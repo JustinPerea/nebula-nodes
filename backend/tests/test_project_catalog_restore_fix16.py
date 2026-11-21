@@ -93,7 +93,7 @@ def _value(snapshot: dict, node_id: str):
 
 # -- Renumbered at Save as a project ------------------------------------------------
 
-def test_high1_typing_in_a_kept_node_survives_save_and_an_agents_read(app):
+def test_typing_in_a_kept_node_survives_save_and_an_agents_read(app):
     client, store, _graph, _state = app
     source, snapshot = _kept_snapshot(client)
     recovered = _recover(client, source, snapshot)
@@ -145,7 +145,7 @@ def test_high1_typing_in_a_kept_node_survives_save_and_an_agents_read(app):
     assert added.json()["id"] not in {"n1", *mapping.values()}
 
 
-def test_high1_a_retry_answers_the_same_mapping(app):
+def test_a_retry_answers_the_same_mapping(app):
     client, *_ = app
     source, snapshot = _kept_snapshot(client)
     first = _recover(client, source, snapshot)
@@ -156,7 +156,7 @@ def test_high1_a_retry_answers_the_same_mapping(app):
     assert again.json()["droppedWires"] == first.json()["droppedWires"] == []
 
 
-def test_high1_nothing_to_renumber_answers_an_empty_mapping(app):
+def test_nothing_to_renumber_answers_an_empty_mapping(app):
     client, *_ = app
     _create(client, "Delta")
     _add_text(client, "delta-1")
@@ -168,7 +168,7 @@ def test_high1_nothing_to_renumber_answers_an_empty_mapping(app):
     assert [node["id"] for node in recovered.json()["project"]["snapshot"]["nodes"]] == ["n1"]
 
 
-def test_high1_numbered_past_the_sources_counter(app):
+def test_numbered_past_the_sources_counter(app):
     client, store, *_ = app
     source, snapshot = _kept_snapshot(client)
     with store.transaction() as catalog:
@@ -180,7 +180,7 @@ def test_high1_numbered_past_the_sources_counter(app):
     assert ProjectStore(store.root).read()["projects"][recovered.json()["project"]["id"]]["_nodeCounter"] == 43
 
 
-def test_high1_the_run_history_follows_the_new_ids(app):
+def test_the_run_history_follows_the_new_ids(app):
     client, *_ = app
     source, snapshot = _kept_snapshot(client)
     recipe = {"nodes": [{"id": U1, "definitionId": "text-input", "params": {}, "outputs": {}}], "edges": []}
@@ -195,7 +195,7 @@ def test_high1_the_run_history_follows_the_new_ids(app):
 
 
 @pytest.mark.parametrize("node_id", [U1, "node-1", "n", "n1a", "N2", "x7", "1"])
-def test_high1_no_copy_recover_writes_holds_a_non_backend_id(app, node_id):
+def test_no_copy_recover_writes_holds_a_non_backend_id(app, node_id):
     """The ratchet: whatever the tab's local id looks like, the copy holds nN."""
     client, store, *_ = app
     _create(client, "Delta")
@@ -211,7 +211,7 @@ def test_high1_no_copy_recover_writes_holds_a_non_backend_id(app, node_id):
     assert on_disk["snapshot"]["edges"][0]["target"] == recovered.json()["renumbered"][node_id]
 
 
-def test_high1_the_invariant_refuses_a_local_id_before_the_commit(app, monkeypatch):
+def test_the_invariant_refuses_a_local_id_before_the_commit(app, monkeypatch):
     """The route's own guard: a staging change that let a local id through
     fails the save with nothing written."""
     client, store, *_ = app
@@ -225,7 +225,7 @@ def test_high1_the_invariant_refuses_a_local_id_before_the_commit(app, monkeypat
 
 # -- Design: a kept tab's wires the server refuses are left out and said --------------
 
-def test_r21_3_refused_wires_are_dropped_and_reported_and_the_good_ones_kept(app):
+def test_refused_wires_are_dropped_and_reported_and_the_good_ones_kept(app):
     client, store, *_ = app
     source, snapshot = _kept_snapshot(client)
     snapshot["nodes"] += [_node("img-local", "image-input", {}, 600), _node(U3, "combine-text", {}, 800)]
@@ -265,7 +265,7 @@ def test_r21_3_refused_wires_are_dropped_and_reported_and_the_good_ones_kept(app
     assert "left out 4 connections" in created[-1]["summary"]
 
 
-def test_r21_3_a_wire_to_a_node_that_isnt_there_is_dropped_too(app):
+def test_a_wire_to_a_node_that_isnt_there_is_dropped_too(app):
     client, *_ = app
     source, snapshot = _kept_snapshot(client)
     snapshot["edges"].append(_wire("w-gone", U1, "text", "gone-local", "text1"))
@@ -274,7 +274,7 @@ def test_r21_3_a_wire_to_a_node_that_isnt_there_is_dropped_too(app):
     assert [(wire["id"], wire["kind"]) for wire in recovered.json()["droppedWires"]] == [("w-gone", "missing")]
 
 
-def test_r21_3_only_recover_drops_other_saves_still_refuse(app):
+def test_only_recover_drops_other_saves_still_refuse(app):
     """The other staging callers keep refusing a bad wire with a 400."""
     client, *_ = app
     source, snapshot = _kept_snapshot(client)
@@ -294,7 +294,7 @@ def _left_out(*names: str) -> list[dict]:
     return [{"id": name[0].lower() * 32, "name": name, "reason": "limit"} for name in names]
 
 
-def test_r22_1_never_no_project_is_missing_beside_a_left_out_project():
+def test_never_no_project_is_missing_beside_a_left_out_project():
     record = {**_DAMAGED, "notAddedBack": _left_out("Delta"), "notAddedBackCount": 1, "notAddedBackLimitCount": 1}
     note = main_module._catalog_restore_note(record)
     cli = "\n".join(catalog_restore_lines(record))
@@ -311,12 +311,12 @@ def test_r22_1_never_no_project_is_missing_beside_a_left_out_project():
     {"recoveredCanvas": {"id": "r" * 32, "name": "Recovered canvas"}},
     {"canvasNotFiled": {"reason": "projects"}},
 ])
-def test_r22_1_said_more_means_no_none_missing(extra):
+def test_said_more_means_no_none_missing(extra):
     note = main_module._catalog_restore_note({**_DAMAGED, **extra})
     assert "no project is missing" not in note and "every record in it was read" in note
 
 
-def test_r22_1_nothing_else_said_still_says_no_project_is_missing():
+def test_nothing_else_said_still_says_no_project_is_missing():
     note = main_module._catalog_restore_note(dict(_DAMAGED))
     assert "no project is missing" in note
     assert "no project is missing" in "\n".join(catalog_restore_lines(dict(_DAMAGED)))
@@ -325,7 +325,7 @@ def test_r22_1_nothing_else_said_still_says_no_project_is_missing():
     assert "no project is missing" in main_module._catalog_restore_note(live)
 
 
-def test_r22_1_the_context_part_says_what_the_listing_says():
+def test_the_context_part_says_what_the_listing_says():
     """`nebula context` prints catalog_restore_lines over start_here's short
     part: it carries damagedRecordsUnread, so the line agrees with the note
     (the live check found "may be missing" there beside "every record in it
@@ -345,7 +345,7 @@ def test_r22_1_the_context_part_says_what_the_listing_says():
 
 @pytest.mark.parametrize("canvas", [{"canvasNotFiled": {"reason": "projects"}},
                                     {"recoveredCanvas": {"id": "r" * 32, "name": "Recovered canvas"}}])
-def test_r21_4_the_open_canvas_project_is_said_once(canvas):
+def test_the_open_canvas_project_is_said_once(canvas):
     rows = _left_out("Delta", "Epsilon")
     record = {**_DAMAGED, **canvas, "notAddedBack": rows, "notAddedBackCount": 2, "notAddedBackLimitCount": 2,
               "openProjectMissing": rows[1]["id"]}
@@ -355,7 +355,7 @@ def test_r21_4_the_open_canvas_project_is_said_once(canvas):
     assert "could not be added back" not in note
 
 
-def test_r21_4_counts_leave_the_open_project_out_too():
+def test_counts_leave_the_open_project_out_too():
     rows = _left_out("Alpha", "Beta", "Gamma", "Delta", "Epsilon")
     record = {**_DAMAGED, "canvasNotFiled": {"reason": "projects"}, "notAddedBack": rows,
               "notAddedBackCount": 5, "notAddedBackLimitCount": 5, "openProjectMissing": rows[4]["id"]}
@@ -364,7 +364,7 @@ def test_r21_4_counts_leave_the_open_project_out_too():
     assert "could not be added back" not in note
 
 
-def test_r21_4_without_a_canvas_line_the_open_project_is_named_with_the_others():
+def test_without_a_canvas_line_the_open_project_is_named_with_the_others():
     rows = _left_out("Delta", "Epsilon")
     record = {**_DAMAGED, "notAddedBack": rows, "notAddedBackCount": 2, "notAddedBackLimitCount": 2,
               "openProjectMissing": rows[1]["id"]}
@@ -440,7 +440,7 @@ def _restart(monkeypatch, marker: Path):
     return manager
 
 
-def test_r22_5_the_marker_follows_the_kept_tabs(app, clock, monkeypatch, tmp_path):
+def test_the_marker_follows_the_kept_tabs(app, clock, monkeypatch, tmp_path):
     client, *_ = app
     marker = tmp_path / main_module.KEPT_MARKER_NAME
     manager = _manager(monkeypatch, marker)
@@ -454,7 +454,7 @@ def test_r22_5_the_marker_follows_the_kept_tabs(app, clock, monkeypatch, tmp_pat
     socket.__exit__(None, None, None)
 
 
-def test_r22_5_a_restart_holds_agents_until_the_kept_tab_is_back(app, clock, monkeypatch, tmp_path):
+def test_a_restart_holds_agents_until_the_kept_tab_is_back(app, clock, monkeypatch, tmp_path):
     client, *_ = app
     marker = tmp_path / main_module.KEPT_MARKER_NAME
     manager = _manager(monkeypatch, marker)
@@ -478,7 +478,7 @@ def test_r22_5_a_restart_holds_agents_until_the_kept_tab_is_back(app, clock, mon
     again.__exit__(None, None, None)
 
 
-def test_r22_5_a_kept_tab_that_never_comes_back_lets_agents_through_after_the_grace(app, clock, monkeypatch,
+def test_a_kept_tab_that_never_comes_back_lets_agents_through_after_the_grace(app, clock, monkeypatch,
                                                                                      tmp_path):
     client, *_ = app
     marker = tmp_path / main_module.KEPT_MARKER_NAME
@@ -499,14 +499,14 @@ def test_r22_5_a_kept_tab_that_never_comes_back_lets_agents_through_after_the_gr
     assert not main_module.manager.kept_in_tab()
 
 
-def test_r22_5_no_marker_no_boot_grace(app, monkeypatch, tmp_path):
+def test_no_marker_no_boot_grace(app, monkeypatch, tmp_path):
     client, *_ = app
     _create(client, "Delta")
     _restart(monkeypatch, tmp_path / main_module.KEPT_MARKER_NAME)
     assert AGENT_WRITES["add"](client).status_code == 200
 
 
-def test_r22_5_a_damaged_marker_still_holds_one_tab(app, clock, monkeypatch, tmp_path):
+def test_a_damaged_marker_still_holds_one_tab(app, clock, monkeypatch, tmp_path):
     client, *_ = app
     marker = tmp_path / main_module.KEPT_MARKER_NAME
     marker.write_text("{not json", encoding="utf-8")
@@ -516,7 +516,7 @@ def test_r22_5_a_damaged_marker_still_holds_one_tab(app, clock, monkeypatch, tmp
     assert len(main_module.manager.kept_graces) == 1
 
 
-def test_r22_5_two_kept_tabs_restart_each_holds_its_own(app, clock, monkeypatch, tmp_path):
+def test_two_kept_tabs_restart_each_holds_its_own(app, clock, monkeypatch, tmp_path):
     client, *_ = app
     marker = tmp_path / main_module.KEPT_MARKER_NAME
     manager = _manager(monkeypatch, marker)
@@ -539,7 +539,7 @@ def test_r22_5_two_kept_tabs_restart_each_holds_its_own(app, clock, monkeypatch,
     again.__exit__(None, None, None)
 
 
-def test_nit1_one_tabs_kept_false_never_clears_another_tabs_grace(app, clock, monkeypatch, tmp_path):
+def test_one_tabs_kept_false_never_clears_another_tabs_grace(app, clock, monkeypatch, tmp_path):
     client, *_ = app
     manager = _manager(monkeypatch, tmp_path / main_module.KEPT_MARKER_NAME)
     _create(client, "Delta")
@@ -631,7 +631,7 @@ def test_only_the_persons_kept_save_passes_the_limit(app, monkeypatch, kept_tab,
     assert len(client.get("/api/projects", headers=PERSON).json()["projects"]) == 2
 
 
-def test_nit1_a_tab_back_that_saves_ends_its_own_grace_at_once(app, clock, monkeypatch, tmp_path):
+def test_a_tab_back_that_saves_ends_its_own_grace_at_once(app, clock, monkeypatch, tmp_path):
     """Back within its grace (kept:true), then Save as a project (kept:false):
     agents go on at once, not when the closed socket's grace runs out."""
     client, *_ = app
@@ -650,7 +650,7 @@ def test_nit1_a_tab_back_that_saves_ends_its_own_grace_at_once(app, clock, monke
     again.__exit__(None, None, None)
 
 
-def test_nit1_a_tab_back_takes_the_grace_ending_first(app, clock, monkeypatch, tmp_path):
+def test_a_tab_back_takes_the_grace_ending_first(app, clock, monkeypatch, tmp_path):
     """Two kept tabs blip, 5 s apart; one comes back and saves: the later
     grace (the longest another closed tab may still need) keeps running."""
     client, *_ = app

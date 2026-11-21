@@ -88,7 +88,7 @@ def _agent_writes(graph) -> dict[str, tuple[str, str, dict]]:
 
 @pytest.mark.parametrize("write", ["delete a node", "apply with remove", "restore with remove", "add a node",
                                    "delete a wire", "clear", "load"])
-def test_m1_at_the_limit_every_agent_write_to_the_waiting_canvas_is_refused(app, monkeypatch, write):
+def test_at_the_limit_every_agent_write_to_the_waiting_canvas_is_refused(app, monkeypatch, write):
     client, store, graph, state = app
     _waiting(client, store, graph, state, monkeypatch)
     before = _live_values(graph)
@@ -109,7 +109,7 @@ def test_m1_at_the_limit_every_agent_write_to_the_waiting_canvas_is_refused(app,
     assert {"agent": "Codex", "agentId": "ext:codex"}.items() <= event["canvasHeld"].items()
 
 
-def test_m1_gm_lines_verbatim():
+def test_the_approved_lines_verbatim():
     assert main_module.CANVAS_CHANGE_REFUSAL == (
         "The open canvas isn't saved as a project yet because the project limit is reached, so it can't be changed. "
         "Open an existing project to work in, or ask the person to delete a project.")
@@ -120,7 +120,7 @@ def test_m1_gm_lines_verbatim():
         "the person to permanently delete a project in Recently deleted.")
 
 
-def test_m1_the_reviewers_repro_codex_empties_the_canvas_then_a_slot_frees(app, monkeypatch):
+def test_the_reviewers_repro_codex_empties_the_canvas_then_a_slot_frees(app, monkeypatch):
     """WAITX: Codex's apply removes every node and adds its own;
     then the person deletes a project. The person's canvas is saved intact,
     and Codex's scratch node is nowhere."""
@@ -137,7 +137,7 @@ def test_m1_the_reviewers_repro_codex_empties_the_canvas_then_a_slot_frees(app, 
 
 
 @pytest.mark.parametrize("write", ["delete a node", "apply with remove", "restore with remove", "add a node"])
-def test_m1_below_the_limit_an_agent_write_holds_the_canvas_first(app, monkeypatch, write):
+def test_below_the_limit_an_agent_write_holds_the_canvas_first(app, monkeypatch, write):
     client, store, graph, state = app
     ids = _waiting(client, store, graph, state, monkeypatch)
     _make_room_without_listing(client, store, ids[0])
@@ -160,7 +160,7 @@ def test_m1_below_the_limit_an_agent_write_holds_the_canvas_first(app, monkeypat
     assert _held(store) == []
 
 
-def test_m1_two_agent_writes_at_once_hold_the_canvas_once(app, monkeypatch):
+def test_two_agent_writes_at_once_hold_the_canvas_once(app, monkeypatch):
     client, store, graph, state = app
     ids = _waiting(client, store, graph, state, monkeypatch)
     _make_room_without_listing(client, store, ids[0])
@@ -176,7 +176,7 @@ def test_m1_two_agent_writes_at_once_hold_the_canvas_once(app, monkeypatch):
     assert _projects_holding(client, store, ONLY_W) == ["Recovered canvas"]
 
 
-def test_m1_the_persons_own_writes_are_never_blocked(app, monkeypatch):
+def test_the_persons_own_writes_are_never_blocked(app, monkeypatch):
     client, store, graph, state = app
     _waiting(client, store, graph, state, monkeypatch)
     response = client.post("/api/graph/node", headers=PERSON,
@@ -185,7 +185,7 @@ def test_m1_the_persons_own_writes_are_never_blocked(app, monkeypatch):
     assert "the-persons" in _live_values(graph) and _held(store) == []
 
 
-def test_m1_a_plain_upload_isnt_a_canvas_write_but_one_that_adds_a_node_is(app, monkeypatch):
+def test_a_plain_upload_isnt_a_canvas_write_but_one_that_adds_a_node_is(app, monkeypatch):
     client, store, graph, state = app
     _waiting(client, store, graph, state, monkeypatch)
     plain = client.post("/api/uploads", headers=CODEX, files={"file": ("a.png", _png(), "image/png")})
@@ -200,7 +200,7 @@ def _fill(path: str) -> str:
     return re.sub(r"\{[^}]+\}", "x", path)
 
 
-def test_n6_every_graph_write_route_goes_through_the_guard(app, monkeypatch):
+def test_every_graph_write_route_goes_through_the_guard(app, monkeypatch):
     """Every route marked graph_write, found from the router
     (so a new one is covered by construction), refuses an agent's request
     with canvas_waiting while the canvas waits at the limit, before its own
@@ -233,7 +233,7 @@ def test_n6_every_graph_write_route_goes_through_the_guard(app, monkeypatch):
     assert _live_values(graph) == before and _held(store) == []
 
 
-def test_m1_mcp_tools_say_the_refusal_with_its_code(app, monkeypatch):
+def test_mcp_tools_say_the_refusal_with_its_code(app, monkeypatch):
     client, store, graph, state = app
     _waiting(client, store, graph, state, monkeypatch)
     monkeypatch.setattr(mcp_server, "_api", lambda: NebulaAPI("http://testserver", client=client))
@@ -272,7 +272,7 @@ def _kept(store) -> list[Path]:
     return sorted(store.root.glob(f"{store_module.CANVAS_HELD_NAME}*.damaged-*"))
 
 
-def test_l1_both_copies_unreadable_are_kept_aside_and_said(app, monkeypatch):
+def test_both_copies_unreadable_are_kept_aside_and_said(app, monkeypatch):
     client, store, graph, state = app
     ids = _held_one(client, store, graph, state, monkeypatch)
     zeroed = {}
@@ -290,7 +290,7 @@ def test_l1_both_copies_unreadable_are_kept_aside_and_said(app, monkeypatch):
     assert client.get("/api/projects", headers=PERSON).json()["canvasHeldUnreadable"]["count"] is None
 
 
-def test_l1_one_entry_with_a_changed_field_type_is_still_saved(app, monkeypatch):
+def test_one_entry_with_a_changed_field_type_is_still_saved(app, monkeypatch):
     client, store, graph, state = app
     ids = _held_one(client, store, graph, state, monkeypatch)
     data = json.loads(_paths(store)[0].read_text())
@@ -305,7 +305,7 @@ def test_l1_one_entry_with_a_changed_field_type_is_still_saved(app, monkeypatch)
     assert _projects_holding(client, store, ONLY_W) == ["Recovered canvas"]
 
 
-def test_l1_an_entry_whose_canvas_cant_be_read_is_counted_and_the_others_kept(app, monkeypatch):
+def test_an_entry_whose_canvas_cant_be_read_is_counted_and_the_others_kept(app, monkeypatch):
     client, store, graph, state = app
     _held_one(client, store, graph, state, monkeypatch)
     data = json.loads(_paths(store)[0].read_text())
@@ -331,7 +331,7 @@ def test_l1_an_entry_whose_canvas_cant_be_read_is_counted_and_the_others_kept(ap
     assert not any(path.exists() for path in _paths(store))
 
 
-def test_l1_main_copy_damaged_and_the_bak_whole_loses_nothing_and_says_nothing(app, monkeypatch):
+def test_main_copy_damaged_and_the_bak_whole_loses_nothing_and_says_nothing(app, monkeypatch):
     client, store, graph, state = app
     ids = _held_one(client, store, graph, state, monkeypatch)
     main_copy = _paths(store)[0]
@@ -351,7 +351,7 @@ def test_l1_main_copy_damaged_and_the_bak_whole_loses_nothing_and_says_nothing(a
 # -- A failed open keeps its hold ------------------------------------------------
 
 
-def test_l2_an_open_whose_rollback_fails_too_keeps_the_hold_and_files_it_after_a_restart(app, monkeypatch):
+def test_an_open_whose_rollback_fails_too_keeps_the_hold_and_files_it_after_a_restart(app, monkeypatch):
     """The rename fails and so does the rollback's save
     (507): state.json holds B, memory the waiting canvas, the hold is the
     only copy of it on disk. It stays, a listing before the restart doesn't
@@ -387,7 +387,7 @@ def test_l2_an_open_whose_rollback_fails_too_keeps_the_hold_and_files_it_after_a
     assert _projects_holding(client, store, ONLY_W) == ["Recovered canvas"]
 
 
-def test_l2_no_hold_is_ever_released_by_name():
+def test_no_hold_is_ever_released_by_name():
     source = Path(main_module.__file__).read_text()
     assert "_release_hold" not in source
 
@@ -398,7 +398,7 @@ def test_l2_no_hold_is_ever_released_by_name():
 # holding the last place never refuses a restore.
 
 
-def test_l3_a_held_canvas_in_the_last_place_no_longer_refuses_a_restore(app, monkeypatch):
+def test_a_held_canvas_in_the_last_place_no_longer_refuses_a_restore(app, monkeypatch):
     """Case: the size cap keeps the held canvas held, so the
     list shows 2 of 3. The restore lands (3 of 3), and the held canvas still
     waits, nothing in it lost."""
@@ -413,7 +413,7 @@ def test_l3_a_held_canvas_in_the_last_place_no_longer_refuses_a_restore(app, mon
     assert len(after["projects"]) == 3 and after["canvasNotFiled"]["held"] == 1
 
 
-def test_l3_at_the_limit_with_a_canvas_held_a_restore_passes_and_a_create_is_refused(app, monkeypatch):
+def test_at_the_limit_with_a_canvas_held_a_restore_passes_and_a_create_is_refused(app, monkeypatch):
     """At 3 of 3 with a canvas held: a restore passes the limit (4), and a
     new project is still refused at the limit."""
     client, store, graph, state = app
@@ -444,7 +444,7 @@ def _flip_digit(path: Path, key: bytes, value: int, to: int) -> None:
     path.write_bytes(raw.replace(old, key + b":" + str(to).encode(), 1))
 
 
-def test_l5_a_flipped_commit_digit_in_bak_never_brings_a_purged_project_back(tmp_path):
+def test_a_flipped_commit_digit_in_bak_never_brings_a_purged_project_back(tmp_path):
     store, _alpha, x = _purge_setup(tmp_path)
     _purge(store, x)
     bak = json.loads(store.backup_path.read_text())
@@ -457,7 +457,7 @@ def test_l5_a_flipped_commit_digit_in_bak_never_brings_a_purged_project_back(tmp
     assert [row["id"] for row in _record(fresh)["keptDeleted"]] == [x]
 
 
-def test_l5_a_flipped_commit_digit_in_the_side_file_never_lets_an_older_copy_decide(tmp_path):
+def test_a_flipped_commit_digit_in_the_side_file_never_lets_an_older_copy_decide(tmp_path):
     store, _alpha, x = _purge_setup(tmp_path)
     _purge(store, x)
     side = _side(store)
@@ -468,7 +468,7 @@ def test_l5_a_flipped_commit_digit_in_the_side_file_never_lets_an_older_copy_dec
     assert _where(restored, x) == "gone"
 
 
-def test_l5_the_control_and_every_commit_carries_its_check(tmp_path):
+def test_the_control_and_every_commit_carries_its_check(tmp_path):
     store, _alpha, x = _purge_setup(tmp_path)
     _purge(store, x)
     for copy in (store.path, store.backup_path):
@@ -486,7 +486,7 @@ def test_l5_the_control_and_every_commit_carries_its_check(tmp_path):
 # -- the room-now note and the waiting canvases listed -------------------
 
 
-def test_n1_the_room_now_note_says_only_a_listing_saves_them(app, monkeypatch):
+def test_the_room_now_note_says_only_a_listing_saves_them(app, monkeypatch):
     note = main_module._canvas_not_filed_note("projects", room_now=True, live=True, held=1)
     assert "the next listing (the person's Projects home, `nebula projects`, list_projects) saves each" in note
     assert "open or create" not in note
@@ -494,7 +494,7 @@ def test_n1_the_room_now_note_says_only_a_listing_saves_them(app, monkeypatch):
     assert "every change to it is refused (409, code canvas_waiting)" in plain
 
 
-def test_n2_every_waiting_canvas_is_listed_and_one_toast_names_each_filed(app, monkeypatch):
+def test_every_waiting_canvas_is_listed_and_one_toast_names_each_filed(app, monkeypatch):
     client, store, graph, state = app
     ids = _held_one(client, store, graph, state, monkeypatch)
     # A second canvas waits: B's canvas loses its project to a restore at the limit.

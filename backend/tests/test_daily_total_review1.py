@@ -216,7 +216,7 @@ def test_full_proposal_slots_get_one_line_and_a_neutral_log_line(api, monkeypatc
     api.main.execute_graph.assert_not_awaited()
 
 
-def test_nebulas_cap_of_twelve_open_proposals_gets_gms_lines(api, monkeypatch):
+def test_nebulas_cap_of_twelve_open_proposals_gets_the_approved_lines(api, monkeypatch):
     said: list[dict] = []
 
     async def capture_raw(data, others=None):

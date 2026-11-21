@@ -74,7 +74,7 @@ def _where(catalog: dict, project_id: str) -> str:
 # -- JSON's whitespace, never Python's \s ------------------------------------------
 
 
-def test_m1_no_salvage_pattern_uses_pythons_whitespace_class():
+def test_no_salvage_pattern_uses_pythons_whitespace_class():
     """Every regex in catalog_recovery that means JSON whitespace says so:
     ``\\s`` also matches 0x1c-0x1f, 0x0b, 0x0c, 0x85 and Unicode spaces."""
     patterns = {name: value.pattern for name, value in vars(catalog_recovery).items()
@@ -86,7 +86,7 @@ def test_m1_no_salvage_pattern_uses_pythons_whitespace_class():
 
 
 @pytest.mark.parametrize("bit", range(8))
-def test_m1_a_flipped_bracket_in_an_earlier_record_never_hides_a_later_ones_newest_version(tmp_path, bit):
+def test_a_flipped_bracket_in_an_earlier_record_never_hides_a_later_ones_newest_version(tmp_path, bit):
     """dbg_bracket and live B: Dunes, Middle, Logo; Logo renamed
     "Logo v2" after the copy; one bit of Middle's ``"nodes":[]``. Bit 6
     turns ``]`` into 0x1d, which ``\\s`` read as a space."""
@@ -117,7 +117,7 @@ def test_m1_a_flipped_bracket_in_an_earlier_record_never_hides_a_later_ones_newe
     assert restored["projects"][logo]["name"] == "Logo v2"
 
 
-def test_m1_the_trimmed_text_between_records_is_json_whitespace_only():
+def test_the_trimmed_text_between_records_is_json_whitespace_only():
     """salvage's "right after a complete record" test used str.strip(), which
     also strips 0x1c-0x1f: a comma with a group separator beside it is not
     what prepare writes."""
@@ -152,11 +152,11 @@ def _with_logo_at(tmp_path: Path, where: str):
 
 
 @pytest.mark.parametrize("where", ["middle", "last"])
-def test_m1_every_bit_of_every_structural_byte_with_the_changed_record_anywhere(tmp_path, quick_disk, where):
-    """g1 (16 silent reverts with Logo last), for every place the
-    changed record can sit: 0 silent reverts. First is test_m2's own
-    sweep (test_m2_every_bit_of_every_structural_byte_never_reverts_silently:
-    Logo is the first record of _fuzz_base)."""
+def test_every_bit_of_every_structural_byte_with_the_changed_record_anywhere(tmp_path, quick_disk, where):
+    """For every place the changed record can sit: 0 silent reverts (there
+    were 16 with Logo last). First is the sweep in
+    test_every_bit_of_every_structural_byte_never_reverts_silently, where
+    Logo is the first record of _fuzz_base."""
     base, ids = _with_logo_at(tmp_path, where)
     raw = base.path.read_bytes()
     positions = _structural(raw)
@@ -204,7 +204,7 @@ def _edit(store: ProjectStore, project_id: str, name: str) -> None:
         store.commit(catalog)
 
 
-def test_m2_the_newest_copy_written_while_ahead_still_wins_and_nothing_is_lost(tmp_path, monkeypatch):
+def test_the_newest_copy_written_while_ahead_still_wins_and_nothing_is_lost(tmp_path, monkeypatch):
     """c1: .bak.1 with a correct clock, then the clock 3 h ahead
     (R edited again, Gamma made: only in .bak), then corrected and
     catalog.json zeroed. .bak must win; Gamma survives two more commits."""
@@ -246,7 +246,7 @@ def test_m2_the_newest_copy_written_while_ahead_still_wins_and_nothing_is_lost(t
     assert gamma["id"] in json.loads(fresh.path.read_text())["projects"]
 
 
-def test_m2_a_whole_record_edited_while_ahead_beats_the_copys_older_version(tmp_path, monkeypatch):
+def test_a_whole_record_edited_while_ahead_beats_the_copys_older_version(tmp_path, monkeypatch):
     """c2: catalog.json holds Alpha's edit made 3 h ahead, .bak the
     one before; the clock is corrected; catalog.json is torn by 2 bytes."""
     store = ProjectStore(tmp_path / "p")
@@ -268,7 +268,7 @@ def test_m2_a_whole_record_edited_while_ahead_beats_the_copys_older_version(tmp_
     assert [row["name"] for row in _record(fresh)["updatedFromDisk"]] == ["Alpha edited while ahead"]
 
 
-def test_m2_a_whole_record_that_loses_by_its_dates_is_reverted_and_still_in_the_kept_file(tmp_path, monkeypatch):
+def test_a_whole_record_that_loses_by_its_dates_is_reverted_and_still_in_the_kept_file(tmp_path, monkeypatch):
     """The clock ran 3 h ahead when the copy's version was written, and that
     date is now in the past; the damaged file's whole record was written
     later with a corrected clock, so its date is earlier. The copy's
@@ -298,7 +298,7 @@ def test_m2_a_whole_record_that_loses_by_its_dates_is_reverted_and_still_in_the_
     assert b"Alpha v2 (newer, clock corrected)" in kept
 
 
-def test_m2_the_older_copy_needs_a_later_commit_too(tmp_path, monkeypatch):
+def test_the_older_copy_needs_a_later_commit_too(tmp_path, monkeypatch):
     """.bak.1 wins over .bak only when both its dates (future ones left out)
     and its commit are later: a .bak.1 whose dates were written ahead and
     have since passed never beats a later .bak."""
@@ -353,7 +353,7 @@ def _side(store: ProjectStore) -> dict | None:
     return json.loads(path.read_text()) if path.exists() else None
 
 
-def test_l1_every_commit_is_numbered_and_the_side_file_says_which_it_is_of(tmp_path):
+def test_every_commit_is_numbered_and_the_side_file_says_which_it_is_of(tmp_path):
     store, _alpha, x = _purge_setup(tmp_path)
     before = json.loads(store.path.read_text())["commitSeq"]
     _purge(store, x)
@@ -364,7 +364,7 @@ def test_l1_every_commit_is_numbered_and_the_side_file_says_which_it_is_of(tmp_p
     assert json.loads(store.backup_path.read_text())["commitSeq"] == before
 
 
-def test_l1_a_side_file_that_cant_be_rewritten_never_drops_a_project_made_again(tmp_path, monkeypatch, capsys):
+def test_a_side_file_that_cant_be_rewritten_never_drops_a_project_made_again(tmp_path, monkeypatch, capsys):
     """s8: X deleted for good (side file written), then the side
     file can't be rewritten; the recover retry makes X again with its id;
     two commits follow, so .bak holds X live; catalog.json is zeroed."""
@@ -403,7 +403,7 @@ def test_l1_a_side_file_that_cant_be_rewritten_never_drops_a_project_made_again(
 
 
 @pytest.mark.skipif(sys.platform != "darwin", reason="chflags is macOS's")
-def test_l1_the_reviews_immutable_side_file(tmp_path):
+def test_the_reviews_immutable_side_file(tmp_path):
     import stat
     store, _alpha, x = _purge_setup(tmp_path)
     _purge(store, x)
@@ -426,7 +426,7 @@ def test_l1_the_reviews_immutable_side_file(tmp_path):
         os.chflags(side, 0)
 
 
-def test_l3_the_side_file_is_written_before_the_catalogs_rename(tmp_path, monkeypatch):
+def test_the_side_file_is_written_before_the_catalogs_rename(tmp_path, monkeypatch):
     store, _alpha, x = _purge_setup(tmp_path)
     order: list[str] = []
     real = os.replace
@@ -452,7 +452,7 @@ def _crash_at_the_catalog_rename(monkeypatch):
     monkeypatch.setattr(ProjectStore, "_undo_side_file", lambda self, *args, **kwargs: None, raising=False)
 
 
-def test_l3_a_crash_after_the_side_file_and_before_the_rename_of_a_delete_for_good(tmp_path, monkeypatch):
+def test_a_crash_after_the_side_file_and_before_the_rename_of_a_delete_for_good(tmp_path, monkeypatch):
     """The person deleted X for good; the side file landed, catalog.json
     didn't (X still in Recently deleted). A zeroed catalog then keeps X
     deleted, as the person asked, with a row."""
@@ -469,7 +469,7 @@ def test_l3_a_crash_after_the_side_file_and_before_the_rename_of_a_delete_for_go
     assert [row["id"] for row in _record(fresh)["keptDeleted"]] == [x]
 
 
-def test_l3_a_crash_before_a_remake_lands_keeps_the_delete_that_did_land(tmp_path, monkeypatch):
+def test_a_crash_before_a_remake_lands_keeps_the_delete_that_did_land(tmp_path, monkeypatch):
     """X was deleted for good (landed), then made again with its id; that
     commit's side file landed (X no longer purged), its catalog rename
     didn't. catalog.json is the delete's; zeroed, .bak still has X in
@@ -493,7 +493,7 @@ def test_l3_a_crash_before_a_remake_lands_keeps_the_delete_that_did_land(tmp_pat
 # -- MCP gets the whole refusal ---------------------------------------------------
 
 
-def test_l2_mcp_restore_passes_the_limit_and_new_project_says_the_413_and_its_number(app, monkeypatch):
+def test_mcp_restore_passes_the_limit_and_new_project_says_the_413_and_its_number(app, monkeypatch):
     """Justin, 2026-10-29: an agent's restore_from_trash may
     pass the limit; its new_project past it is still refused with the
     existing line (and HTTP's 413 body names the limit)."""
@@ -559,7 +559,7 @@ def _projects_holding(client, store, value: str) -> list[str]:
                   if value in _values(project))
 
 
-def test_m3_opening_a_project_while_the_canvas_waits_holds_it_and_opens(app, monkeypatch):
+def test_opening_a_project_while_the_canvas_waits_holds_it_and_opens(app, monkeypatch):
     client, store, graph, state = app
     ids = _waiting(client, store, graph, state, monkeypatch)
     opened = client.post(f"/api/projects/{ids[1]}/open", headers=PERSON, json={"workspaceRevision": _rev(client)})
@@ -582,7 +582,7 @@ def test_m3_opening_a_project_while_the_canvas_waits_holds_it_and_opens(app, mon
     assert after["activeProjectId"] == ids[1]
 
 
-def test_m3_an_agent_can_open_an_existing_project_while_the_canvas_waits(app, monkeypatch):
+def test_an_agent_can_open_an_existing_project_while_the_canvas_waits(app, monkeypatch):
     """Design's refusal tells agents to open an existing project: it must work."""
     client, store, graph, state = app
     ids = _waiting(client, store, graph, state, monkeypatch)
@@ -595,7 +595,7 @@ def test_m3_an_agent_can_open_an_existing_project_while_the_canvas_waits(app, mo
 
 @pytest.mark.parametrize("route", ["import", "clear"])
 @pytest.mark.parametrize("who", ["agent", "person"])
-def test_m3_a_clear_or_graph_load_at_the_limit_is_refused_and_changes_nothing(app, monkeypatch, route, who):
+def test_a_clear_or_graph_load_at_the_limit_is_refused_and_changes_nothing(app, monkeypatch, route, who):
     client, store, graph, state = app
     _waiting(client, store, graph, state, monkeypatch)
     before = _live_values(graph)
@@ -615,7 +615,7 @@ def test_m3_a_clear_or_graph_load_at_the_limit_is_refused_and_changes_nothing(ap
     assert _live_values(graph) == before and _held(store) == []
 
 
-def test_m3_the_refusal_lines(app):
+def test_the_refusal_lines(app):
     assert main_module.CANVAS_WAITING_REFUSAL == ("The project limit is reached, so a new canvas can't be saved. "
                                                   "Open an existing project to work in, or ask the person to delete a project.")
     assert main_module.CANVAS_WAITING_REFUSAL_STORAGE == (
@@ -623,7 +623,7 @@ def test_m3_the_refusal_lines(app):
         "the person to permanently delete a project in Recently deleted.")
 
 
-def test_m3_an_agents_refused_clear_tells_the_person_in_the_agent_log(app, monkeypatch):
+def test_an_agents_refused_clear_tells_the_person_in_the_agent_log(app, monkeypatch):
     client, store, graph, state = app
     _waiting(client, store, graph, state, monkeypatch)
     sent = main_module.manager.broadcast_raw
@@ -643,7 +643,7 @@ def _make_room_without_listing(client, store, project_id: str) -> None:
 
 
 @pytest.mark.parametrize("route", ["import", "clear"])
-def test_m3_below_the_limit_a_clear_or_load_holds_the_canvas_first(app, monkeypatch, route):
+def test_below_the_limit_a_clear_or_load_holds_the_canvas_first(app, monkeypatch, route):
     """Below the limit (room freed, no listing since) the agent's clear or
     load works after the hold; its new canvas is the ordinary unfiled one,
     never filed as the person's; the held copy is."""
@@ -675,7 +675,7 @@ def test_m3_below_the_limit_a_clear_or_load_holds_the_canvas_first(app, monkeypa
     assert _held(store) == []
 
 
-def test_m3_the_hold_is_on_disk_before_the_open_writes_the_canvas(app, monkeypatch):
+def test_the_hold_is_on_disk_before_the_open_writes_the_canvas(app, monkeypatch):
     client, store, graph, state = app
     ids = _waiting(client, store, graph, state, monkeypatch)
     seen: list[bool] = []
@@ -690,7 +690,7 @@ def test_m3_the_hold_is_on_disk_before_the_open_writes_the_canvas(app, monkeypat
     assert seen and all(seen)
 
 
-def test_m3_a_failed_open_keeps_its_hold_and_the_next_settle_drops_it_by_digest(app, monkeypatch):
+def test_a_failed_open_keeps_its_hold_and_the_next_settle_drops_it_by_digest(app, monkeypatch):
     """A failed open never gives its hold back;
     the next settle drops the copy because the live canvas, on disk too, is
     that canvas, so it is filed once."""
@@ -710,7 +710,7 @@ def test_m3_a_failed_open_keeps_its_hold_and_the_next_settle_drops_it_by_digest(
     assert _projects_holding(client, store, ONLY_W) == ["Recovered canvas"]
 
 
-def test_m3_a_crash_between_the_hold_and_the_open_files_the_canvas_once(app, monkeypatch):
+def test_a_crash_between_the_hold_and_the_open_files_the_canvas_once(app, monkeypatch):
     """The process dies after the hold landed and before the open's commit:
     state.json still holds the waiting canvas, and canvas-held.json a copy
     of it. After the restart it is one canvas, filed once."""
@@ -732,7 +732,7 @@ def test_m3_a_crash_between_the_hold_and_the_open_files_the_canvas_once(app, mon
     assert _projects_holding(client, store, ONLY_W) == ["Recovered canvas"]
 
 
-def test_m3_a_crash_after_the_canvas_switched_and_before_the_catalog_files_the_held_copy_once(app, monkeypatch):
+def test_a_crash_after_the_canvas_switched_and_before_the_catalog_files_the_held_copy_once(app, monkeypatch):
     """The process dies after state.json became B's and before the catalog
     said B is open: after the restart B is open (its canvas says so), and
     the held copy is filed once there is room."""
@@ -761,7 +761,7 @@ def test_m3_a_crash_after_the_canvas_switched_and_before_the_catalog_files_the_h
     assert after["activeProjectId"] == ids[1]
 
 
-def test_m3_the_hold_survives_restarts(app, monkeypatch):
+def test_the_hold_survives_restarts(app, monkeypatch):
     client, store, graph, state = app
     ids = _waiting(client, store, graph, state, monkeypatch)
     client.post(f"/api/projects/{ids[1]}/open", headers=PERSON, json={"workspaceRevision": _rev(client)})
@@ -774,7 +774,7 @@ def test_m3_the_hold_survives_restarts(app, monkeypatch):
     assert _projects_holding(client, store, ONLY_W) == ["Recovered canvas"]
 
 
-def test_m3_two_windows_open_projects_one_hold(app, monkeypatch):
+def test_two_windows_open_projects_one_hold(app, monkeypatch):
     client, store, graph, state = app
     ids = _waiting(client, store, graph, state, monkeypatch)
     first = client.post(f"/api/projects/{ids[1]}/open", headers=PERSON, json={"workspaceRevision": _rev(client)})
@@ -785,7 +785,7 @@ def test_m3_two_windows_open_projects_one_hold(app, monkeypatch):
     assert _projects_holding(client, store, ONLY_W) == ["Recovered canvas"]
 
 
-def test_m3_an_agent_opening_right_after_more_edits_holds_every_edit(app, monkeypatch):
+def test_an_agent_opening_right_after_more_edits_holds_every_edit(app, monkeypatch):
     client, store, graph, state = app
     ids = _waiting(client, store, graph, state, monkeypatch)
     for value in ("typed-1", "typed-2"):
@@ -796,7 +796,7 @@ def test_m3_an_agent_opening_right_after_more_edits_holds_every_edit(app, monkey
     assert {"typed-1", "typed-2", ONLY_W} <= set(_held_values(held))
 
 
-def test_m3_undo_across_the_hold_never_reaches_the_held_canvas(app, monkeypatch):
+def test_undo_across_the_hold_never_reaches_the_held_canvas(app, monkeypatch):
     """Below the limit an agent's apply holds the waiting canvas first, then
     lands on the canvas with no project; its undo then
     works there and never reaches the held copy."""
@@ -817,7 +817,7 @@ def test_m3_undo_across_the_hold_never_reaches_the_held_canvas(app, monkeypatch)
     assert _projects_holding(client, store, "applied") == []
 
 
-def test_m3_two_waiting_canvases_are_held_and_filed_separately(app, monkeypatch):
+def test_two_waiting_canvases_are_held_and_filed_separately(app, monkeypatch):
     client, store, graph, state = app
     ids = _waiting(client, store, graph, state, monkeypatch)
     client.post(f"/api/projects/{ids[1]}/open", headers=PERSON, json={"workspaceRevision": _rev(client)})
@@ -835,7 +835,7 @@ def test_m3_two_waiting_canvases_are_held_and_filed_separately(app, monkeypatch)
     assert _projects_holding(client, store, "second-canvas") == ["Recovered canvas 2"]
 
 
-def test_m3_create_at_the_limit_still_refuses_and_keeps_the_canvas(app, monkeypatch):
+def test_create_at_the_limit_still_refuses_and_keeps_the_canvas(app, monkeypatch):
     client, store, graph, state = app
     _waiting(client, store, graph, state, monkeypatch)
     response = client.post("/api/projects", headers=PERSON, json={"name": "New", "workspaceRevision": _rev(client)})
@@ -843,7 +843,7 @@ def test_m3_create_at_the_limit_still_refuses_and_keeps_the_canvas(app, monkeypa
     assert ONLY_W in _live_values(graph) and _held(store) == []
 
 
-def test_m3_graph_load_from_the_cli_and_mcp_says_the_refusal(app, monkeypatch, tmp_path):
+def test_graph_load_from_the_cli_and_mcp_says_the_refusal(app, monkeypatch, tmp_path):
     import graph_file_client
 
     client, store, graph, state = app
@@ -862,7 +862,7 @@ def test_m3_graph_load_from_the_cli_and_mcp_says_the_refusal(app, monkeypatch, t
     assert ONLY_W in _live_values(main_module.cli_graph)
 
 
-def test_m3_nothing_in_it_is_lost_on_every_path(app, monkeypatch):
+def test_nothing_in_it_is_lost_on_every_path(app, monkeypatch):
     """Every route that replaces or clears the live canvas, taken while it
     waits at the limit: each refuses or holds it, and once room frees,
     exactly one project holds the waiting canvas."""

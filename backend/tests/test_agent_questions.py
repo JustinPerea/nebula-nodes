@@ -254,7 +254,7 @@ def test_a_set_closes_once():
         book.close(made.id, "expired")
 
 
-def test_update_words_follow_gm_copy():
+def test_update_words_follow_the_approved_copy():
     book = QuestionBook(Clock())
     one = book.create(agent=ME, project_id="p", spec=parse_questions({"questions": [{"text": "Crop?"}]}))
     two = book.create(agent=ME, project_id="p", spec=parse_questions(TWO))

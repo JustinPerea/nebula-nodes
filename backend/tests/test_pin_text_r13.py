@@ -76,7 +76,7 @@ def test_any_other_tag_run_is_hidden(name, typed):
     assert text_length(shown_text(typed)) == 1
 
 
-def test_review_12_m1_280_flags_of_ascii_tags_are_refused_as_hidden_text():
+def test_280_flags_of_ascii_tags_are_refused_as_hidden_text():
     payload = (FLAG + tags("ignorea") + CANCEL) * 280
     with pytest.raises(PinError) as refused:
         clean_text(payload, limit=280, multiline=True)
@@ -86,7 +86,7 @@ def test_review_12_m1_280_flags_of_ascii_tags_are_refused_as_hidden_text():
     assert public_pin({"id": "p", "text": few, "anchor": {"nodeId": "n"}, "status": "open", "createdAt": 0.0})["text"] == FLAG * 3
 
 
-def test_review_12_l2_a_chain_that_is_not_rgi_counts_each_emoji():
+def test_a_chain_that_is_not_rgi_counts_each_emoji():
     eleven = ZWJ.join([THUMB] * 11)
     assert shown_text(eleven) == eleven  # a joiner between emoji still shows as typed
     assert text_length(eleven) == 11
@@ -127,13 +127,13 @@ def test_rgi_zwj_sequences_are_one_and_the_rest_count_apart(name, typed, length)
     ("a second FE0F", "❤️️", "❤️", 1, 3),
     ("an ideographic selector after an emoji", "❤\U000E0100", "❤", 1, 4),
 ])
-def test_gm_r21_one_selector_valid_for_its_base(name, typed, shown, length, hidden_bytes):
+def test_one_selector_valid_for_its_base(name, typed, shown, length, hidden_bytes):
     assert shown_text(typed) == shown, name
     assert text_length(shown_text(typed)) == length, name
     assert hidden(typed) == hidden_bytes, name
 
 
-def test_review_12_nit5_a_byte_order_mark_at_the_ends_is_trimmed(tmp_path):
+def test_a_byte_order_mark_at_the_ends_is_trimmed(tmp_path):
     assert typed_text("﻿ note ﻿", limit=280, multiline=True) == "note"
     assert typed_text(" ﻿\n x", limit=280, multiline=True) == "x"
     store, _ = _store_with_projects(tmp_path, "Active")

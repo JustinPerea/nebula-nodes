@@ -89,7 +89,7 @@ def _cut_at(raw: bytes, cut: str) -> int:
 
 
 @pytest.mark.parametrize("cut", CUTS)
-def test_high1_every_cut_of_the_catalog_keeps_the_persons_canvas(app, monkeypatch, cut):
+def test_every_cut_of_the_catalog_keeps_the_persons_canvas(app, monkeypatch, cut):
     """The listing filed and opened the person's waiting canvas, protected;
     then catalog.json is cut (damage: an atomic rename never tears it). After
     a restart, a listing and an agent's clear, the person's canvas is still
@@ -110,7 +110,7 @@ def test_high1_every_cut_of_the_catalog_keeps_the_persons_canvas(app, monkeypatc
     assert _keepers(store, before), f"cut {cut}: the person's canvas is in no project"
 
 
-def test_high1_the_record_is_written_in_the_head():
+def test_the_record_is_written_in_the_head():
     """`canvasPending` comes right before `activeProjectId`: a head that
     still says which project is open has its protection whole too."""
     keys = store_module._HEAD_KEYS
@@ -118,7 +118,7 @@ def test_high1_the_record_is_written_in_the_head():
     assert keys.index("canvasPending") < keys.index("workspaceRevision")
 
 
-def test_high1_a_restore_that_lost_the_record_protects_the_reopened_project_again(app, monkeypatch):
+def test_a_restore_that_lost_the_record_protects_the_reopened_project_again(app, monkeypatch):
     """The damage took the record but left the open project and its record
     (the record missing, the file cut in Recently deleted): the restore
     reopens the live canvas's project and protects it again (b), so the
@@ -141,7 +141,7 @@ def test_high1_a_restore_that_lost_the_record_protects_the_reopened_project_agai
     assert _keepers(store, before) == ["Recovered canvas"]
 
 
-def test_high1_a_whole_read_restore_keeps_the_damaged_files_record(app, monkeypatch):
+def test_a_whole_read_restore_keeps_the_damaged_files_record(app, monkeypatch):
     """A damaged catalog that parses (one record's shape is wrong): the
     restore takes the copy, and the protection the damaged file holds stays."""
     client, store, graph, state = app
@@ -160,7 +160,7 @@ def test_high1_a_whole_read_restore_keeps_the_damaged_files_record(app, monkeypa
     assert _keepers(store, before) == ["Recovered canvas"]
 
 
-def test_high1_only_the_live_canvass_own_project_is_protected_again(app, monkeypatch):
+def test_only_the_live_canvass_own_project_is_protected_again(app, monkeypatch):
     """(b) protects the reopened project only when it is the live canvas's:
     another open project, or an empty canvas, is left as the restore made it."""
     client, store, graph, state = app
@@ -179,7 +179,7 @@ L1_CUTS = [f"f{i:02d}" for i in range(4, 100, 8)] + ["before-canvasPending", "in
 
 
 @pytest.mark.parametrize("cut", L1_CUTS)
-def test_l1_a_damaged_catalog_never_names_the_agents_copy_as_the_persons(app, monkeypatch, cut):
+def test_a_damaged_catalog_never_names_the_agents_copy_as_the_persons(app, monkeypatch, cut):
     client, store, _graph, state = app
     _restored_unsettled(client, store, state, monkeypatch)
     added = client.post("/api/graph/node", headers=CODEX, json={"definitionId": "text-input", "params": {"value": "codex-x"}})
@@ -201,7 +201,7 @@ def test_l1_a_damaged_catalog_never_names_the_agents_copy_as_the_persons(app, mo
             assert row.get("agentCopy") == {"agent": "Codex"}
 
 
-def test_l1_the_copy_note_travels_with_the_canvas(app, monkeypatch):
+def test_the_copy_note_travels_with_the_canvas(app, monkeypatch):
     """state.json says the canvas is Codex's copy, under the name it takes;
     the note goes with the owner (inert once the canvas is another's)."""
     client, store, graph, state = app
@@ -245,7 +245,7 @@ def _the_original_stays_intact(client, store, before) -> None:
 
 
 @pytest.mark.parametrize("frame", ["fixed-tab-viewing-null", "followed-tab-says-person", "old-tab-viewing"])
-def test_high2_a_tab_that_follows_codex_onto_the_original_doesnt_end_its_protection(app, monkeypatch, frame):
+def test_a_tab_that_follows_codex_onto_the_original_doesnt_end_its_protection(app, monkeypatch, frame):
     """With the person's tab connected: Codex edits, opens
     the original, the tab follows it and says what it shows; Codex clears.
     The original keeps the person's canvas. Even a tab that wrongly says the
@@ -263,7 +263,7 @@ def test_high2_a_tab_that_follows_codex_onto_the_original_doesnt_end_its_protect
     _the_original_stays_intact(client, store, before)
 
 
-def test_high2_a_followed_tab_plus_the_persons_own_edit_ends_it(app, monkeypatch):
+def test_a_followed_tab_plus_the_persons_own_edit_ends_it(app, monkeypatch):
     client, store, graph, state = app
     with client.websocket_connect("/ws", headers=PERSON) as socket:
         socket.receive_json()
@@ -277,7 +277,7 @@ def test_high2_a_followed_tab_plus_the_persons_own_edit_ends_it(app, monkeypatch
     assert added.status_code == 200 and "savedCanvas" not in added.json(), added.text
 
 
-def test_high2_the_persons_own_open_of_the_loaded_project_ends_it(app, monkeypatch):
+def test_the_persons_own_open_of_the_loaded_project_ends_it(app, monkeypatch):
     """`personOpen`: the person opened the project already loaded in their
     tab (no request goes out): their own open, after Codex's too."""
     client, store, graph, state = app
@@ -290,7 +290,7 @@ def test_high2_the_persons_own_open_of_the_loaded_project_ends_it(app, monkeypat
         assert _settles(lambda: _fresh(store) is None)
 
 
-def test_high2_the_persons_open_through_nebula_then_viewing_ends_it(app, monkeypatch):
+def test_the_persons_open_through_nebula_then_viewing_ends_it(app, monkeypatch):
     client, store, graph, state = app
     with client.websocket_connect("/ws", headers=PERSON) as socket:
         socket.receive_json()
@@ -303,7 +303,7 @@ def test_high2_the_persons_open_through_nebula_then_viewing_ends_it(app, monkeyp
         assert _settles(lambda: _fresh(store) is None)
 
 
-def test_high2_an_agents_write_doesnt_end_it(app, monkeypatch):
+def test_an_agents_write_doesnt_end_it(app, monkeypatch):
     client, store, graph, state = app
     project_id, before = _codex_copies_then_opens_the_original(client, store, graph, state, monkeypatch)
     again = client.post("/api/graph/node", headers=CODEX, json={"definitionId": "text-input", "params": {"value": "codex-y"}})
@@ -312,7 +312,7 @@ def test_high2_an_agents_write_doesnt_end_it(app, monkeypatch):
     assert "Recovered canvas" in _keepers(store, before)
 
 
-def test_high2_the_sync_names_the_project_an_agents_write_closed(app, monkeypatch):
+def test_the_sync_names_the_project_an_agents_write_closed(app, monkeypatch):
     """A tab that followed Codex onto the original is told, on the sync, that
     Codex's clear closed it to keep the person's canvas in it, so it goes to
     Projects home rather than saying another window changed it. A new id per
@@ -327,7 +327,7 @@ def test_high2_the_sync_names_the_project_an_agents_write_closed(app, monkeypatc
     assert "Recovered canvas" in _keepers(store, before)
 
 
-def test_high2_a_sync_echo_doesnt_end_it_and_is_kept(app, monkeypatch):
+def test_a_sync_echo_doesnt_end_it_and_is_kept(app, monkeypatch):
     """The followed tab writes the layout back (a sync echo, no person
     input): still protected, and the clear saves the canvas, echo included,
     into the original first."""
@@ -345,7 +345,7 @@ def test_high2_a_sync_echo_doesnt_end_it_and_is_kept(app, monkeypatch):
 
 
 @pytest.mark.parametrize("headers", ["agent-socket", "no-hello"])
-def test_high2_no_agent_sends_the_persons_acts(app, monkeypatch, headers):
+def test_no_agent_sends_the_persons_acts(app, monkeypatch, headers):
     client, store, graph, state = app
     project_id = _listed_fresh(client, store, graph, state, monkeypatch)
     with client.websocket_connect("/ws", headers=CODEX if headers == "agent-socket" else PERSON) as socket:
@@ -361,7 +361,7 @@ def test_high2_no_agent_sends_the_persons_acts(app, monkeypatch, headers):
 
 # -- Design: the person's canvas first, each line its own count ----------------------------
 
-def test_gm12_2_each_waiting_canvas_says_its_own_count_the_persons_first(app, monkeypatch):
+def test_each_waiting_canvas_says_its_own_count_the_persons_first(app, monkeypatch):
     client, store, graph, state = app
     _waiting(client, store, graph, state, monkeypatch)
     catalog = _catalog(store)

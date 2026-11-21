@@ -296,7 +296,7 @@ def _boot_failure(canvas, monkeypatch, directory):
 
 
 @pytest.mark.unprivileged
-def test_b1_a_journal_fixed_after_a_real_boot_failure_lets_the_restore_go_on(canvas, monkeypatch, unwritable):
+def test_a_journal_fixed_after_a_real_boot_failure_lets_the_restore_go_on(canvas, monkeypatch, unwritable):
     """Once the folder can be written again, the next restore's
     retry writes the journal, clears the error and goes on."""
     store = _boot_failure(canvas, monkeypatch, unwritable)
@@ -310,7 +310,7 @@ def test_b1_a_journal_fixed_after_a_real_boot_failure_lets_the_restore_go_on(can
 
 
 @pytest.mark.unprivileged
-def test_b4_a_healthy_flag_over_an_unwritable_journal_still_refuses(canvas, monkeypatch, unwritable):
+def test_a_healthy_flag_over_an_unwritable_journal_still_refuses(canvas, monkeypatch, unwritable):
     """The store's last operation succeeded (its flag says
     healthy), then the folder went read-only. The canvas holds no IDs, so the
     re-seed writes nothing; the retry's own write fails, so it refuses and the
@@ -329,7 +329,7 @@ def test_b4_a_healthy_flag_over_an_unwritable_journal_still_refuses(canvas, monk
     assert json.dumps([canvas.graph.nodes, canvas.graph.edges], sort_keys=True, default=str) == before
 
 
-def test_l7_an_unhealthy_paid_start_store_answers_its_own_507_and_keeps_the_bootstrap_error(canvas, monkeypatch):
+def test_an_unhealthy_paid_start_store_answers_its_own_507_and_keeps_the_bootstrap_error(canvas, monkeypatch):
     """The retry can't take the paid-start fence because that
     store is unhealthy. It answers what a canvas replacement answers for it
     (507), blames that store, and leaves the bootstrap error as it was."""

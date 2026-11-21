@@ -173,7 +173,7 @@ def _structural(raw: bytes) -> list[int]:
 
 
 @pytest.mark.parametrize("bit", range(8))
-def test_m2_a_flip_of_a_records_opening_brace_keeps_its_newest_version(tmp_path, bit):
+def test_a_flip_of_a_records_opening_brace_keeps_its_newest_version(tmp_path, bit):
     """8 of 8 flips of Logo's `{` reverted it to "Logo"."""
     base, ids = _fuzz_base(tmp_path)
     raw = base.path.read_bytes()
@@ -185,7 +185,7 @@ def test_m2_a_flip_of_a_records_opening_brace_keeps_its_newest_version(tmp_path,
     assert _verdict(store, catalog, ids, error) == "ok"
 
 
-def test_m2_a_flipped_opener_in_recently_deleted_keeps_it_there(tmp_path):
+def test_a_flipped_opener_in_recently_deleted_keeps_it_there(tmp_path):
     base, ids = _fuzz_base(tmp_path)
     raw = base.path.read_bytes()
     brace = raw.index(f'"{ids["old"]}":{{'.encode()) + 35
@@ -195,7 +195,7 @@ def test_m2_a_flipped_opener_in_recently_deleted_keeps_it_there(tmp_path):
         assert ids["old"] in catalog["trash"]
 
 
-def test_m2_every_bit_of_every_structural_byte_never_reverts_silently(tmp_path, quick_disk):
+def test_every_bit_of_every_structural_byte_never_reverts_silently(tmp_path, quick_disk):
     """The full 8-bit sweep of every structural byte of base."""
     base, ids = _fuzz_base(tmp_path)
     raw = base.path.read_bytes()
@@ -214,7 +214,7 @@ def test_m2_every_bit_of_every_structural_byte_never_reverts_silently(tmp_path, 
 # -- Two flips never add a phantom -----------------------------------------------
 
 
-def test_l5_the_reviews_1500_two_flip_set_adds_no_phantom_and_no_wrong_id(tmp_path, quick_disk):
+def test_the_reviews_1500_two_flip_set_adds_no_phantom_and_no_wrong_id(tmp_path, quick_disk):
     base, ids = _fuzz_base(tmp_path)
     raw = base.path.read_bytes()
     rng = random.Random(4403)
@@ -229,7 +229,7 @@ def test_l5_the_reviews_1500_two_flip_set_adds_no_phantom_and_no_wrong_id(tmp_pa
     assert bad == {}, bad
 
 
-def test_l5_a_broken_quote_after_a_nested_record_shaped_object_never_counts_it(tmp_path):
+def test_a_broken_quote_after_a_nested_record_shaped_object_never_counts_it(tmp_path):
     """Case @613/@2193: a flip right after Hero's id stops its
     read before Shadow3 (a whole record-shaped object in Hero's `extra`), and
     a broken quote in Dunes after it hides every brace that closes it."""
@@ -248,7 +248,7 @@ def test_l5_a_broken_quote_after_a_nested_record_shaped_object_never_counts_it(t
     assert "PHANTOM" not in _verdict(store, catalog, ids, error)
 
 
-def test_l5_a_record_whose_key_and_id_both_changed_is_never_a_new_project(tmp_path):
+def test_a_record_whose_key_and_id_both_changed_is_never_a_new_project(tmp_path):
     """Run of the 1,500 set (@2896/@2846): a flip in Old's key
     (a hex digit to "i") and another in its own id (a hex digit to another)
     filed Old under the changed id as a project added back."""
@@ -277,7 +277,7 @@ def test_torn_page_after_a_whole_record_never_makes_it_look_nested():
 # -- A broken "deletedAt" key ----------------------------------------------------
 
 
-def test_l4_a_broken_deleted_at_key_never_says_in_recently_deleted_again(tmp_path):
+def test_a_broken_deleted_at_key_never_says_in_recently_deleted_again(tmp_path):
     base, ids = _fuzz_base(tmp_path)
     raw = base.path.read_bytes()
     start = raw.index(f'"{ids["old"]}":{{'.encode())
@@ -292,7 +292,7 @@ def test_l4_a_broken_deleted_at_key_never_says_in_recently_deleted_again(tmp_pat
     assert bad == {}
 
 
-def test_l4_a_trash_record_without_deleted_at_is_damaged_not_restored():
+def test_a_trash_record_without_deleted_at_is_damaged_not_restored():
     alpha = make_project("Old")
     alpha["deletedAt"] = store_module.now()
     entry = {key: value for key, value in alpha.items() if key != "deletedAt"}
@@ -345,7 +345,7 @@ def _skewed_older_copy(tmp_path: Path, monkeypatch):
     return store, {"alpha": a["id"], "beta": b["id"], "gamma": g["id"]}
 
 
-def test_m3_a_zeroed_catalog_restores_bak_not_the_older_copy_from_the_future(tmp_path, monkeypatch):
+def test_a_zeroed_catalog_restores_bak_not_the_older_copy_from_the_future(tmp_path, monkeypatch):
     store, ids = _skewed_older_copy(tmp_path, monkeypatch)
     size = store.path.stat().st_size
     with open(store.path, "r+b") as handle:
@@ -356,7 +356,7 @@ def test_m3_a_zeroed_catalog_restores_bak_not_the_older_copy_from_the_future(tmp
     assert _names(catalog)["projects"] == ["Alpha final", "Beta final", "Gamma (new)"]
 
 
-def test_m3_a_torn_catalog_keeps_its_newest_records(tmp_path, monkeypatch):
+def test_a_torn_catalog_keeps_its_newest_records(tmp_path, monkeypatch):
     store, ids = _skewed_older_copy(tmp_path, monkeypatch)
     store.path.write_bytes(store.path.read_bytes()[:-2])
     fresh = ProjectStore(store.root)
@@ -366,7 +366,7 @@ def test_m3_a_torn_catalog_keeps_its_newest_records(tmp_path, monkeypatch):
     assert ids["gamma"] in catalog["projects"]
 
 
-def test_m3_the_bak_only_project_survives_the_next_two_commits(tmp_path, monkeypatch):
+def test_the_bak_only_project_survives_the_next_two_commits(tmp_path, monkeypatch):
     """a3c: the next commit after the restore replaced .bak, and
     Gamma, whole in a valid copy, was gone from every file."""
     store, ids = _skewed_older_copy(tmp_path, monkeypatch)
@@ -380,7 +380,7 @@ def test_m3_the_bak_only_project_survives_the_next_two_commits(tmp_path, monkeyp
     assert ids["gamma"] in json.loads(fresh.path.read_text())["projects"]
 
 
-def test_m3_a_future_dated_copy_record_never_beats_a_whole_one(monkeypatch):
+def test_a_future_dated_copy_record_never_beats_a_whole_one(monkeypatch):
     """reconcile's newer(): a copy record whose only later date is ahead of
     the clock doesn't win over the damaged file's whole record."""
     now = datetime.now(timezone.utc)
@@ -395,7 +395,7 @@ def test_m3_a_future_dated_copy_record_never_beats_a_whole_one(monkeypatch):
     assert merged.catalog["projects"][whole["id"]]["name"] == "Alpha final"
 
 
-def test_m3_bak_wins_a_tie_and_an_older_copy_with_truly_later_dates_still_wins(tmp_path):
+def test_bak_wins_a_tie_and_an_older_copy_with_truly_later_dates_still_wins(tmp_path):
     """.bak is preferred; .bak.1 is chosen only for later dates that aren't
     in the future (a .bak a sync tool rolled back)."""
     store = ProjectStore(tmp_path / "p")
@@ -421,7 +421,7 @@ def test_m3_bak_wins_a_tie_and_an_older_copy_with_truly_later_dates_still_wins(t
 # -- Deleted for good stays deleted ---------------------------------------
 
 
-def test_l2_an_older_damaged_catalog_never_brings_back_a_project_deleted_for_good(tmp_path):
+def test_an_older_damaged_catalog_never_brings_back_a_project_deleted_for_good(tmp_path):
     """a1: catalog.json rolled back to a file from before the
     delete for good (a sync tool), and torn; .bak holds the tombstone."""
     store = ProjectStore(tmp_path / "p")
@@ -453,7 +453,7 @@ def test_l2_an_older_damaged_catalog_never_brings_back_a_project_deleted_for_goo
     assert [row["id"] for row in record["keptDeleted"]] == [x["id"]]
 
 
-def test_l3_a_delete_for_good_as_the_last_commit_survives_a_zeroed_catalog(tmp_path):
+def test_a_delete_for_good_as_the_last_commit_survives_a_zeroed_catalog(tmp_path):
     """a2: .bak is one commit behind; the tombstone was only in
     catalog.json's head. It is in catalog-purged.json too now."""
     store = ProjectStore(tmp_path / "p")
@@ -477,7 +477,7 @@ def test_l3_a_delete_for_good_as_the_last_commit_survives_a_zeroed_catalog(tmp_p
     assert [row["id"] for row in _record(fresh)["keptDeleted"]] == [x["id"]]
 
 
-def test_l3_a_project_made_again_after_its_delete_for_good_is_never_dropped_by_the_side_file(tmp_path):
+def test_a_project_made_again_after_its_delete_for_good_is_never_dropped_by_the_side_file(tmp_path):
     """The same id made again (a retried recovery) takes its tombstone out of
     catalog-purged.json too, so a restore keeps it."""
     store = ProjectStore(tmp_path / "p")
@@ -508,7 +508,7 @@ def test_l3_a_project_made_again_after_its_delete_for_good_is_never_dropped_by_t
     assert x["id"] in fresh.read()["projects"]
 
 
-def test_l3_a_damaged_side_file_is_ignored(tmp_path):
+def test_a_damaged_side_file_is_ignored(tmp_path):
     store = ProjectStore(tmp_path / "p")
     with store.transaction() as c:
         a = make_project("Alpha")
@@ -544,7 +544,7 @@ def _undo_past_the_limit(client, store, graph, state, monkeypatch) -> list[str]:
     return ids
 
 
-def test_l1_undo_after_the_canvas_took_the_slot_passes_the_limit(app, monkeypatch):
+def test_undo_after_the_canvas_took_the_slot_passes_the_limit(app, monkeypatch):
     assert store_module.RESTORE_MAY_PASS_THE_PROJECT_LIMIT is True
     client, store, graph, state = app
     ids = _undo_past_the_limit(client, store, graph, state, monkeypatch)
@@ -560,7 +560,7 @@ def test_l1_undo_after_the_canvas_took_the_slot_passes_the_limit(app, monkeypatc
     assert len(client.get("/api/projects", headers=PERSON).json()["projects"]) == 4
 
 
-def test_l1_over_the_limit_after_undo_the_next_create_is_refused_with_the_limit_line(app, monkeypatch):
+def test_over_the_limit_after_undo_the_next_create_is_refused_with_the_limit_line(app, monkeypatch):
     """Over the limit after such an Undo is like any other list over it: a
     new project is still refused (413, the existing limit body), nothing
     changes."""
@@ -581,7 +581,7 @@ def test_l1_over_the_limit_after_undo_the_next_create_is_refused_with_the_limit_
 @pytest.mark.parametrize("damage", [None, b"\x00{not json", b"[1,2]",
                                     b'{"reason":"projects","since":5,"journaled":"yes","from":["x"]}'],
                          ids=["missing", "garbage", "a list", "wrong types"])
-def test_nit1_a_damaged_or_missing_waiting_record_keeps_since_and_the_one_event(app, monkeypatch, damage):
+def test_a_damaged_or_missing_waiting_record_keeps_since_and_the_one_event(app, monkeypatch, damage):
     client, store, graph, state = app
     kinds = _journal_kinds(monkeypatch)
     _unfiled_at_the_limit(client, store, graph, state, monkeypatch, "e" * 32)
@@ -598,7 +598,7 @@ def test_nit1_a_damaged_or_missing_waiting_record_keeps_since_and_the_one_event(
     assert kinds.count("project.canvasNotFiled") == 1
 
 
-def test_nit1_the_wait_journals_its_since(app, monkeypatch):
+def test_the_wait_journals_its_since(app, monkeypatch):
     """The one `project.canvasNotFiled` event carries `since`, as the
     listing does, so a watcher has it without a listing."""
     client, store, graph, state = app
@@ -616,7 +616,7 @@ def test_nit1_the_wait_journals_its_since(app, monkeypatch):
     assert [data.get("since") for data in seen] == [first["since"]]
 
 
-def test_nit2_start_here_says_when_room_has_freed(app, monkeypatch):
+def test_start_here_says_when_room_has_freed(app, monkeypatch):
     """b2b: after an agent's delete with no listing, start_here
     still said opening was refused (413) until then; the open succeeded."""
     client, store, graph, state = app
@@ -631,7 +631,7 @@ def test_nit2_start_here_says_when_room_has_freed(app, monkeypatch):
     assert "room now" in waiting["note"]
 
 
-def test_nit3_needs_reading_and_projection_see_an_in_place_rewrite(tmp_path):
+def test_needs_reading_and_projection_see_an_in_place_rewrite(tmp_path):
     store = ProjectStore(tmp_path / "projects")
     with store.transaction() as catalog:
         a = make_project("Alpha")
@@ -655,7 +655,7 @@ def test_nit3_needs_reading_and_projection_see_an_in_place_rewrite(tmp_path):
 # -- Design: the waiting canvas isn't open or reachable ---------------------------------
 
 
-def test_gm_no_agent_text_says_the_waiting_canvas_is_open(app, monkeypatch):
+def test_no_agent_text_says_the_waiting_canvas_is_open(app, monkeypatch):
     client, store, graph, state = app
     _unfiled_at_the_limit(client, store, graph, state, monkeypatch, "e" * 32)
     waiting = client.get("/api/projects", headers=PERSON).json()["canvasNotFiled"]

@@ -74,7 +74,7 @@ def _park_the_open_until_the_fence_passes(main, monkeypatch, b: str):
 
 
 @pytest.mark.asyncio
-async def test_L1_a_switch_that_commits_between_the_fence_and_the_route_refuses_the_note(api, monkeypatch):
+async def test_a_switch_that_commits_between_the_fence_and_the_route_refuses_the_note(api, monkeypatch):
     """WINDOW probe: the note is refused (409), pinned nowhere and journaled nowhere."""
     main = api.main
     api.client.post("/api/graph/apply", headers=CLAUDE,
@@ -106,7 +106,7 @@ async def test_L1_a_switch_that_commits_between_the_fence_and_the_route_refuses_
 
 
 @pytest.mark.asyncio
-async def test_L1_a_delete_in_the_same_window_is_refused_and_deletes_nothing(api, monkeypatch):
+async def test_a_delete_in_the_same_window_is_refused_and_deletes_nothing(api, monkeypatch):
     main = api.main
     api.client.post("/api/graph/apply", headers=CLAUDE,
                     json={"nodes": [{"ref": "+p", "definitionId": "text-input", "params": {"value": "A"}}]})
@@ -131,7 +131,7 @@ async def test_L1_a_delete_in_the_same_window_is_refused_and_deletes_nothing(api
     assert [pin["id"] for pin in main.canvas_pins.list().get("pins", [])] == [pin_id]
 
 
-def test_L1_every_before_route_write_checks_again_as_its_body_starts():
+def test_every_before_route_write_checks_again_as_its_body_starts():
     """No FENCE_BEFORE_ROUTE route relies on the middleware's marker alone:
     graph_write wraps each one in the check (and refuses to mark a sync route,
     which would run on another thread after an unknown wait)."""
@@ -155,7 +155,7 @@ def test_L1_every_before_route_write_checks_again_as_its_body_starts():
         main.graph_write(lambda: None)
 
 
-def test_L1_the_pin_routes_write_with_no_await_before_the_write():
+def test_the_pin_routes_write_with_no_await_before_the_write():
     """The check runs as the body starts; nothing in create/delete awaits
     before canvas_pins.add_in / remove_in, so nothing can run between."""
     import main
@@ -169,7 +169,7 @@ def test_L1_the_pin_routes_write_with_no_await_before_the_write():
         assert awaits_before == [], (function.__name__, awaits_before)
 
 
-def test_L1_agents_and_the_person_still_write_through_the_recheck(api):
+def test_agents_and_the_person_still_write_through_the_recheck(api):
     """The recheck changes nothing for a request made for the open canvas, or
     for agents (no revision headers)."""
     main = api.main
@@ -194,7 +194,7 @@ def test_L1_agents_and_the_person_still_write_through_the_recheck(api):
 # written: its newlines kept end to end (the store, look_at_canvas and
 # start_here, `nebula pins`), every other control character still dropped.
 
-def test_L2_a_note_keeps_its_newlines_and_drops_every_other_control_character():
+def test_a_note_keeps_its_newlines_and_drops_every_other_control_character():
     from services.canvas_pins import clean_text
 
     note = "first line\r\n\tsecond line\x00\x1b[31m\u202e\rthird  line  \n"
@@ -206,7 +206,7 @@ def test_L2_a_note_keeps_its_newlines_and_drops_every_other_control_character():
             clean_text(bad, limit=280, multiline=True)
 
 
-def test_L2_the_pin_store_keeps_the_lines_and_a_reply_stays_one_line(tmp_path):
+def test_the_pin_store_keeps_the_lines_and_a_reply_stays_one_line(tmp_path):
     from services.canvas_pins import CanvasPins
     from services.project_store import ProjectStore
 
@@ -222,7 +222,7 @@ def test_L2_the_pin_store_keeps_the_lines_and_a_reply_stays_one_line(tmp_path):
     assert [p["text"] for p in pins.list()["pins"]] == ["first line\nsecond line"]
 
 
-def test_L2_agents_read_the_lines_in_start_here_mcp_and_the_cli():
+def test_agents_read_the_lines_in_start_here_mcp_and_the_cli():
     from cli.formatter import format_pin, format_start
     from services import agent_start
 
@@ -246,7 +246,7 @@ def test_L2_agents_read_the_lines_in_start_here_mcp_and_the_cli():
 # surface (an event summary, `nebula watch`) shows a break as " ⏎ " so one
 # event never reads as two.
 
-def test_r3_M1_the_channel_pushes_a_multiline_note_with_its_lines_kept():
+def test_the_channel_pushes_a_multiline_note_with_its_lines_kept():
     from tests.test_mcp_channel import pin, resp, take
     import mcp_channel
 
@@ -268,7 +268,7 @@ def test_r3_M1_the_channel_pushes_a_multiline_note_with_its_lines_kept():
     assert "first linesecond line" not in push.content
 
 
-def test_r3_LOW5_every_unicode_line_break_reads_as_a_newline_in_the_store():
+def test_every_unicode_line_break_reads_as_a_newline_in_the_store():
     from services.canvas_pins import clean_text
 
     for brk in (" ", " ", "\x85", "\x0b", "\x0c", "\r\n", "\r"):
@@ -277,7 +277,7 @@ def test_r3_LOW5_every_unicode_line_break_reads_as_a_newline_in_the_store():
     assert clean_text("one two", limit=280) == "one two"
 
 
-def test_r3_LOW5_event_summaries_and_cli_event_lines_stay_one_line():
+def test_event_summaries_and_cli_event_lines_stay_one_line():
     from cli.formatter import format_event
     from services.canvas_pins import pin_summary
 
@@ -294,7 +294,7 @@ def test_r3_LOW5_event_summaries_and_cli_event_lines_stay_one_line():
     assert "\n" not in blank
 
 
-def test_r3_LOW5_the_resolved_event_summary_is_one_line():
+def test_the_resolved_event_summary_is_one_line():
     import main
     from services.canvas_pins import pin_resolved_summary
 
@@ -307,7 +307,7 @@ def test_r3_LOW5_the_resolved_event_summary_is_one_line():
     assert "pin_resolved_summary(" in source
 
 
-def test_r3_N6_start_here_keeps_spacing_as_look_at_canvas_does():
+def test_start_here_keeps_spacing_as_look_at_canvas_does():
     from services import agent_start
 
     pin = {"id": "pin_1", "anchor": {"nodeId": "n4"}, "text": "lead  tab\nnext   line", "status": "open"}
@@ -322,7 +322,7 @@ def test_r3_N6_start_here_keeps_spacing_as_look_at_canvas_does():
 # The blank-run collapse in the store is reverted later:
 # see test_r5_N3 below.
 
-def test_r4_N4_the_channel_indents_each_later_line_of_a_note():
+def test_the_channel_indents_each_later_line_of_a_note():
     from tests.test_mcp_channel import pin, resp, take
     import mcp_channel
 
@@ -345,7 +345,7 @@ def test_r4_N4_the_channel_indents_each_later_line_of_a_note():
 LIST_NOTE = "Fix these:\n- warmer key light\n  - not orange\n\n- tighter crop"
 
 
-def test_r5_LOW4_the_channel_keeps_a_list_note_in_shape():
+def test_the_channel_keeps_a_list_note_in_shape():
     from tests.test_mcp_channel import pin, resp, take
     import mcp_channel
 
@@ -364,7 +364,7 @@ def test_r5_LOW4_the_channel_keeps_a_list_note_in_shape():
     assert '<pin id="pin_00000002" node="n7">warmer</pin>' in push.content
 
 
-def test_r5_LOW4_the_cli_prints_the_note_the_same_way():
+def test_the_cli_prints_the_note_the_same_way():
     from cli.formatter import format_pin, format_start
     from services import agent_start
     import mcp_channel
@@ -385,7 +385,7 @@ def test_r5_LOW4_the_cli_prints_the_note_the_same_way():
     assert format_pin({**resolved, "text": "warmer"}, now=None) == 'pin_1 on n4: "warmer" — resolved by Claude: "done"'
 
 
-def test_r5_N3_the_store_keeps_what_the_person_typed():
+def test_the_store_keeps_what_the_person_typed():
     from services.canvas_pins import clean_text
 
     # Blank lines stay as typed (fold is reverted); the cap bounds them.
@@ -400,7 +400,7 @@ def test_r5_N3_the_store_keeps_what_the_person_typed():
 # The first line keeps its indent end to end; a pasted terminal colour code
 # goes whole, never as a stray "[31m".
 
-def test_r6_N2_the_first_line_keeps_its_indent():
+def test_the_first_line_keeps_its_indent():
     from services.canvas_pins import clean_text
     import mcp_channel
 
@@ -411,7 +411,7 @@ def test_r6_N2_the_first_line_keeps_its_indent():
     assert mcp_channel._note_block("  indented first\nsecond") == "    indented first\n  second"
 
 
-def test_r6_N4_a_terminal_colour_code_goes_whole():
+def test_a_terminal_colour_code_goes_whole():
     from services.canvas_pins import clean_text
 
     assert clean_text("\x1b[31mred\x1b[0m text", limit=280, multiline=True) == "red text"
@@ -419,7 +419,7 @@ def test_r6_N4_a_terminal_colour_code_goes_whole():
     assert clean_text("a\x1b[1;32mb", limit=280) == "ab"
 
 
-def test_r7_N3_a_dcs_sequence_goes_whole():
+def test_a_dcs_sequence_goes_whole():
     """DCS (ESC P ... ST, and its 8-bit form) is dropped whole,
     like CSI and OSC; no "Pq#0;2;0;0;0\\" is left in the note."""
     from services.canvas_pins import clean_text
@@ -429,7 +429,7 @@ def test_r7_N3_a_dcs_sequence_goes_whole():
     assert clean_text("a\x1bP1$r0m\x1b\\b\x1b[0m", limit=280) == "ab"
 
 
-def test_r9_NIT3_every_string_sequence_goes_whole():
+def test_every_string_sequence_goes_whole():
     """OSC, DCS, APC, PM and SOS, 7- or 8-bit, are dropped
     with their payload: past an inner ESC, ended by ST or BEL, and, left
     unterminated, to the end of their line (the next lines stay)."""

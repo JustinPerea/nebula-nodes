@@ -39,7 +39,7 @@ def _needs_input_and_key(definition: dict) -> bool:
 WALKED = sorted(node_id for node_id, definition in REGISTRY.items() if _needs_input_and_key(definition))
 
 
-def test_the_walk_covers_the_routed_nodes_review_19_named():
+def test_the_walk_covers_the_routed_nodes_the_review_named():
     for node_id in ("flux-2-pro", "flux-3-image", "flux-3-image-klein", "flux-3-video", "krea-3",
                     "krea-moodboard-create", "flux-kontext", "claude-chat"):
         assert node_id in WALKED, node_id

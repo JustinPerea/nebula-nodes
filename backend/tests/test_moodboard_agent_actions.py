@@ -343,7 +343,7 @@ def _words_rows() -> list[tuple[str, dict, dict, str]]:
 
 
 @pytest.mark.parametrize("label,before,after,line", _words_rows(), ids=[row[0] for row in _words_rows()])
-def test_every_board_change_line_in_gms_words_for_each_surface(label, before, after, line):
+def test_every_board_change_line_in_the_approved_words_for_each_surface(label, before, after, line):
     from services.moodboard_edits import journal_entries
 
     changes = diff(before, after)
@@ -363,7 +363,7 @@ def test_every_board_change_line_in_gms_words_for_each_surface(label, before, af
     assert summaries == [expected]
 
 
-def test_the_whole_lines_gm_listed_for_writes_with_no_journal_event():
+def test_the_whole_lines_the_review_listed_for_writes_with_no_journal_event():
     from services.moodboard_actions import describe_create, describe_move, describe_write
 
     dusk = {"id": "b", "name": "Dusk", "images": _imgs(3)}

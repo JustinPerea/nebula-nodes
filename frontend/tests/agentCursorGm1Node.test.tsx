@@ -104,7 +104,7 @@ describe('a Character cursor at its canvas node', () => {
     canvasNode('character:c1');
     land();
     // With no layout to read (jsdom), the rest is the fallback: HEADER_ICON_X in, 44 px down. In the app it is
-    // the card's own title row, measured (launcherRestPoint, tests/agentCursorGm1.test.ts).
+    // the card's own title row, measured (launcherRestPoint, in the agent-cursor tests).
     expect(tipOf(cursor())).toEqual({ x: NODE.left + HEADER_ICON_X, y: NODE.top + 44 });
     // Not beside the node (right edge + the park's gap): the tip would touch the output port.
     expect(tipOf(cursor())!.x).toBeLessThan(NODE.left + NODE.width);

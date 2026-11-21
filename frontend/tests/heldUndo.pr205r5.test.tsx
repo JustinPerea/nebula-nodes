@@ -482,7 +482,7 @@ describe('PR #205: holds, someone, and the selection', () => {
     };
     /** Codex sets a value, then a reconnect's sync renames n1: Codex's step keeps only the value. */
     const codexThenReconnect = async () => {
-      agentDoes(codex, 'ed_gm7val00000001', () => { n1().params = { value: 'CODEX' }; });
+      agentDoes(codex, 'ed_case7val00000001', () => { n1().params = { value: 'CODEX' }; });
       await settle();
       reconnectSync(() => { n1().label = 'Reconnect'; });
       await settle();
@@ -539,7 +539,7 @@ describe('PR #205: holds, someone, and the selection', () => {
     it('a Delete that goes through: Undo brings both back; "someone" for the name; Codex\'s step holds only its value', async () => {
       start([{ ...textFakeNode('n1'), params: { value: 'v0' } }, textFakeNode('n2')]);
       await deleteHeld();
-      agentEdits(codex, { ...textFakeNode('n1'), params: { value: 'CODEX' } }, 'ed_gm7del00000001');
+      agentEdits(codex, { ...textFakeNode('n1'), params: { value: 'CODEX' } }, 'ed_case7del00000001');
       await settle();
       const others = [...nebula().nodes.values()].filter((node) => node.id !== 'n1');
       emit({ nodes: FakeNebula.syncNodes({ nodes: [{ ...textFakeNode('n1'), label: 'Reconnect', params: { value: 'CODEX' } }, ...others], edges: [] }),
@@ -559,7 +559,7 @@ describe('PR #205: holds, someone, and the selection', () => {
 
     it.each([['no hold', false], ['a Delete Nebula refuses', true]] as const)('%s: a run\'s own write-back (no origin, runParams) is nobody\'s change: the value\'s toucher stays Codex', async (_label, held) => {
       start([{ ...textFakeNode('n1'), params: { value: 'v0' } }, textFakeNode('n2')]);
-      agentDoes(codex, 'ed_gm7run00000001', () => { n1().params = { value: 'CODEX' }; });
+      agentDoes(codex, 'ed_case7run00000001', () => { n1().params = { value: 'CODEX' }; });
       await settle();
       expect(lastForeignToucher('n1', 'value')).toEqual({ kind: 'agent', name: 'Codex' });
       if (held) {
@@ -581,7 +581,7 @@ describe('PR #205: holds, someone, and the selection', () => {
 
     it('an agent rename, then a reconnect renames during a refused Delete: the agent is never named for it', async () => {
       start([{ ...textFakeNode('n1'), params: { value: 'v0' } }, textFakeNode('n2')]);
-      agentDoes(codex, 'ed_gm7ren00000001', () => { n1().label = 'Codex name'; });
+      agentDoes(codex, 'ed_case7ren00000001', () => { n1().label = 'Codex name'; });
       await settle();
       expect(lastForeignToucher('n1')).toEqual({ kind: 'agent', name: 'Codex' });
       refuseDelete();

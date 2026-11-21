@@ -115,7 +115,7 @@ def _verdict(store: ProjectStore, catalog: dict, ids: dict) -> str:
     pytest.param(lambda raw, at: raw[:at + 33] + b"#" + raw[at + 34:], id="closing quote -> #"),
     pytest.param(lambda raw, at: raw[:at + 34] + b";" + raw[at + 35:], id="colon -> ;"),
 ])
-def test_m2_a_broken_key_keeps_the_records_latest_version(tmp_path, change):
+def test_a_broken_key_keeps_the_records_latest_version(tmp_path, change):
     """test_r3_debug: the file no longer parses, the record
     behind the key is whole and holds its own id. Its newest version stays."""
     base, ids = _logo_renamed_after_the_copy(tmp_path)
@@ -130,7 +130,7 @@ def test_m2_a_broken_key_keeps_the_records_latest_version(tmp_path, change):
     assert _record(store)["damagedReadWhole"] is False
 
 
-def test_m2_the_reviews_272_flips_in_a_changed_records_key_never_revert_it_silently(tmp_path):
+def test_the_reviews_272_flips_in_a_changed_records_key_never_revert_it_silently(tmp_path):
     """Fuzz, the region that failed (69 of 272 silent reverts):
     every bit of every byte of the key of the project changed since the copy."""
     base, ids = _logo_renamed_after_the_copy(tmp_path)
@@ -148,7 +148,7 @@ def test_m2_the_reviews_272_flips_in_a_changed_records_key_never_revert_it_silen
     assert set(tally) <= {"ok", "no-restore"}, tally
 
 
-def test_m2_the_id_field_and_section_flips_still_hold(tmp_path):
+def test_the_id_field_and_section_flips_still_hold(tmp_path):
     base, ids = _logo_renamed_after_the_copy(tmp_path)
     raw = base.path.read_bytes()
     text = raw.decode()
@@ -166,7 +166,7 @@ def test_m2_the_id_field_and_section_flips_still_hold(tmp_path):
     assert bad == {}
 
 
-def test_m2_a_whole_record_shaped_object_nested_in_a_torn_snapshot_is_not_a_project():
+def test_a_whole_record_shaped_object_nested_in_a_torn_snapshot_is_not_a_project():
     """The record anchor finds objects by their leading id: one nested in a
     snapshot (a node holding a copy of a project, after a torn page) sits
     deeper than any record, and is never taken."""
@@ -185,7 +185,7 @@ def test_m2_a_whole_record_shaped_object_nested_in_a_torn_snapshot_is_not_a_proj
     assert set(found.failed) == {alpha["id"]}
 
 
-def test_m2_a_whole_record_after_a_torn_one_with_a_broken_key_is_found_by_its_id():
+def test_a_whole_record_after_a_torn_one_with_a_broken_key_is_found_by_its_id():
     first, second = make_project("Logo"), make_project("Hero")
     catalog = {"version": 1, "activeProjectId": None, "workspaceRevision": "r",
                "projects": {first["id"]: first, second["id"]: second}, "trash": {}}
@@ -205,7 +205,7 @@ def test_m2_a_whole_record_after_a_torn_one_with_a_broken_key_is_found_by_its_id
 # -- L2: the torn-after-torn rule never counts a nested object -----------------------
 
 
-def test_l2_a_nested_record_shaped_object_after_a_cut_is_not_a_project():
+def test_a_nested_record_shaped_object_after_a_cut_is_not_a_project():
     """Probe: {"<id>": {"id": "<id>", "name": "Shadow", "kind": ...}}
     in the tail of a torn snapshot read as "“Shadow”, a newer project,
     couldn't be added back"."""
@@ -229,7 +229,7 @@ def test_l2_a_nested_record_shaped_object_after_a_cut_is_not_a_project():
 # -- L1: a flipped version bit is damage when something says so ----------------------
 
 
-def test_l1_a_flipped_version_in_the_older_copy_never_blocks_a_restore_the_copy_can_do(tmp_path):
+def test_a_flipped_version_in_the_older_copy_never_blocks_a_restore_the_copy_can_do(tmp_path):
     base, ids = _logo_renamed_after_the_copy(tmp_path)
     root = tmp_path / "bak1"
     shutil.copytree(base.root, root)
@@ -242,7 +242,7 @@ def test_l1_a_flipped_version_in_the_older_copy_never_blocks_a_restore_the_copy_
     assert _record(store)["source"] == store_module.BACKUP_NAME
 
 
-def test_l1_a_copy_claiming_a_newer_version_beside_a_version_1_head_is_a_damaged_copy(tmp_path):
+def test_a_copy_claiming_a_newer_version_beside_a_version_1_head_is_a_damaged_copy(tmp_path):
     base, ids = _logo_renamed_after_the_copy(tmp_path)
     root = tmp_path / "bak"
     shutil.copytree(base.root, root)
@@ -259,7 +259,7 @@ def test_l1_a_copy_claiming_a_newer_version_beside_a_version_1_head_is_a_damaged
     assert any(".bak.damaged-" in path for path in record["setAside"])
 
 
-def test_l1_a_version_changed_in_place_in_a_file_this_process_committed_is_damage(tmp_path):
+def test_a_version_changed_in_place_in_a_file_this_process_committed_is_damage(tmp_path):
     base, ids = _logo_renamed_after_the_copy(tmp_path)
     store = base
     with store.transaction():
@@ -274,7 +274,7 @@ def test_l1_a_version_changed_in_place_in_a_file_this_process_committed_is_damag
     assert _record(store)["reason"] in ("invalid", "corrupt")
 
 
-def test_l1_a_real_newer_catalog_still_refuses(tmp_path):
+def test_a_real_newer_catalog_still_refuses(tmp_path):
     base, _ids = _logo_renamed_after_the_copy(tmp_path)
     root = tmp_path / "newer"
     shutil.copytree(base.root, root)
@@ -287,7 +287,7 @@ def test_l1_a_real_newer_catalog_still_refuses(tmp_path):
     assert not list(root.glob("*.damaged-*"))
 
 
-def test_l1_a_newer_catalog_and_copy_still_refuse_when_nothing_contradicts_them(tmp_path):
+def test_a_newer_catalog_and_copy_still_refuse_when_nothing_contradicts_them(tmp_path):
     base, _ids = _logo_renamed_after_the_copy(tmp_path)
     root = tmp_path / "newer2"
     shutil.copytree(base.root, root)
@@ -302,7 +302,7 @@ def test_l1_a_newer_catalog_and_copy_still_refuse_when_nothing_contradicts_them(
 # -- L3: tombstones are decided by file order, never by a skewed clock --------------
 
 
-def test_l3_a_project_made_while_the_clock_was_ahead_stays_deleted_for_good(tmp_path):
+def test_a_project_made_while_the_clock_was_ahead_stays_deleted_for_good(tmp_path):
     """Probe: created with the clock 3 h ahead, deleted for
     good after it was corrected, then a cut that keeps the head."""
     store = ProjectStore(tmp_path / "projects")
@@ -332,7 +332,7 @@ def test_l3_a_project_made_while_the_clock_was_ahead_stays_deleted_for_good(tmp_
 # -- L4: create one below the limit ---------------------------------------------------
 
 
-def test_l4_create_one_below_the_limit_never_files_the_canvas_then_refuses(app, monkeypatch):
+def test_create_one_below_the_limit_never_files_the_canvas_then_refuses(app, monkeypatch):
     """Probe: limit 3, Alpha and Beta, and the open Gamma's
     canvas whose record is gone. A raw create (no listing first)."""
     client, store, _graph, state = app
@@ -358,7 +358,7 @@ def test_l4_create_one_below_the_limit_never_files_the_canvas_then_refuses(app, 
     assert _values(json.loads(store.path.read_text())["projects"][filed[0]["id"]]) == ["g1"]
 
 
-def test_l4_a_create_whose_commit_fails_after_filing_gives_the_canvas_its_owner_back(app, monkeypatch):
+def test_a_create_whose_commit_fails_after_filing_gives_the_canvas_its_owner_back(app, monkeypatch):
     client, store, _graph, state = app
     _create(client, "Alpha")
     gamma = _create(client, "Gamma")
@@ -420,7 +420,7 @@ def _unfiled_at_the_limit(client, store, graph, state, monkeypatch, owner):
 
 
 @pytest.mark.parametrize("owner", ["e" * 32, OWNER_UNPROVEN], ids=["missing-id", "unproven"])
-def test_l5_since_and_the_journal_event_hold_across_restarts(app, monkeypatch, owner):
+def test_since_and_the_journal_event_hold_across_restarts(app, monkeypatch, owner):
     client, store, graph, state = app
     kinds = _journal_kinds(monkeypatch)
     _unfiled_at_the_limit(client, store, graph, state, monkeypatch, owner)
@@ -433,7 +433,7 @@ def test_l5_since_and_the_journal_event_hold_across_restarts(app, monkeypatch, o
     assert kinds.count("project.canvasNotFiled") == 1
 
 
-def test_l5_the_listing_and_start_here_carry_the_unfiled_canvas_with_an_agents_note(app, monkeypatch):
+def test_the_listing_and_start_here_carry_the_unfiled_canvas_with_an_agents_note(app, monkeypatch):
     client, store, graph, state = app
     _unfiled_at_the_limit(client, store, graph, state, monkeypatch, "e" * 32)
     waiting = client.get("/api/projects", headers=PERSON).json()["canvasNotFiled"]
@@ -446,7 +446,7 @@ def test_l5_the_listing_and_start_here_carry_the_unfiled_canvas_with_an_agents_n
     assert "CANVAS NOT SAVED AS A PROJECT" in printed and waiting["note"] in printed
 
 
-def test_l5_storage_says_to_delete_for_good(app, monkeypatch):
+def test_storage_says_to_delete_for_good(app, monkeypatch):
     client, store, graph, state = app
     _create(client, "A")
     _add_text(client, "a1")
@@ -459,7 +459,7 @@ def test_l5_storage_says_to_delete_for_good(app, monkeypatch):
     assert "for good" in waiting["note"]
 
 
-def test_l5_a_saved_canvas_is_listed_once_with_its_name(app, monkeypatch):
+def test_a_saved_canvas_is_listed_once_with_its_name(app, monkeypatch):
     """The person's "saved" toast needs the filed project's name: the
     listing carries `canvasSaved` after a waiting canvas is filed."""
     client, store, graph, state = app
@@ -475,7 +475,7 @@ def test_l5_a_saved_canvas_is_listed_once_with_its_name(app, monkeypatch):
 # -- L6: an in-place rewrite that keeps the signature --------------------------------
 
 
-def test_l6_an_in_place_rewrite_with_the_same_signature_is_read_strictly(tmp_path):
+def test_an_in_place_rewrite_with_the_same_signature_is_read_strictly(tmp_path):
     store = ProjectStore(tmp_path / "projects")
     with store.transaction() as catalog:
         project = make_project("Logo")
@@ -500,7 +500,7 @@ def test_l6_an_in_place_rewrite_with_the_same_signature_is_read_strictly(tmp_pat
     assert json.loads(store.path.read_text())["projects"][project["id"]]["name"] == "Logo v3"
 
 
-def test_l6_a_save_that_cant_be_encoded_clears_the_projection(tmp_path):
+def test_a_save_that_cant_be_encoded_clears_the_projection(tmp_path):
     store = ProjectStore(tmp_path / "projects")
     with store.transaction() as catalog:
         project = make_project("Logo")
@@ -517,7 +517,7 @@ def test_l6_a_save_that_cant_be_encoded_clears_the_projection(tmp_path):
 # -- L7: the cover follow never reads the catalog on the event loop ------------------
 
 
-def test_l7_the_cover_follow_reads_the_open_project_off_the_loop(app, monkeypatch):
+def test_the_cover_follow_reads_the_open_project_off_the_loop(app, monkeypatch):
     client, store, _graph, _state = app
     project_id = _create(client, "Alpha")
     from services.agent_presence import AgentIdentity
@@ -544,7 +544,7 @@ def test_l7_the_cover_follow_reads_the_open_project_off_the_loop(app, monkeypatc
 # -- M1, agents' half: rows that no longer hold ---------------------------------------
 
 
-def test_m1_a_row_that_no_longer_holds_is_marked_and_left_out_of_the_agents_note(app):
+def test_a_row_that_no_longer_holds_is_marked_and_left_out_of_the_agents_note(app):
     """Hero was added back into Recently deleted; the person (or an agent)
     restores it: its "in Recently deleted" row isn't true any more."""
     client, store, _graph, _state = app

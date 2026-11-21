@@ -91,7 +91,7 @@ def _agent_first_write(client, how: str) -> list[int]:
 
 
 @pytest.mark.parametrize("how", ["apply-remove-all", "delete-nodes", "clear"])
-def test_m1_at_the_limit_an_agents_first_write_after_a_restore_is_refused(app, monkeypatch, how):
+def test_at_the_limit_an_agents_first_write_after_a_restore_is_refused(app, monkeypatch, how):
     client, store, _graph, state = app
     _restored_with_the_open_project_gone(client, store, state, monkeypatch, limit=3)
     before = _live_values(main_module.cli_graph)
@@ -108,7 +108,7 @@ def test_m1_at_the_limit_an_agents_first_write_after_a_restore_is_refused(app, m
     assert _projects_holding(client, store, "codex-scratch") == []
 
 
-def test_m1_the_refusal_after_a_restore_is_codex_s_agent_log_line(app, monkeypatch):
+def test_the_refusal_after_a_restore_is_codex_s_agent_log_line(app, monkeypatch):
     """Design's answer: the usual "Codex tried to change the canvas
     you had open…" line, as Codex's row."""
     client, store, _graph, state = app
@@ -122,7 +122,7 @@ def test_m1_the_refusal_after_a_restore_is_codex_s_agent_log_line(app, monkeypat
     assert refused[0]["canvasHeld"]["action"] == "change"
 
 
-def test_m1_below_the_limit_the_persons_canvas_is_saved_first_then_the_write_goes_on(app, monkeypatch):
+def test_below_the_limit_the_persons_canvas_is_saved_first_then_the_write_goes_on(app, monkeypatch):
     """Room for the canvas: the guard files the person's canvas untouched as
     its own project, never opened, and the agent's write goes on a copy (design's
     rule (a), replacing "lands on it"); the agent's own undo
@@ -148,7 +148,7 @@ def test_m1_below_the_limit_the_persons_canvas_is_saved_first_then_the_write_goe
     assert _projects_holding(client, store, "codex-scratch") == []
 
 
-def test_m1_mcp_and_the_cli_say_the_refusal_after_a_restore(app, monkeypatch, capsys):
+def test_mcp_and_the_cli_say_the_refusal_after_a_restore(app, monkeypatch, capsys):
     client, store, _graph, state = app
     _restored_with_the_open_project_gone(client, store, state, monkeypatch, limit=3)
     monkeypatch.setattr(mcp_server, "_api", lambda: NebulaAPI("http://testserver", client=client))
@@ -159,7 +159,7 @@ def test_m1_mcp_and_the_cli_say_the_refusal_after_a_restore(app, monkeypatch, ca
     assert ONLY_W in _live_values(main_module.cli_graph)
 
 
-def test_n4_a_restore_between_the_fence_and_the_write_is_caught_in_the_write_step(app, monkeypatch):
+def test_a_restore_between_the_fence_and_the_write_is_caught_in_the_write_step(app, monkeypatch):
     """The upload passes the fence on a settled canvas; while the route
     reads the file the open project goes from the list (as a restore leaves
     it). The write step's guard settles it and refuses at the limit."""
@@ -265,7 +265,7 @@ def _unmarked_mutating_routes() -> set[str]:
     return unmarked
 
 
-def test_n3_every_route_that_can_change_the_graph_is_marked_or_says_why():
+def test_every_route_that_can_change_the_graph_is_marked_or_says_why():
     unmarked = _unmarked_mutating_routes()
     assert unmarked, "the scan finds the known unmarked routes (it reads main.py)"
     assert unmarked <= set(_UNMARKED_ALLOWED), sorted(unmarked - set(_UNMARKED_ALLOWED))
@@ -288,7 +288,7 @@ def _held_file(store) -> tuple[Path, Path]:
 
 
 @pytest.mark.parametrize("flip", [("\"id\"", "\"hd\""), ("\"id\"", "\"ad\"")])
-def test_m2_a_flip_in_the_main_copy_loses_to_the_bak_and_the_listing_works(app, monkeypatch, flip):
+def test_a_flip_in_the_main_copy_loses_to_the_bak_and_the_listing_works(app, monkeypatch, flip):
     client, store, graph, state = app
     ids = _held_one(client, store, graph, state, monkeypatch)
     main_copy, _backup = _held_file(store)
@@ -304,7 +304,7 @@ def test_m2_a_flip_in_the_main_copy_loses_to_the_bak_and_the_listing_works(app, 
     assert _projects_holding(client, store, ONLY_W) == ["Recovered canvas"]
 
 
-def test_m2_a_flip_that_still_parses_loses_to_the_bak_by_its_check(app, monkeypatch):
+def test_a_flip_that_still_parses_loses_to_the_bak_by_its_check(app, monkeypatch):
     client, store, graph, state = app
     ids = _held_one(client, store, graph, state, monkeypatch)
     main_copy, _backup = _held_file(store)
@@ -315,7 +315,7 @@ def test_m2_a_flip_that_still_parses_loses_to_the_bak_by_its_check(app, monkeypa
 
 
 @pytest.mark.parametrize("damage", ["node-no-id", "node-id-int", "node-int", "node-data-str", "edge-no-source"])
-def test_m2_n6_typed_damage_in_both_copies_is_said_and_never_fails_a_listing(app, monkeypatch, damage):
+def test_typed_damage_in_both_copies_is_said_and_never_fails_a_listing(app, monkeypatch, damage):
     client, store, graph, state = app
     ids = _held_one(client, store, graph, state, monkeypatch)
     for path in _held_file(store):
@@ -346,7 +346,7 @@ def test_m2_n6_typed_damage_in_both_copies_is_said_and_never_fails_a_listing(app
     assert sorted(store.held_dir.glob("*.damaged-*"))  # both copies kept as they were
 
 
-def test_m2_a_canvas_that_cant_be_filed_is_set_aside_and_the_others_are_saved(app, monkeypatch):
+def test_a_canvas_that_cant_be_filed_is_set_aside_and_the_others_are_saved(app, monkeypatch):
     client, store, graph, state = app
     ids = _held_one(client, store, graph, state, monkeypatch)
     good = _held(store)[0]
@@ -396,7 +396,7 @@ def _fail_open(client, monkeypatch, project_id):
         monkeypatch.setattr(CLIGraph, "save", real_save)
 
 
-def test_l1_failed_opens_hold_the_canvas_once_and_it_is_filed_once(app, monkeypatch):
+def test_failed_opens_hold_the_canvas_once_and_it_is_filed_once(app, monkeypatch):
     client, store, graph, state = app
     ids = _waiting(client, store, graph, state, monkeypatch)
     for _ in range(3):
@@ -419,7 +419,7 @@ def test_l1_failed_opens_hold_the_canvas_once_and_it_is_filed_once(app, monkeypa
 # -- One file per canvas, no shared cap, agents capped like a project --------------
 
 
-def test_l3_the_persons_open_always_holds_even_past_a_projects_size(app, monkeypatch):
+def test_the_persons_open_always_holds_even_past_a_projects_size(app, monkeypatch):
     client, store, graph, state = app
     ids = _waiting(client, store, graph, state, monkeypatch)
     monkeypatch.setattr(main_module, "MAX_PROJECT_BYTES", 200)
@@ -436,7 +436,7 @@ def test_l3_the_persons_open_always_holds_even_past_a_projects_size(app, monkeyp
 
 
 @pytest.mark.parametrize("route", ["clear", "load"])
-def test_l3_the_persons_clear_or_load_below_the_limit_always_holds(app, monkeypatch, route):
+def test_the_persons_clear_or_load_below_the_limit_always_holds(app, monkeypatch, route):
     client, store, graph, state = app
     ids = _waiting(client, store, graph, state, monkeypatch)
     _make_room_without_listing(client, store, ids[0])
@@ -450,7 +450,7 @@ def test_l3_the_persons_clear_or_load_below_the_limit_always_holds(app, monkeypa
     assert any(ONLY_W in _held_values(entry) for entry in _held(store))
 
 
-def test_l3_an_agents_write_past_a_projects_size_is_refused_with_gms_line(app, monkeypatch):
+def test_an_agents_write_past_a_projects_size_is_refused_with_the_approved_line(app, monkeypatch):
     client, store, graph, state = app
     ids = _waiting(client, store, graph, state, monkeypatch)
     _make_room_without_listing(client, store, ids[0])
@@ -470,12 +470,12 @@ def test_l3_an_agents_write_past_a_projects_size_is_refused_with_gms_line(app, m
     assert body["detail"] in str(raised.value) and "(409, canvas_held_full)" in str(raised.value)
 
 
-def test_l3_the_shared_cap_is_gone():
+def test_the_shared_cap_is_gone():
     assert not hasattr(store_module, "CANVAS_HELD_MAX_BYTES")
     assert not hasattr(main_module, "CANVAS_HELD_FULL_DETAIL")
 
 
-def test_l3_each_canvas_has_its_own_two_copies(app, monkeypatch):
+def test_each_canvas_has_its_own_two_copies(app, monkeypatch):
     client, store, graph, state = app
     _held_one(client, store, graph, state, monkeypatch)
     main_copy, backup = _held_file(store)
@@ -502,7 +502,7 @@ def _two_legacy(client, store, graph, state, monkeypatch) -> tuple[list[str], li
     return ids, [good, other]
 
 
-def test_l3_the_old_held_file_moves_in_once_and_is_kept_aside(app, monkeypatch):
+def test_the_old_held_file_moves_in_once_and_is_kept_aside(app, monkeypatch):
     client, store, graph, state = app
     ids, entries = _two_legacy(client, store, graph, state, monkeypatch)
     old = _legacy(store, entries)
@@ -521,7 +521,7 @@ def test_l3_the_old_held_file_moves_in_once_and_is_kept_aside(app, monkeypatch):
 
 
 @pytest.mark.parametrize("crash", ["after-first-canvas", "before-keeping-aside"])
-def test_l3_a_crash_midway_through_the_move_loses_nothing_and_files_nothing_twice(app, monkeypatch, crash):
+def test_a_crash_midway_through_the_move_loses_nothing_and_files_nothing_twice(app, monkeypatch, crash):
     client, store, graph, state = app
     _ids, entries = _two_legacy(client, store, graph, state, monkeypatch)
     _legacy(store, entries)
@@ -563,7 +563,7 @@ def test_l3_a_crash_midway_through_the_move_loses_nothing_and_files_nothing_twic
 # -- The old file cut, or one copy's id flipped --------------------------------
 
 
-def test_l2_both_old_copies_cut_keep_their_complete_leading_entries(app, monkeypatch):
+def test_both_old_copies_cut_keep_their_complete_leading_entries(app, monkeypatch):
     client, store, graph, state = app
     _ids, entries = _two_legacy(client, store, graph, state, monkeypatch)
     whole = _legacy(store, entries)
@@ -576,7 +576,7 @@ def test_l2_both_old_copies_cut_keep_their_complete_leading_entries(app, monkeyp
     assert listing["canvasHeldUnreadable"]["count"] is None  # how many were past the cut is unknown: said
 
 
-def test_n1_an_entry_the_bak_supplies_is_never_said_lost(app, monkeypatch):
+def test_an_entry_the_bak_supplies_is_never_said_lost(app, monkeypatch):
     client, store, graph, state = app
     _ids, entries = _two_legacy(client, store, graph, state, monkeypatch)
     _legacy(store, entries)
@@ -588,7 +588,7 @@ def test_n1_an_entry_the_bak_supplies_is_never_said_lost(app, monkeypatch):
     assert "canvasHeldUnreadable" not in listing
 
 
-def test_l1_a_per_canvas_pair_both_cut_costs_only_that_canvas_and_is_said(app, monkeypatch):
+def test_a_per_canvas_pair_both_cut_costs_only_that_canvas_and_is_said(app, monkeypatch):
     client, store, graph, state = app
     ids = _held_one(client, store, graph, state, monkeypatch)
     good = _held(store)[0]
@@ -603,7 +603,7 @@ def test_l1_a_per_canvas_pair_both_cut_costs_only_that_canvas_and_is_said(app, m
     assert ids
 
 
-def test_l2_a_damaged_note_still_says_a_canvas_may_be_lost(app, monkeypatch):
+def test_a_damaged_note_still_says_a_canvas_may_be_lost(app, monkeypatch):
     """The note of canvases that may be lost is written whole, but if it is
     damaged on disk later, the person is still told (count unknown), and the
     damaged note is kept aside."""
@@ -631,7 +631,7 @@ def test_l2_a_damaged_note_still_says_a_canvas_may_be_lost(app, monkeypatch):
 # deletes is ever said for it, and canvases waiting never refuse it.
 
 
-def test_n2_a_restore_lands_however_many_canvases_wait(app, monkeypatch):
+def test_a_restore_lands_however_many_canvases_wait(app, monkeypatch):
     """Case: the live canvas and two held at a limit of 3. One
     delete and its Undo: the restore lands at once, no deletes asked for."""
     client, store, graph, state = app
@@ -661,7 +661,7 @@ def test_n2_a_restore_lands_however_many_canvases_wait(app, monkeypatch):
 
 
 @pytest.mark.parametrize("route", ["clear", "load"])
-def test_gm7_a_person_request_at_the_limit_is_still_refused(app, monkeypatch, route):
+def test_a_person_request_at_the_limit_is_still_refused(app, monkeypatch, route):
     client, store, graph, state = app
     _waiting(client, store, graph, state, monkeypatch)
     if route == "clear":

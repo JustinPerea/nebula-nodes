@@ -282,7 +282,7 @@ def _removed(count):
              "sourceName": f"Photo {i}", "targetName": "Krea 2", "targetLabel": "Images"} for i in range(count)]
 
 
-def test_gm_r3_examples_word_for_word():
+def test_the_examples_word_for_word():
     one_paid = {"paidRuns": 1, "nodes": [_entry("n4", "Krea 2", node_id="n4")]}
     # 4: the verbs merge onto the node; "plus" carries connections, "and" when it doesn't run.
     adds = _view(nodes=[{"ref": "+a", "name": "A"}], edges=[{}], run=["+a"], cost={"freeRuns": 1})
@@ -433,7 +433,7 @@ def _new(*names):
     return [{"ref": f"+{name.lower()}", "name": name} for name in names]
 
 
-def test_gm_r4_added_nodes_that_all_run():
+def test_added_nodes_that_all_run():
     """Design: every added node also runs → "runs both", "runs all 3", and
     from 4 a count; one added node keeps "Adds and runs"."""
     two = _view(nodes=_new("A", "B"), edges=[{}], run=["+a", "+b"], cost={"freeRuns": 2})
@@ -448,7 +448,7 @@ def test_gm_r4_added_nodes_that_all_run():
     assert plan_line({**two, "edges": []}) == "Adds “A” and “B”, runs both · free"
 
 
-def test_gm_r4_only_some_added_nodes_run():
+def test_only_some_added_nodes_run():
     """Design: "If only some added nodes run, name them"."""
     view = _view(nodes=_new("A", "B"), edges=[{}], run=["+a"], cost={"freeRuns": 1})
     assert plan_line(view) == "Adds “A”, “B” and 1 connection, runs “A” · free"
@@ -460,7 +460,7 @@ def test_gm_r4_only_some_added_nodes_run():
     assert plan_line(many) == "Adds 5 nodes, runs “A” and “B” · free"
 
 
-def test_gm_r4_changed_nodes_that_run_follow_the_same_rule():
+def test_changed_nodes_that_run_follow_the_same_rule():
     """No merged verb before two names ("Changes and runs “A”
     and “B”"), so no group says "and" twice."""
     params = [{**KREA, "nodeId": "n1", "title": "A"}, {**KREA, "nodeId": "n2", "title": "B"}]
@@ -487,7 +487,7 @@ def test_other_runs_join_the_run_named_last():
     assert plan_line(mixed) == "Adds “X” and “Y”, runs both, changes “A”, runs “C” · free"
 
 
-def test_gm_r4_another_after_a_count_and_every_group_keeps_its_verb():
+def test_another_after_a_count_and_every_group_keeps_its_verb():
     """Design: "Keep "another" after a count; every group keeps its verb".
     The groups keep order (changes before other runs), so design's example
     "Runs 2 “Image” nodes, changes another “Image”" reads with the change first."""
@@ -499,7 +499,7 @@ def test_gm_r4_another_after_a_count_and_every_group_keeps_its_verb():
     assert plan_line(two_others) == "Changes “Image”, runs 2 other “Image” nodes · free"
 
 
-def test_l2_a_group_that_counted_its_nodes_said_no_name():
+def test_a_group_that_counted_its_nodes_said_no_name():
     """"Adds 4 nodes, runs another “Image”" pointed back at a
     name the reader never saw."""
     nodes = [{"ref": "+a", "name": "Image"}, *_new("B", "C", "D")]

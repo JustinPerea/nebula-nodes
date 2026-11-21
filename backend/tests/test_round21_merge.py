@@ -70,7 +70,7 @@ def test_control_an_admitted_run_makes_them_normal_and_keeps_its_agent_run(pend,
 # C2: the canvas header on the filed path
 
 
-def test_C2_a_filed_revision_compares_the_canvas_header_with_the_filed_canvas(monkeypatch):
+def test_a_filed_revision_compares_the_canvas_header_with_the_filed_canvas(monkeypatch):
     import main
     from fastapi import HTTPException
 
@@ -95,7 +95,7 @@ def test_C2_a_filed_revision_compares_the_canvas_header_with_the_filed_canvas(mo
         main._request_canvas_revision.reset(token)
 
 
-def test_C2_without_a_revision_the_canvas_header_is_still_checked():
+def test_without_a_revision_the_canvas_header_is_still_checked():
     import main
     from fastapi import HTTPException
 

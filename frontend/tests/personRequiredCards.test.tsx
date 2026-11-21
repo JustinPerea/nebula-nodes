@@ -19,10 +19,10 @@ import { ExecutionStartRejectedError } from '../src/lib/api';
 import { NodeRunError } from '../src/components/nodes/NodeError';
 import { RUN_HISTORY_STORAGE_KEY } from '../src/lib/runHistory';
 
-const GM_LINE = "This change needs your OK, and this tab isn’t connected as you. Open the link Nebula printed when it started, then try again.";
+const TAB_LINE = "This change needs your OK, and this tab isn’t connected as you. Open the link Nebula printed when it started, then try again.";
 const APP_LINE = "This change needs your OK, and this window isn’t connected as you. Quit Nebula and open it again, then try again.";
 // What the card shows: the same refusal as one because line (the stored line above is what agents read).
-const GM_CARD = "Nebula couldn’t run the node because this tab isn’t connected as you. Open the link Nebula printed when it started.";
+const TAB_CARD = "Nebula couldn’t run the node because this tab isn’t connected as you. Open the link Nebula printed when it started.";
 const APP_CARD = "Nebula couldn’t run the node because this window isn’t connected as you. Quit Nebula and open it again.";
 const BILLING = "n1: Changing how a Krea node is billed (_kreaAuth) is the person's call, so it needs their OK. Leave _kreaAuth as it is, and propose the change instead with propose_change (`nebula propose`); the person accepts it on the canvas.";
 
@@ -51,11 +51,11 @@ describe('a run start refused because this tab is not connected as the person', 
     await useGraphStore.getState().executeNode('n1');
     const [node] = useGraphStore.getState().nodes;
     expect(node.data.state).toBe('error');
-    expect(node.data.errorPerson).toBe(GM_LINE);
+    expect(node.data.errorPerson).toBe(TAB_LINE);
     expect(node.data.error).toBe(BILLING);
 
     const { container } = render(<NodeRunError data={node.data} className="model-node__run-error" />);
-    expect(screen.getByText(GM_CARD)).toBeTruthy();
+    expect(screen.getByText(TAB_CARD)).toBeTruthy();
     const details = container.querySelector('details');
     expect(details).not.toBeNull();
     expect(details!.open).toBe(false);

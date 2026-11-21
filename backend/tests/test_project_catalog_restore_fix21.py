@@ -594,7 +594,7 @@ def test_b_equal_times_with_an_in_process_landing_keep_nebulas(app):
     assert _live(client)[new]["data"]["outputs"] == _text("AGENT")
 
 
-def test_b12_the_tabs_unchanged_result_never_replaces_what_nebulas_side_changed(app):
+def test_the_tabs_unchanged_result_never_replaces_what_nebulas_side_changed(app):
     """No landing was recorded (no run), but Nebula's copy of n2's result
     moved after the open: the tab's result, as the open loaded it, stays out."""
     client, store, *_ = app
@@ -610,7 +610,7 @@ def test_b12_the_tabs_unchanged_result_never_replaces_what_nebulas_side_changed(
 
 # -- C. a refused delete is never silent; item 18 (M3) and B4 ----------------------------------------
 
-def test_c_the_reloaded_window_with_its_tab_id_deletes(app):
+def test_the_reloaded_window_with_its_tab_id_deletes(app):
     client, store, *_ = app
     delta, window_a, _b = _delta(client)
     old_rev = _rev(client)
@@ -623,7 +623,7 @@ def test_c_the_reloaded_window_with_its_tab_id_deletes(app):
 
 
 @pytest.mark.parametrize("by", ["old", "new"])
-def test_c_a_window_that_never_saved_it_gets_deletes_kept(app, by):
+def test_a_window_that_never_saved_it_gets_deletes_kept(app, by):
     client, store, *_ = app
     delta, _window_a, window_b = _delta(client)
     old_rev = _rev(client)
@@ -637,7 +637,7 @@ def test_c_a_window_that_never_saved_it_gets_deletes_kept(app, by):
     assert not _events("node.removed", since)
 
 
-def test_c_m3_b4_a_left_out_node_stays_once_any_delete_is_listed(app):
+def test_a_left_out_node_stays_once_any_delete_is_listed(app):
     """Window A saved two duplicates and lists only the first as deleted;
     the second is left out of its handoff (a stale or partial snapshot)
     without being listed: it stays, live and on disk."""
@@ -658,7 +658,7 @@ def test_c_m3_b4_a_left_out_node_stays_once_any_delete_is_listed(app):
 
 # -- B16: a moved checkpoint never overwrites one at its new key --------------------------------------
 
-def test_b16_a_renumber_never_overwrites_a_checkpoint_at_the_new_key(tmp_path):
+def test_a_renumber_never_overwrites_a_checkpoint_at_the_new_key(tmp_path):
     recoveries = ProviderRecoveryStore(tmp_path / "provider-recoveries.json")
     recoveries.set(run_id="wl-run", node_id="n9", resume_operation_id="op-n9", existing_world_id=None)
     recoveries.set(run_id="wl-run", node_id="tab-local", resume_operation_id="op-tab", existing_world_id=None)
@@ -832,7 +832,7 @@ def test_21_the_count_is_plural(count, words):
 
 # -- docs --------------------------------------------------------------------------------------------------
 
-def test_agent_docs_describe_round_21():
+def test_agent_docs_describe_the_fix():
     def flat(text: str) -> str:
         return " ".join(text.split())
 

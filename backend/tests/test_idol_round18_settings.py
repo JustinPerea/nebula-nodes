@@ -80,7 +80,7 @@ def _protected_paths(keyed: Path) -> list[Path]:
             settings.temp_path_for(keyed)]
 
 
-def test_the_copy_folder_and_the_temp_names_are_what_round_18_says(home_state, keyed):
+def test_the_copy_folder_and_the_temp_names_are_what_the_review_says(home_state, keyed):
     assert settings.settings_copy_folder() == home_state / "settings-copy"
     assert settings.backup_path(keyed).parent == home_state / "settings-copy"
     assert settings.temp_path_for(keyed) == keyed.parent / ".settings.json.nebula-tmp"
@@ -148,7 +148,7 @@ def test_an_in_place_save_keeps_its_copy_and_temp_only_in_the_copy_folder(home_s
 
 # -- The start sweep, under the lock --------------------------------------------
 
-def test_the_start_sweep_removes_every_temp_file_left_and_moves_a_round_17_copy(home_state, keyed):
+def test_the_start_sweep_removes_every_temp_file_left_and_moves_the_backup_copy(home_state, keyed):
     left = [settings.temp_path_for(keyed), keyed.parent / ".settings-nebula-123-abcd_123.tmp"]
     copy_temp = settings.temp_path_for(settings.backup_path(keyed))
     copy_temp.parent.mkdir(mode=0o700)
@@ -498,7 +498,7 @@ def test_two_interleaved_settings_writes_of_different_keys_both_survive(keyed, t
     def write_settings():
         try:
             answers.append(
-                _person().put("/api/settings", json={"apiKeys": {"GEMINI_API_KEY": "gm-from-B-1111"}})
+                _person().put("/api/settings", json={"apiKeys": {"GEMINI_API_KEY": "key-from-B-1111"}})
                 if write == "put" else _person().delete("/api/settings/api-keys/FAL_KEY"))
         except BaseException as exc:  # noqa: BLE001 - the test reads it as the answer
             answers.append(exc)
@@ -521,7 +521,7 @@ def test_two_interleaved_settings_writes_of_different_keys_both_survive(keyed, t
     keys = _parses(keyed)["apiKeys"]
     assert keys["OPENAI_API_KEY"] == "sk-from-A-1111"
     if write == "put":
-        assert keys["GEMINI_API_KEY"] == "gm-from-B-1111" and keys["FAL_KEY"] == OLD["apiKeys"]["FAL_KEY"]
+        assert keys["GEMINI_API_KEY"] == "key-from-B-1111" and keys["FAL_KEY"] == OLD["apiKeys"]["FAL_KEY"]
     else:
         assert "FAL_KEY" not in keys
 
@@ -641,7 +641,7 @@ COPY_AGENT_LINE = ("Nothing was saved because Nebula isn’t allowed to change {
 
 
 @pytest.mark.unprivileged
-def test_a_copy_folder_nebula_cant_change_is_gms_line(keyed, tmp_path, monkeypatch):
+def test_a_copy_folder_nebula_cant_change_is_the_approved_line(keyed, tmp_path, monkeypatch):
     state = tmp_path / "home" / "st"
     state.mkdir()
     monkeypatch.setenv("NEBULA_STATE_DIR", str(state))

@@ -38,7 +38,7 @@ def _krea_token(monkeypatch):
 
 
 TOPAZ = "krea-enhance-topaz-standard-enhance"
-GM_LINE = "Choose a model for “Clean plate” first."
+NOT_CHOSEN_LINE = "Choose a model for “Clean plate” first."
 
 
 # Design's rule (only the first missing field, in the card's order): Topaz
@@ -75,7 +75,7 @@ def test_every_krea_node_with_a_required_model_setting_is_covered():
 
 
 def test_the_line_names_the_node_and_the_field():
-    assert model_choice.not_chosen_line("Clean plate", "model") == GM_LINE
+    assert model_choice.not_chosen_line("Clean plate", "model") == NOT_CHOSEN_LINE
     assert model_choice.not_chosen_line("Lab app", "version") == "Choose a version for “Lab app” first."
 
 
@@ -106,8 +106,8 @@ def test_an_agents_run_nodes_is_refused_before_anything_runs(pend, monkeypatch):
     response = pend.client.post("/api/graph/run", json={"targetNodeId": ids["+t"]}, headers=CLAUDE)
     body = response.json()
     assert body["status"] == "failed", body
-    assert GM_LINE in body["errors"][ids["+t"]]
-    assert body["error"].startswith("Nothing ran, so nothing was spent.") and GM_LINE in body["error"]
+    assert NOT_CHOSEN_LINE in body["errors"][ids["+t"]]
+    assert body["error"].startswith("Nothing ran, so nothing was spent.") and NOT_CHOSEN_LINE in body["error"]
     assert pend.ran == [] and pend.priced == []
 
 
@@ -117,7 +117,7 @@ def test_the_canvas_run_of_the_node_is_refused_the_same_way(pend):
     assert response.status_code == 200, response.text
     body = response.json()
     assert body["status"] == "validation_error"
-    assert any(error["nodeId"] == ids["+t"] and error["person"] == GM_LINE for error in body["errors"])
+    assert any(error["nodeId"] == ids["+t"] and error["person"] == NOT_CHOSEN_LINE for error in body["errors"])
     assert pend.ran == [] and pend.priced == []
 
 
@@ -130,7 +130,7 @@ def test_a_direct_run_over_a_placeholder_with_no_model_is_refused_before_its_con
     assert response.status_code == 200, response.text
     body = response.json()
     assert body["status"] == "validation_error"
-    assert any(error["nodeId"] == ids["+t"] and error["person"] == GM_LINE for error in body["errors"])
+    assert any(error["nodeId"] == ids["+t"] and error["person"] == NOT_CHOSEN_LINE for error in body["errors"])
     assert pend.ran == [] and pend.priced == []
 
 
@@ -140,7 +140,7 @@ def test_the_whole_canvas_run_is_refused_too(pend, monkeypatch):
     response = pend.client.post("/api/execute", headers=PERSON, json={**_execute_body(pend), "runId": "r-topaz"})
     body = response.json()
     assert body["status"] == "validation_error", body
-    assert any(error["nodeId"] == ids["+t"] and error["person"] == GM_LINE for error in body["errors"])
+    assert any(error["nodeId"] == ids["+t"] and error["person"] == NOT_CHOSEN_LINE for error in body["errors"])
     assert pend.ran == []
 
 
@@ -149,7 +149,7 @@ def test_a_chosen_model_is_not_refused_for_it(pend, monkeypatch):
     ids = _topaz_chain(pend, pending=False, model="CGI")
     response = pend.client.post("/api/graph/run", json={"targetNodeId": ids["+t"]}, headers=CLAUDE)
     body = response.json()
-    assert GM_LINE not in str(body.get("errors") or {})
+    assert NOT_CHOSEN_LINE not in str(body.get("errors") or {})
 
 
 # -- Design: "the agents" ---------------------------------------------------------

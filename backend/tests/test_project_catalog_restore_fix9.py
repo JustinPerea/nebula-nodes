@@ -60,7 +60,7 @@ def _fresh_if_kept(store):
 # -- The protection is committed with the filing ---------------
 
 @pytest.mark.parametrize("action", ["add", "clear"])
-def test_m1_p3_the_protects_owner_write_fails_and_the_project_stays_protected(app, monkeypatch, action):
+def test_the_protects_owner_write_fails_and_the_project_stays_protected(app, monkeypatch, action):
     """The protect committed the filing; its state.json write then fails (a
     507, or the process dies there). After a restart and a listing the
     project is open again, still protected: the agent's clear files nothing
@@ -93,7 +93,7 @@ def test_m1_p3_the_protects_owner_write_fails_and_the_project_stays_protected(ap
     assert _keepers(store, before) == ["Recovered canvas"]
 
 
-def test_m1_p7_the_protects_owner_write_fails_with_no_restart(app, monkeypatch):
+def test_the_protects_owner_write_fails_with_no_restart(app, monkeypatch):
     client, store, _graph, state = app
     _restored_unsettled(client, store, state, monkeypatch)
     before = _live_values(main_module.cli_graph)
@@ -117,7 +117,7 @@ def test_m1_p7_the_protects_owner_write_fails_with_no_restart(app, monkeypatch):
     assert _keepers(store, before) == ["Recovered canvas"]
 
 
-def test_m1_p7_the_process_dies_after_the_listings_filing_commit(app, monkeypatch):
+def test_the_process_dies_after_the_listings_filing_commit(app, monkeypatch):
     """The listing filed and opened the waiting canvas, its waiting record
     went, and the process died before the rest of the bookkeeping after its
     commit (crash-before-fresh-write): the protection is in that
@@ -141,7 +141,7 @@ def test_m1_p7_the_process_dies_after_the_listings_filing_commit(app, monkeypatc
     assert _keepers(store, before) == ["Recovered canvas"]
 
 
-def test_m1_the_pending_record_lives_in_the_catalog_only():
+def test_the_pending_record_lives_in_the_catalog_only():
     from services import catalog_recovery
 
     assert "canvasPending" in catalog_recovery.CATALOG_FIELDS
@@ -174,7 +174,7 @@ def _settles(check, seconds: float = 3.0) -> bool:
     return check()
 
 
-def test_gm11_2_the_persons_tab_on_the_project_ends_its_protection_for_good(app, monkeypatch):
+def test_the_persons_tab_on_the_project_ends_its_protection_for_good(app, monkeypatch):
     client, store, graph, state = app
     project_id = _listed_fresh(client, store, graph, state, monkeypatch)
     with client.websocket_connect("/ws", headers=PERSON) as socket:
@@ -196,7 +196,7 @@ def test_gm11_2_the_persons_tab_on_the_project_ends_its_protection_for_good(app,
 
 
 @pytest.mark.parametrize("how", ["agent-socket-with-hello", "socket-without-hello", "wrong-project", "agent-open"])
-def test_gm11_2_an_agent_cant_end_the_protection(app, monkeypatch, how):
+def test_an_agent_cant_end_the_protection(app, monkeypatch, how):
     client, store, graph, state = app
     project_id = _listed_fresh(client, store, graph, state, monkeypatch)
     before = _live_values(main_module.cli_graph)
@@ -226,7 +226,7 @@ def test_gm11_2_an_agent_cant_end_the_protection(app, monkeypatch, how):
     assert _keepers(store, before) == ["Recovered canvas"]
 
 
-def test_gm11_2_no_http_route_ends_it():
+def test_no_http_route_ends_it():
     import inspect
 
     source = inspect.getsource(main_module)
@@ -247,7 +247,7 @@ def _cli(client) -> NebulaClient:
 
 
 @pytest.mark.parametrize("command", ["create", "set", "delete", "connect-less-apply", "clear"])
-def test_m2_every_cli_printer_prints_gms_saved_canvas_line(app, monkeypatch, capsys, command):
+def test_every_cli_printer_prints_the_saved_canvas_line(app, monkeypatch, capsys, command):
     client, store, _graph, state = app
     _restored_unsettled(client, store, state, monkeypatch)
     monkeypatch.setenv("NEBULA_AGENT_NAME", "Codex")
@@ -256,33 +256,33 @@ def test_m2_every_cli_printer_prints_gms_saved_canvas_line(app, monkeypatch, cap
     if command == "create":
         graph_commands.run_create(cli, "text-input", {"value": "c"})
         action = "Created node "
-        gm = "and made your change on a copy of it."
+        tail = "and made your change on a copy of it."
     elif command == "set":
         graph_commands.run_set(cli, first, {"value": "v"})
         action = f"Updated {first}: value=v"
-        gm = "and made your change on a copy of it."
+        tail = "and made your change on a copy of it."
     elif command == "delete":
         graph_commands.run_delete(cli, [first])
         action = "Deleted "
-        gm = "and made your change on a copy of it."
+        tail = "and made your change on a copy of it."
     elif command == "connect-less-apply":
         print(format_applied(cli.apply({"note": "x", "nodes": [
             {"ref": "+a", "definitionId": "text-input", "params": {"value": "a"}}]}, agent_name="Codex")))
         action = "Applied: "
-        gm = "and made your change on a copy of it."
+        tail = "and made your change on a copy of it."
     else:
         graph_commands.run_clear(cli, force=True)
         action = "Canvas cleared ("
-        gm = "and cleared a new canvas."
+        tail = "and cleared a new canvas."
     printed = capsys.readouterr().out.splitlines()
     start = next(index for index, line in enumerate(printed) if line.startswith(action))
     lines = printed[start:start + 2]  # the backend's own log lines are around them
-    assert lines[1] == f"Nebula saved the open canvas as its own project, “Recovered canvas”, {gm}", lines
+    assert lines[1] == f"Nebula saved the open canvas as its own project, “Recovered canvas”, {tail}", lines
     # Design's line takes the clear's Undo sentence's place.
     assert "Cmd-Z" not in "\n".join(lines)
 
 
-def test_m2_without_a_saved_canvas_the_printers_say_what_they_said(app, capsys):
+def test_without_a_saved_canvas_the_printers_say_what_they_said(app, capsys):
     client, *_ = app
     cli = _cli(client)
     graph_commands.run_create(cli, "text-input", {"value": "c"})
@@ -294,7 +294,7 @@ def test_m2_without_a_saved_canvas_the_printers_say_what_they_said(app, capsys):
 
 # -- Design: the copy that has to wait is said at the time ----------------------------
 
-def test_gm10_3_the_edit_reply_says_the_copy_waits(app, monkeypatch):
+def test_the_edit_reply_says_the_copy_waits(app, monkeypatch):
     client, store, graph, state = app
     ids = _waiting(client, store, graph, state, monkeypatch)
     _make_room_without_listing(client, store, ids[0])
@@ -314,7 +314,7 @@ def test_gm10_3_the_edit_reply_says_the_copy_waits(app, monkeypatch):
 
 # -- Design: the copy named as the agent's, in saved order -------------------
 
-def test_gm11_4_the_copy_filed_while_the_notice_shows_is_the_agents(app, monkeypatch):
+def test_the_copy_filed_while_the_notice_shows_is_the_agents(app, monkeypatch):
     client, store, _graph, state = app
     _restored_unsettled(client, store, state, monkeypatch)
     assert client.post("/api/graph/node", headers=CODEX, json={"definitionId": "text-input", "params": {"value": "e1"}}).status_code == 200
@@ -328,7 +328,7 @@ def test_gm11_4_the_copy_filed_while_the_notice_shows_is_the_agents(app, monkeyp
     assert store_module.canvas_pending_of(_catalog(store))["copies"] == {}
 
 
-def test_gm10_the_shared_duplicate_name_helper():
+def test_the_shared_duplicate_name_helper():
     catalog = {"projects": {"a": {"name": "Hero"}, "b": {"name": "Hero copy"}}, "trash": {"c": {"name": "Hero copy 2"}}}
     assert store_module.duplicate_name("Hero", catalog) == "Hero copy 3"
     assert store_module.duplicate_name("Hero", {"projects": {}}) == "Hero copy"
@@ -341,7 +341,7 @@ INVERSE = {"added": [{"id": "n9"}], "removed": [], "changed": [], "renamed": [],
            "removedWires": [], "ready": []}
 
 
-def test_nit4_rehome_moves_only_the_copys_edits():
+def test_rehome_moves_only_the_copys_edits():
     book = CanvasUndoBook()
     actor = {"kind": "agent", "name": "Codex"}
     older = book.keep(edit_id="e1", actor=actor, agent_id="codex", project_id=None, project_name="",
@@ -354,7 +354,7 @@ def test_nit4_rehome_moves_only_the_copys_edits():
     assert book.take(older, agent_id="codex", project_id=None).project_id is None
 
 
-def test_nit3_copies_that_no_longer_exist_are_dropped(app, monkeypatch):
+def test_copies_that_no_longer_exist_are_dropped(app, monkeypatch):
     client, store, _graph, state = app
     _restored_unsettled(client, store, state, monkeypatch)
     with store.transaction() as catalog:
@@ -366,7 +366,7 @@ def test_nit3_copies_that_no_longer_exist_are_dropped(app, monkeypatch):
     assert "d" * 32 not in copies and len(copies) == 1
 
 
-def test_nit2_a_new_loss_after_the_note_was_closed_counts_only_itself(tmp_path):
+def test_a_new_loss_after_the_note_was_closed_counts_only_itself(tmp_path):
     store = ProjectStore(tmp_path / "projects")
     store._ensure_held_dir()
     store._note_held_lost(2, ["canvas-held/a.damaged-20261028T000000Z-0000aaaa"])
@@ -377,7 +377,7 @@ def test_nit2_a_new_loss_after_the_note_was_closed_counts_only_itself(tmp_path):
                                         "canvas-held/b.damaged-20261028T000001Z-0000bbbb"]
 
 
-def test_l3_a_damaged_note_never_lets_pruning_delete_a_kept_file(tmp_path, monkeypatch):
+def test_a_damaged_note_never_lets_pruning_delete_a_kept_file(tmp_path, monkeypatch):
     store = ProjectStore(tmp_path / "projects")
     store._ensure_held_dir()
     monkeypatch.setattr(store_module, "DAMAGED_KEPT_MIN", 1)
@@ -398,7 +398,7 @@ def test_l3_a_damaged_note_never_lets_pruning_delete_a_kept_file(tmp_path, monke
 
 # -- Design: the graphSync says the restore ------------------------------------------
 
-def test_gm11_5_the_graph_sync_carries_the_restore_notice(app, monkeypatch):
+def test_the_graph_sync_carries_the_restore_notice(app, monkeypatch):
     client, store, _graph, state = app
     _restored_unsettled(client, store, state, monkeypatch)
     listing = client.get("/api/projects", headers=PERSON).json()
@@ -413,7 +413,7 @@ def test_gm11_5_the_graph_sync_carries_the_restore_notice(app, monkeypatch):
 
 # -- Design: the person's refusal lines are gone ---------------------------------------
 
-def test_gm11_3_the_persons_refusal_lines_are_dropped():
+def test_the_persons_refusal_lines_are_dropped():
     assert not hasattr(main_module, "canvas_waiting_person_reason")
     refusal = main_module.CanvasWaitingRefusal("projects", "clear")
     assert refusal.detail == main_module.CANVAS_WAITING_REFUSAL

@@ -6,24 +6,55 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 // Design: the repo is public, so comments and test titles say "design" and carry no internal
 // ids. Five kinds are counted per file:
-//   - the studio initials as a standalone uppercase word, anywhere in the file;
+//   - the studio initials as a standalone uppercase word anywhere in the file, and in an
+//     identifier shape anywhere in a code file's text outside string literals (comments are
+//     still read, and a shell file, which has no string spans, is read whole; a stylesheet
+//     never): GM_, GMS_, Gm_, Gms_, gm_ or gms_ and the digit tails of those spellings at an
+//     identifier start, alone or with one $ before them (GM_LINE, GMS_2, GM9, gm_board, gm7run,
+//     Gm_flag, $GM_TOKEN, $gm_board); gm / Gm / Gms at a camelCase hump, alone or $-prefixed
+//     (gmBoard, $gmBoard, GmsLine, readsGmsLine, cursorGm1, myGm); GM / GMS as an acronym hump
+//     before a capital-lowercase pair or a digit (GMPanel, readsGMLine, xGM9); and _GM / _GM_ /
+//     _gm / _gms with their digit tails at an underscore boundary plus _gm / _gms before a
+//     capital (MY_GM_CARD, reads_gms_line, ed_gm7run, _gmBoard). A bare Gm or Gms standing
+//     alone is not counted (a chord name, a GraphicsMagick handle: name it graphicsmagick_*
+//     instead), nor is kebab case (gm-board). "gm" inside a word never counts: segment,
+//     pigment, enigma, gmail, gmock, GMT, GMAIL, aGM, a regex flag string;
 //   - a round id, only inside a comment or a test title (the first string argument of
-//     it/test/describe): the phrase "round N[letter]" anywhere there, or the letter r with one to
-//     three digits and an optional letter when it reads as a design round (right after the
-//     studio initials, "design", "review", "since", "per", "PR #N" or "#N", right before "item",
-//     "answer" or a question id, or as the next link of a slash chain whose earlier link counts).
-//     A bare r1 elsewhere is a domain id (a region, a radius) and is not counted, nor is an
-//     uppercase R1;
-//   - a question id (the letter Q and one to three digits), only inside the same places;
+//     it/test/describe) or a Python `def test_` name: the phrase "round N[letter]" anywhere
+//     there, or the letter r with one to three digits and an optional letter when it reads as a
+//     design round (right after the studio initials, "design", "review", "since", "per",
+//     "PR #N" or "#N", right before "item", "answer" or a question id, or as the next link of a
+//     slash chain whose earlier link counts). In a `def test_` name a round_N segment counts
+//     anywhere (skipped when the next segment is decimals, places, digits, dp or sig, the same
+//     arithmetic exemption the comment rule uses) and an rN[letter] segment counts in the
+//     leading run described below. A bare r1 elsewhere is a domain id (a region, a radius) and
+//     is not counted, nor is an uppercase R1 or a provider endpoint spelled rNv (r2v);
+//   - a question id (the letter Q and one to three digits), only inside the same places; in a
+//     `def test_` name a qN / QN segment counts in the leading run;
 //   - a review id, only inside the same places: "Review N" in any case, or a severity id
-//     (LOW-N, MED-N, MEDIUM-N, HIGH-N, NIT-N; a one-letter H-N, L-N, M-N or N-N only right after
-//     a review id or another severity id, since "N-1" alone is arithmetic);
+//     (LOW-N, MED-N, MEDIUM-N, HIGH-N, NIT-N; a one-letter H-N, L-N, M-N or N-N only right
+//     after a review id or another severity id, since "N-1" alone is arithmetic); in a `def
+//     test_` name a review_N or review_rule(_N) segment counts anywhere, and in the leading
+//     run a reviewN segment (review15), a severity word with digits in any case (nit1, LOW4,
+//     medium1) or a lettered finding id (lr1, Le, C/G/H/L/M/N/U with one or two digits, never
+//     a lowercase suffix: H1, L2, M1, C2, G4, U1) counts too. A bare review or rule, and any
+//     other single letter with digits, stays a word or a domain value: round_trip, the review
+//     found, n1, v3, h3, t2v, i2v, s2v, o3, e00, b64, m4a;
 //   - the word "lane", only inside text people and agents read: a JS/TS string or template
 //     literal (its literal text, never a ${} expression), JSX text, a test title, or any Python
 //     string (docstrings, triple-quoted constants and f-strings included; never an f-string
 //     replacement field). The TypeScript parser finds those in .ts, .tsx, .js, .jsx, .mjs and .cjs.
 //     An identifier, a comment, a CSS class or a grid-area named lane is code and does not count,
 //     and stylesheets are not read for it at all.
+// In a `def test_` name the short shapes count only in the leading run: the consecutive
+// segments right after test_ that are each id-shaped (an rN[letter], qN / QN, reviewN, a
+// severity word with digits, a lettered finding id, gm / gms with or without digits, or a bare
+// number, which keeps the run going but is not itself counted). The first other segment ends
+// the run; after it only round_N and review_N / review_rule(_N) count. A `def` inside a string
+// or comment is not read, and `class Test...` and `def testCamel` spellings stay out of scope.
+// Residual collisions, counted on purpose: a domain token as the leading word still counts
+// (test_r2_bucket_upload, test_L2_norm, test_q4_k_m_quant, test_high1_low1_thresholds); put a
+// word first to clear it (test_cloudflare_r2_bucket_upload).
 // Agent-facing markdown is read too (docs/MCP-SETUP.md, skills/**/*.md, .agents/skills/**/*.md):
 // agents follow those files as instructions. There all prose counts (paragraphs, headings, lists,
 // tables, block quotes, link text) for the same five kinds. Fenced code blocks, inline code spans
@@ -101,6 +132,65 @@ export const BASELINE_REL = 'frontend/scripts/internal-ids-baseline.json';
 export const KINDS = ['gm', 'round', 'question', 'review', 'lane'];
 
 const GM_RE = /\bGM\b/g;
+// The initials inside a code identifier (Python, TS/JS family and shell, never a stylesheet):
+// GM_, GMS_, Gm_, Gms_, gm_, gms_ or a digit after one of those spellings at an identifier
+// start, alone or with one $ before it (GM_LINE, GMS_2, GM9, gm_board, gm7run, Gm_flag,
+// $GM_TOKEN, $gm_board); gm / Gm / Gms at a camelCase hump (gmBoard, $gmBoard, GmsLine,
+// readsGmsLine, cursorGm1, myGm) or before a capital after an underscore (_gmBoard); GM / GMS
+// as an acronym hump before a capital-lowercase pair or a digit (GMPanel, readsGMLine, xGM9);
+// and _GM / _GM_ / _gm / _gms with their digit tails at an underscore boundary (MY_GM_CARD,
+// reads_gms_line, ed_gm7run). A bare uppercase GM is GM_RE's whole-word match; a bare Gm or
+// Gms standing alone, a bare lowercase gm and kebab case (gm-board) are not counted (a chord
+// name, a regex flag string, a gram unit, a GraphicsMagick handle: name it graphicsmagick_*).
+// "gm" inside a word never counts: segment, pigment, enigma, gmail, gmock, GMT, GMAIL, aGM.
+const GM_ID_RE = new RegExp(
+  [
+    String.raw`(?<![\w$])\$?(?:GMS?|Gms?|gms?)(?=_|\d)`,
+    String.raw`(?<![\w$])\$?gms?(?=[A-Z])`,
+    String.raw`(?<![\w$])\$?Gms?(?=[A-Z])`,
+    String.raw`(?<![\w$])\$?GMS?(?=[A-Z][a-z])`,
+    String.raw`(?<=_)GMS?(?=_|\d|(?![\w$]))`,
+    String.raw`(?<=_)gms?(?=_|\d|(?![\w$]))`,
+    String.raw`(?<=_)gms?(?=[A-Z])`,
+    String.raw`(?<=[a-z\d])GMS?(?=[A-Z][a-z]|\d)`,
+    String.raw`(?<=[a-z\d])Gms?(?=[A-Z\d]|(?![\w$]))`,
+  ].join('|'),
+  'g',
+);
+// Inside a Python `def test_` name the short id shapes count only in the leading run: the
+// consecutive segments right after test_ that are each id-shaped — a bare rN[letter] or qN /
+// QN (one to three digits; never the endpoint-shaped rNv: r2v is a provider route name), a
+// reviewN segment (review15), a severity word with digits in any case (nit1, LOW4, medium1), a
+// lettered finding id (lr1, Le, C/G/H/L/M/N/U with one or two digits, never a lowercase
+// suffix: H1, L2, M1, C2, G4, U1; H264 is a codec), gm / gms with or without digits, or a bare
+// number. The first other segment ends the run; a bare number keeps it going and is not itself
+// counted. After the run only a round_N segment (skipped when the segment after its digits is
+// decimals, places, digits, dp or sig, the comment rule's arithmetic exemption) and a
+// review_N or review_rule(_N) segment count. A `def` inside a string or comment is not read,
+// and `class Test...` or `def testCamel` spellings stay out of scope. A bare round, review or
+// rule stays a word (round_trip, the review found), and every other single letter with digits
+// stays a domain value: n1 and n2 are node ids, v3 / v4 / h3 / v26 model versions, t2v / i2v /
+// s2v / e2e endpoint names, o3 / t2 / e00 / b64 / m4a / qc / wan26 other domain tokens.
+// Residual collisions, counted on purpose: a domain token as the leading word still counts
+// (test_r2_bucket_upload, test_L2_norm, test_q4_k_m_quant, test_high1_low1_thresholds); put a
+// word first to clear it (test_cloudflare_r2_bucket_upload).
+const DEF_TEST_RE = /\bdef\s+(test_\w+)/g;
+const DEF_ROUND_SEG = /^r\d{1,3}[a-uw-z]?$/;
+const DEF_Q_SEG = /^[qQ]\d{1,3}[a-z]?$/;
+const DEF_SEV_SEG = /^(?:nit|low|med|medium|high)\d+$/i;
+const DEF_LETTER_SEG = /^(?:lr\d{1,2}|Le|[CGHLMNU]\d{1,2})$/;
+const DEF_REVIEW_SEG = /^review\d+$/;
+const DEF_GM_SEG = /^gms?\d*$/;
+const DEF_NUM_SEG = /^\d+$/;
+const DEF_ARITH_SEG = /^(?:decimals?|places?|digits?|dp|sig)$/;
+const isDefIdSeg = (g) =>
+  DEF_Q_SEG.test(g) ||
+  DEF_ROUND_SEG.test(g) ||
+  DEF_SEV_SEG.test(g) ||
+  DEF_LETTER_SEG.test(g) ||
+  DEF_REVIEW_SEG.test(g) ||
+  DEF_GM_SEG.test(g) ||
+  DEF_NUM_SEG.test(g);
 // "lane" is how the studio organises its own work, not a Nebula word; agents and people read
 // "session". Counted as a whole word in any case, only inside the text people and agents read (a
 // JS/TS string or template literal, JSX text, a test title, a Python string, a CSS content string).
@@ -131,8 +221,10 @@ const CALLEE_TAIL = /(?:^|[^.\w$])(?:it|test|describe)(?:\.(?:skip|only|todo|con
 const EACH_TAIL = /(?:^|[^.\w$])(?:it|test|describe)(?:\.(?:skip|only|concurrent|fails|sequential))?\.each\s*$/;
 
 /**
- * Find comment and title spans in source. Returns [{start, end, kind}] with kind comment|title.
- * In Python files the literal text of every string is also returned, as kind string.
+ * Find comment, title and string-literal spans in source. Returns [{start, end, kind}] with
+ * kind comment|title|string. Every string or template literal is returned as kind string (a
+ * template's ${} parts included): in Python files its literal text is prose, and in every
+ * file the span lets a rule read only the code around it. A shell file has no string spans.
  */
 export function findSpans(path, text) {
   const ext = path.slice(path.lastIndexOf('.') + 1);
@@ -242,6 +334,7 @@ function jsSpans(text, isScript) {
         i++;
       }
       i++;
+      spans.push({ start, end: Math.min(i, n), kind: 'string' });
       if (isScript && isTitleStart(text, start)) {
         spans.push({ start: start + 1, end: Math.min(i - 1, n), kind: 'title' });
       }
@@ -442,6 +535,48 @@ function scanBody(body, offsetOf, push) {
   }
 }
 
+/** Round, review, question and studio-initial ids inside Python `def test_` names, reported at
+ * each segment's offset. The short shapes count only in the leading run: the consecutive
+ * segments right after test_ that are each id-shaped (isDefIdSeg); the first other segment ends
+ * the run, and a bare number inside it keeps the run going but is not itself counted. After the
+ * run only a round_N segment (skipped when the segment after its digits is decimals, places,
+ * digits, dp or sig, the comment rule's arithmetic exemption) and a review_N or
+ * review_rule(_N) segment count; the pair's whole id is the match text. A `def` inside a string
+ * or comment span is not read, and `class Test...` or `def testCamel` spellings stay out of
+ * scope by the test_ prefix itself. */
+function defNameIds(text, spans, push) {
+  for (const m of text.matchAll(DEF_TEST_RE)) {
+    if (spans.some((s) => m.index >= s.start && m.index < s.end)) continue;
+    const name = m[1];
+    const nameStart = m.index + m[0].length - name.length;
+    let at = nameStart + 'test_'.length;
+    const segs = name.slice('test_'.length).split('_');
+    let runEnd = 0;
+    while (runEnd < segs.length && isDefIdSeg(segs[runEnd])) runEnd++;
+    for (let i = 0; i < segs.length; i++) {
+      const g = segs[i];
+      const next = segs[i + 1] ?? '';
+      let kind = null;
+      let match = g;
+      if (i < runEnd) {
+        if (DEF_Q_SEG.test(g)) kind = 'question';
+        else if (DEF_ROUND_SEG.test(g)) kind = 'round';
+        else if (DEF_SEV_SEG.test(g) || DEF_LETTER_SEG.test(g) || DEF_REVIEW_SEG.test(g)) kind = 'review';
+        else if (DEF_GM_SEG.test(g)) kind = 'gm';
+      }
+      if (!kind && g === 'round' && /^\d+[a-z]?$/.test(next) && !DEF_ARITH_SEG.test(segs[i + 2] ?? '')) {
+        kind = 'round';
+        match = `${g}_${next}`;
+      } else if (!kind && g === 'review' && /^(?:\d+|rule)$/.test(next)) {
+        kind = 'review';
+        match = next === 'rule' && /^\d+$/.test(segs[i + 2] ?? '') ? `${g}_${next}_${segs[i + 2]}` : `${g}_${next}`;
+      }
+      if (kind) push(at, kind, match);
+      at += g.length + 1;
+    }
+  }
+}
+
 /**
  * Comment texts read as runs: [{body, map}] where map[i] is the file offset of body[i]. Only runs
  * that join at least two lines are returned (a single comment is already scanned on its own). A
@@ -561,7 +696,7 @@ function scanMarkdown(text) {
   const push = (offset, kind, match) => {
     const idx = lineOf(offset);
     const end = lineStarts[idx + 1] === undefined ? text.length : lineStarts[idx + 1] - 1;
-    out.push({ line: idx + 1, text: text.slice(lineStarts[idx], end).trim(), kind, match });
+    out.push({ line: idx + 1, col: offset - lineStarts[idx] + 1, text: text.slice(lineStarts[idx], end).trim(), kind, match });
   };
   for (const m of text.matchAll(GM_RE)) push(m.index, 'gm', m[0]);
   for (const m of prose.matchAll(LANE_RE)) push(m.index, 'lane', m[0]);
@@ -576,7 +711,23 @@ function scanMarkdown(text) {
   return out;
 }
 
-/** Every match in one file: [{line, text, kind: 'gm'|'round'|'question'|'review'|'lane', match}]. */
+/** `text` with every string span blanked to spaces, newlines kept, so an offset stays the file's. */
+function blankStrings(text, spans) {
+  const strings = spans.filter((s) => s.kind === 'string');
+  if (strings.length === 0) return text;
+  const parts = [];
+  let at = 0;
+  for (const s of strings) {
+    if (s.end <= at) continue;
+    const from = Math.max(at, s.start);
+    parts.push(text.slice(at, from), text.slice(from, s.end).replace(/[^\n]/g, ' '));
+    at = s.end;
+  }
+  parts.push(text.slice(at));
+  return parts.join('');
+}
+
+/** Every match in one file: [{line, col, text, kind: 'gm'|'round'|'question'|'review'|'lane', match}]. */
 export function scanSource(path, text) {
   if (path.endsWith('.md')) return scanMarkdown(text);
   const allSpans = findSpans(path, text);
@@ -603,13 +754,8 @@ export function scanSource(path, text) {
   const out = [];
   const push = (offset, kind, match) => {
     const idx = lineOf(offset);
-    out.push({ line: idx + 1, text: lineText(idx), kind, match });
+    out.push({ line: idx + 1, col: offset - lineStarts[idx] + 1, text: lineText(idx), kind, match });
   };
-  for (const m of text.matchAll(GM_RE)) push(m.index, 'gm', m[0]);
-  for (const m of text.matchAll(LANE_RE)) {
-    if (!readable.some((s) => m.index >= s.start && m.index < s.end)) continue;
-    push(m.index, 'lane', m[0]);
-  }
   const seen = new Set();
   const add = (offset, kind, match) => {
     const key = `${kind}:${offset}`;
@@ -617,6 +763,18 @@ export function scanSource(path, text) {
     seen.add(key);
     push(offset, kind, match);
   };
+  for (const m of text.matchAll(GM_RE)) push(m.index, 'gm', m[0]);
+  // The initials inside an identifier: every code file but a stylesheet (a class or grid-area
+  // never holds them anyway). String literal text is blanked out first, keeping offsets, so a gm
+  // spelled inside a string does not count (comments are still read, and a shell file has no
+  // string spans so it is read whole). A bare uppercase GM is the whole-word match above, never
+  // doubled.
+  if (ext === 'py') defNameIds(text, allSpans, add);
+  if (ext !== 'css') for (const m of blankStrings(text, allSpans).matchAll(GM_ID_RE)) add(m.index, 'gm', m[0]);
+  for (const m of text.matchAll(LANE_RE)) {
+    if (!readable.some((s) => m.index >= s.start && m.index < s.end)) continue;
+    push(m.index, 'lane', m[0]);
+  }
   for (const s of spans) scanBody(text.slice(s.start, s.end), (i) => s.start + i, add);
   for (const run of commentRuns(path, text, spans)) scanBody(run.body, (i) => run.map[i], add);
   out.sort((a, b) => a.line - b.line);
@@ -724,7 +882,7 @@ export function compareToBaseline(counts, matches, baseline) {
     const allowed = baseline[file] ?? 0;
     if (count > allowed) {
       const list = matches[file] ?? [];
-      const shown = list.slice(0, 8).map((m) => `    ${file}:${m.line}  ${m.text.slice(0, 120)}`);
+      const shown = list.slice(0, 8).map((m) => `    ${file}:${m.line}:${m.col} [${m.kind} ${JSON.stringify(m.match)}] ${m.text.slice(0, 120)}`);
       failures.push({ file, count, allowed, lines: shown, more: Math.max(0, list.length - shown.length), hint: hints[file] });
     }
   }

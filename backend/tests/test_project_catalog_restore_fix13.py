@@ -85,7 +85,7 @@ def test_mcp_and_the_cli_say_the_number(app, monkeypatch, capsys):
     assert "The project list has 5 projects, over the limit of 3. Move 3 to Recently deleted to make room." in format_start(start)
 
 
-def test_q4_mcp_new_project_past_the_limit_carries_the_limit_and_its_number(app, monkeypatch):
+def test_mcp_new_project_past_the_limit_carries_the_limit_and_its_number(app, monkeypatch):
     client, store, graph, state = app
     for name in ("A", "B", "C"):
         _create(client, name)
@@ -97,7 +97,7 @@ def test_q4_mcp_new_project_past_the_limit_carries_the_limit_and_its_number(app,
             '"deletes": 1})') in str(raised.value)
 
 
-def test_q4_the_kept_detail_uses_curly_apostrophes():
+def test_the_kept_detail_uses_curly_apostrophes():
     detail = main_module.CANVAS_KEPT_IN_TAB_DETAIL
     assert "’" in detail
     assert not re.search(r"[A-Za-z]'[A-Za-z]", detail)

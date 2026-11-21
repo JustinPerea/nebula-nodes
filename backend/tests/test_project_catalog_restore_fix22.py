@@ -131,7 +131,7 @@ def test_a_the_open_keeps_the_hold_and_its_line_agrees(app, recoveries):
 
 # -- B. the landing stamp across an open; a node's own landing time (nodeLandedAt) ----------------
 
-def test_b1_the_stamp_survives_an_open_an_autosave_and_a_restart(app, monkeypatch):
+def test_the_stamp_survives_an_open_an_autosave_and_a_restart(app, monkeypatch):
     """Probe (stamp lost across an open then restart): the agent's
     run lands on n1; an agent reopens Delta; window B autosaves; Nebula
     restarts; tab A hands off an hour-old result. Nebula's stands."""
@@ -156,7 +156,7 @@ def test_b1_the_stamp_survives_an_open_an_autosave_and_a_restart(app, monkeypatc
 
 
 @pytest.mark.parametrize("changed,kept", [(False, True), (True, False)])
-def test_b1_a_save_keeps_the_stored_stamp_while_its_result_is_the_one_stored(app, monkeypatch, changed, kept):
+def test_a_save_keeps_the_stored_stamp_while_its_result_is_the_one_stored(app, monkeypatch, changed, kept):
     """The live node lost its stamp (a canvas read back from an older
     state.json): a save keeps the stored one while the node's result is the
     one stored, and drops it once the result isn't."""
@@ -185,7 +185,7 @@ def _long_run(node_id: str, started: float, landed: float | None) -> dict:
 
 
 @pytest.mark.parametrize("landed_after,expected", [(10_000, "NEBULA"), (120_000, "TAB"), (None, "TAB")])
-def test_b5_a_long_runs_early_result_loses_to_a_result_that_landed_mid_run(app, landed_after, expected):
+def test_a_long_runs_early_result_loses_to_a_result_that_landed_mid_run(app, landed_after, expected):
     """After a restart (no landing seen in this process): the tab's long run
     started at T, its result on n1 landed at T+10 s; Nebula's (an agent's)
     landed at T+60 s. Nebula's stands. Without ``nodeLandedAt`` the run's
@@ -201,7 +201,7 @@ def test_b5_a_long_runs_early_result_loses_to_a_result_that_landed_mid_run(app, 
     assert _disk_node(store, delta, "n1")["data"]["outputs"] == _text(expected)
 
 
-def test_b5_node_landed_at_moves_with_a_renumbered_node(app, monkeypatch):
+def test_node_landed_at_moves_with_a_renumbered_node(app, monkeypatch):
     """The tab's record keys the duplicate by its tab-local id; the agent's
     reopen gives it n2. The handoff reads the record under n2 (its keys
     moved with the node), so the run's early landing loses to the agent's
@@ -237,7 +237,7 @@ def _journal_in(monkeypatch, directory: Path) -> ProviderRecoveryStore:
 
 
 @pytest.mark.unprivileged
-def test_c_bootstrap_while_the_journal_cant_be_written_says_bootstrap_everywhere(app, tmp_path, monkeypatch):
+def test_bootstrap_while_the_journal_cant_be_written_says_bootstrap_everywhere(app, tmp_path, monkeypatch):
     client, *_ = app
     delta = _create(client, "Delta")
     folder = tmp_path / "journal"
@@ -266,7 +266,7 @@ def test_c_bootstrap_while_the_journal_cant_be_written_says_bootstrap_everywhere
     assert _open(client, delta, headers=CODEX).status_code == 200
 
 
-def test_c_a_journal_that_takes_the_write_never_reads_as_held(app, tmp_path, monkeypatch):
+def test_a_journal_that_takes_the_write_never_reads_as_held(app, tmp_path, monkeypatch):
     """The bootstrap error is set, but the journal takes a write now: the
     read answers what the press does (it goes), never "held"."""
     client, *_ = app
@@ -281,7 +281,7 @@ def test_c_a_journal_that_takes_the_write_never_reads_as_held(app, tmp_path, mon
 
 # -- D. a real paid start: the open's and new_project's 409 carry the hold -------------------------
 
-def test_d_a_real_paid_start_refuses_the_open_and_new_project_with_the_hold(app):
+def test_a_real_paid_start_refuses_the_open_and_new_project_with_the_hold(app):
     client, *_ = app
     delta = _create(client, "Delta")
     guard = main_module.provider_start_guard
@@ -301,7 +301,7 @@ def test_d_a_real_paid_start_refuses_the_open_and_new_project_with_the_hold(app)
     assert _open(client, delta, headers=CODEX).status_code == 200
 
 
-def test_d_new_project_under_a_recovery_carries_the_hold(app, recoveries):
+def test_new_project_under_a_recovery_carries_the_hold(app, recoveries):
     client, *_ = app
     alpha, _delta_id = _alpha_then_delta(client)
     recoveries.set(run_id="wl-run-alpha", node_id="n1", resume_operation_id="op-1", existing_world_id=None)
@@ -322,7 +322,7 @@ def _hold_the_id(store, project_id: str, operation: str) -> None:
         store.commit(catalog)
 
 
-def test_v5_a3_an_id_two_projects_hold_places_neither(app, recoveries):
+def test_an_id_two_projects_hold_places_neither(app, recoveries):
     """A seeded record (no run history names it) whose ID two projects'
     nodes hold (a duplicate copies it): its project can't be known."""
     client, store, *_ = app
@@ -344,7 +344,7 @@ def test_v5_a3_an_id_two_projects_hold_places_neither(app, recoveries):
     assert _hold(client)["projectId"] == alpha
 
 
-def test_v9_a9_a_handoff_never_keeps_the_tabs_stamp_on_a_node_only_the_tab_has(app):
+def test_a_handoff_never_keeps_the_tabs_stamp_on_a_node_only_the_tab_has(app):
     client, store, *_ = app
     delta, old_rev, window_a = _switched_away(client)
     held = _copy(window_a)
@@ -354,7 +354,7 @@ def test_v9_a9_a_handoff_never_keeps_the_tabs_stamp_on_a_node_only_the_tab_has(a
     assert main_module.RESULT_LANDED_KEY not in _disk_node(store, delta, DUP)["data"]
 
 
-def test_v14_the_later_of_the_stored_and_live_stamps_is_nebulas_time(app):
+def test_the_later_of_the_stored_and_live_stamps_is_nebulas_time(app):
     """Delta open after an agent's reopen: the stored n1 stamp is older than
     the live one. The tab's run finished between them: the live (later)
     stamp decides, so Nebula's stands."""
@@ -373,7 +373,7 @@ def test_v14_the_later_of_the_stored_and_live_stamps_is_nebulas_time(app):
     assert _disk_node(store, delta, "n1")["data"]["outputs"] == _text("NEBULA")
 
 
-def test_a18_a_landing_in_another_projects_run_never_stamps_the_open_canvas(app, monkeypatch):
+def test_a_landing_in_another_projects_run_never_stamps_the_open_canvas(app, monkeypatch):
     """A run admitted in Alpha lands on its n1 after Delta opened: Delta's
     live n1 (same id) gets no stamp."""
     client, *_ = app
@@ -392,7 +392,7 @@ def test_a18_a_landing_in_another_projects_run_never_stamps_the_open_canvas(app,
 
 
 @pytest.mark.parametrize("owned,expected", [(True, "delta"), (False, None)])
-def test_a21_the_live_canvas_places_a_seeded_record_only_while_it_is_the_open_projects(app, recoveries, owned, expected):
+def test_the_live_canvas_places_a_seeded_record_only_while_it_is_the_open_projects(app, recoveries, owned, expected):
     client, *_ = app
     delta = _create(client, "Delta")
     _add_text(client, "d")
@@ -424,7 +424,7 @@ def _agents_note(client) -> tuple[str, str]:
     ("wl-run-delta", "“Delta World” (n1) in the open project “Delta”"),
     ("wl-run-ghost", "a World Labs node (n1), in a project Nebula can\u2019t tell,"),
 ])
-def test_f_the_agents_note_says_the_state_node_project_and_what_clears_it(app, recoveries, run_id, said):
+def test_the_agents_note_says_the_state_node_project_and_what_clears_it(app, recoveries, run_id, said):
     client, *_ = app
     _alpha_then_delta(client)
     recoveries.set(run_id=run_id, node_id="n1", resume_operation_id="op-1", existing_world_id=None)
@@ -434,7 +434,7 @@ def test_f_the_agents_note_says_the_state_node_project_and_what_clears_it(app, r
     assert f"Note: {note}" in printed
 
 
-def test_f_the_note_for_each_other_state():
+def test_the_note_for_each_other_state():
     note = project_client.open_hold_note
     assert note({"state": "run"}) == "Opening or switching projects is held (run): a run is going; wait for it to finish, or stop it."
     assert note({"state": "params", "nodeId": "n3", "nodeName": "World", "projectId": "p", "projectName": "Delta",
@@ -460,7 +460,7 @@ def _tool_text(name: str) -> str:
     return " ".join((tools[name].description or "").split())
 
 
-def test_f_agent_docs_describe_round_22():
+def test_agent_docs_describe_the_fix():
     def flat(text: str) -> str:
         return " ".join(text.split())
 
@@ -493,7 +493,7 @@ def test_f_agent_docs_describe_round_22():
 
 # -- G. the records' bytes for the tab and agents are unchanged ----------------------------------
 
-def test_g_the_records_reads_carry_the_same_fields_as_before(app, recoveries):
+def test_the_records_reads_carry_the_same_fields_as_before(app, recoveries):
     """The export and graphSync carry providerRecoveries and
     providerStartAmbiguities exactly as on 69277f89 (no project fields), and
     GET /api/graph carries neither, as before."""

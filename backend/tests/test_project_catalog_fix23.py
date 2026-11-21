@@ -104,7 +104,7 @@ def _delete(client, headers=PERSON):
                           headers={**headers, "X-Nebula-Workspace-Revision": _rev(client)})
 
 
-def test_a_record_no_run_history_names_says_gms_line_and_agents_text_is_unchanged(app, recoveries):
+def test_a_record_no_run_history_names_says_the_approved_line_and_agents_text_is_unchanged(app, recoveries):
     client, *_ = app
     _alpha_then_delta(client)
     _named("Delta brief")

@@ -157,7 +157,7 @@ def _stored(api, node_id: str) -> dict:
     return next(node for node in nodes if node["id"] == node_id)
 
 
-def test_H1_the_handoff_keeps_typing_on_a_node_nebula_had(api):
+def test_the_handoff_keeps_typing_on_a_node_nebula_had(api):
     node = api.graph.add_node("text-input", {"value": "a"}, position={"x": 0, "y": 0})
     old_revision, saved = _switch_away(api)
     answer = _handoff(api, old_revision, _with(saved, node, params={"value": "typed"}),
@@ -167,7 +167,7 @@ def test_H1_the_handoff_keeps_typing_on_a_node_nebula_had(api):
     assert _stored(api, node)["data"]["params"]["value"] == "typed"
 
 
-def test_H1_reopening_the_project_puts_the_typing_on_the_live_graph(api):
+def test_reopening_the_project_puts_the_typing_on_the_live_graph(api):
     node = api.graph.add_node("text-input", {"value": "a"}, position={"x": 0, "y": 0})
     old_revision, saved = _switch_away(api)
     assert _handoff(api, old_revision, _with(saved, node, params={"value": "typed"}),
@@ -177,7 +177,7 @@ def test_H1_reopening_the_project_puts_the_typing_on_the_live_graph(api):
     assert api.graph.nodes[node]["params"]["value"] == "typed"
 
 
-def test_H1_an_agents_edit_of_another_key_on_the_same_node_survives(api):
+def test_an_agents_edit_of_another_key_on_the_same_node_survives(api):
     node = api.graph.add_node("combine-text", {"separator": ",", "template": "x"}, position={"x": 0, "y": 0})
     assert api.client.put(f"/api/graph/node/{node}", headers=AGENT, json={"params": {"template": "AG"}}).status_code == 200
     old_revision, saved = _switch_away(api)
@@ -189,7 +189,7 @@ def test_H1_an_agents_edit_of_another_key_on_the_same_node_survives(api):
     assert params["template"] == "AG"
 
 
-def test_H1_values_come_from_the_staged_snapshot_not_the_side_list(api):
+def test_values_come_from_the_staged_snapshot_not_the_side_list(api):
     node = api.graph.add_node("text-input", {"value": "a"}, position={"x": 0, "y": 0})
     old_revision, saved = _switch_away(api)
     answer = _handoff(api, old_revision, _with(saved, node, params={"value": "typed"}),
@@ -198,7 +198,7 @@ def test_H1_values_come_from_the_staged_snapshot_not_the_side_list(api):
     assert _stored(api, node)["data"]["params"]["value"] == "typed"
 
 
-def test_H1_a_key_the_staged_node_lacks_refuses_the_save(api):
+def test_a_key_the_staged_node_lacks_refuses_the_save(api):
     """Design's ruling: a key that isn't a setting of the node refuses the
     save with its own form, so the tab keeps it as a copy (it was dropped
     silently before)."""
@@ -212,14 +212,14 @@ def test_H1_a_key_the_staged_node_lacks_refuses_the_save(api):
     assert _stored(api, node)["data"]["params"]["separator"] == ","
 
 
-def test_H1_without_pending_keys_the_stored_copy_wins_as_before(api):
+def test_without_pending_keys_the_stored_copy_wins_as_before(api):
     node = api.graph.add_node("text-input", {"value": "a"}, position={"x": 0, "y": 0})
     old_revision, saved = _switch_away(api)
     assert _handoff(api, old_revision, _with(saved, node, params={"value": "dropped undo"})).status_code == 200
     assert _stored(api, node)["data"]["params"]["value"] == "a"
 
 
-def test_H1_a_rename_it_hadnt_sent_is_kept_and_null_goes_back_to_the_models_name(api):
+def test_a_rename_it_hadnt_sent_is_kept_and_null_goes_back_to_the_models_name(api):
     node = api.graph.add_node("text-input", {"value": "a"}, position={"x": 0, "y": 0})
     other = api.graph.add_node("text-input", {"value": "b"}, position={"x": 0, "y": 200})
     api.graph.set_label(other, "Old name")
@@ -235,7 +235,7 @@ def test_H1_a_rename_it_hadnt_sent_is_kept_and_null_goes_back_to_the_models_name
     assert "label" not in api.graph.nodes[other]
 
 
-def test_H1_a_node_only_the_tab_had_is_added_as_before(api):
+def test_a_node_only_the_tab_had_is_added_as_before(api):
     api.graph.add_node("text-input", {"value": "a"}, position={"x": 0, "y": 0})
     old_revision, saved = _switch_away(api)
     extra = {**saved["nodes"][0], "id": "tab-only", "data": {**saved["nodes"][0]["data"], "params": {"value": "mine"}}}
@@ -246,7 +246,7 @@ def test_H1_a_node_only_the_tab_had_is_added_as_before(api):
 
 
 @pytest.mark.parametrize("case", ["missing-node", "definition", "not-object", "bad-entry", "bad-label"])
-def test_H1_a_merge_nebula_cant_make_refuses_the_whole_handoff(api, case):
+def test_a_merge_nebula_cant_make_refuses_the_whole_handoff(api, case):
     node = api.graph.add_node("text-input", {"value": "a"}, position={"x": 0, "y": 0})
     old_revision, saved = _switch_away(api)
     snapshot = _with(saved, node, params={"value": "typed"})
@@ -274,7 +274,7 @@ def test_H1_a_merge_nebula_cant_make_refuses_the_whole_handoff(api, case):
     assert retry.status_code == 200, retry.text
 
 
-def test_H1_an_ordinary_autosave_ignores_the_fields(api):
+def test_an_ordinary_autosave_ignores_the_fields(api):
     node = api.graph.add_node("text-input", {"value": "a"}, position={"x": 0, "y": 0})
     snapshot = api.client.get(f"/api/projects/{api.first}").json()["snapshot"]
     saved = api.client.put(f"/api/projects/{api.first}", headers=_tab(api), json={
@@ -457,7 +457,7 @@ def _non_get_routes(app) -> list[tuple[str, str, object]]:
     return found
 
 
-def test_H2_every_non_get_route_is_fenced_or_allowlisted():
+def test_every_non_get_route_is_fenced_or_allowlisted():
     import main
 
     marked, unmarked = [], []
@@ -482,7 +482,7 @@ def test_H2_every_non_get_route_is_fenced_or_allowlisted():
         assert expected in marked, expected
 
 
-def test_H2_the_fence_reads_the_route_not_the_path(api):
+def test_the_fence_reads_the_route_not_the_path(api):
     import main
 
     # The middleware finds the route the request matches and reads its marker.
@@ -494,7 +494,7 @@ def test_H2_the_fence_reads_the_route_not_the_path(api):
     assert main._graph_fence_of("POST", "/api/graph/no-such-route") is None
 
 
-def test_H2_stop_and_the_project_save_still_pass_from_a_tab_with_no_revision(api):
+def test_stop_and_the_project_save_still_pass_from_a_tab_with_no_revision(api):
     no_revision = {**PERSON, "X-Nebula-Tab": TAB}
     stop = api.client.delete("/api/executions/no-such-run", headers=no_revision)
     assert stop.json().get("detail") != STALE, stop.text
@@ -516,7 +516,7 @@ def _drop(api, headers: dict, *, create: str = "true", name: str = "drop.png", c
                            data={"create_node": create, "x": "10", "y": "10"})
 
 
-def test_H2_U1_a_drop_made_for_the_project_left_is_refused(api):
+def test_a_drop_made_for_the_project_left_is_refused(api):
     old, canvas = _revision(api), _canvas(api)
     assert api.client.post(f"/api/projects/{api.second}/open", headers=AGENT,
                            json={"workspaceRevision": old}).status_code == 200
@@ -526,20 +526,20 @@ def test_H2_U1_a_drop_made_for_the_project_left_is_refused(api):
     assert api.graph.nodes == {}
 
 
-def test_H2_U2_a_drop_with_no_revision_from_a_tab_is_refused(api):
+def test_a_drop_with_no_revision_from_a_tab_is_refused(api):
     answer = _drop(api, {**PERSON, "X-Nebula-Tab": TAB})
     assert answer.status_code == 409, answer.text
     assert answer.json()["detail"] == STALE
     assert api.graph.nodes == {}
 
 
-def test_H2_an_upload_that_makes_no_node_needs_no_revision(api):
+def test_an_upload_that_makes_no_node_needs_no_revision(api):
     answer = _drop(api, {**PERSON, "X-Nebula-Tab": TAB}, create="false")
     assert answer.status_code == 200, answer.text
     assert "nodeId" not in answer.json()
 
 
-def test_H2_the_person_and_agents_still_drop_onto_the_open_canvas(api):
+def test_the_person_and_agents_still_drop_onto_the_open_canvas(api):
     mine = _drop(api, _tab(api, _canvas(api)))
     assert mine.status_code == 200, mine.text
     agent = _drop(api, AGENT, name="agent.png", content=_png() + b"\x00")
@@ -547,7 +547,7 @@ def test_H2_the_person_and_agents_still_drop_onto_the_open_canvas(api):
     assert sorted(api.graph.nodes) == ["n1", "n2"]
 
 
-def test_H2_the_upload_checks_in_the_step_that_adds_the_node(api, monkeypatch):
+def test_the_upload_checks_in_the_step_that_adds_the_node(api, monkeypatch):
     """The canvas is cleared while the upload awaits its video probe: the
     drop was made for the old canvas, so no node is added to the new one."""
     import main
@@ -574,7 +574,7 @@ def test_H2_the_upload_checks_in_the_step_that_adds_the_node(api, monkeypatch):
 # M2: the canvas revision survives a restart
 
 
-def test_M2_a_new_book_on_the_same_file_keeps_every_projects_revision(tmp_path):
+def test_a_new_book_on_the_same_file_keeps_every_projects_revision(tmp_path):
     path = tmp_path / "canvas-revisions.json"
     book = CanvasUndoBook(persist_path=path)
     book.forget_project("p_one", "cleared")
@@ -588,20 +588,20 @@ def test_M2_a_new_book_on_the_same_file_keeps_every_projects_revision(tmp_path):
     assert stored == {"version": 1, "projects": {"p_one": 1}, "unfiled": 2}
 
 
-def test_M2_without_a_path_nothing_is_written(tmp_path):
+def test_without_a_path_nothing_is_written(tmp_path):
     book = CanvasUndoBook()
     book.forget_project("p_one", "cleared")
     assert book.epoch("p_one") == 1
     assert list(tmp_path.iterdir()) == []
 
 
-def test_M2_mains_book_lives_in_the_state_dir():
+def test_mains_book_lives_in_the_state_dir():
     import main
 
     assert main.canvas_undo_book.persist_path == main._STATE_DIR / "canvas-revisions.json"
 
 
-def test_M2_a_storage_error_never_breaks_a_clear(tmp_path):
+def test_a_storage_error_never_breaks_a_clear(tmp_path):
     blocker = tmp_path / "not-a-dir"
     blocker.write_text("")
     book = CanvasUndoBook(persist_path=blocker / "canvas-revisions.json")
@@ -609,7 +609,7 @@ def test_M2_a_storage_error_never_breaks_a_clear(tmp_path):
     assert book.epoch("p_one") == 1
 
 
-def test_M2_an_unreadable_file_starts_from_zero(tmp_path):
+def test_an_unreadable_file_starts_from_zero(tmp_path):
     path = tmp_path / "canvas-revisions.json"
     path.write_text("{not json")
     assert CanvasUndoBook(persist_path=path).epoch("p_one") == 0
@@ -620,7 +620,7 @@ def _disk_epoch(api, project_id) -> int:
     return stored["unfiled"] if project_id is None else stored["projects"].get(project_id, 0)
 
 
-def test_M2_a_clear_writes_the_new_revision_before_the_canvas_changes(api, monkeypatch):
+def test_a_clear_writes_the_new_revision_before_the_canvas_changes(api, monkeypatch):
     api.graph.add_node("text-input", {"value": "a"}, position={"x": 0, "y": 0})
     seen: list[int] = []
     real_clear = api.graph.clear
@@ -634,7 +634,7 @@ def test_M2_a_clear_writes_the_new_revision_before_the_canvas_changes(api, monke
     assert seen == [1]
 
 
-def test_M2_an_import_writes_the_new_revision_before_the_canvas_changes(api, monkeypatch):
+def test_an_import_writes_the_new_revision_before_the_canvas_changes(api, monkeypatch):
     import main
 
     seen: list[int] = []
@@ -652,7 +652,7 @@ def test_M2_an_import_writes_the_new_revision_before_the_canvas_changes(api, mon
     assert answer.json()["canvasRevision"] == "1"
 
 
-def test_M2_an_import_that_fails_to_commit_leaves_the_revision_as_it_was(api, monkeypatch):
+def test_an_import_that_fails_to_commit_leaves_the_revision_as_it_was(api, monkeypatch):
     import main
 
     def fail(*_args, **_kwargs):
@@ -676,7 +676,7 @@ def _restart(api, monkeypatch) -> None:
     api.graph = graph
 
 
-def test_M2_a_restart_keeps_the_revision_and_a_held_write_still_lands(api, monkeypatch):
+def test_a_restart_keeps_the_revision_and_a_held_write_still_lands(api, monkeypatch):
     api.graph.add_node("text-input", {"value": "a"}, position={"x": 0, "y": 0})
     cleared = api.client.delete("/api/graph?force=true", headers=_tab(api, _canvas(api)))
     assert cleared.json()["canvasRevision"] == "1"
@@ -703,7 +703,7 @@ def _boot(state: Path, code: str) -> str:
     return result.stdout.strip().splitlines()[-1]
 
 
-def test_M2_a_real_restart_keeps_the_unfiled_canvas_revision(tmp_path):
+def test_a_real_restart_keeps_the_unfiled_canvas_revision(tmp_path):
     state = tmp_path / "state"
     first = _boot(state, (
         "import main\n"
@@ -715,7 +715,7 @@ def test_M2_a_real_restart_keeps_the_unfiled_canvas_revision(tmp_path):
     assert _boot(state, "import main\nprint(main._canvas_revision())") == "1"
 
 
-def test_M2_a_boot_whose_graph_file_fails_to_load_moves_the_revision(tmp_path):
+def test_a_boot_whose_graph_file_fails_to_load_moves_the_revision(tmp_path):
     state = tmp_path / "state"
     state.mkdir()
     (state / "canvas-revisions.json").write_text(json.dumps({"version": 1, "projects": {}, "unfiled": 3}))
@@ -796,7 +796,7 @@ def _start(main, route):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("route", ["execute", "execute-node"])
-async def test_L3_a_canvas_run_registers_its_canvas_and_a_clear_waits_for_it(api, run_gate, route):
+async def test_a_canvas_run_registers_its_canvas_and_a_clear_waits_for_it(api, run_gate, route):
     import main
 
     node = api.graph.add_node("text-input", {"value": "a"}, position={"x": 0, "y": 0})
@@ -810,7 +810,7 @@ async def test_L3_a_canvas_run_registers_its_canvas_and_a_clear_waits_for_it(api
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("route", ["execute", "execute-node"])
-async def test_L3_a_canvas_run_whose_canvas_is_replaced_under_it_leaves_the_new_node_alone(api, run_gate, route):
+async def test_a_canvas_run_whose_canvas_is_replaced_under_it_leaves_the_new_node_alone(api, run_gate, route):
     import main
 
     api.graph.add_node("text-input", {"value": "a"}, position={"x": 0, "y": 0})
@@ -824,7 +824,7 @@ async def test_L3_a_canvas_run_whose_canvas_is_replaced_under_it_leaves_the_new_
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("route", ["execute", "execute-node"])
-async def test_L3_without_a_clear_the_run_still_writes_back(api, run_gate, route):
+async def test_without_a_clear_the_run_still_writes_back(api, run_gate, route):
     import main
 
     node = api.graph.add_node("text-input", {"value": "a"}, position={"x": 0, "y": 0})
@@ -836,7 +836,7 @@ async def test_L3_without_a_clear_the_run_still_writes_back(api, run_gate, route
 
 
 @pytest.mark.asyncio
-async def test_L3_an_agents_graph_run_leaves_a_node_made_on_a_canvas_replaced_under_it_alone(api, run_gate):
+async def test_an_agents_graph_run_leaves_a_node_made_on_a_canvas_replaced_under_it_alone(api, run_gate):
     import main
     from starlette.requests import Request
 
@@ -853,7 +853,7 @@ async def test_L3_an_agents_graph_run_leaves_a_node_made_on_a_canvas_replaced_un
 
 
 @pytest.mark.asyncio
-async def test_L3_a_stopped_run_whose_canvas_was_replaced_leaves_the_new_node_alone(api, monkeypatch):
+async def test_a_stopped_run_whose_canvas_was_replaced_leaves_the_new_node_alone(api, monkeypatch):
     import main
 
     started = asyncio.Event()
@@ -878,7 +878,7 @@ async def test_L3_a_stopped_run_whose_canvas_was_replaced_leaves_the_new_node_al
 
 
 @pytest.mark.asyncio
-async def test_L3_cinema_merges_and_recovery_params_check_the_runs_canvas(api):
+async def test_cinema_merges_and_recovery_params_check_the_runs_canvas(api):
     import main
 
     api.graph.add_node("text-input", {"value": "a"}, position={"x": 0, "y": 0})

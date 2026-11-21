@@ -1207,7 +1207,7 @@ def test_the_bounds_are_the_pinned_spaces_and_the_nodes():
 @pytest.mark.asyncio
 @pytest.mark.parametrize("bad_token", ["hf_abc’def", "hf_abc\ndef", "hf_été", "hf_abc\x00def", "hf_abc def",
                                        "hf_abc\tdef"])
-async def test_a_token_with_a_character_tokens_cant_have_gets_gms_line_and_sends_nothing(monkeypatch, bad_token):
+async def test_a_token_with_a_character_tokens_cant_have_gets_the_approved_line_and_sends_nothing(monkeypatch, bad_token):
     hosts = idol_hosts(monkeypatch)
     with pytest.raises(idol.IdolSpaceError) as excinfo:
         await run_direct(keys={"HF_TOKEN": bad_token})

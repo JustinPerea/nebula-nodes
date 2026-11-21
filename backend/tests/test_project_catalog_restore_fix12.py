@@ -50,7 +50,7 @@ def _named(*names: str, trash: tuple[str, ...] = ()) -> dict:
     ("Recovered canvas", (), "Recovered canvas copy"),
     ("Alpha copy", ("Alpha copy",), "Alpha copy 2"),
 ])
-def test_r16_1_a_copy_names_its_source_and_never_says_copy_twice(source, names, want):
+def test_a_copy_names_its_source_and_never_says_copy_twice(source, names, want):
     got = store_module.duplicate_name(source, _named(*names))
     assert got == want
     assert "copy copy" not in got
@@ -63,7 +63,7 @@ def test_r16_1_a_copy_names_its_source_and_never_says_copy_twice(source, names, 
     ("Alpha copy 2", ("Recovered Alpha copy 2",), "Recovered Alpha copy 3"),
     ("Recovered canvas", ("Recovered canvas",), "Recovered canvas copy"),
 ])
-def test_r16_1_a_recovered_copy_never_says_recovered_twice_in_a_row(source, names, want):
+def test_a_recovered_copy_never_says_recovered_twice_in_a_row(source, names, want):
     got = store_module.recovered_name(source, _named(*names))
     assert got == want
     assert not got.startswith("Recovered Recovered")
@@ -80,11 +80,11 @@ def test_r16_1_a_recovered_copy_never_says_recovered_twice_in_a_row(source, name
     ("Recovered canvas", (), ("Recovered canvas",), "Recovered canvas copy"),
     ("Alpha copy", (), ("Alpha copy",), "Recovered Alpha copy"),
 ])
-def test_r16_3_a_lost_rows_name_is_free_only_when_recently_deleted_doesnt_have_it(lost, names, trash, want):
+def test_a_lost_rows_name_is_free_only_when_recently_deleted_doesnt_have_it(lost, names, trash, want):
     assert store_module.lost_row_name(lost, _named(*names, trash=trash)) == want
 
 
-def test_r16_3_the_live_canvas_of_a_project_in_recently_deleted_is_filed_as_recovered(app):
+def test_the_live_canvas_of_a_project_in_recently_deleted_is_filed_as_recovered(app):
     """main's filing of the live canvas whose project is in Recently deleted
     (_filed_canvas_name): "Beta" is still there, so not free."""
     owner = "b" * 32
@@ -99,7 +99,7 @@ def test_r16_3_the_live_canvas_of_a_project_in_recently_deleted_is_filed_as_reco
 STRAIGHT = re.compile(r"[A-Za-z]'[A-Za-z]")
 
 
-def test_r16_5_the_lines_the_cli_prints_to_people_use_curly_apostrophes():
+def test_the_lines_the_cli_prints_to_people_use_curly_apostrophes():
     lines = [*main_module.CANVAS_SAVED_FOR_AGENT.values(), *main_module.CANVAS_KEPT_FOR_AGENT.values(),
              *main_module.CANVAS_COPY_WAITS.values()]
     for action in ("clear", "replace", "change"):
@@ -152,7 +152,7 @@ AGENT_WRITES = {
 
 
 @pytest.mark.parametrize("write", list(AGENT_WRITES))
-def test_r16_mcp_an_agents_write_while_the_tab_keeps_edits_is_refused_with_its_code(app, write):
+def test_mcp_an_agents_write_while_the_tab_keeps_edits_is_refused_with_its_code(app, write):
     client, store, _graph, _state = app
     other = _create(client, "Other")
     _create(client, "Delta")
@@ -183,7 +183,7 @@ def _active(client) -> str:
     return client.get("/api/projects", headers=PERSON).json()["activeProjectId"]
 
 
-def test_r16_mcp_the_persons_own_requests_pass_and_reads_pass(app):
+def test_mcp_the_persons_own_requests_pass_and_reads_pass(app):
     client, _store, _graph, _state = app
     _create(client, "Delta")
     _add_text(client, "delta-1")
@@ -204,7 +204,7 @@ def test_r16_mcp_the_persons_own_requests_pass_and_reads_pass(app):
         assert opened.status_code == 200, opened.text
 
 
-def test_r16_mcp_a_closed_tab_or_an_agents_socket_never_holds_agents_back(app, monkeypatch):
+def test_mcp_a_closed_tab_or_an_agents_socket_never_holds_agents_back(app, monkeypatch):
     client, _store, _graph, _state = app
     # Past the grace a closed kept tab leaves (test_pr199_round15_kept_grace has the grace itself).
     monkeypatch.setattr(main_module, "KEPT_GRACE_SECONDS", 0.0)
@@ -226,7 +226,7 @@ def test_r16_mcp_a_closed_tab_or_an_agents_socket_never_holds_agents_back(app, m
         assert AGENT_WRITES["add"](client).status_code == 200
 
 
-def test_r16_mcp_cli_and_graph_tools_say_the_code():
+def test_mcp_cli_and_graph_tools_say_the_code():
     assert "canvas_kept_in_tab" in AGENT_REFUSAL_CODES
     payload = {"detail": main_module.CANVAS_KEPT_IN_TAB_DETAIL, "code": "canvas_kept_in_tab"}
     error = NebulaAPIError(main_module.CANVAS_KEPT_IN_TAB_DETAIL, status=409, kind="http", payload=payload)

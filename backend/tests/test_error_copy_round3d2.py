@@ -686,7 +686,7 @@ def test_the_guard_catches_more_provider_id_shapes(line) -> None:
     "Your Krea account is out of credits. Add credits, then run the node again.",
     "Set the node's Duration (ms) to 3.",
 ])
-def test_the_guard_lets_gms_words_through(line) -> None:
+def test_the_guard_lets_the_approved_words_through(line) -> None:
     from tests.test_error_copy_round3c2 import forbidden_in_a_line
 
     assert not forbidden_in_a_line(line), line

@@ -60,13 +60,13 @@ def test_synonym_expansion_and_bm25(store):
 def test_brand_scope_and_inheritance(store):
     free = store.ensure_collection("free", "manual")
     mita = store.ensure_collection("mita", "manual", brand="mitamaton")
-    gm = store.ensure_collection("gm", "manual", brand="good-machines")
+    machines = store.ensure_collection("machines", "manual", brand="good-machines")
     other = store.ensure_collection("other", "manual", brand="acme")
     ids = {}
-    for name, col, seed in (("free", free, 1), ("mita", mita, 2), ("gm", gm, 3), ("other", other, 4)):
+    for name, col, seed in (("free", free, 1), ("mita", mita, 2), ("machines", machines, 3), ("other", other, 4)):
         ids[name] = add(store, col, seed, why=f"grid reference {name}").asset["id"]
     seen = {r["id"] for r in search.search(store, query="grid", brand="mitamaton")}
-    assert seen == {ids["free"], ids["mita"], ids["gm"]}
+    assert seen == {ids["free"], ids["mita"], ids["machines"]}
     assert {r["id"] for r in search.search(store, query="grid")} == {ids["free"]}
     assert {r["id"] for r in search.search(store, query="grid", brand="acme")} == {ids["free"], ids["other"]}
     assert len(search.search(store, query="grid", all_scopes=True)) == 4

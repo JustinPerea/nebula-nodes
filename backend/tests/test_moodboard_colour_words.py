@@ -13,22 +13,22 @@ import pytest
 
 from services.moodboard_colour_words import LEXICON_VERSION, check, oklch
 
-GM_DIRECTION = (
+DIRECTION = (
     "Real 19th-century landscape oil (Hudson River School, Luminism, Tonalism) in a silver tonalist palette: "
     "cool pearl-grey sky, pale blue-grey water, sage and grey-green land, soft mist. Fine detail confined to "
     "about a third of the canvas; the rest is quiet sky, mist or water. Flowers in cool jewel tones: cornflower "
     "blue, violet, lilac and white."
 )
-GM_AVOID = ["busy all-over detail", "warm yellow varnish cast", "red, orange or pink flowers",
+AVOID = ["busy all-over detail", "warm yellow varnish cast", "red, orange or pink flowers",
             "digital or illustration look", "people, buildings, text"]
-GM_PALETTE = [("#f7f8f7", 0.2037), ("#111010", 0.136), ("#2a2b28", 0.0478), ("#dce0e2", 0.0344),
+PALETTE = [("#f7f8f7", 0.2037), ("#111010", 0.136), ("#2a2b28", 0.0478), ("#dce0e2", 0.0344),
               ("#16121f", 0.0245), ("#1c70f2", 0.0232), ("#98acac", 0.0208), ("#e7e2d4", 0.0197)]
-GM_ACCENTS = [("#a6392d", 0.0015), ("#ef8172", 0.0019), ("#9b492b", 0.0006), ("#c8b03e", 0.0005)]
+ACCENTS = [("#a6392d", 0.0015), ("#ef8172", 0.0019), ("#9b492b", 0.0006), ("#c8b03e", 0.0005)]
 BRICK, SALMON, RUST, OCHRE, BLUE, PIN = "#a6392d", "#ef8172", "#9b492b", "#c8b03e", "#1c70f2", "#e8593c"
 NEUTRALS = ["#f7f8f7", "#111010", "#2a2b28", "#dce0e2", "#16121f", "#98acac", "#e7e2d4"]
 
 
-def colours(palette=GM_PALETTE, accents=GM_ACCENTS) -> list[dict]:
+def colours(palette=PALETTE, accents=ACCENTS) -> list[dict]:
     return ([{"hex": hex_value, "role": "palette", "share": share} for hex_value, share in palette]
             + [{"hex": hex_value, "role": "accent", "share": share} for hex_value, share in accents])
 
@@ -46,7 +46,7 @@ def of(findings: list[dict], hex_value) -> list[dict]:
     return [finding for finding in findings if finding["hex"] == hex_value]
 
 
-def gm(direction=GM_DIRECTION, avoid=GM_AVOID, palette=GM_PALETTE, accents=GM_ACCENTS, pinned=(PIN,)):
+def run_check(direction=DIRECTION, avoid=AVOID, palette=PALETTE, accents=ACCENTS, pinned=(PIN,)):
     return check(direction, list(avoid), colours(palette, accents), list(pinned))
 
 
@@ -62,7 +62,7 @@ def test_oklch_matches_the_research_note(hex_value, expected):
 
 
 def test_the_good_machines_board_as_labelled():
-    findings = gm()
+    findings = run_check()
     levels = worst(findings)
     # Brick, salmon and rust are the red, orange and pink flowers the person avoids.
     for hex_value in (BRICK, SALMON, RUST):
@@ -92,7 +92,7 @@ def test_the_good_machines_board_as_labelled():
 
 
 def test_every_finding_says_which_check_found_it():
-    findings = gm()
+    findings = run_check()
     assert findings and {finding["foundBy"] for finding in findings} == {"words"}
     assert isinstance(LEXICON_VERSION, int)
     for finding in findings:
@@ -102,8 +102,8 @@ def test_every_finding_says_which_check_found_it():
 
 
 def test_the_blue_as_a_large_cluster_conflicts_with_the_silver_palette():
-    palette = [(hex_value, 0.15 if hex_value == BLUE else share) for hex_value, share in GM_PALETTE]
-    assert worst(gm(palette=palette))[BLUE] == "conflict"
+    palette = [(hex_value, 0.15 if hex_value == BLUE else share) for hex_value, share in PALETTE]
+    assert worst(run_check(palette=palette))[BLUE] == "conflict"
 
 
 def test_the_research_cases_that_are_consistent():
@@ -111,18 +111,18 @@ def test_the_research_cases_that_are_consistent():
     # alone averages warm yellow, C 0.034, and would trip the cast line:
     # a tuning case for design's labels, noted in implementation-notes.md.)
     palette = [("#c0c0c0", 0.4), ("#eae0c8", 0.15), ("#e2dfd2", 0.15)]
-    levels = worst(gm(palette=palette, accents=[("#6495ed", 0.002)], pinned=()))
+    levels = worst(run_check(palette=palette, accents=[("#6495ed", 0.002)], pinned=()))
     assert levels == {}
 
 
 def test_an_invented_saturated_orange_cluster_conflicts():
-    levels = worst(gm(palette=[*GM_PALETTE, ("#f07818", 0.18)], pinned=()))
+    levels = worst(run_check(palette=[*PALETTE, ("#f07818", 0.18)], pinned=()))
     assert levels["#f07818"] == "conflict"
 
 
 def test_dropping_the_palette_rule_drops_the_blue_warning():
-    direction = GM_DIRECTION.replace(" in a silver tonalist palette", "")
-    levels = worst(gm(direction=direction))
+    direction = DIRECTION.replace(" in a silver tonalist palette", "")
+    levels = worst(run_check(direction=direction))
     assert BLUE not in levels
     # Without the palette rule, ochre is only the cast warning.
     assert levels[OCHRE] == "warning"
@@ -150,13 +150,13 @@ def test_negation_perturbations(direction, hex_value, level):
 
 
 def test_reordered_clauses_give_the_same_findings():
-    sentences = [s.strip() for s in GM_DIRECTION.split(". ") if s.strip()]
+    sentences = [s.strip() for s in DIRECTION.split(". ") if s.strip()]
     reordered = ". ".join(reversed([s.rstrip(".") for s in sentences])) + "."
 
     def key(findings):
         return sorted((f["hex"] or "", f["level"], f["clause"], f["rule"]) for f in findings)
 
-    assert key(gm(direction=reordered, avoid=list(reversed(GM_AVOID)))) == key(gm())
+    assert key(run_check(direction=reordered, avoid=list(reversed(AVOID)))) == key(run_check())
 
 
 @pytest.mark.parametrize("avoid", [["Reds"], ["RED FLOWER"], ["red flower"], ["red  flowers."]])
@@ -391,11 +391,11 @@ LONG = " ".join([SUMMER + "."] * 60)[:4000]
     LONG,
     "",
     "   ",
-    GM_DIRECTION,
+    DIRECTION,
 ], ids=lambda direction: direction[:40] or "empty")
 def test_every_reason_quotes_whole_words(direction):
     avoid = [*SUMMER_AVOID, "blue-tinted glass", "Rouge vif, café-au-lait", "warm yellow varnish cast"]
-    findings = check(direction, avoid, colours([*SUMMER_PALETTE, *GM_PALETTE], [*SUMMER_ACCENTS, *GM_ACCENTS]),
+    findings = check(direction, avoid, colours([*SUMMER_PALETTE, *PALETTE], [*SUMMER_ACCENTS, *ACCENTS]),
                      [PIN])
     for finding in findings:
         assert_reason_reads_well(finding, direction, avoid)

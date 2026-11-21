@@ -111,7 +111,7 @@ def _lands_once(client, store, delta: str, new: str, value: str) -> None:
 
 # -- The handoff learns the open's ids --------------------------------------------
 
-def test_high1_an_agents_reopen_lands_the_tabs_late_typing_on_one_node(app):
+def test_an_agents_reopen_lands_the_tabs_late_typing_on_one_node(app):
     """renumber-everywhere's RE16 (typing variant)."""
     client, store, *_ = app
     delta, tab, old_rev = _delta_with_a_duplicate(client)
@@ -123,7 +123,7 @@ def test_high1_an_agents_reopen_lands_the_tabs_late_typing_on_one_node(app):
     _lands_once(client, store, delta, new, "dup-new")
 
 
-def test_high1_the_agents_grace_probe_p2_lands_on_the_new_id(app):
+def test_the_agents_grace_probe_lands_on_the_new_id(app):
     """agents-grace's P2: the tab's autosave built before the
     renumbering lands after it."""
     client, store, *_ = app
@@ -134,7 +134,7 @@ def test_high1_the_agents_grace_probe_p2_lands_on_the_new_id(app):
     _lands_once(client, store, delta, new, "dup typed late")
 
 
-def test_high1_a_move_only_handoff_doesnt_double_the_node(app):
+def test_a_move_only_handoff_doesnt_double_the_node(app):
     """RE16C: the only unsaved change is n1 moved by 30 px."""
     client, store, *_ = app
     delta, tab, old_rev = _delta_with_a_duplicate(client)
@@ -145,7 +145,7 @@ def test_high1_a_move_only_handoff_doesnt_double_the_node(app):
     _lands_once(client, store, delta, new, "dup-old")
 
 
-def test_high1_a_snapshot_the_tab_already_moved_to_the_new_ids_lands_the_same(app):
+def test_a_snapshot_the_tab_already_moved_to_the_new_ids_lands_the_same(app):
     """The tab remaps its snapshot by the switch sync's ``renumbered`` too:
     a snapshot that already holds n2 (and lists it as unsent) lands once."""
     client, store, *_ = app
@@ -158,7 +158,7 @@ def test_high1_a_snapshot_the_tab_already_moved_to_the_new_ids_lands_the_same(ap
     _lands_once(client, store, delta, new, "dup-new")
 
 
-def test_high1_unsent_lists_under_the_old_id_move_with_it(app):
+def test_unsent_lists_under_the_old_id_move_with_it(app):
     client, store, *_ = app
     delta, tab, old_rev = _delta_with_a_duplicate(client)
     held = _held(tab, **{DUP: "dup-new"})
@@ -171,7 +171,7 @@ def test_high1_unsent_lists_under_the_old_id_move_with_it(app):
     _lands_once(client, store, delta, new, "dup-new")
 
 
-def test_high1_a_renumbered_nodes_late_move_and_name_land_too(app):
+def test_a_renumbered_nodes_late_move_and_name_land_too(app):
     client, store, *_ = app
     delta, tab, old_rev = _delta_with_a_duplicate(client)
     held = _held(tab)
@@ -186,7 +186,7 @@ def test_high1_a_renumbered_nodes_late_move_and_name_land_too(app):
     assert _live(client)[new]["data"].get("label") == "Moved name"
 
 
-def test_high1_a_handoff_from_anyone_but_the_persons_tab_keeps_the_stored_copy(app):
+def test_a_handoff_from_anyone_but_the_persons_tab_keeps_the_stored_copy(app):
     """The renumbered node's values are the tab's unsent ones only from the
     person's tab, as the unsent lists are; anyone else's save (the agent
     that switched, holding the old revision) doubles nothing either."""
@@ -200,7 +200,7 @@ def test_high1_a_handoff_from_anyone_but_the_persons_tab_keeps_the_stored_copy(a
     assert _live(client)[new]["data"]["params"]["value"] == "dup-old"
 
 
-def test_high1_the_open_lists_the_renumbered_nodes_as_nebulas(app):
+def test_the_open_lists_the_renumbered_nodes_as_nebulas(app):
     """At the open the new ids are Nebula's nodes
     (_backendNodeIds), so an agent's delete of one isn't undone by the next
     read, which would keep it as a node only the tab had."""
@@ -214,7 +214,7 @@ def test_high1_the_open_lists_the_renumbered_nodes_as_nebulas(app):
     assert [node["id"] for node in _on_disk(store, delta)["snapshot"]["nodes"]] == ["n1"]
 
 
-def test_high1_the_handoffs_renumbering_ends_with_the_handoff(app):
+def test_the_handoffs_renumbering_ends_with_the_handoff(app):
     client, store, *_ = app
     delta, _tab, old_rev = _delta_with_a_duplicate(client)
     new = _open(client, delta, headers=CODEX).json()["renumbered"][DUP]
@@ -226,7 +226,7 @@ def test_high1_the_handoffs_renumbering_ends_with_the_handoff(app):
     assert main_module._HANDOFF_RENUMBERED not in _on_disk(store, delta)
 
 
-def test_high1_a_renumbering_is_read_only_for_its_own_handoff():
+def test_a_renumbering_is_read_only_for_its_own_handoff():
     """The map belongs to the handoff at one revision: a save holding any
     other revision (a stale tab's, a later handoff's) gets none of it."""
     project = {main_module._HANDOFF_RENUMBERED: {"revision": "r1", "map": {DUP: "n2", P1: "not-an-id"}}}
@@ -275,7 +275,7 @@ def _boot(state: Path) -> CLIGraph:
     return loaded
 
 
-def test_medium1_boot_renumber_prefers_the_projects_typing_over_state_json(app):
+def test_boot_renumber_prefers_the_projects_typing_over_state_json(app):
     """renumber-everywhere's test, as it was written."""
     client, store, _graph, state = app
     delta = _legacy_state(client, store, state, live_value="dup-first", project_value="dup-first dup-second")
@@ -287,7 +287,7 @@ def test_medium1_boot_renumber_prefers_the_projects_typing_over_state_json(app):
     assert _value(_on_disk(store, delta)["snapshot"], new) == "dup-first dup-second"
 
 
-def test_medium1_boot_takes_the_projects_name_and_place(app):
+def test_boot_takes_the_projects_name_and_place(app):
     client, store, _graph, state = app
     _legacy_state(client, store, state, live_value="a", project_value="b", label="Hero line",
                   position={"x": 420, "y": 96})
@@ -296,7 +296,7 @@ def test_medium1_boot_takes_the_projects_name_and_place(app):
     assert node["data"].get("label") == "Hero line" and node["position"] == {"x": 420, "y": 96}
 
 
-def test_medium1_boot_numbers_past_every_id_the_project_ever_used(app):
+def test_boot_numbers_past_every_id_the_project_ever_used(app):
     """state.json's counter is 1; the project's run history names n7 (a node
     deleted since). load() alone gave the uuid n2."""
     client, store, _graph, state = app
@@ -310,7 +310,7 @@ def test_medium1_boot_numbers_past_every_id_the_project_ever_used(app):
     assert main_module.cli_graph._counter >= int(new[1:])
 
 
-def test_medium1_the_first_sync_after_a_boot_renumber_reloads_a_tab_from_before_it(app):
+def test_the_first_sync_after_a_boot_renumber_reloads_a_tab_from_before_it(app):
     """The first sync is a reopen of the open project in Nebula's name, under
     a new revision; the old tab's handoff (old revision, the uuid, typing it
     never sent) lands on the new id; the person's read of the project ends it."""
@@ -342,7 +342,7 @@ def test_medium1_the_first_sync_after_a_boot_renumber_reloads_a_tab_from_before_
     assert _live(client)[new]["data"]["params"]["value"] == "dup-third"
 
 
-def test_nit3_the_boot_renumbering_stops_at_the_next_replacement(app):
+def test_the_boot_renumbering_stops_at_the_next_replacement(app):
     client, store, _graph, state = app
     _legacy_state(client, store, state, live_value="a", project_value="b")
     _boot(state)
@@ -354,7 +354,7 @@ def test_nit3_the_boot_renumbering_stops_at_the_next_replacement(app):
     assert "renumbered" not in first and "graphReplaced" not in first
 
 
-def test_nit3_an_agents_read_doesnt_end_it(app):
+def test_an_agents_read_doesnt_end_it(app):
     """Only the person's tab loads the project with the new ids."""
     client, store, _graph, state = app
     delta = _legacy_state(client, store, state, live_value="a", project_value="b")
@@ -366,7 +366,7 @@ def test_nit3_an_agents_read_doesnt_end_it(app):
 
 # -- The live graph refuses a non-nN id itself -----------------------------------------
 
-def test_nit1_cligraph_refuses_a_uuid_id_on_every_write(tmp_path):
+def test_cligraph_refuses_a_uuid_id_on_every_write(tmp_path):
     state = tmp_path / "state.json"
     graph = CLIGraph(persist_path=state)
     graph.add_node("text-input", {"value": "a"})
@@ -397,7 +397,7 @@ def test_nit1_cligraph_refuses_a_uuid_id_on_every_write(tmp_path):
     assert list(loaded.nodes) == ["n1"] and loaded.renumbered_on_load == {DUP: "n1"}
 
 
-def test_nit1_the_commit_uses_the_same_rule():
+def test_the_commit_uses_the_same_rule():
     with pytest.raises(ForeignNodeIdError):
         main_module._require_backend_node_ids({"nodes": [{"id": "n1"}, {"id": P1}]})
     main_module._require_backend_node_ids({"nodes": [{"id": "n1"}]})
@@ -405,7 +405,7 @@ def test_nit1_the_commit_uses_the_same_rule():
 
 # -- Imported outputs read the shared rule ------------------------------
 
-def test_kept_ui_nit3_imported_output_types_read_the_shared_port_rule(monkeypatch):
+def test_kept_ui_imported_output_types_read_the_shared_port_rule(monkeypatch):
     check = main_module._imported_output_type_is_valid
     for pair in port_contracts.PORT_RULES["alsoCompatible"]:
         assert check(pair[0], pair[1]) and check(pair[1], pair[0])
@@ -420,7 +420,7 @@ def test_kept_ui_nit3_imported_output_types_read_the_shared_port_rule(monkeypatc
 # -- The kept marker ------------------------------------------
 
 @pytest.mark.unprivileged
-def test_grace_nit1_a_marker_in_a_folder_nebula_cant_write_pauses_no_boot(tmp_path, monkeypatch):
+def test_a_marker_in_a_folder_nebula_cant_write_pauses_no_boot(tmp_path, monkeypatch):
     """agents-grace's probe: three boots held a grace each."""
     folder = tmp_path / "state"
     folder.mkdir()
@@ -441,7 +441,7 @@ def test_grace_nit1_a_marker_in_a_folder_nebula_cant_write_pauses_no_boot(tmp_pa
         os.chmod(folder, 0o755)
 
 
-def test_grace_nit1_a_marker_in_a_folder_it_can_write_still_holds_the_boot(tmp_path):
+def test_a_marker_in_a_folder_it_can_write_still_holds_the_boot(tmp_path):
     marker = tmp_path / main_module.KEPT_MARKER_NAME
     marker.write_text(json.dumps({"keptTabs": 2, "at": 0}), encoding="utf-8")
     manager = main_module.ConnectionManager(marker)
@@ -449,7 +449,7 @@ def test_grace_nit1_a_marker_in_a_folder_it_can_write_still_holds_the_boot(tmp_p
     assert not list(tmp_path.glob(".kept-probe.*"))
 
 
-def test_grace_nit2_a_directory_at_the_marker_path_is_tried_once(tmp_path, monkeypatch):
+def test_a_directory_at_the_marker_path_is_tried_once(tmp_path, monkeypatch):
     marker = tmp_path / main_module.KEPT_MARKER_NAME
     marker.mkdir()
     manager = main_module.ConnectionManager(marker)
@@ -492,7 +492,7 @@ _TWO_NUMBERS = re.compile(r"[0-9]+ [0-9]+$")
     ("Recovered canvas 2", (), "Recovered canvas 2 copy"),
     ("X (recovered)", (), "X (recovered) copy"),
 ])
-def test_gm_r25_5_copy_names(source, taken, want):
+def test_copy_names(source, taken, want):
     got = store_module.duplicate_name(source, _named(source, *taken))
     assert got == want
     assert "copy copy" not in got and not _TWO_NUMBERS.search(got)
@@ -514,13 +514,13 @@ def test_gm_r25_5_copy_names(source, taken, want):
     ("X (recovered)", (), "Recovered X"),
     ("X (recovered 2)", (), "Recovered X"),
 ])
-def test_gm_r25_5_recovered_names(source, taken, want):
+def test_recovered_names(source, taken, want):
     got = store_module.recovered_name(source, _named(source, *taken))
     assert got == want
     assert not got.startswith("Recovered Recovered") and not _TWO_NUMBERS.search(got)
 
 
-def test_gm_r25_5_every_backend_copy_follows_the_rule(app):
+def test_every_backend_copy_follows_the_rule(app):
     client, store, *_ = app
     catalog = _named("Recovered Alpha copy 2")
     assert main_module._canvas_copy_name("Recovered Alpha copy 2", catalog) == "Recovered Alpha copy 3"
@@ -531,7 +531,7 @@ def test_gm_r25_5_every_backend_copy_follows_the_rule(app):
 
 # -- Design: no tab-local id offered to agents in the selection -------------------------------
 
-def test_gm_r26_a_selected_tab_local_node_is_left_out_of_what_agents_read(app):
+def test_selected_tab_local_node_is_left_out_of_what_agents_read(app):
     client, *_ = app
     _create(client, "Delta")
     _add_text(client, "delta-1")
@@ -553,7 +553,7 @@ def test_gm_r26_a_selected_tab_local_node_is_left_out_of_what_agents_read(app):
     assert DUP not in json.dumps(look.get("selection"))
 
 
-def test_gm_r26_only_nebula_ids_publish_no_note(app):
+def test_only_nebula_ids_publish_no_note(app):
     client, *_ = app
     _create(client, "Delta")
     _add_text(client, "delta-1")
@@ -564,7 +564,7 @@ def test_gm_r26_only_nebula_ids_publish_no_note(app):
 
 # -- Docs ---------------------------------------------------------------------------------------
 
-def test_agent_docs_describe_round_18():
+def test_agent_docs_describe_the_fix():
     setup = (ROOT / "docs/MCP-SETUP.md").read_text()
     skill = (ROOT / "skills/nebula/SKILL.md").read_text()
     for text in (setup, skill):
