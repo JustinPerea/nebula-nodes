@@ -382,10 +382,10 @@ export function boardImages(key: string): MoodboardImage[] {
 
 /**
  * The paste backstop, per board: a file identical (by size, type and bytes
- * hash) to one still being added to the same board is ignored there; the
- * same image on another board goes. Kept here, not in the Studio, so it holds
- * across a board switch or the Studio closing and opening again. Adds take turns: each one's files are checked
- * only after the add before it has claimed its own.
+ * hash) to one still being added to the same board is ignored there; the same
+ * image on another board goes. Kept here, not in the Studio, so it holds across
+ * a board switch or the Studio closing and opening again. Adds take turns: each
+ * one's files are checked only after the add before it has claimed its own.
  */
 const claims: Array<{ signature: string; board: BoardRef }> = [];
 let turn: Promise<unknown> = Promise.resolve();

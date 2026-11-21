@@ -441,9 +441,9 @@ export function copyAge(copyAt: string | null | undefined, now: number = Date.no
 export interface CatalogRestoreNotice {
   /** The notice as one paragraph (single outcome, or for logs and tests). */
   text: string;
-  /** The design's stacked layout: the opening, each outcome, and "The damaged
-   * file was kept." when said, one per line. layout() always sets it, a single
-   * outcome included. */
+  /** The stacked layout: the opening, each outcome, and "The damaged file was
+   * kept." when said, one per line. layout() always sets it, a single outcome
+   * included. */
   lines: string[] | null;
   /** Show "Open Recently deleted": Recently deleted holds one of the
    * notice's items (or the size cap's line asks to empty it). */

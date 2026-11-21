@@ -516,19 +516,17 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, pasteTarget: pasteTa
     // fit left it (a move no callback reported clears it).
     follows: (fitted) => placed.current !== null && (placed.current.kind !== 'board' || fitted),
   });
-  // The view is fitted (PR #210): the camera is where the app last framed it, and for
-  // what: the whole board (`kind: 'board'`), or the cards an Update's Show or the outside
-  // chip brought into view (`cards`). Only the person's own framing sets it: Fit, Shift+1,
-  // a Show, the chip's press, or opening the board fresh. The app's refits (a line coming
-  // or going, a column resize, the fit on open of a kept camera) keep it as it is and
-  // never set it. Only the person clears
-  // it, by moving the camera (a pan, a pinch, a wheel, the zoom buttons, a
-  // keyboard zoom); an agent's change to the board doesn't. While it is set,
-  // a notice line appearing or going, or the column resizing, frames the
-  // same cards again in the view as it is now (reframe); once cleared,
-  // neither moves the camera (PR #213). The flag is kept with the camera for
-  // the visit (the store's `placed`), so it comes back with the camera from
-  // List (savedPlaced).
+  // The view is fitted (PR #210): the camera is where the app last framed it, and for what:
+  // the whole board (`kind: 'board'`), or the cards an Update's Show or the outside chip
+  // brought into view (`cards`). Only the person's own framing sets it: Fit, Shift+1, a
+  // Show, the chip's press, or opening the board fresh. The app's refits (a line coming or
+  // going, a column resize, the fit on open of a kept camera) keep it as it is and never
+  // set it. Only the person clears it, by moving the camera (a pan, a pinch, a wheel, the
+  // zoom buttons, a keyboard zoom); an agent's change to the board doesn't. While it is
+  // set, a notice line appearing or going, or the column resizing, frames the same cards
+  // again in the view as it is now (reframe); once cleared, neither moves the camera
+  // (PR #213). The flag is kept with the camera for the visit (the store's `placed`), so
+  // it comes back with the camera from List (savedPlaced).
   const placed = useRef<BoardPlaced | null>(savedPlaced);
   const place = useCallback((value: BoardPlaced | null) => {
     placed.current = value;
@@ -761,9 +759,9 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, pasteTarget: pasteTa
    * The app's refit (PR #210): while the view is fitted, what the flag names is
    * framed again in the view as it is now, on the board's spring (a jump under
    * reduced motion), so a line never covers a card the person framed and a
-   * resized column keeps them in view. It keeps the flag as it is and never
-   * sets it. A Show's or the chip's cards are framed as many as are left; with none left, the
-   * flag clears and the camera stays still. False when nothing moved.
+   * resized column keeps them in view. It keeps the flag as it is and never sets
+   * it. A Show's or the chip's cards are framed as many as are left; with none
+   * left, the flag clears and the camera stays still. False when nothing moved.
    */
   const reframe = useCallback((): boolean => {
     const at = placed.current;
