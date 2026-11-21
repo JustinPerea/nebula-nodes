@@ -38,6 +38,7 @@ from typing import Any
 from services import agent_binaries, agent_token_file, antigravity_agent, gemini_cli_setup
 from services.agent_name_in_sentence import in_sentence  # noqa: F401 (re-exported: the name inside a sentence)
 from services.agent_presence import clean_agent_name
+from services.chat_models import PICK_ANOTHER_MODEL
 from services.credential_catalog import CREDENTIAL_PROVIDERS
 
 FILE_NAME = "personal-agents.json"
@@ -510,13 +511,13 @@ def launch_spec(state_dir: Path, agent_id: str, home: Path | None = None) -> Lau
     """How to start ``agent_id``: absolute argv, extra env and timeouts."""
     view = get_agent(state_dir, agent_id, home)
     if view is None:
-        raise PersonalAgentError("personal_agent_unknown", "No personal agent with that id")
+        raise PersonalAgentError("personal_agent_unknown", f"Nebula doesn’t recognize that personal agent. {PICK_ANOTHER_MODEL}")
     if view.status != "ready":
         messages = {
-            "disabled": f"{view.displayName} is switched off in Settings > Personal agents.",
-            "not_installed": f"{view.displayName} isn't installed. {view.note}".strip(),
-            "needs_node": f"{view.displayName}: {view.note}",
-            "needs_setup": f"{view.displayName}: {view.note}",
+            "disabled": f"{view.displayName} is switched off. Turn it on in Settings > Preferences > Personal agents, then send again.",
+            "not_installed": f"{view.displayName} isn’t installed. {view.note}".strip(),
+            "needs_node": f"{view.displayName} needs setup. {view.note}",
+            "needs_setup": f"{view.displayName} needs setup. {view.note}",
         }
         raise PersonalAgentError(f"personal_agent_{view.status}", messages.get(view.status, "Not startable"))
     assert view.resolvedPath is not None
@@ -539,7 +540,7 @@ def launch_spec(state_dir: Path, agent_id: str, home: Path | None = None) -> Lau
             key = _nebula_key(preset.key_option)
             if not key:
                 raise PersonalAgentError("personal_agent_needs_setup",
-                                         f"Add a Gemini API key in Settings to use {in_sentence(view.displayName)}.")
+                                         f"{view.displayName} needs a Gemini API key. Add one in Settings > Providers, then send again.")
             env["GEMINI_API_KEY"] = key
             # Read before the overlay replaces the system settings path: the
             # CLI looks for system-defaults.json next to that file.

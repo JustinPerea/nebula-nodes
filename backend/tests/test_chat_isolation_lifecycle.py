@@ -10,6 +10,7 @@ from fastapi import WebSocketDisconnect
 import main
 from commons import actors
 from services import chat_actions, chat_session
+from services.chat_lines import AGENT_UNKNOWN_LINE, RELOAD_LINE, RESPONSE_RUNNING_LINE
 from tests.conftest import PERSON_TOKEN
 from tests.test_commons_integration import isolated_app  # noqa: F401
 
@@ -122,7 +123,7 @@ async def test_nonobject_envelope_is_rejected_and_disconnect_cleans_active_turn(
             seen["opaque"] = event["sessionId"]
             socket.put(malformed)
         if event["type"] == "error":
-            assert "must be an object" in event["message"]
+            assert event["message"] == RELOAD_LINE
             assert actors.agent_registry.lookup(seen["agent_token"]) is not None
             assert not seen.get("cleaned")
             socket.disconnect()
@@ -178,7 +179,7 @@ async def test_active_guard_precedes_second_turn_validation_without_terminal_don
         if event["type"] == "session":
             socket.put({**payload, "message": "competing", **second})
         if event["type"] == "error":
-            assert "Another response is active" in event["message"]
+            assert event["message"] == RESPONSE_RUNNING_LINE and event["source"] == "system"
             assert actors.agent_registry.lookup(calls[0]["agent_token"]) is not None
             socket.disconnect()
     socket = QueueSocket(payload, send)
@@ -202,5 +203,7 @@ async def test_invalid_agent_type_never_starts_native_runner(isolated_app, monke
     socket = QueueSocket({"type": "send", "message": "hello", "agent": agent, "personToken": PERSON_TOKEN}, send)
     await asyncio.wait_for(main.chat_websocket(socket), timeout=3)
     assert called == []
-    assert any(event["type"] == "error" and "agent must be text" in event["message"] for event in socket.events)
+    refusals = [event for event in socket.events if event["type"] == "error"]
+    assert [event["message"] for event in refusals] == [AGENT_UNKNOWN_LINE]
+    assert refusals[0]["source"] == "system" and "stop" not in refusals[0]
     assert not (isolated_app / "state").exists()

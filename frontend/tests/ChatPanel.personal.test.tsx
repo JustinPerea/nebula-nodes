@@ -23,6 +23,7 @@ import { PersonalAgentsSection } from '../src/components/panels/settings/Persona
 import { normalizeAgentEventSource } from '../src/lib/agentEvents';
 import { useUIStore } from '../src/store/uiStore';
 import { notePersonPromoted, reportPersonRequired } from '../src/lib/personSession';
+import { chatPersonRequiredCopy, personRequiredCopy } from '../src/lib/errorCopy';
 const initialUI = useUIStore.getState();
 const TOKEN = 'person-token-for-tests';
 
@@ -210,7 +211,7 @@ describe('Personal agents in the chat panel', () => {
     await waitFor(() => expect(socket.sent).toHaveLength(1));
     await act(async () => {
       socket.receive({ type: 'session', sessionId: 'host-1', source: 'personal' });
-      socket.receive({ type: 'error', code: 'personal_session_ended', message: 'Fake Agent exited (code 3).', source: 'personal' });
+      socket.receive({ type: 'error', code: 'personal_session_ended', stop: 'error', message: 'Fake Agent exited (code 3)', source: 'personal' });
       socket.receive({ type: 'done', source: 'personal' });
     });
     await sendText('Second');
@@ -444,5 +445,190 @@ describe('Chat /clear: the system line says what happened to the canvas', () => 
     apiMocks.apiFetch.mockRejectedValue(new TypeError('Failed to fetch'));
     await sendText('/clear');
     expect(await systemLine("Session cleared. Next message starts a fresh conversation. Nebula didn’t confirm the canvas was cleared.")).toBeInTheDocument();
+  });
+});
+
+describe('the chat line per event kind', () => {
+  const toneOf = (text: string) => screen.getByText(text).closest('[data-chat-system-tone]')?.getAttribute('data-chat-system-tone');
+  const failureOf = (text: string) => screen.getByText(text).closest('[data-line-because]');
+  async function sendAndReceive(...events: Record<string, unknown>[]) {
+    const socket = await connected();
+    await pickFake();
+    fireEvent.keyDown(screen.getByRole('dialog', { name: 'Chat model settings' }), { key: 'Escape' });
+    await sendText('Hello');
+    await waitFor(() => expect(socket.sent).toHaveLength(1));
+    await act(async () => { for (const event of events) socket.receive({ source: 'personal', ...event }); socket.receive({ type: 'done', source: 'personal' }); });
+    return socket;
+  }
+
+  it('a crash (stop: error) is a warning that opens with the agent, and the next send starts a new session', async () => {
+    const socket = await sendAndReceive({ type: 'session', sessionId: 'host-1' },
+      { type: 'error', code: 'personal_session_ended', stop: 'error', message: 'Fake Agent exited (code 3)' });
+    const text = 'Fake Agent stopped because it exited (code 3).';
+    expect(await screen.findByText(text)).toBeInTheDocument();
+    expect(toneOf(text)).toBe('error');
+    // A line the neutral because-style would take over keeps its warning colour.
+    expect(failureOf(text)).toBeNull();
+    await sendText('Again');
+    await waitFor(() => expect(socket.sent).toHaveLength(2));
+    expect(socket.sent[1]).toMatchObject({ sessionId: null });
+  });
+
+  it('an ended session (stop: ended) shows the backend line as it is, neutral', async () => {
+    const text = 'Fake Agent stopped after it sat idle. Send again to start a new conversation.';
+    await sendAndReceive({ type: 'error', code: 'personal_session_ended', stop: 'ended', reason: 'idle', message: text });
+    expect(await screen.findByText(text)).toBeInTheDocument();
+    expect(toneOf(text)).toBe('neutral');
+  });
+
+  it('a refusal is a whole line in the warning tone, even when its words open "Nebula couldn’t"', async () => {
+    const text = 'Nebula couldn’t read that message. Reload the page, then send again.';
+    await sendAndReceive({ type: 'error', code: 'model_invalid', message: text });
+    expect(await screen.findByText(text)).toBeInTheDocument();
+    expect(toneOf(text)).toBe('error');
+    expect(failureOf(text)).toBeNull();
+  });
+
+  it('an oversized-event notice (a system event) is neutral and the turn goes on to its answer', async () => {
+    const notice = 'Part of the reply was too large to show, so Nebula skipped it.';
+    await sendAndReceive({ type: 'system', text: notice }, { type: 'text', text: 'The rest of the reply.' });
+    expect(await screen.findByText(notice)).toBeInTheDocument();
+    expect(toneOf(notice)).toBe('neutral');
+    expect(screen.getByText('The rest of the reply.')).toBeInTheDocument();
+    // It is not a stop: nothing says the agent stopped.
+    expect(screen.queryByText(/stopped/)).toBeNull();
+  });
+
+  it('a failed Stop is a because line in the warning ink, as any error-tone line is', async () => {
+    const line = 'Nebula couldn’t stop the reply because the server didn’t accept it. Try again, or reload the page if it keeps happening.';
+    await sendAndReceive({ type: 'cancellation', status: 'failed', active: true, message: 'cancel failed' });
+    const text = await screen.findByText(line);
+    expect(toneOf(line)).toBe('error');
+    // The warning ink is the line not being marked a neutral because line (LineText draws a marked one in the neutral ink).
+    expect(text.closest('[data-line-because]')).toBeNull();
+    expect(text.closest('[data-chat-system-tone]')?.querySelector('[data-line-because]')).toBeNull();
+  });
+
+  // The connection-lost callers of the same notice (ChatPanel cancel(): socket not open, send throws; the socket
+  // closing after Stop was requested) draw in the warning ink too, not as a neutral because line.
+  async function stoppedWith(break_: (socket: ChatSocket) => void | Promise<void>) {
+    const socket = await connected();
+    await pickFake();
+    fireEvent.keyDown(screen.getByRole('dialog', { name: 'Chat model settings' }), { key: 'Escape' });
+    await sendText('Hello');
+    await waitFor(() => expect(socket.sent).toHaveLength(1));
+    await act(async () => { socket.receive({ type: 'session', sessionId: 'host-1', source: 'personal' }); });
+    const stop = await screen.findByRole('button', { name: 'Stop response' });
+    await break_(socket);
+    await act(async () => { fireEvent.click(stop); });
+    return socket;
+  }
+  it.each([
+    ['the socket is not open when Stop is pressed', async (socket: ChatSocket) => {
+      Object.defineProperty(socket, 'readyState', { value: WebSocket.CLOSED, writable: true, configurable: true });
+    }, /couldn’t stop the reply/],
+    ['the Stop message cannot be sent', async (socket: ChatSocket) => {
+      socket.send = () => { throw new Error('socket is gone'); };
+    }, /couldn’t stop the reply/],
+  ])('a failed Stop when %s is in the warning ink, with no neutral because line', async (_name, breakIt, pattern) => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    await stoppedWith(breakIt);
+    const text = await screen.findByText(pattern);
+    expect(text.closest('[data-chat-system-tone]')?.getAttribute('data-chat-system-tone')).toBe('error');
+    expect(text.closest('[data-line-because]')).toBeNull();
+    expect(text.closest('[data-chat-system-tone]')?.querySelector('[data-line-because]')).toBeNull();
+  });
+
+  it('the notice for a connection that drops after Stop was requested is in the warning ink, with no neutral because line', async () => {
+    const socket = await stoppedWith(() => {});
+    await act(async () => { socket.close(); });
+    const text = await screen.findByText(/the connection dropped before Nebula confirmed the stop/);
+    expect(text.closest('[data-chat-system-tone]')?.getAttribute('data-chat-system-tone')).toBe('error');
+    expect(text.closest('[data-line-because]')).toBeNull();
+    expect(text.closest('[data-chat-system-tone]')?.querySelector('[data-line-because]')).toBeNull();
+  });
+
+  it('a limit line (a system event) stays neutral and unchanged', async () => {
+    await sendAndReceive({ type: 'system', text: 'Fake Agent declined to continue.' });
+    expect(await screen.findByText('Fake Agent declined to continue.')).toBeInTheDocument();
+    expect(toneOf('Fake Agent declined to continue.')).toBe('neutral');
+  });
+});
+
+describe('person_required in the chat says what this tab was doing', () => {
+  const SEND_TAB = 'This tab isn’t connected as you, so it can’t start a chat. Open the link Nebula printed when it started, then send again.';
+  const SEND_APP = 'This window isn’t connected as you, so it can’t start a chat. Quit Nebula and open it again, then send again.';
+  const ANSWER_TAB = 'Nebula can’t answer or close the agent from this tab because it isn’t connected as you. Open the link Nebula printed when it started.';
+  const ANSWER_APP = 'Nebula can’t answer or close the agent from this window because it isn’t connected as you. Quit Nebula and open it again.';
+  const BACKEND = 'Only the person can start a chat, from a Nebula canvas connected as them.';
+  afterEach(() => { act(() => notePersonPromoted()); delete (window as unknown as Record<string, unknown>).nebulaDesktop; });
+
+  it('a refused send says it can’t start a chat, with the backend words behind Details', async () => {
+    const socket = await connected();
+    await sendText('Hello');
+    await waitFor(() => expect(socket.sent).toHaveLength(1));
+    await act(async () => { socket.receive({ type: 'error', code: 'person_required', message: BACKEND, ref: socket.sent[0].ref, source: 'system' }); socket.receive({ type: 'done' }); });
+    const line = await screen.findByText(SEND_TAB);
+    expect(line.parentElement?.querySelector('details')?.textContent).toContain(BACKEND);
+  });
+
+  it('draws the person-required line in the warning ink, as a plain refusal is', async () => {
+    const socket = await connected();
+    await sendText('Hello');
+    await waitFor(() => expect(socket.sent).toHaveLength(1));
+    await act(async () => { socket.receive({ type: 'error', code: 'person_required', message: BACKEND, ref: socket.sent[0].ref, source: 'system' }); socket.receive({ type: 'done' }); });
+    const line = await screen.findByText(chatPersonRequiredCopy('send', false));
+    const box = line.closest('[data-chat-system-tone]');
+    expect(box?.getAttribute('data-chat-system-tone')).toBe('error');
+    // The warning ink is the line not being marked a neutral because line (LineText draws a marked one in the neutral ink).
+    expect(line.closest('[data-line-because]')).toBeNull();
+    expect(box?.querySelector('[data-line-because]')).toBeNull();
+  });
+
+  it('the desktop app says "window" and "Quit Nebula"', async () => {
+    const socket = await connected();
+    await sendText('Hello');
+    await waitFor(() => expect(socket.sent).toHaveLength(1));
+    Object.defineProperty(window, 'nebulaDesktop', { value: { apiBaseUrl: 'http://127.0.0.1' }, configurable: true, writable: true });
+    await act(async () => { socket.receive({ type: 'error', code: 'person_required', message: BACKEND, ref: socket.sent[0].ref, source: 'system' }); socket.receive({ type: 'done' }); });
+    expect(await screen.findByText(SEND_APP)).toBeInTheDocument();
+  });
+
+  it('a refused permission answer says it can’t answer or close the agent, and puts the card back', async () => {
+    const socket = await connected();
+    await pickFake();
+    fireEvent.keyDown(screen.getByRole('dialog', { name: 'Chat model settings' }), { key: 'Escape' });
+    await sendText('Run it');
+    await waitFor(() => expect(socket.sent).toHaveLength(1));
+    await act(async () => {
+      socket.receive({ type: 'permission_request', requestId: 'r-1', title: 'Run ls', kind: 'execute', input: { command: 'ls' }, canAllow: true, timeoutSeconds: 120, source: 'personal' });
+    });
+    fireEvent.click(within(screen.getByRole('group', { name: 'Fake Agent asks permission' })).getByRole('button', { name: 'Allow once' }));
+    await waitFor(() => expect(socket.sent).toHaveLength(2));
+    await act(async () => { socket.receive({ type: 'error', code: 'person_required', message: 'Only the person can answer.', ref: socket.sent[1].ref, source: 'personal' }); });
+    expect(await screen.findByText(ANSWER_TAB)).toBeInTheDocument();
+    expect(screen.queryByText(SEND_TAB)).toBeNull();
+  });
+
+  it('a refused close (the /clear close_session) says the same, in the desktop app too', async () => {
+    const socket = await connected();
+    await pickFake();
+    fireEvent.keyDown(screen.getByRole('dialog', { name: 'Chat model settings' }), { key: 'Escape' });
+    await sendText('First');
+    await waitFor(() => expect(socket.sent).toHaveLength(1));
+    await act(async () => { socket.receive({ type: 'session', sessionId: 'host-1', source: 'personal' }); socket.receive({ type: 'done', source: 'personal' }); });
+    await sendText('/clear');
+    await waitFor(() => expect(socket.sent).toHaveLength(2));
+    Object.defineProperty(window, 'nebulaDesktop', { value: { apiBaseUrl: 'http://127.0.0.1' }, configurable: true, writable: true });
+    await act(async () => { socket.receive({ type: 'error', code: 'person_required', message: 'Only the person', ref: socket.sent[1].ref, source: 'system' }); });
+    expect(await screen.findByText(ANSWER_APP)).toBeInTheDocument();
+  });
+
+  it('an error with no ref of ours (an older backend) keeps the general line', async () => {
+    const socket = await connected();
+    await sendText('Hello');
+    await waitFor(() => expect(socket.sent).toHaveLength(1));
+    await act(async () => { socket.receive({ type: 'error', code: 'person_required', message: BACKEND }); socket.receive({ type: 'done' }); });
+    expect(await screen.findByText(personRequiredCopy())).toBeInTheDocument();
   });
 });

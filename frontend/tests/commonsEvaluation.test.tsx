@@ -128,8 +128,8 @@ it('says only the rule while unsaved, and tells a leave whether saving again cou
   // (design), and a TypeError the API didn't classify is not "isn't answering"
   // (PR #191, 2026-10-24): design's general line.
   api.labels.mockRejectedValueOnce(new TypeError('Failed to fetch'));
-  expect(await work!.save()).toMatchObject({ ok: false, reason: 'Nebula couldn’t save your labels because the server didn’t accept it. Try again, or reload if it keeps happening.',
-    message: 'Nebula couldn’t save your labels because the server didn’t accept it. Try again, or reload if it keeps happening.', retry: true });
+  expect(await work!.save()).toMatchObject({ ok: false, reason: 'Nebula couldn’t save your labels because the server didn’t accept it. Try again, or reload the page if it keeps happening.',
+    message: 'Nebula couldn’t save your labels because the server didn’t accept it. Try again, or reload the page if it keeps happening.', retry: true });
   // Design: a timeout or a rate limit is a 4xx that works on a second try.
   for (const status of [408, 429]) {
     api.labels.mockRejectedValueOnce(new CommonsRequestError('Try again', status));

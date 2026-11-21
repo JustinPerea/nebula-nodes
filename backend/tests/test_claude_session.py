@@ -123,7 +123,7 @@ async def test_claude_nonzero_exit_surfaces_stderr_then_done():
         events = await _collect(run_claude("hi", None, "claude-sonnet-4-6"))
 
     assert events == [
-        {"type": "error", "message": "authentication failed"},
+        {"type": "error", "stop": "error", "message": "authentication failed"},
         {"type": "done"},
     ]
 
@@ -136,10 +136,70 @@ async def test_claude_missing_binary_surfaces_error_then_done():
     ):
         events = await _collect(run_claude("hi", None, "claude-sonnet-4-6"))
 
+    # The CLI never ran: a refusal (a code, no stop), in the model list's own "isn't installed" line.
     assert events == [
-        {"type": "error", "message": "`claude` binary not found in PATH"},
+        {"type": "error", "code": "cli_not_installed", "message": "Claude Code isn’t installed. Install it, then send again."},
         {"type": "done"},
     ]
+
+
+@pytest.mark.asyncio
+async def test_claude_grant_overlap_is_a_refusal_that_names_no_path(caplog):
+    from services.agent_profiles import GrantOverlapsProtectedDir
+
+    def overlap(**kwargs):
+        raise GrantOverlapsProtectedDir("agent grant /private/out overlaps protected storage at /private/commons")
+
+    spawn = AsyncMock()
+    with patch("services.chat_session.validate_agent_read_grants", side_effect=overlap), \
+            patch("services.chat_session.asyncio.create_subprocess_exec", spawn):
+        events = await _collect(run_claude("hi", None, "claude-sonnet-4-6"))
+
+    assert events == [
+        {"type": "error", "code": "agent_grant_overlap", "message": (
+            "Nebula didn’t start Claude Code because a folder it would open overlaps one Nebula keeps private. "
+            "Make sure Nebula’s output and Commons folders are separate, then send again.")},
+        {"type": "done"},
+    ]
+    assert "/private/" not in events[0]["message"]
+    spawn.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_claude_knowledge_snapshot_failure_is_a_refusal():
+    from services.agent_knowledge import KnowledgeSnapshotError
+
+    spawn = AsyncMock()
+    with patch("services.agent_knowledge.snapshot_provider_knowledge", side_effect=KnowledgeSnapshotError("Provider knowledge source changed while opening")), \
+            patch("services.chat_session.asyncio.create_subprocess_exec", spawn):
+        events = await _collect(run_claude("hi", None, "claude-sonnet-4-6"))
+
+    assert events == [
+        {"type": "error", "code": "agent_knowledge_unavailable", "message": (
+            "Nebula couldn’t copy its reference files for Claude Code, so it didn’t start. "
+            "Restart Nebula, then send again. If it keeps happening, reinstall Nebula.")},
+        {"type": "done"},
+    ]
+    spawn.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_an_oversized_stream_event_is_a_notice_and_the_turn_goes_on():
+    proc = _proc(b'{"type":"result","subtype":"success","result":"done","duration_ms":1}\n')
+    reads = [asyncio.LimitOverrunError("too long", 10), *_readline_chunks(
+        b'{"type":"result","subtype":"success","result":"done","duration_ms":1}\n')]
+    proc.stdout.readline = AsyncMock(side_effect=reads)
+    proc.stdout.readexactly = AsyncMock(return_value=b"")
+
+    with patch("services.chat_session.asyncio.create_subprocess_exec", return_value=proc):
+        events = await _collect(run_claude("hi", None, "claude-sonnet-4-6"))
+
+    notice = [event for event in events if event.get("type") == "system"]
+    assert notice == [{"type": "system", "text": "Part of the reply was too large to show, so Nebula skipped it."}]
+    # Not a stop and not an error: the person's turn carries on to its own end.
+    assert not [event for event in events if event.get("type") == "error"]
+    assert events[-1] == {"type": "done"}
+    assert any(event.get("type") == "result" for event in events)
 
 
 @pytest.mark.asyncio
@@ -192,6 +252,6 @@ async def test_claude_failed_result_is_an_error_not_success_text():
         events = await _collect(run_claude("hi", None, "claude-sonnet-4-6"))
 
     assert events == [
-        {"type": "error", "message": "turn limit reached"},
+        {"type": "error", "stop": "error", "message": "turn limit reached"},
         {"type": "done"},
     ]

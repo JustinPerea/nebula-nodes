@@ -18,7 +18,7 @@ import {
 
 const HEADING = "Couldn't check Claude status.";
 const LOST_LINE = 'Nebula couldn’t check Claude status because the server isn’t answering. Check that Nebula is running, then try again.';
-const GENERAL_LINE = 'Nebula couldn’t check Claude status because the server didn’t accept it. Try again, or reload if it keeps happening.';
+const GENERAL_LINE = 'Nebula couldn’t check Claude status because the server didn’t accept it. Try again, or reload the page if it keeps happening.';
 
 /** Headers and the first bytes arrive, then the stream errors as fetch's does mid-body. */
 function droppingResponse(init: ResponseInit = {}): Response {

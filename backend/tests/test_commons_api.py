@@ -359,7 +359,11 @@ def test_chat_turn_refuses_to_start_when_output_root_contains_commons(client, mo
     monkeypatch.setenv('NEBULA_COMMONS_ROOT', str(main.OUTPUT_ROOT / 'commons'))
     captured, events = _chat_turn(client, 'claude', monkeypatch)
     assert captured == {}
-    assert any(e['type'] == 'error' and 'overlaps protected storage' in e['message'] for e in events)
+    errors = [e for e in events if e['type'] == 'error']
+    # The agent never ran: a refusal (a code, no stop) in a line that names no path.
+    assert errors == [{'type': 'error', 'code': 'agent_grant_overlap', 'source': 'claude', 'message': (
+        'Nebula didn’t start Claude Code because a folder it would open overlaps one Nebula keeps private. '
+        'Make sure Nebula’s output and Commons folders are separate, then send again.')}]
 
 
 def _clear_png() -> bytes:

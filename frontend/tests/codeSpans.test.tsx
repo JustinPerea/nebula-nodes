@@ -252,3 +252,84 @@ describe('curling around code spans', () => {
     expect(shown('Don\'t \uE000 `x` it\'s')).toBe('Don’t \uE000 x it’s');
   });
 });
+
+describe('the preflight refusals the backend sends draw their code as spans', () => {
+  const shown = (text: string) => render(<p>{curledWithCodeSpans(text)}</p>).container.firstElementChild as HTMLElement;
+  it('each unreviewed feature is its own span, and the "(no longer listed)" note stays prose', () => {
+    const el = shown('Codex has features on that Nebula hasn’t reviewed (`browser_use`, `hooks` (no longer listed)), so it didn’t start. Update Nebula, then send again.');
+    expect(codes(el)).toEqual(['browser_use', 'hooks']);
+    expect(el.textContent).toBe('Codex has features on that Nebula hasn’t reviewed (browser_use, hooks (no longer listed)), so it didn’t start. Update Nebula, then send again.');
+  });
+  it('a refused flag shows its short detail as plain words in the brackets, with no span', () => {
+    const el = shown('This version of Codex refused Nebula’s agent settings (unknown feature x). Update Codex and Nebula, then send again.');
+    expect(codes(el)).toEqual([]);
+    expect(el.textContent).toBe('This version of Codex refused Nebula’s agent settings (unknown feature x). Update Codex and Nebula, then send again.');
+  });
+});
+
+describe('punctuation that touches a span stays on the span’s line', () => {
+  const html = (text: string) => render(<p>{curledWithCodeSpans(text)}</p>).container.firstElementChild as HTMLElement;
+  const groups = (el: HTMLElement) => [...el.querySelectorAll('.code-glue')];
+  it('an opening bracket before a span and a closing bracket after it share one no-break group with it', () => {
+    const el = html('Codex has features Nebula hasn’t reviewed (`example_feature`), so it didn’t start.');
+    expect(groups(el)).toHaveLength(1);
+    expect(groups(el)[0].textContent).toBe('(example_feature),');
+    expect(groups(el)[0].querySelector('code')?.textContent).toBe('example_feature');
+    expect(el.textContent).toBe('Codex has features Nebula hasn’t reviewed (example_feature), so it didn’t start.');
+  });
+  it('a comma or a full stop after a span, and a quote before it, glue the same way', () => {
+    const el = html('See "`a`, `b`" and `c`.');
+    expect(groups(el).map((g) => g.textContent)).toEqual(['"a,', 'b"', 'c.']);
+    const two = html('Features (`a`, `b`).');
+    expect(groups(two).map((g) => g.textContent)).toEqual(['(a,', 'b).']);
+    expect(two.textContent).toBe('Features (a, b).');
+  });
+  it('the group is the inline-block capped at its line, and the span flows inside it as inline text (layout is measured in a real browser, not jsdom)', () => {
+    document.body.className = 'app-slava-restraint';
+    const el = html('(`x`),');
+    const group = groups(el)[0];
+    const value = (node: Element, prop: string) => cascaded(node as HTMLElement).get(`|${prop}`)?.value;
+    expect(value(group, 'display')).toBe('inline-block');
+    expect(value(group, 'max-width')).toBe('100%');
+    expect(value(group, 'vertical-align')).toBe('baseline');
+    expect(value(group, 'overflow-wrap')).toBe('anywhere');
+    const code = group.querySelector('code')!;
+    expect(value(code, 'display')).toBe('inline');
+    expect(value(code, 'max-width')).toBe('none');
+    // The span keeps its own face and ink inside the group.
+    expect(value(code, 'font-family')).toBeDefined();
+    expect(value(code, 'font-variant-ligatures')).toBe('none');
+    expect(value(code, 'overflow-wrap')).toBe('anywhere');
+    // A span with no touching punctuation keeps its own inline-block.
+    const alone = html('Run `x` now').querySelector('code')!;
+    expect(value(alone, 'display')).toBe('inline-block');
+    expect(value(alone, 'max-width')).toBe('100%');
+  });
+  it('the opener and the closer are plain text beside the span: no wrapper elements, and the text copies as the same string', () => {
+    const el = html('(`x`),');
+    const group = groups(el)[0];
+    expect([...group.childNodes].map((n) => n.nodeName)).toEqual(['#text', 'CODE', '#text']);
+    expect(group.firstChild?.textContent).toBe('(');
+    expect(group.lastChild?.textContent).toBe('),');
+    expect(group.querySelector('.code-glue__open, .code-glue__close')).toBeNull();
+    expect(el.textContent).toBe('(x),');
+    const many = html('See "`a`, `b`" and `c`.');
+    for (const g of groups(many)) expect(g.querySelectorAll(':scope > :not(code)')).toHaveLength(0);
+  });
+  it('an apostrophe after a span glues only when whitespace, punctuation or the end follows it', () => {
+    const possessive = html('Read `x`\'s value and `y`’s too.');
+    expect(groups(possessive)).toHaveLength(0);
+    expect(possessive.textContent).toBe('Read x\'s value and y’s too.');
+    expect(groups(html("Read `x`' now")).map((g) => g.textContent)).toEqual(["x'"]);
+    expect(groups(html('Read `x`’.')).map((g) => g.textContent)).toEqual(['x’.']);
+    expect(groups(html("It said 'run `x`'")).map((g) => g.textContent)).toEqual(["x'"]);
+    expect(groups(html("Read `x`'s, `y`'.")).map((g) => g.textContent)).toEqual(["y'."]);
+  });
+  it('text with no touching punctuation is unchanged: the span stands alone, with no group', () => {
+    const el = html('Run `nebula apply` now, then `check` it.');
+    expect(groups(el)).toHaveLength(0);
+    expect(codes(el)).toEqual(['nebula apply', 'check']);
+    expect([...el.childNodes].map((n) => n.nodeName)).toEqual(['#text', 'CODE', '#text', 'CODE', '#text']);
+    expect(el.textContent).toBe('Run nebula apply now, then check it.');
+  });
+});

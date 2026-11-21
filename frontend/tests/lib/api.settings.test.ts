@@ -20,7 +20,7 @@ describe('browser provider key removal API', () => {
   it('escapes provider path segments and rejects an unsuccessful deletion', async () => {
     apiFetchMock.mockResolvedValue({ ok: false, status: 400 });
     await expect(deleteSettingsApiKey('unknown/provider')).rejects.toThrow(
-      "Nebula couldn’t remove the API key because the server didn’t accept it. Try again, or reload if it keeps happening.");
+      "Nebula couldn’t remove the API key because the server didn’t accept it. Try again, or reload the page if it keeps happening.");
     expect(apiFetchMock).toHaveBeenCalledExactlyOnceWith('/api/settings/api-keys/unknown%2Fprovider', { method: 'DELETE' });
   });
 });

@@ -35,10 +35,10 @@ afterEach(() => {
 
 describe('a canvas notice for an error', () => {
   it('is announced as an alert and dismissed with a button', () => {
-    useGraphStore.getState().notify("Couldn’t save the graph. Try again, or reload if it keeps happening.");
+    useGraphStore.getState().notify("Couldn’t save the graph. Try again, or reload the page if it keeps happening.");
     render(<CanvasUndoNotice />);
     const notice = screen.getByRole('alert');
-    expect(notice).toHaveTextContent("Couldn’t save the graph. Try again, or reload if it keeps happening.");
+    expect(notice).toHaveTextContent("Couldn’t save the graph. Try again, or reload the page if it keeps happening.");
     const dismiss = screen.getByRole('button', { name: 'Dismiss' });
     dismiss.focus();
     expect(document.activeElement).toBe(dismiss);

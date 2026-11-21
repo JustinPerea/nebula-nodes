@@ -23,7 +23,7 @@ const alertMock = noticeSpy();
 
 const { useGraphStore } = await import('../../src/store/graphStore');
 
-const REFUSED = "Try again, or reload if it keeps happening.";
+const REFUSED = "Try again, or reload the page if it keeps happening.";
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
   status, headers: { 'content-type': 'application/json' } });
 

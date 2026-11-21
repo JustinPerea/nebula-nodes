@@ -37,6 +37,52 @@ _refresh_sequence: dict[str, int] = {}
 CLI_NAMES = {"claude": "Claude Code", "codex": "Codex"}
 
 
+# The button a person clicks to pick a model or an agent, by its visible label
+# (frontend/src/components/panels/ChatModelPicker.tsx: "Choose model"). Lines name this
+# button, never the dialog's own heading.
+CHOOSE_MODEL = "Choose model"
+# The clause that sends a person to the model button when the one they have can't be used (design). The
+# button is named by what it is, not by its label, so a line that has no room for a label still reads.
+PICK_ANOTHER_MODEL = "Pick another with the model button at the top of the chat, then send again."
+# The command each CLI answers "am I signed in?" with, for a line that tells the person to check.
+_CLI_AUTH_CHECK = {"claude": "claude auth status", "codex": "codex login status"}
+_CLI_SIGN_IN = {
+    "claude": "Run `claude` in a terminal and sign in",
+    "codex": "Run `codex` in a terminal and sign in with your ChatGPT account",
+}
+_RELOAD = "Nebula couldn\u2019t read that message. Reload the page, then send again."
+
+
+def chat_refusal_message(code: str, agent: str, fallback: str) -> str:
+    """What the chat shows when a send is refused for its model choice or its
+    CLI catalog (the agent never ran). The REST catalog keeps its own wording
+    (``catalog.error.message``); this is the chat event's text. An unknown
+    ``code`` keeps ``fallback``."""
+    cli = CLI_NAMES.get(agent, agent.title())
+    if code in {"model_invalid", "effort_invalid"}:
+        return _RELOAD
+    if code == "model_required":
+        return f"No model is selected. Pick one with {CHOOSE_MODEL} at the top of the chat, then send again."
+    if code == "model_unsupported":
+        return f"That model isn\u2019t offered anymore. {PICK_ANOTHER_MODEL}"
+    if code == "effort_unsupported":
+        return f"This model doesn\u2019t support that thinking effort. {PICK_ANOTHER_MODEL}"
+    if code == "auth_required":
+        return f"{cli} isn\u2019t signed in, so Nebula can\u2019t list its models. {_CLI_SIGN_IN.get(agent, 'Sign in to it in a terminal')}, then send again."
+    if code in {"catalog_unavailable", "catalog_cleanup_failed"}:
+        return f"Nebula couldn\u2019t get the model list from {cli}. Check that it\u2019s installed and signed in, then send again."
+    if code == "auth_unknown":
+        check = _CLI_AUTH_CHECK.get(agent, agent)
+        return f"Nebula couldn\u2019t tell whether {cli} is signed in. Run `{check}` in a terminal to check, then send again."
+    if code == "catalog_invalid":
+        return f"{cli} sent a model list Nebula couldn\u2019t read. Update {cli}, then send again."
+    if code == "catalog_timeout":
+        return f"{cli} took too long to list its models. Send again in a moment."
+    if code == "cli_not_installed":
+        return f"{cli} isn\u2019t installed. Install it, then send again."
+    return fallback
+
+
 class ChatModelSelectionError(ValueError):
     def __init__(self, code: str, message: str):
         super().__init__(message)

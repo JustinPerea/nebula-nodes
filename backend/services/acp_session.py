@@ -94,10 +94,57 @@ PERSONAL_AGENT_PRIMER_TAIL = (
 class PersonalSessionError(Exception):
     """A personal session could not start or continue; ``code`` goes to the UI."""
 
-    def __init__(self, code: str, message: str) -> None:
+    def __init__(self, code: str, message: str, *, stop: str | None = None, reason: str | None = None) -> None:
         super().__init__(message)
         self.code = code
         self.message = message
+        # Set only when the agent ran and then stopped (a stop event); a refusal
+        # (the agent never started) leaves both None.
+        self.stop = stop
+        self.reason = reason
+
+    def event(self) -> dict[str, Any]:
+        """The chat error event for this error: ``stop`` and ``reason`` only on a stop."""
+        event: dict[str, Any] = {"type": "error", "code": self.code, "message": self.message}
+        if self.stop is not None:
+            event["stop"] = self.stop
+        if self.reason is not None:
+            event["reason"] = self.reason
+        return event
+
+
+PERSONAL_AGENTS_SETTINGS = "Settings > Preferences > Personal agents"
+ENDED_REASONS = frozenset({"idle", "agent_changed", "commons_enabled", "shutdown"})
+# Close reasons that are the agent's own failure, not Nebula or a timer ending it:
+# a later send to such a session reads as an error stop, not an ended one.
+ERROR_CLOSE_REASONS = frozenset({"crashed", "cancel_timeout"})
+ENDED_UNKNOWN_LINE = "This chat’s agent stopped. Send again to start a new conversation."
+
+
+def ended_line(reason: str, name: str | None) -> str:
+    """The line for a personal chat Nebula or a timer ended. ``name`` is the agent's
+    display name; without one (an unknown or already-ended session) the line says "This chat's agent"."""
+    if not name or reason not in ENDED_REASONS:
+        return ENDED_UNKNOWN_LINE
+    if reason == "agent_changed":
+        return f"{name} stopped because it was switched off or changed in Settings. If it’s still switched on, send again."
+    if reason == "commons_enabled":
+        return f"{name} stopped because Commons is on. Pick Claude or Codex to keep chatting."
+    if reason == "idle":
+        return f"{name} stopped after it sat idle. Send again to start a new conversation."
+    return f"{name} stopped because Nebula closed. Send again to start a new conversation."
+
+
+def start_interrupted_line(reason: str, name: str) -> str:
+    """The line for a personal start Nebula cut short (the agent never ran): "<Name> couldn’t start because <why>",
+    mirroring the "stopped because" lines of ``ended_line`` (shutdown reads the same before and after a start)."""
+    if reason == "agent_changed":
+        return f"{name} couldn’t start because it was switched off or changed in Settings. If it’s still switched on, send again."
+    if reason == "commons_enabled":
+        return f"{name} couldn’t start because Commons is on. Pick Claude or Codex to chat."
+    if reason == "shutdown":
+        return f"{name} couldn’t start because Nebula is shutting down."
+    return f"{name} couldn’t start because the chat was closed or replaced. Send again to start a new conversation."
 
 
 def agent_base_env(command: Path) -> dict[str, str]:
@@ -275,7 +322,7 @@ class AcpHostSession:
         chat was replaced or the backend is stopping) never mints a token
         after the teardown revoked, and never turns "ready" over "closed"."""
         if self._closing:
-            raise PersonalSessionError("personal_session_ended", self.ended_message())
+            raise self.start_interrupted()
 
     async def start(self) -> None:
         from commons import actors
@@ -298,13 +345,13 @@ class AcpHostSession:
                     "clientInfo": CLIENT_INFO}, timeout=max(INIT_TIMEOUT_S, self.spec.startup_timeout))
             except asyncio.TimeoutError as exc:
                 raise PersonalSessionError("personal_agent_start_timeout",
-                                           f"{self.display_name} didn't answer in time.") from exc
+                                           f"{self.display_name} couldn’t start. It didn’t answer in time.") from exc
             self._give_up_if_closing()
             init = init if isinstance(init, dict) else {}
             if init.get("protocolVersion") != ACP_PROTOCOL_VERSION:
                 raise PersonalSessionError(
                     "acp_version_unsupported",
-                    f"{self.display_name} speaks ACP version {init.get('protocolVersion')!r}; Nebula speaks 1.")
+                    f"{self.display_name} couldn’t start. It speaks ACP version {init.get('protocolVersion')!r}; Nebula speaks 1.")
             self.agent_caps = init.get("agentCapabilities") if isinstance(init.get("agentCapabilities"), dict) else {}
             self.agent_info = init.get("agentInfo") if isinstance(init.get("agentInfo"), dict) else {}
             # A sign-in the person made in Settings, before any token exists.
@@ -329,20 +376,20 @@ class AcpHostSession:
             except AcpError as exc:
                 self._give_up_if_closing()
                 if exc.code == AUTH_REQUIRED:
-                    where = (f"Sign in in Settings"
-                             if self.spec.auth_method else "Open a terminal, sign in to it there")
+                    where = (f"Sign in from {PERSONAL_AGENTS_SETTINGS}"
+                             if self.spec.auth_method else "Run it once in a terminal and sign in there")
                     raise PersonalSessionError(
-                        "auth_required", f"{self.display_name} needs you to sign in. {where}, then try again.",
+                        "auth_required", f"{self.display_name} needs you to sign in. {where}, then send again.",
                     ) from exc
                 raise PersonalSessionError("personal_agent_start_failed",
-                                           f"{self.display_name} couldn't start a session: {self._redact(exc.message)}") from exc
+                                           f"{self.display_name} couldn’t start. It couldn’t open a session: {self._redact(exc.message)}") from exc
             except asyncio.TimeoutError as exc:
                 raise PersonalSessionError("personal_agent_start_timeout",
-                                           f"{self.display_name} didn't start a session in time.") from exc
+                                           f"{self.display_name} couldn’t start. It didn’t open a session in time.") from exc
             self._give_up_if_closing()
             session_id = created.get("sessionId") if isinstance(created, dict) else None
             if not isinstance(session_id, str) or not session_id or len(session_id) > 256:
-                raise PersonalSessionError("personal_agent_start_failed", f"{self.display_name} returned no session id.")
+                raise PersonalSessionError("personal_agent_start_failed", f"{self.display_name} couldn’t start. It returned no session id.")
             self.acp_session_id = session_id
             self.options = clean_config_options(created.get("configOptions")) or legacy_model_option(created.get("models"))
             self.state = "ready"
@@ -354,16 +401,16 @@ class AcpHostSession:
             stopped_by_nebula = self._closing
             await self.close("start_failed")
             if stopped_by_nebula:
-                raise PersonalSessionError("personal_session_ended", self.ended_message()) from exc
+                raise self.start_interrupted() from exc
             raise PersonalSessionError("personal_agent_start_failed",
-                                       f"{self.display_name} exited while starting{self._exit_detail()}") from exc
+                                       f"{self.display_name} couldn’t start. It exited while starting{self._exit_detail()}") from exc
         except PersonalSessionError:
             await self.close("start_failed")
             raise
         except (OSError, ValueError) as exc:
             await self.close("start_failed")
             raise PersonalSessionError("personal_agent_start_failed",
-                                       f"{self.display_name} couldn't start: {self._redact(str(exc))}") from exc
+                                       f"{self.display_name} couldn’t start. {self._redact(str(exc))}") from exc
         except BaseException:
             await asyncio.shield(self.close("start_failed"))
             raise
@@ -380,8 +427,7 @@ class AcpHostSession:
         offered = init.get("authMethods") if isinstance(init.get("authMethods"), list) else []
         if not any(isinstance(m, dict) and m.get("id") == method for m in offered):
             raise PersonalSessionError("personal_agent_start_failed",
-                                       f"{self.display_name} no longer offers the sign-in Nebula used.")
-        again = f"Sign in again in Settings."
+                                       f"{self.display_name} couldn’t start. It no longer offers the sign-in Nebula used.")
         try:
             await self.conn.request("authenticate", {"methodId": method}, timeout=AUTH_TIMEOUT_S)
         except asyncio.TimeoutError as exc:
@@ -390,10 +436,11 @@ class AcpHostSession:
             except personal_agents.PersonalAgentError:
                 pass
             raise PersonalSessionError("auth_required",
-                                       f"{self.display_name} needs you to sign in with Google again. {again}") from exc
+                                       f"{self.display_name} needs you to sign in with Google again. "
+                                       f"Do that in {PERSONAL_AGENTS_SETTINGS}, then send again.") from exc
         except AcpError as exc:
-            raise PersonalSessionError("auth_required", f"{self.display_name} couldn't use your sign-in: "
-                                       f"{self._redact(exc.message)[:200]}. If this keeps happening, {again[0].lower()}{again[1:]}") from exc
+            raise PersonalSessionError("auth_required", f"{self.display_name} couldn’t use your sign-in: "
+                                       f"{self._redact(exc.message)[:200]}. Sign in again in {PERSONAL_AGENTS_SETTINGS}, then send again.") from exc
 
     def option_view(self) -> list[dict[str, Any]]:
         return [dict(option, options=list(option["options"])) for option in self.options]
@@ -637,7 +684,9 @@ class AcpHostSession:
     async def prompt(self, message: str, selection_context: str | None = None) -> AsyncIterator[dict[str, Any]]:
         """Run one turn; yields chat events, ending with ``result``."""
         if self.state != "ready" or self.conn is None:
-            raise PersonalSessionError("personal_session_ended", "This chat's agent has stopped. Send again to start a new one.")
+            if self.closed:
+                raise self.ended_error()
+            raise PersonalSessionError("personal_session_ended", ENDED_UNKNOWN_LINE, stop="ended", reason="ended")
         self.state = "prompting"
         self.last_activity = time.monotonic()
         turn = _Turn()
@@ -668,17 +717,17 @@ class AcpHostSession:
                 if self.closed:
                     # Nebula ended it mid-turn (Settings switched it off, say).
                     self._turn = None
-                    yield {"type": "error", "code": "personal_session_ended", "message": self.ended_message()}
+                    yield self.ended_error().event()
                     return
                 await self._wait_exit()
                 detail = self._exit_detail()
                 self._turn = None
                 await self.close("crashed")
-                yield {"type": "error", "code": "personal_session_ended",
+                yield {"type": "error", "code": "personal_session_ended", "stop": "error",
                        "message": f"{self.display_name} exited{detail}"}
                 return
             except AcpError as exc:
-                yield {"type": "error", "message": f"{self.display_name}: {self._redact(exc.message)}"}
+                yield {"type": "error", "stop": "error", "message": f"{self.display_name}: {self._redact(exc.message)}"}
                 yield {"type": "result", "text": "", "stopReason": "error"}
                 return
             stop = result.get("stopReason") if isinstance(result, dict) else None
@@ -709,14 +758,36 @@ class AcpHostSession:
         await self._wait_exit()
         await self.close("crashed")
 
+    def ended_stop(self) -> str:
+        """The chat's ``stop`` field for this session's end: "error" when the agent
+        itself failed (a crash, a cancel it didn't answer), else "ended"."""
+        return "error" if self.closed_reason in ERROR_CLOSE_REASONS else "ended"
+
+    def ended_reason(self) -> str | None:
+        """The chat's ``reason`` field, on an "ended" stop only: idle, agent_changed,
+        commons_enabled or shutdown; "ended" for any other way the session is gone."""
+        if self.ended_stop() == "error":
+            return None
+        return self.closed_reason if self.closed_reason in ENDED_REASONS else "ended"
+
     def ended_message(self) -> str:
-        reason = self.closed_reason
+        return ended_line(self.ended_reason() or "ended", self.display_name)
+
+    def ended_error(self) -> PersonalSessionError:
+        """The stop this session ended with: "ended" plus its reason, or "error" for the agent's own failure."""
+        return PersonalSessionError("personal_session_ended", self.ended_message(),
+                                    stop=self.ended_stop(), reason=self.ended_reason())
+
+    def start_interrupted(self) -> PersonalSessionError:
+        """A start Nebula cut short (Settings, Commons or a shutdown closed the session first): the agent never
+        ran, so this is a refusal ("<Name> couldn’t start. …"), not a stop."""
+        reason = self.closed_reason if self.closed_reason in ENDED_REASONS else "ended"
+        line = start_interrupted_line(reason, self.display_name)
         if reason == "agent_changed":
-            return (f"{self.display_name} was switched off, removed or changed in Settings, so Nebula stopped it. "
-                    "If it's still on there, send again to start a new conversation.")
-        if reason == "commons_enabled":
-            return f"Commons is on, so Nebula stopped {personal_agents.in_sentence(self.display_name)}."
-        return "This chat's agent has stopped. Send again to start a new conversation."
+            return PersonalSessionError("personal_agent_changed", line)
+        if reason == "shutdown":
+            return PersonalSessionError("personal_agent_shutting_down", line)
+        return PersonalSessionError("personal_agent_start_interrupted", line)
 
     async def cancel_turn(self, prompt_task: asyncio.Task | None = None) -> None:
         """session/cancel, answer open cards "cancelled", wait for the agent, else kill it."""
@@ -750,7 +821,7 @@ class AcpSessionManager:
         self._shutting_down = False
         # Why recently ended sessions ended, by id: (owner, message), so a send
         # that arrives after a prune can still say why. Bounded.
-        self._ended: dict[str, tuple[str, str]] = {}
+        self._ended: dict[str, tuple[str, str, str, str | None]] = {}
 
     def live(self) -> list[AcpHostSession]:
         return [s for s in self._sessions.values() if not s.closed]
@@ -760,7 +831,7 @@ class AcpSessionManager:
         if not personal_agents.warning_acknowledged(state_dir):
             raise PersonalSessionError(
                 "personal_agent_warning_required",
-                "Read and accept the personal agent notice before starting one.")
+                "Accept the personal agent notice that opens over the chat, then send again.")
         # One personal chat per panel: a new one replaces the old.
         await self.close_owned(owner)
         self._prune()
@@ -775,16 +846,16 @@ class AcpSessionManager:
         except personal_agents.PersonalAgentError as exc:
             raise PersonalSessionError(exc.code, exc.message) from exc
         if self._shutting_down:
-            raise PersonalSessionError("personal_agent_shutting_down", "Nebula is shutting down.")
+            raise PersonalSessionError("personal_agent_shutting_down", start_interrupted_line("shutdown", spec.display_name))
         # Settings may have changed while the spec was read. From this check to
         # registering the session nothing awaits, so a later Settings change
         # can't fall between the check and the moment close_stale can see it.
         if personal_agents.launch_key(state_dir, agent_id) != key:
             raise PersonalSessionError("personal_agent_changed",
-                                       f"{spec.display_name}'s settings changed while it started. Send again.")
+                                       f"{spec.display_name}’s settings changed while it started. Send again.")
         if len(self.live()) >= MAX_LIVE_SESSIONS:
             raise PersonalSessionError("personal_agent_limit",
-                                       f"At most {MAX_LIVE_SESSIONS} personal agents can run at once. Close one first.")
+                                       f"At most {MAX_LIVE_SESSIONS} personal agents can run at once. Close one, then send again.")
         session = AcpHostSession(spec=spec, owner=owner, state_dir=state_dir, output_root=output_root,
                                  backend_url=backend_url, workspace_sessions=workspace_sessions)
         session.launch_key = key
@@ -795,11 +866,11 @@ class AcpSessionManager:
             # backend process, a hand edit) while it started: stop it now.
             if not self.still_allowed(session, state_dir):
                 await session.close("agent_changed")
-                raise PersonalSessionError("personal_session_ended", session.ended_message())
+                raise session.start_interrupted()
             # Shutdown began while it started; close_all may already be done.
             if self._shutting_down:
                 await session.close("shutdown")
-                raise PersonalSessionError("personal_agent_shutting_down", "Nebula is shutting down.")
+                raise session.start_interrupted()
         except BaseException:
             self._forget(session.id)
             raise
@@ -877,7 +948,8 @@ class AcpSessionManager:
         for session_id in [k for k, s in self._sessions.items() if s.closed]:
             session = self._forget(session_id)
             if session is not None:
-                self._ended[session_id] = (session.owner, session.ended_message())
+                self._ended[session_id] = (session.owner, session.ended_message(), session.ended_stop(),
+                                           session.ended_reason())
         while len(self._ended) > ENDED_MEMORY:
             self._ended.pop(next(iter(self._ended)))
 
@@ -885,6 +957,17 @@ class AcpSessionManager:
         """Why ``session_id`` ended, for its own owner only."""
         entry = self._ended.get(session_id) if isinstance(session_id, str) else None
         return entry[1] if entry is not None and entry[0] == owner else None
+
+    def ended_error(self, session_id: Any, owner: str) -> PersonalSessionError | None:
+        """The stop for ``session_id``'s end (message, ``stop``, ``reason``), for its own owner only."""
+        # Closed but not pruned yet (the manager prunes on its next close, open or reap): ask the session.
+        live = self._sessions.get(session_id) if isinstance(session_id, str) else None
+        if live is not None and live.closed and live.owner == owner:
+            return live.ended_error()
+        entry = self._ended.get(session_id) if isinstance(session_id, str) else None
+        if entry is None or entry[0] != owner:
+            return None
+        return PersonalSessionError("personal_session_ended", entry[1], stop=entry[2], reason=entry[3])
 
     async def reap_idle(self, now: float | None = None) -> list[str]:
         """Close sessions with no turn and no activity for IDLE_TIMEOUT_S."""

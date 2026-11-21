@@ -120,7 +120,7 @@ describe('saved project coordinator', () => {
     expect(useProjectStore.getState().activeProject?.id).toBe('alpha');
     expect(useGraphStore.getState().nodes[0].data.params.value).toBe('alpha');
     // Error copy: a plain Error's own words never show; the action's heading and design's general line do.
-    expect(useProjectStore.getState().error).toBe("Nebula couldn’t open the project because the server didn’t accept it. Try again, or reload if it keeps happening.");
+    expect(useProjectStore.getState().error).toBe("Nebula couldn’t open the project because the server didn’t accept it. Try again, or reload the page if it keeps happening.");
   });
   it('creates a blank canvas without replaying a recipe or clearing the outgoing saved project', async () => {
     await useProjectStore.getState().initialize();

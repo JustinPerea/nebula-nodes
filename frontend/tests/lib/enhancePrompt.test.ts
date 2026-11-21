@@ -18,7 +18,7 @@ describe('enhancePrompt errors', () => {
   it('a validation list says design\'s fallback line, not [object Object] (error-copy)', async () => {
     apiFetch.mockResolvedValue(json({ detail: [{ loc: ['body', 'prompt'], msg: 'Field required', type: 'missing' }] }, 422));
     await expect(enhancePrompt('x')).rejects.toThrow(
-      "Nebula couldn’t enhance the prompt because the server didn’t accept it. Try again, or reload if it keeps happening.");
+      "Nebula couldn’t enhance the prompt because the server didn’t accept it. Try again, or reload the page if it keeps happening.");
   });
 
   it("shows the person gate refusal as design's line (every person-only refusal)", async () => {

@@ -108,7 +108,7 @@ describe('isNamedLine knows every form a backend person line takes', () => {
     'Wait for the active run to finish.',
     "Nebula's server isn't answering. Make sure it's running, then try again.",
     "Nebula didn't respond. Try again.",
-    'Try again, or reload if it keeps happening.',
+    'Try again, or reload the page if it keeps happening.',
     "It's still running.",
   ])('a reason, not a line of its own: %s', (line) => {
     expect(isNamedLine(line)).toBe(false);

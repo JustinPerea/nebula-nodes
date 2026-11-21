@@ -5982,7 +5982,7 @@ change." (a server error that went on past the retries); "“Opening” and
 “Ref scene” are too big to save. Remove something from them, then try
 again." (413; from four, "4 scenes are too big to save. …"); "Nebula
 couldn’t save your changes to “Opening” and “Ref scene”. Try again, or
-reload if it keeps happening." (a refusal Nebula has no line of its own
+reload the page if it keeps happening." (a refusal Nebula has no line of its own
 for, when the backend gave no reason). A reason the backend wrote goes
 after the same heading but stays one line per scene, even when two scenes
 have the same text ("Nebula couldn’t save your changes to “Opening”. Shot

@@ -198,10 +198,56 @@ async def test_run_codex_refuses_api_key_auth_before_exec():
         events = await _collect(run_codex("hi", None))
 
     assert captured_args == [("codex", "login", "status")]
-    assert events[0]["type"] == "error"
-    assert "ChatGPT account login" in events[0]["message"]
-    assert "API-key billing mode" in events[0]["message"]
+    # Codex never ran: a refusal (a code, no stop).
+    assert events[0] == {"type": "error", "code": "codex_chatgpt_required", "message": (
+        "Codex is using an API key, and Nebula needs a ChatGPT account. "
+        "Use Connect ChatGPT account above the message box, then send again.")}
     assert events[-1] == {"type": "done"}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status, event", [
+    ({"installed": False, "loggedIn": False, "mode": None},
+     {"code": "cli_not_installed", "message": "Codex isn’t installed. Install it, then send again."}),
+    ({"installed": True, "loggedIn": False, "mode": None},
+     {"code": "codex_chatgpt_required", "message": "Codex isn’t signed in. Use Connect ChatGPT account above the message box, then send again."}),
+    ({"installed": True, "loggedIn": True, "mode": "access_token"},
+     {"code": "codex_chatgpt_required", "message": "Codex is using an access token, and Nebula needs a ChatGPT account. "
+                                                    "Use Connect ChatGPT account above the message box, then send again."}),
+    ({"installed": True, "loggedIn": True, "mode": "weird"},
+     {"code": "codex_chatgpt_required", "message": "Codex is using a sign-in Nebula doesn’t accept, and Nebula needs a ChatGPT account. "
+                                                    "Use Connect ChatGPT account above the message box, then send again."}),
+])
+async def test_codex_sign_in_refusals_are_refusals_with_a_line_each(monkeypatch, status, event):
+    monkeypatch.setattr(codex_session, "codex_login_status", AsyncMock(return_value=status))
+    events = await _collect(run_codex("hi", None))
+    assert events == [{"type": "error", **event}, {"type": "done"}]
+
+
+@pytest.mark.asyncio
+async def test_codex_grant_overlap_is_a_refusal_that_names_no_path(monkeypatch):
+    from services.agent_profiles import GrantOverlapsProtectedDir
+
+    def overlap(*args, **kwargs):
+        raise GrantOverlapsProtectedDir("agent workdir /private/w overlaps Nebula's output folder /private/out")
+    monkeypatch.setattr(codex_session, "_require_codex_chatgpt_login", AsyncMock(return_value=None))
+    monkeypatch.setattr(codex_session, "_codex_base_args", overlap)
+    events = await _collect(run_codex("hi", None))
+    assert events == [
+        {"type": "error", "code": "agent_grant_overlap", "message": (
+            "Nebula didn’t start Codex because a folder it would open overlaps one Nebula keeps private. "
+            "Make sure Nebula’s output and Commons folders are separate, then send again.")},
+        {"type": "done"}]
+
+
+@pytest.mark.asyncio
+async def test_codex_binary_not_found_is_the_not_installed_refusal(monkeypatch):
+    monkeypatch.setattr(codex_session, "_require_codex_chatgpt_login", AsyncMock(return_value=None))
+    monkeypatch.setattr(codex_session, "_codex_base_args", lambda *a, **k: ["codex", "exec"])
+    monkeypatch.setattr(codex_session.asyncio, "create_subprocess_exec", AsyncMock(side_effect=FileNotFoundError))
+    events = await _collect(run_codex("hi", None))
+    assert events == [{"type": "error", "code": "cli_not_installed", "message": "Codex isn’t installed. Install it, then send again."},
+                      {"type": "done"}]
 
 
 @pytest.mark.asyncio
@@ -314,7 +360,8 @@ async def test_codex_turn_is_refused_when_the_feature_preflight_refuses(monkeypa
     monkeypatch.setattr(codex_session.asyncio, "create_subprocess_exec", spawned)
     monkeypatch.setattr(codex_session, "_codex_base_args", lambda *a, **k: ["codex", "exec", "--disable", "hooks"])
     events = await _collect(run_codex("hi", None, workdir=tmp_path, agent_token="tok"))
-    assert events == [{"type": "error", "message": "Codex has features on that Nebula hasn't reviewed (browser_use)"},
+    # The CLI never ran: a refusal (a code, no stop).
+    assert events == [{"type": "error", "code": "codex_features_refused", "message": "Codex has features on that Nebula hasn't reviewed (browser_use)"},
                       {"type": "done"}]
     spawned.assert_not_called()
 
@@ -388,11 +435,84 @@ async def test_preflight_fails_closed(monkeypatch, tmp_path):
     assert "NEBULA_AGENT_TOKEN" not in seen["env"]
     assert seen["cwd"] == str(tmp_path)
     seen["proc"] = proc(0, _listing(browser="true").encode())
-    assert "browser_use" in await codex_session.codex_feature_preflight(args, tmp_path)
+    refused = await codex_session.codex_feature_preflight(args, tmp_path)
+    assert refused == ("Codex has features on that Nebula hasn’t reviewed (`browser_use`), so it didn’t start. "
+                       "Update Nebula, then send again.")
+    assert refused.code == "codex_features_refused"
     seen["proc"] = proc(1, b"", b"Error: Unknown feature flag: hooks")
-    assert "Unknown feature flag" in await codex_session.codex_feature_preflight(args, tmp_path)
+    refused = await codex_session.codex_feature_preflight(args, tmp_path)
+    assert refused == ("This version of Codex refused Nebula’s agent settings (Error: Unknown feature flag: hooks). "
+                       "Update Codex and Nebula, then send again.")
+    assert refused.code == "codex_features_refused"
     seen["proc"] = proc(0, b"nothing useful")
-    assert "Couldn't read" in await codex_session.codex_feature_preflight(args, tmp_path)
+    refused = await codex_session.codex_feature_preflight(args, tmp_path)
+    assert refused == "Nebula couldn’t read Codex’s feature list, so it didn’t start. Update Codex, then send again."
+    assert refused.code == "codex_features_refused"
+
+
+def test_preflight_refused_flag_detail_is_shown_only_when_plainly_safe():
+    from services.chat_lines import one_line_detail
+    # A trace whose first line holds a path is left out whole (the full stderr stays in the server log).
+    trace = ("Error: failed to read /Users/jane/.codex/config.toml: unknown field `hooks'\n"
+             "    at load (/Users/jane/work/codex/lib/config.js:41:9)\n")
+    assert one_line_detail(trace) == ""
+    # A home path with a space, a URL with a query, a 40-character token, a key=value pair, a Windows path.
+    assert one_line_detail("failed to read /Users/Justin Perea/.codex/config.toml") == ""
+    assert one_line_detail("fetch failed https://h/x?token=abc") == ""
+    assert one_line_detail("bad credential " + "a1B2" * 10) == ""
+    assert one_line_detail("bad setting api_key=abc") == ""
+    assert one_line_detail("bad flag at C:\\Users\\jane\\codex.toml") == ""
+    # A quote or backtick a code span can't hold is not allowed either.
+    assert one_line_detail('bad "flag"') == "" and one_line_detail("bad `flag`") == ""
+    # A feature-name detail is plainly safe and shown, trailing punctuation trimmed, whitespace collapsed.
+    assert one_line_detail("Error:  Unknown feature flag: hooks.\nmore") == "Error: Unknown feature flag: hooks"
+    assert one_line_detail("") == "" and one_line_detail("\n  \n") == ""
+    long = one_line_detail("word " * 60)
+    assert len(long) <= 81 and long.endswith("…")
+
+
+@pytest.mark.asyncio
+async def test_preflight_a_refused_flag_with_a_home_path_and_a_trace_reaches_the_chat_with_no_detail(monkeypatch, tmp_path):
+    stderr = (b"Error: unknown feature `hooks' in /Users/jane/.codex/config.toml\n"
+              b"    at load (/Users/jane/.nvm/versions/node/lib/codex.js:41:9)\n" + b"    at x\n" * 60)
+    proc = MagicMock()
+    proc.returncode = 1
+    proc.communicate = AsyncMock(return_value=(b"", stderr))
+    monkeypatch.setattr(codex_session.asyncio, "create_subprocess_exec", AsyncMock(return_value=proc))
+    refused = await codex_session.codex_feature_preflight(["codex", "exec", "--disable", "hooks"], tmp_path)
+    assert refused == ("This version of Codex refused Nebula’s agent settings. "
+                       "Update Codex and Nebula, then send again.")
+    assert refused.count("`") == 0 and "\n" not in refused and "jane" not in refused and len(refused) < 200
+
+
+@pytest.mark.asyncio
+async def test_preflight_a_feature_missing_from_the_listing_keeps_its_note_outside_the_code_span(tmp_path):
+    trimmed = "\n".join(line for line in _listing(browser="true").splitlines() if not line.startswith("hooks "))
+    proc = MagicMock()
+    proc.returncode = 0
+    proc.communicate = AsyncMock(return_value=(trimmed.encode(), b""))
+    with patch("services.codex_session.asyncio.create_subprocess_exec", AsyncMock(return_value=proc)):
+        refused = await codex_session.codex_feature_preflight(["codex", "exec", "--disable", "hooks"], tmp_path)
+    assert refused == ("Codex has features on that Nebula hasn’t reviewed (`browser_use`, `hooks` (no longer listed)), "
+                       "so it didn’t start. Update Nebula, then send again.")
+
+
+@pytest.mark.asyncio
+async def test_preflight_timeout_and_missing_binary_are_refusals_with_a_line_each(monkeypatch, tmp_path):
+    args = ["codex", "exec", "--disable", "hooks"]
+    monkeypatch.setattr(codex_session.asyncio, "create_subprocess_exec", AsyncMock(side_effect=FileNotFoundError))
+    refused = await codex_session.codex_feature_preflight(args, tmp_path)
+    assert refused == "Codex isn’t installed. Install it, then send again." and refused.code == "cli_not_installed"
+
+    slow = MagicMock()
+    slow.returncode = None
+    slow.communicate = AsyncMock(side_effect=asyncio.TimeoutError)
+    monkeypatch.setattr(codex_session.asyncio, "create_subprocess_exec", AsyncMock(return_value=slow))
+    monkeypatch.setattr(codex_session, "terminate_agent_process_tree", AsyncMock())
+    monkeypatch.setattr(codex_session.asyncio, "wait_for", AsyncMock(side_effect=asyncio.TimeoutError))
+    refused = await codex_session.codex_feature_preflight(args, tmp_path)
+    assert refused == "Codex’s feature check took too long, so it didn’t start. Send again in a moment."
+    assert refused.code == "codex_features_refused"
 
 
 @pytest.mark.asyncio

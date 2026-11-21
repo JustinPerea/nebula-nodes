@@ -223,7 +223,7 @@ async function deleteAndWait(id: string) {
 }
 
 const RUN = (names: string) => `Your changes to ${names} are kept. Nebula will save them when the run finishes.`;
-const OTHER = (names: string) => `Nebula couldn’t save your changes to ${names}. Try again, or reload if it keeps happening.`;
+const OTHER = (names: string) => `Nebula couldn’t save your changes to ${names}. Try again, or reload the page if it keeps happening.`;
 const PAID = { status: 409, body: { detail: 'A paid run is starting.', code: 'paid_start' } };
 const OTHER_422 = { status: 422, body: {} };
 const refuseWith = (h: ReturnType<typeof backend>, id: string, refusal: { status: number; body: Record<string, unknown> }, times = 1) => {
@@ -285,10 +285,10 @@ describe('the "other" line, a stop line with [Try again]', () => {
     await vi.waitFor(() => expect(stopLines()).toEqual([OTHER('“Opening”')]), { timeout: 3000, interval: 5 });
     expect(stopLineOf('n1')).toMatchObject({ retry: true, trying: false });
     expect(stopped().n1).toBe(true);
-    expect(useGraphStore.getState().sceneStops.n1).toEqual({ cause: 'other', reason: 'Try again, or reload if it keeps happening.', nebula: true,
-      line: 'Nebula couldn’t save your changes to “Opening” because the server didn’t accept it. Try again, or reload if it keeps happening.' });
+    expect(useGraphStore.getState().sceneStops.n1).toEqual({ cause: 'other', reason: 'Try again, or reload the page if it keeps happening.', nebula: true,
+      line: 'Nebula couldn’t save your changes to “Opening” because the server didn’t accept it. Try again, or reload the page if it keeps happening.' });
     expect(said).toEqual([]);
-    expect(unsaved('n1')).toBe('Nebula couldn’t save your changes to “Opening” because the server didn’t accept it. Try again, or reload if it keeps happening.');
+    expect(unsaved('n1')).toBe('Nebula couldn’t save your changes to “Opening” because the server didn’t accept it. Try again, or reload the page if it keeps happening.');
     const p0 = h.putsOf('n1').length;
     await sleep(300);
     expect(h.putsOf('n1').length).toBe(p0);

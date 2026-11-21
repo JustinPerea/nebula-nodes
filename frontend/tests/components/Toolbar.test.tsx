@@ -361,7 +361,7 @@ describe('Canvas toolbar hierarchy', () => {
     render(<Toolbar />);
     fireEvent.click(within(openActions().panel).getByRole('button', { name: 'Clear canvas…' }));
     await waitFor(() => expect(notices).toHaveBeenCalledWith(
-      'Nebula couldn’t clear the canvas because the server didn’t accept it. Try again, or reload if it keeps happening.'));
+      'Nebula couldn’t clear the canvas because the server didn’t accept it. Try again, or reload the page if it keeps happening.'));
   });
 
   it('does not request clear after a declined confirmation or a run starting during confirmation', () => {
@@ -500,7 +500,7 @@ describe('Canvas toolbar hierarchy', () => {
   it.each([
     [new ConnectionLostError(new TypeError('Failed to fetch')), 'the server isn’t answering. Check that Nebula is running, then try again.'],
     [new RequestFailedError('Nebula couldn’t load the canvas.', 503), 'the server didn’t respond. Try again.'],
-    [new Error('boom'), 'the server didn’t accept it. Try again, or reload if it keeps happening.'],
+    [new Error('boom'), 'the server didn’t accept it. Try again, or reload the page if it keeps happening.'],
   ])('a failed CLI import names the action over the reason (%#)', async (error, reason) => {
     mocks.cli.mockRejectedValue(error);
     render(<Toolbar />);

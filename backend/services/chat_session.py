@@ -10,10 +10,13 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 from pathlib import Path
 from typing import Any, AsyncIterator
 
+from services.chat_lines import (OVERSIZED_EVENT_LINE, grant_overlap_refusal, knowledge_refusal,
+                                 not_installed_refusal)
 from services.agent_process import (
     spawn_agent_process,
     terminate_agent_process_tree,
@@ -27,6 +30,7 @@ from services.agent_profiles import (
 )
 
 
+logger = logging.getLogger(__name__)
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 # Context primers for Nebula's in-app agents. All three reach Nebula through
@@ -253,7 +257,9 @@ async def run_claude(
     try:
         validate_agent_read_grants(workdir=agent_cwd, extra_dirs=list(extra_dirs or []), protected=protected)
     except GrantOverlapsProtectedDir as exc:
-        yield {"type": "error", "message": str(exc)}
+        # A refusal: the CLI never ran. The raw text names Nebula's own paths, so it goes to the log only.
+        logger.warning("claude turn refused: %s", exc)
+        yield grant_overlap_refusal("claude")
         yield {"type": "done"}
         return
     from services.agent_knowledge import KnowledgeSnapshotError, snapshot_provider_knowledge
@@ -261,7 +267,8 @@ async def run_claude(
     try:
         snapshot_provider_knowledge(PROJECT_ROOT, agent_cwd)
     except KnowledgeSnapshotError as exc:
-        yield {"type": "error", "message": str(exc)}
+        logger.warning("claude turn refused: %s", exc)
+        yield knowledge_refusal("claude")
         yield {"type": "done"}
         return
     system_prompt = (
@@ -313,7 +320,7 @@ async def run_claude(
             limit=64 * 1024 * 1024,
         )
     except FileNotFoundError:
-        yield {"type": "error", "message": "`claude` binary not found in PATH"}
+        yield not_installed_refusal("claude")
         yield {"type": "done"}
         return
 
@@ -333,10 +340,8 @@ async def run_claude(
                     await proc.stdout.readexactly(exc.consumed)
                 except Exception:
                     pass
-                yield {
-                    "type": "error",
-                    "message": "Skipped an oversized stream event (likely a huge tool result). Continuing.",
-                }
+                # Not a stop: the turn goes on, so this is a notice, as the limit lines are.
+                yield {"type": "system", "text": OVERSIZED_EVENT_LINE}
                 continue
             if not line:
                 break
@@ -413,7 +418,7 @@ async def run_claude(
                     }
                 else:
                     yield {
-                        "type": "error",
+                        "type": "error", "stop": "error",
                         "message": ev.get("result") or f"claude exited with subtype={st}",
                     }
                 continue
@@ -426,7 +431,7 @@ async def run_claude(
         if return_code != 0:
             err_text = stderr_data.decode("utf-8", errors="replace").strip()
             yield {
-                "type": "error",
+                "type": "error", "stop": "error",
                 "message": err_text or f"claude exited with code {return_code}",
             }
     finally:

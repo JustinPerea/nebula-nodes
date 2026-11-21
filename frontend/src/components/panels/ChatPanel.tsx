@@ -40,7 +40,7 @@ import '../../styles/personal-agents.css';
 import { apiFetch, backendAssetUrlSync, backendWebSocketUrl, personTokenForSocket } from '../../lib/backend';
 import { DEFAULT_BACKEND_PORT, devProxyPort } from '../../lib/devBackendPort';
 import { clearRefusedOnPromote, clearSetterOnPromote, clearsOnPromote } from '../../lib/clearsOnPromote';
-import { CONNECTION_LOST_COPY, NO_ANSWER_STATUS, PERSON_REQUIRED_CODE, isBackendUnreachable, personRefusalSentAt, personRequiredCopy, readDetail, requestError, warnFailure, failureMessage, failureCopy, oneLine, actionFailedLine } from '../../lib/errorCopy';
+import { CONNECTION_LOST_COPY, NO_ANSWER_STATUS, PERSON_REQUIRED_CODE, isBackendUnreachable, personRefusalSentAt, personRequiredCopy, chatPersonRequiredCopy, type ChatPersonAction, readDetail, requestError, warnFailure, failureMessage, failureCopy, oneLine, actionFailedLine } from '../../lib/errorCopy';
 import { ErrorDetails } from '../failure/ErrorDetails';
 import { chatUploadChipError } from '../../lib/chatUploadCopy';
 import { refuseEditWhileOffline } from '../../lib/backendConnection';
@@ -68,7 +68,7 @@ import { terminalListening, usePersonThreadStore } from '../../store/personThrea
 
 type ChatAgent = ChatAgentId;
 /** A message the gate can refuse: the promote count it went out under, and the permission it answered. */
-type SentRef = { sentAt: number; permission?: string };
+type SentRef = { sentAt: number; permission?: string; action: ChatPersonAction };
 let chatRefSeq = 0;
 type ModelSelection = { model: string | null; effort: string | null };
 const NO_MODEL: ModelSelection = { model: null, effort: null };
@@ -154,9 +154,6 @@ type SystemLine = {
   /** Text behind a collapsed Details toggle under the line: a person-only
    * refusal's own words, written for agents (GM, Q116 a). */
   details?: string;
-  /** The line is in a "stopped because" form, "<Agent> stopped because ..." or the same line as two sentences,
-   * "<Agent> stopped. <Reason>.": LineText draws it neutral (tone="because"). */
-  because?: true;
   /** Its only reason was this tab not being connected as the person: it goes
    * when the tab is promoted (GM, #204 r3; lib/clearsOnPromote). */
   personGate?: true;
@@ -409,13 +406,17 @@ export function AssistantBubble({ message, agentName, onPermission }: {
         }
         if (part.kind === 'system') {
           const tone = part.tone ?? 'neutral';
+          // The warning ink follows the tone, so a line that is built as an error can't miss it (LineText would draw a
+          // because failure, or a not-connected line, neutral): every error-tone system line is warning ink, a failed
+          // Stop included.
+          const inkTone = tone === 'error' ? 'warning' : undefined;
           return (
             <div
               key={idx}
               className={`chat__system chat__system--${tone}`}
               data-chat-system-tone={tone}
             >
-              {part.details ? <><LineText text={part.text} tone={part.because ? 'because' : undefined} code /><ErrorDetails raw={part.details} className="chat__system-details" /></> : <LineText text={part.text} tone={part.because ? 'because' : undefined} code />}
+              {part.details ? <><LineText text={part.text} tone={inkTone} code /><ErrorDetails raw={part.details} className="chat__system-details" /></> : <LineText text={part.text} tone={inkTone} code />}
             </div>
           );
         }
@@ -893,7 +894,7 @@ export function ChatPanel() {
   // person_required error, so the refusal is stamped with its own message's count (and a
   // refused permission answer is known by its request).
   const sentRefs = useRef(new Map<string, SentRef>());
-  const stampedRef = useCallback((extra: Omit<SentRef, 'sentAt'> = {}): string => {
+  const stampedRef = useCallback((extra: Omit<SentRef, 'sentAt'>): string => {
     const ref = `r${++chatRefSeq}`;
     sentRefs.current.set(ref, { sentAt: personPromotions(), ...extra });
     // Answered messages never come back: keep the newest few dozen.
@@ -906,7 +907,7 @@ export function ChatPanel() {
       if (!ws || ws.readyState !== WebSocket.OPEN) return;
       void personTokenForSocket(ws.url).then((personToken) => {
         if (ws.readyState !== WebSocket.OPEN) return;
-        ws.send(JSON.stringify({ type: 'close_session', sessionId: id, ref: stampedRef(), ...(personToken ? { personToken } : {}) }));
+        ws.send(JSON.stringify({ type: 'close_session', sessionId: id, ref: stampedRef({ action: 'answer' }), ...(personToken ? { personToken } : {}) }));
       });
     };
   }, [stampedRef]);
@@ -1267,12 +1268,16 @@ export function ChatPanel() {
             // A person-only refusal says GM's line, by its code; the backend's
             // words, written for agents, go behind Details (Q116 a).
             const personRequired = event.code === PERSON_REQUIRED_CODE;
+            let personRequiredLine = '';
             if (personRequired) {
               // One stamp and one check (review 4 NIT-2): an answer to what went out before the
               // promote is the old state's; it holds nothing, and its line goes at once.
               // Its own message's stamp, by the ref the backend echoes; an error with no ref (an
               // older backend) has no stamp, so it holds the tab and its line waits for the promote.
               const sent = typeof event.ref === 'string' ? sentRefs.current.get(event.ref) : undefined;
+              // The line says what this tab was doing: a send starts a chat, the rest answer or close an agent.
+              // An error with no ref of ours (an older backend) keeps the general line.
+              personRequiredLine = sent ? chatPersonRequiredCopy(sent.action) : personRequiredCopy();
               if (typeof event.ref === 'string') sentRefs.current.delete(event.ref);
               const refusal = personRefusalSentAt(sent?.sentAt ?? null);
               if (!refusal.sentBeforePromote) reportPersonRequired();
@@ -1295,8 +1300,8 @@ export function ChatPanel() {
             }
             setMessages((prev) => markThinkingCompleted(prev));
             const errorPart = (turnAgentName: string | undefined): SystemLine => {
-              const line = chatErrorLine({ message: event.message == null ? null : errText, code: event.code, source: event.source, agentName: turnAgentName ?? agentNameRef.current });
-              return { kind: 'system', text: line.text, tone: 'error', ...(line.details ? { details: line.details } : {}), ...(line.because ? { because: true as const } : {}) };
+              const line = chatErrorLine({ message: event.message == null ? null : errText, code: event.code, source: event.source, stop: event.stop, agentName: turnAgentName ?? agentNameRef.current });
+              return { kind: 'system', text: line.text, tone: line.tone, ...(line.details ? { details: line.details } : {}) };
             };
             upsertAssistant((msg) => ({
               ...msg,
@@ -1307,7 +1312,7 @@ export function ChatPanel() {
                     : p,
                 ),
                 personRequired
-                  ? { kind: 'system', text: personRequiredCopy(), tone: 'error', details: errText, personGate: true }
+                  ? { kind: 'system', text: personRequiredLine, tone: 'error', details: errText, personGate: true }
                   : errorPart(msg.agentName),
               ],
               streaming: false,
@@ -1674,7 +1679,7 @@ export function ChatPanel() {
     ws.send(
       JSON.stringify({
         type: 'send',
-        ref: stampedRef(),
+        ref: stampedRef({ action: 'send' }),
         message: raw,
         selectedNodeIds: useGraphStore.getState().nodes
           .filter((node) => node.selected)
@@ -1719,7 +1724,7 @@ export function ChatPanel() {
     setPersonalOptions((current) => current.map((option) => option.id === configId ? { ...option, current: value } : option));
     void personTokenForSocket(ws.url).then((personToken) => {
       if (ws.readyState !== WebSocket.OPEN) return;
-      ws.send(JSON.stringify({ type: 'personal_option', sessionId, configId, value, ref: stampedRef(),
+      ws.send(JSON.stringify({ type: 'personal_option', sessionId, configId, value, ref: stampedRef({ action: 'answer' }),
         ...(personToken ? { personToken } : {}) }));
     });
   }, [sessionId, stampedRef]);
@@ -1743,7 +1748,7 @@ export function ChatPanel() {
     void personTokenForSocket(ws.url).then((personToken) => {
       // Not sent after all: the card waits again.
       if (ws.readyState !== WebSocket.OPEN) { mark('sent', 'pending'); return; }
-      ws.send(JSON.stringify({ type: 'permission', requestId, decision, ref: stampedRef({ permission: requestId }),
+      ws.send(JSON.stringify({ type: 'permission', requestId, decision, ref: stampedRef({ action: 'answer', permission: requestId }),
         ...(personToken ? { personToken } : {}) }));
     }, () => mark('sent', 'pending'));
   }, [upsertAssistant, stampedRef]);

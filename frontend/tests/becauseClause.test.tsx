@@ -81,7 +81,7 @@ describe('the status rows', () => {
     ['a rate limit', NO_RESPONSE_COPY, 429, 'the server is busy. Try again in a moment.', 'the server is busy. Try again.'],
     ['a server error', NO_RESPONSE_COPY, 500, 'the server hit an error. Try again.', 'the server hit an error. Try again.'],
     ['no access', ACCESS_LOST_COPY, 403, 'you don’t have access to this anymore. Reload to sign in again.', 'you don’t have access to this anymore. Reload to sign in again.'],
-    ['a refusal with no reason', REFUSED_FALLBACK_COPY, 400, 'the server didn’t accept it. Try again, or reload if it keeps happening.', 'the server didn’t accept it. Try again.'],
+    ['a refusal with no reason', REFUSED_FALLBACK_COPY, 400, 'the server didn’t accept it. Try again, or reload the page if it keeps happening.', 'the server didn’t accept it. Try again.'],
     ['too large', TOO_LARGE_COPY, 413, 'it’s too large.', 'it’s too large.'],
   ];
   it.each(cases)('%s', (_name, reason, status, alone, button) => {
@@ -277,6 +277,15 @@ describe('colour', () => {
     expect(container.querySelector('[data-testid="b"]')?.hasAttribute('data-line-because')).toBe(false);
   });
 
+  it('draws tone="warning" in the warning ink even on a not-connected line, which tone="failure" leaves neutral', () => {
+    const line = 'This tab isn’t connected as you, so it can’t start a chat. Open the link Nebula printed when it started, then send again.';
+    const { container } = render(<><p data-testid="a"><LineText text={line} tone="warning" /></p>
+      <p data-testid="b"><LineText text={line} tone="failure" /></p><p data-testid="c"><LineText text="Claude stopped because boom." tone="warning" /></p></>);
+    expect(container.querySelector('[data-testid="a"]')?.hasAttribute('data-line-because')).toBe(false);
+    expect(container.querySelector('[data-testid="b"]')?.hasAttribute('data-line-because')).toBe(true);
+    expect(container.querySelector('[data-testid="c"]')?.hasAttribute('data-line-because')).toBe(false);
+  });
+
   it('marks a line with no reason too, and leaves a line that is not a failure alone', () => {
     const { container } = render(<><p data-testid="a"><LineText text="Nebula couldn’t load your projects." /></p>
       <p data-testid="b"><LineText text="Saved." /></p></>);
@@ -324,7 +333,7 @@ describe('FailureLines', () => {
     expect(failureMessage(new RequestFailedError("Couldn't rename the project.", 429), "Couldn't x."))
       .toBe('Nebula couldn’t rename the project because the server is busy. Try again in a moment.');
     expect(failureMessage(new TypeError('boom'), "Couldn't open the file.")).toBe(
-      'Nebula couldn’t open the file because the server didn’t accept it. Try again, or reload if it keeps happening.');
+      'Nebula couldn’t open the file because the server didn’t accept it. Try again, or reload the page if it keeps happening.');
   });
 });
 

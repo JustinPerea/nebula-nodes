@@ -546,7 +546,7 @@ describe('portable graph asset bounds', () => {
     }) as typeof JSON.stringify);
 
     await expect(saveToFile([], [])).resolves.toBeNull();
-    expect(alertSpy).toHaveBeenCalledWith("Nebula couldn’t save the canvas because the server didn’t accept it. Try again, or reload if it keeps happening.");
+    expect(alertSpy).toHaveBeenCalledWith("Nebula couldn’t save the canvas because the server didn’t accept it. Try again, or reload the page if it keeps happening.");
   });
 
   it('refuses too many live nodes before mapping or compression', async () => {

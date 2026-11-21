@@ -472,7 +472,7 @@ describe('RunHistoryPanel replay actions', () => {
     // Error copy: an error that isn't a request's never shows its
     // own message; it says design's general line under the button's heading.
     await waitFor(() => expect(alert).toHaveBeenCalledWith(
-      'Nebula couldn’t forget the recovery safeguard because the server didn’t accept it. Try again, or reload if it keeps happening.',
+      'Nebula couldn’t forget the recovery safeguard because the server didn’t accept it. Try again, or reload the page if it keeps happening.',
     ));
     expect(screen.getByTitle('A removed World Labs node · Operation ID operation-saved')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Forget the recovery ID for a removed World Labs node' })).toBeEnabled();

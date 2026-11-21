@@ -348,7 +348,9 @@ async def test_a_lost_login_says_sign_in_again_and_never_waits_on_a_browser(tmp_
     env = SessionEnv(tmp_path, state)
     with pytest.raises(PersonalSessionError) as info:
         await env.open()
-    assert info.value.code == "auth_required" and "Sign in again in Settings" in info.value.message
+    assert info.value.code == "auth_required"
+    assert info.value.message == ("Your Antigravity needs you to sign in with Google again. Do that in "
+                                  "Settings > Preferences > Personal agents, then send again.")
     assert "session/new" not in log_methods(tmp_path)
     assert personal_agents.get_agent(state, "antigravity").signIn["state"] == "signed_out"
     assert not env.manager.live()

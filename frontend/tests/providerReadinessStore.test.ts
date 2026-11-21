@@ -75,7 +75,7 @@ describe('explicit provider connection checks', () => {
   // A plain Error or a malformed answer reads design's general line;
   // no answer at all reads design's "server isn't answering" line
   // (tests/errorCopy.round3f.projects.test.ts).
-  const CHECK_FAILED = "Nebula couldn’t check the connections because the server didn’t accept it. Try again, or reload if it keeps happening.";
+  const CHECK_FAILED = "Nebula couldn’t check the connections because the server didn’t accept it. Try again, or reload the page if it keeps happening.";
   it('sanitizes transport failures and rejects malformed status data', async () => {
     fetch.mockRejectedValueOnce(new Error('https://private.test/?token=secret'));
     await useProviderReadinessStore.getState().checkConnections();

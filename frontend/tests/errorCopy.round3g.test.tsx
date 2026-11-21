@@ -14,7 +14,7 @@
  *    title and aria-label."
  * - "Readiness, answered failure: "Nebula didn't respond" is wrong when
  *   something did answer. → "Couldn't check the connections. Try again, or
- *   reload if it keeps happening.""
+ *   reload the page if it keeps happening.""
 
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -179,7 +179,7 @@ const json = (status: number, body: unknown) => new Response(JSON.stringify(body
   { status, headers: { 'content-type': 'application/json' } });
 
 describe('the readiness line when something answered', () => {
-  const ANSWERED = "Nebula couldn’t check the connections because the server didn’t accept it. Try again, or reload if it keeps happening.";
+  const ANSWERED = "Nebula couldn’t check the connections because the server didn’t accept it. Try again, or reload the page if it keeps happening.";
 
   it('an answered failure reads design\'s line, never "didn\'t respond"', async () => {
     for (const status of [503, 500, 429, 404]) {

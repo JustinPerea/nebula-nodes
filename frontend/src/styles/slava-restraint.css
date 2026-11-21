@@ -4971,3 +4971,21 @@ body.app-slava-restraint .edit-node__open {
   font-size: 11px;
   cursor: pointer;
 }
+
+/* Punctuation touching a code span ("(" before it, ")" "," "." after it) shares a group with it
+   (lib/codeSpans glueToSpans). The rule: the group is the inline-block, and the span flows inside it as
+   inline text. The group moves to the next line whole, and wraps inside only when it is wider than its line
+   (max-width: 100%; overflow-wrap: anywhere, the span's own rule moved to the group). The opener, the span and
+   the closer are one inline formatting context, so no line break falls after "(" or before the closer, and
+   the closer follows the span's last character wherever the span wraps. */
+body.app-slava-restraint .code-glue {
+  display: inline-block;
+  max-width: 100%;
+  vertical-align: baseline;
+  overflow-wrap: anywhere;
+}
+
+body.app-slava-restraint .code-glue .code-span {
+  display: inline;
+  max-width: none;
+}

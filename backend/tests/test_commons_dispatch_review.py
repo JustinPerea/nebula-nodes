@@ -101,7 +101,7 @@ def test_invalid_second_send_cannot_finish_an_active_turn(isolated_app, monkeypa
         assert ws.receive_json()["type"] == "session"
         ws.send_json({"type": "send", "message": "Competing turn", **second})
         rejected = ws.receive_json()
-        assert rejected["type"] == "error" and "Another response is active" in rejected["message"]
+        assert rejected["type"] == "error" and rejected["message"] == "A response is still running. Stop it and wait for it to stop, then send again."
         ws.send_json({"type": "cancel"})
         assert ws.receive_json()["status"] == "requested"
         assert ws.receive_json()["status"] == "confirmed"

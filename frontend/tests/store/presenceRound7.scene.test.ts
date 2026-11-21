@@ -202,7 +202,7 @@ const stopLines = () => store.sceneStopLines(useGraphStore.getState()).map((line
 
 
 
-const OTHER = (names: string) => `Nebula couldn’t save your changes to ${names}. Try again, or reload if it keeps happening.`;
+const OTHER = (names: string) => `Nebula couldn’t save your changes to ${names}. Try again, or reload the page if it keeps happening.`;
 const OTHER_422 = { status: 422, body: {} };
 const refuseWith = (h: ReturnType<typeof backend>, id: string, refusal: { status: number; body: Record<string, unknown> }, times = 1) => {
   for (let i = 0; i < times; i += 1) h.scenes.get(id)!.refuse.push(clone(refusal));

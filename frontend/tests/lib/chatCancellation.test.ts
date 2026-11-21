@@ -62,6 +62,6 @@ describe('chat cancellation truth state', () => {
       tone: 'error',
     });
     expect(chatCancellationNotice('failed').text)
-      .toBe("Nebula couldn’t stop the reply because the server didn’t accept it. Try again, or reload if it keeps happening.");
+      .toBe("Nebula couldn’t stop the reply because the server didn’t accept it. Try again, or reload the page if it keeps happening.");
   });
 });

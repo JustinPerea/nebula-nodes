@@ -1530,8 +1530,10 @@ class TestChatAgentDispatch:
             })
             first = ws.receive_json()
             assert first["type"] == "error"
-            assert "bogus" in first["message"]
-            assert "Valid:" in first["message"]
+            assert first["message"] == (
+                "Nebula doesn\u2019t recognize the agent for this chat. Pick another with the model button "
+                "at the top of the chat, then send again.")
+            assert "bogus" not in first["message"] and "Valid:" not in first["message"]
 
             second = ws.receive_json()
             assert second["type"] == "done"
@@ -1675,11 +1677,8 @@ class TestChatAgentDispatch:
                 rejected = ws.receive_json()
                 assert rejected == {
                     "type": "error",
-                    "message": (
-                        "Another response is active. Stop it and wait for "
-                        "cancellation confirmation before sending again."
-                    ),
-                    "source": "claude",
+                    "message": "A response is still running. Stop it and wait for it to stop, then send again.",
+                    "source": "system",
                 }
                 assert not cleaned_up.is_set()
 

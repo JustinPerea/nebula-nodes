@@ -16,6 +16,7 @@ import main
 from commons import actors
 from services import acp_session, personal_agents
 from services.acp_session import AcpSessionManager
+from services.chat_lines import RESPONSE_RUNNING_LINE
 from tests.conftest import PERSON, PERSON_TOKEN
 from tests.test_commons_integration import isolated_app  # noqa: F401
 
@@ -222,7 +223,7 @@ async def test_competing_turn_rejected_and_cancel_keeps_the_agent(ws_env):
     await socket.next("text")
     send(socket, "competing", session_id=session["sessionId"])
     rejected = await socket.next("error")
-    assert "Another response is active" in rejected["message"]
+    assert rejected["message"] == RESPONSE_RUNNING_LINE and rejected["source"] == "system"
     socket.put({"type": "cancel"})
     assert (await socket.next("cancellation"))["status"] == "requested"
     assert (await socket.next("cancellation"))["status"] == "confirmed"
@@ -245,6 +246,7 @@ async def test_crash_mid_turn_reports_and_clears(ws_env):
     events = await socket.until_done()
     error = next(e for e in events if e["type"] == "error")
     assert error["code"] == "personal_session_ended" and "code 9" in error["message"]
+    assert error["stop"] == "error" and "reason" not in error
     assert ws_env.manager.live() == []
     assert actors.agent_registry._tokens == {}
     socket.disconnect()
@@ -292,7 +294,9 @@ async def test_settings_switch_off_or_delete_stops_the_running_agent(ws_env, cha
     send(socket, "again", session_id=session["sessionId"])
     stale = await socket.until_done()
     assert stale[0]["code"] == "personal_session_ended"
-    assert "switched off, removed or changed in Settings" in stale[0]["message"]
+    assert stale[0]["message"] == ("Fake Agent stopped because it was switched off or changed in Settings. "
+                                   "If it’s still switched on, send again.")
+    assert stale[0]["stop"] == "ended" and stale[0]["reason"] == "agent_changed"
     # Another socket can't learn why someone else's session ended.
     assert ws_env.manager.ended_message(session["sessionId"], "someone-else") is None
     socket.disconnect()

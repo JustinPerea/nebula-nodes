@@ -82,7 +82,7 @@ describe('the Cinema shot failed lines', () => {
   it('row 7: a start Nebula answered with another status reads as one sentence, with no “because Try again”', async () => {
     vi.spyOn(api, 'generateCinemaShot').mockResolvedValue({ status: 'busy' } as never);
     await useGraphStore.getState().executeShot('cine', 's1');
-    const said = 'Nebula couldn’t start the shot because the server didn’t accept it. Try again, or reload if it keeps happening.';
+    const said = 'Nebula couldn’t start the shot because the server didn’t accept it. Try again, or reload the page if it keeps happening.';
     expect(output()).toMatchObject({ status: 'error', error: said });
     expect(panelLine()).toBe(said);
     expect(output()!.error).not.toMatch(/because Try again/);

@@ -17,6 +17,7 @@ export interface ChatCancellationTransition {
 
 export interface ChatCancellationNotice {
   text: string;
+  /** A failed Stop is an error: the chat draws it in the warning ink (components/panels/ChatPanel.tsx). */
   tone?: 'error';
 }
 

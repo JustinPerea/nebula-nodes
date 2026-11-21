@@ -127,13 +127,17 @@ def test_launch_spec_refuses_what_cannot_start(tmp_path):
     with pytest.raises(personal_agents.PersonalAgentError) as info:
         personal_agents.launch_spec(tmp_path, "hermes")
     assert info.value.code == "personal_agent_needs_setup"
+    assert info.value.message.startswith("Hermes needs setup. ")
     with pytest.raises(personal_agents.PersonalAgentError) as info:
         personal_agents.launch_spec(tmp_path, "nope")
     assert info.value.code == "personal_agent_unknown"
+    assert info.value.message == "Nebula doesn’t recognize that personal agent. Pick another with the model button at the top of the chat, then send again."
     personal_agents.create_custom(tmp_path, {"id": "off", "command": sys.executable, "enabled": False})
     with pytest.raises(personal_agents.PersonalAgentError) as info:
         personal_agents.launch_spec(tmp_path, "off")
     assert info.value.code == "personal_agent_disabled"
+    name = personal_agents.get_agent(tmp_path, "off").displayName
+    assert info.value.message == f"{name} is switched off. Turn it on in Settings > Preferences > Personal agents, then send again."
     personal_agents.update_agent(tmp_path, "off", {"enabled": True})
     spec = personal_agents.launch_spec(tmp_path, "off")
     assert spec.argv == [sys.executable] and spec.startup_timeout == personal_agents.STARTUP_TIMEOUT_S
@@ -213,6 +217,7 @@ def test_gemini_with_a_google_login_is_switched_off_with_the_reason(tmp_path, ge
     with pytest.raises(personal_agents.PersonalAgentError) as info:
         personal_agents.launch_spec(tmp_path, "gemini", home=home)
     assert info.value.code == "personal_agent_needs_setup" and "2026-06-18" in info.value.message
+    assert info.value.message.startswith("Your Gemini needs setup. ")
 
 
 def test_gemini_key_choice_is_off_by_default_and_hands_over_the_key_only_when_on(tmp_path, gemini_bin, monkeypatch):
@@ -241,6 +246,19 @@ def test_gemini_key_choice_is_off_by_default_and_hands_over_the_key_only_when_on
     personal_agents.update_agent(tmp_path, "gemini", {"useNebulaKey": False}, home=home)
     with pytest.raises(personal_agents.PersonalAgentError):
         personal_agents.launch_spec(tmp_path, "gemini", home=home)
+
+
+def test_a_gemini_key_that_goes_missing_after_the_check_says_what_to_add(tmp_path, gemini_bin, monkeypatch):
+    _, home = gemini_bin
+    save_google_key(monkeypatch, "AIzaSy-test-key-0123456789")
+    personal_agents.update_agent(tmp_path, "gemini", {"enabled": True, "useNebulaKey": True}, home=home)
+    calls = []
+    # Readiness sees the key; it is gone by the time launch_spec reads it.
+    monkeypatch.setattr(personal_agents, "_nebula_key", lambda name: "AIzaSy-test-key-0123456789" if not calls.append(name) and len(calls) == 1 else None)
+    with pytest.raises(personal_agents.PersonalAgentError) as info:
+        personal_agents.launch_spec(tmp_path, "gemini", home=home)
+    assert info.value.code == "personal_agent_needs_setup"
+    assert info.value.message == "Your Gemini needs a Gemini API key. Add one in Settings > Providers, then send again."
 
 
 def test_a_shell_gemini_key_is_never_passed_on():

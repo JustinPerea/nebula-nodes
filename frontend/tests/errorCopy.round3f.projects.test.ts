@@ -73,7 +73,7 @@ describe('the Projects startup line', () => {
     fetch.mockRejectedValueOnce(new Error('internal: snapshot.nodes is not iterable'));
     await useProjectStore.getState().initialize();
     expect(useProjectStore.getState().error)
-      .toBe("Nebula couldn’t load your projects because the server didn’t accept it. Try again, or reload if it keeps happening.");
+      .toBe("Nebula couldn’t load your projects because the server didn’t accept it. Try again, or reload the page if it keeps happening.");
   });
 
   it('no answer: the server on this computer', async () => {
@@ -101,6 +101,6 @@ describe('the provider-readiness line', () => {
     fetch.mockResolvedValueOnce(json(503, {}));
     await useProviderReadinessStore.getState().checkConnections();
     // Design: ""Nebula didn't respond" is wrong when something did answer."
-    expect(useProviderReadinessStore.getState().error).toBe("Nebula couldn’t check the connections because the server didn’t accept it. Try again, or reload if it keeps happening.");
+    expect(useProviderReadinessStore.getState().error).toBe("Nebula couldn’t check the connections because the server didn’t accept it. Try again, or reload the page if it keeps happening.");
   });
 });
