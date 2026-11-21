@@ -244,7 +244,7 @@ export function NoticeRegion({ screen }: { screen: NoticeRegionScreen }) {
           region with no role: the notices own the region's statuses. */}
       <div className="notice-region__say" aria-live="polite" aria-atomic="true" {...{ [SAY_ATTR]: '' }} />
       <div ref={stackRef} className="notice-region__stack">
-        {/* The older notices folded into one row when there is no room
+        {/* The older notices, folded into one row when there is no room
             above the card for them all; its words and aria-expanded are
             written with the place (lib/noticeStackPlace.ts). */}
         <button type="button" className="notice-region__more" {...{ [MORE_ATTR]: '' }} hidden onClick={toggleMore} />

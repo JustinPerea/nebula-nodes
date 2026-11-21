@@ -16,10 +16,9 @@ interface HoldHandlers {
 }
 
 /**
- * One update, dropped from the chip into the corner for about 4 s (the
- * design's mockup v5.2). Hover or focus holds it. A click on it, or on
- * one of its actions, reads it; × dismisses it; leaving by itself
- * leaves it unread.
+ * One update, dropped from the chip into the corner for about 4 s (design,
+ * mockup v5.2). Hover or focus holds it. A click on it, or on one of its
+ * actions, reads it; × dismisses it; leaving by itself leaves it unread.
  */
 export function AgentNoteCard({
   note,

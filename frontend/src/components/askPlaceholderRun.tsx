@@ -7,7 +7,7 @@ export interface AskPlaceholderRunOptions {
   /** Asked again because the run changed since the person last saw it. */
   changed?: boolean;
   /** Asked again because a route or price moved: which nodes (movedRowIds),
-   * named in the design's line in place of the changed-run line. */
+   * named in the approved line in place of the changed-run line. */
   moved?: readonly string[];
   /** Called once as the dialog opens with a function that shows newer words
    * (a measured input's price, the keys read again); returns its stop. The

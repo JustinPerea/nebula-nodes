@@ -209,9 +209,9 @@ function measurePopoverFrame(nodeId: string, anchor: HTMLElement, panelNeed: num
 
   // 12 px above the notice region's reserved band, which stands on the bar
   // across the whole width, and above the Canvas actions panel only where it
-  // is over that panel (lib/bottomBar.ts). Design: "Cap to the BAND line, not
+  // is over that panel (lib/bottomBar.ts). Design: cap to the BAND line, not
   // the bar: the reserved notice band wins; a notice covering
-  // Run/Duplicate/Delete is the overlap to rule out" (154-754 at 1440x900,
+  // Run/Duplicate/Delete is the overlap to rule out (154-754 at 1440x900,
   // 600 px measured live; the bar line gave 662).
   const bottomLimit = floatingBottomLimit(VIEWPORT_GUTTER, viewportHeight, { left, right: left + width },
     FLOATING_CHROME_CLEARANCE);
@@ -368,7 +368,7 @@ export function NodeInspectorPopover() {
   // collapsing, a section opening) runs on the layout spring, anchored at the
   // top. So do the open's own settling (design), the held top let go by a
   // window resize and its card growing while it stands under or over the
-  // node. Only then (on PR #208): a pan, zoom or drag moves the panel with
+  // node. Only then (PR #208): a pan, zoom or drag moves the panel with
   // its node at once.
   const [contentResizing, setContentResizing] = useState(false);
   // Design: while the card's own width springs (lib/cardWidthSpring.ts), the
@@ -759,9 +759,9 @@ export function NodeInspectorPopover() {
   // A confirmed next-step picker unmounts its focused choice. Resume keyboard
   // work in the Inspector only then (it asks: resumeInspectorFocus), and only
   // when focus was lost; preserve an active control. Never for a node an Undo
-  // or a Redo brought back, or any other way the shown node changed (PR #205,
-  // inspector-pin; design: focus stays on the canvas, the Inspector updates
-  // without taking it).
+  // or a Redo brought back, or any other way the shown node changed (PR #205;
+  // design: focus stays on the canvas, the Inspector updates without taking
+  // it).
   const hasFrame = Boolean(frame);
   useLayoutEffect(() => {
     if (!visible || !selectedNodeId || !hasFrame || frame?.suspended
@@ -773,7 +773,7 @@ export function NodeInspectorPopover() {
   }, [visible, selectedNodeId, hasFrame, frame?.suspended]);
   // A node left the canvas (a Delete, an Undo, an agent's delete) and its
   // card took focus with it. Focus goes to the canvas, never to the page, so
-  // the next Cmd+Z or Cmd+Shift+Z is the canvas's (inspector-pin; design).
+  // the next Cmd+Z or Cmd+Shift+Z is the canvas's (design).
   // The Inspector naming none (an unpinned one closing took focus from its
   // field): the same.
   const shownBefore = useRef(selectedNodeId);
@@ -782,13 +782,12 @@ export function NodeInspectorPopover() {
     shownBefore.current = selectedNodeId;
     if (previous !== null && selectedNodeId === null) focusCanvasFromPage();
   }, [selectedNodeId]);
-  // Any focused card whose node left, whichever node the Inspector shows
-  // or names after (lines-inspector: an agent's delete of the shown card
-  // while another node stays selected names that one, never none, and a card
-  // the Inspector doesn't show can hold focus too). React Flow removes the
-  // card a render after the node goes (it copies the nodes into its own
-  // store), so while focus is still in the leaving card, wait for the card
-  // to go, then move it.
+  // Any focused card whose node left, whichever node the Inspector shows or
+  // names after (an agent's delete of the shown card while another node stays
+  // selected names that one, never none, and a card the Inspector doesn't show
+  // can hold focus too). React Flow removes the card a render after the node
+  // goes (it copies the nodes into its own store), so while focus is still in
+  // the leaving card, wait for the card to go, then move it.
   useEffect(() => {
     let stop: (() => void) | undefined;
     const unsubscribe = useGraphStore.subscribe((state, before) => {

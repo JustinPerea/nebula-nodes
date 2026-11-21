@@ -328,7 +328,8 @@ describe('small message box fixes', () => {
     expect(repliedAfter(second, [first, second, answer])).toBe(false);
     expect(repliedAfter(second, [first, second, reply(3_000, { replyTo: 'b' })])).toBe(true);
     expect(repliedAfter(first, [first, reply(3_000, { replyTo: null })])).toBe(false);
-    expect(repliedAfter(first, [first, reply(3_000)])).toBe(true);  // a row from before replies carried replyTo
+    // A row from before replies carried replyTo.
+    expect(repliedAfter(first, [first, reply(3_000)])).toBe(true);
   });
 
   it('the cut keeps a closing bracket whose opener it keeps', async () => {

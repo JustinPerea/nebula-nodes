@@ -11,8 +11,8 @@ import { sayTopStackChanged } from '../lib/bottomBar';
 export const BACKEND_PROBE_INTERVAL_MS = 3_000;
 
 /** Design, PR #114: offline is read-only; edits are blocked, not queued. An
- * earlier version read "Nebula is offline. Reconnecting…"; the design keeps
- * "Reconnecting…" for a day when edits really queue, which they don't. */
+ * earlier version read "Nebula is offline. Reconnecting…"; "Reconnecting…" is
+ * kept (design) for a day when edits really queue, which they don't. */
 export const OFFLINE_LINE = 'Nebula is offline. Editing is paused until it reconnects.';
 /** The offline row's id: a control locked while offline names it as its describedby (the Message box's composer). */
 export const OFFLINE_LINE_ID = 'nebula-offline-line';
@@ -31,8 +31,8 @@ export const OFFLINE_LINE_ID = 'nebula-offline-line';
  */
 export function BackendConnectionStatus({ placement = 'workspace', bannerHidden = false }: {
   /** Design: on the home screen the banner sits right under its top bar (the
-   * workspace's place, below both bars, covered the heading there). Design,
-   * PR #198: every other screen but the canvas is a studio, and there the
+   * workspace's place, below both bars, covered the heading there).
+   * Design, PR #198: every other screen but the canvas is a studio, and there the
    * banner is a row of the studio's own layout, under its header
    * (StudioOfflineRow, rendered by WorkspaceHeader); this keeps probing and
    * pulsing but shows nothing of its own. */

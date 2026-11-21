@@ -241,7 +241,7 @@ export function AgentLog() {
   }
 
   // Expanded or not lives in uiStore, so the Updates list's "See all
-  // actions →" can open it (PR9a). It starts collapsed, and collapses again
+  // actions →" can open it (PR #124). It starts collapsed, and collapses again
   // when the log unmounts (leaving the canvas), as its local state did.
   const open = useUIStore((s) => s.agentLogOpen);
   const setOpen = useUIStore((s) => s.setAgentLogOpen);
@@ -389,8 +389,7 @@ export function AgentLog() {
   // and resized. --agent-log-top is how far its top edge (plus the gap) sits
   // above the window's bottom: a proposal card too narrow beside the log sits
   // above it instead (design, PR #216; canvasProposals.css). The log never
-  // moves for the card; at short heights its body gives way (see the last
-  // paragraph here).
+  // moves for the card; at short heights its body gives way (see below).
   // Dragged off the dock, its box goes on the root as --agent-log-float-*
   // (window px): the proposal card clears it when it sits in the card's
   // column (design, PR #216; lib/noticeStackPlace.ts).

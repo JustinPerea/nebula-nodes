@@ -45,7 +45,7 @@ export function SelectionToolbar() {
   // Delete stay (they change only this tab, as typing does, and Undo takes
   // them back: graphStore KeptStep).
   const lock = useCanvasLock();
-  // A control this tab's own run also locks (#198's run lock): its reason wins
+  // A control this tab's own run also locks (PR #198's run lock): its reason wins
   // over following's and offline's, in lib/canvasLock (run, follow,
   // offline; the Next step its node portals here reads the same). Its line
   // names the control's verb (lib/runLock): "it" for one selected node,

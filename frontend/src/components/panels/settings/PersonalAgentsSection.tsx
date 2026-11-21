@@ -151,7 +151,7 @@ export function PersonalAgentsSection() {
   const [draft, setDraft] = useState({ id: '', displayName: '', command: '', args: '' });
   // Design, PR #204: every route here is the person's alone. A listed agent's switches,
   // Remove and Antigravity's download and sign-in lock as a group, with one line under the
-  // heading; Add has its own line (the design's words).
+  // heading; Add has its own line (design).
   const rowLock = usePersonLock('change your agents');
   const addLock = usePersonLock('add an agent');
   // Design, PR #204: a held or demoted tab shows what a tab that never connected

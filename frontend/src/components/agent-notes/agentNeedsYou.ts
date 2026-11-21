@@ -7,7 +7,7 @@ import type { ProposalView } from '../../lib/wsClient';
  * What needs the person, per agent: the open question sets and proposals of
  * the open project this tab can answer. One rule for the Agents panel's
  * Needs-you group (agentRosterModel) and the closed Updates chip's badge
- * (the design's review of PR #193: "A waiting question blocks an agent, so
+ * (design, PR #193: "A waiting question blocks an agent, so
  * 'Updates 0' mustn't hide it"), so the two counts always match. Pure, and
  * in the corner's chunk (the chip reads it through AgentNotesCorner's
  * useNeedsYouCount); the panel's own chunk is never pulled in for a count.

@@ -8,7 +8,7 @@ import { LineText } from '../LineText';
 
 /**
  * The answer form: a popover from the Updates corner, at the list's width,
- * opened by an Update's Answer. The design's copy, verbatim. Each question
+ * opened by an Update's Answer. The approved copy, verbatim. Each question
  * is its own group; options are toggle buttons (one, or any for a multiple
  * question); a typed answer sits beside them as "Other", or alone. Send is
  * on once one question has an answer. Escape closes without dismissing:

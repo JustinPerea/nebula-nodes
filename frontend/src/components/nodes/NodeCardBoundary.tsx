@@ -35,7 +35,7 @@ interface NodeCardBoundaryProps {
 
 /**
  * One canvas card that throws while it draws (a scene whose data is
- * damaged, PR #198) shows the design's boundary line at card size instead
+ * damaged, PR #198) shows the boundary line (design) at card size instead
  * of taking the whole canvas down to a white screen. Design: the card
  * keeps its header (icon and label) and only its body is replaced. Its
  * wires stay (its handles are drawn from the node's definition and the
@@ -44,7 +44,7 @@ interface NodeCardBoundaryProps {
  *
  * The line says "missing or damaged" only when the data check
  * (nodeDataProblem) finds what's wrong, and the Agent log names that field.
- * Data that checks out reads the design's neutral line, and the Agent log
+ * Data that checks out reads the neutral line (design), and the Agent log
  * names the error ("Couldn’t draw “X”, node n4. <error message>").
  *
  * The card retries on every data change, and a running node's data changes

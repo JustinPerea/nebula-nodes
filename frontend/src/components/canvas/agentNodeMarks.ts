@@ -23,7 +23,8 @@ export function isLowZoom(zoom: number): boolean {
   return Math.round(zoom * 100) < LOW_ZOOM * 100;
 }
 
-/** A run's pill shows only once it has been going this long (design: instant local runs never flash a pill). */
+/** A run's pill shows only once it has been going this long (design: instant
+ * local runs never flash a pill). */
 export const RUN_MARK_DELAY_MS = 1000;
 
 /** m:ss, from milliseconds. */

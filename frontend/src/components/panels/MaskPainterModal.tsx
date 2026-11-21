@@ -267,7 +267,7 @@ export function MaskPainterModal({ imageUrl, initialMask, onSave, onClose }: Mas
             className="mask-painter__save"
             onClick={saveMask}
             // Saving writes the node's mask (updateNodeData): the canvas lock
-            // (PR #200, the design's sweep list).
+            // (design, PR #200).
             {...lock.act({ disabled: !natural || !hasStrokes, offline: true, kept: 'live' })}
           >
             Save mask

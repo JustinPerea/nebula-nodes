@@ -282,7 +282,7 @@ export function Toolbar() {
       }
       // Checked as a file being opened is (PR #205), so a canvas Save couldn't
       // save never comes in unseen: its nodes hold their params as deep as
-      // Save's file does. The design's lines for it say it isn't a file.
+      // Save's file does. Its approved lines say it isn't a file.
       // Measured as the file Save will write (serializeGraph, with its root
       // fields and viewport), so the count is Save's own.
       try {
@@ -365,8 +365,8 @@ export function Toolbar() {
           className={`toolbar__button toolbar__button--primary${following || runKeyLocked ? ' toolbar__button--waiting' : ''}`}
           // Design: disabled while the tab follows an agent's switch, with its
           // tooltip (aria-disabled keeps the tooltip and the focus; a click
-          // only pulses the project bar). Offline it is disabled outright (PR
-          // #114). A missing key comes first, as on every Run surface
+          // only pulses the project bar). Offline it is disabled outright
+          // (PR #114). A missing key comes first, as on every Run surface
           // (withKeyLock, design, PR #203): key-locked, a click sends nothing
           // and pulses nothing.
           onClick={() => { if (runKeyLocked) return; if (refuseEditWhileFollowing()) return; void executeGraph(); }}

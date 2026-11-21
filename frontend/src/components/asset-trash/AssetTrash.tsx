@@ -47,7 +47,7 @@ const NOUNS: Record<AssetKind, { one: string; many: string; counted: string }> =
 export const UNDO_VISIBLE_MS = 8000;
 
 /** A deleted item's picture, only when it is one of Nebula's own files
- *  (lib/storedImage.ts): a Character's and, since a later change, a board's. */
+ *  (lib/storedImage.ts): a Character's and, since board images are checked too, a board's. */
 function thumbnailOf(item: TrashedItem): string | null {
   return storedImageView(item.thumbnail).src;
 }
@@ -137,8 +137,9 @@ export function RecentlyDeletedAssets({ kind, scope, refreshKey, onRestored, onR
   // every Delete forever lock as one group with one line under the heading.
   const purgeLock = usePersonLock('delete items for good');
   const [busy, setBusy] = useState(false);
-  // A failed load's line, and a failed Restore or delete's own (the list read again after an action, as it
-  // always is, clears only a load's line, so an action's refusal stays until the next action).
+  // A failed load's line, and a failed Restore or delete's own (the list read
+  // again after an action, as it always is, clears only a load's line, so an
+  // action's refusal stays until the next action).
   const [loadError, setLoadError] = useState<string | null>(null);
   const [actError, setActError] = useState<string | null>(null);
   const error = actError ?? loadError;
@@ -211,7 +212,7 @@ export function RecentlyDeletedAssets({ kind, scope, refreshKey, onRestored, onR
       // A request's own line; never another error's message.
       const line = failureMessage(err, '');
       setActError(line);
-      clearSetterOnPromote(err, setActError, line, null); // clears-on-promote: trash (design, PR #204)
+      clearSetterOnPromote(err, setActError, line, null); // clears-on-promote: trash (PR #204)
     } finally {
       setBusy(false);
       setReload((value) => value + 1);

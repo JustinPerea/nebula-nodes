@@ -418,8 +418,8 @@ function QuestionRow({ row }: { row: ThreadRow }) {
 }
 
 /** Design: "You answered “…”." on one line, the words cut at a word inside the
- * quotes. Design: whole words that end in . ? or ! take no period after the
- * quote; cut words end in the ellipsis, so the period stays. */
+ * quotes; whole words that end in . ? or ! take no period after the quote, and
+ * cut words end in the ellipsis, so the period stays. */
 function TypedAnswerLine({ before, words, after, afterCut }: { before: string; words: string; after: string; afterCut: string }) {
   const wordsRef = useRef<HTMLSpanElement | null>(null);
   const cut = cutParts(useWordCut(wordsRef, words, '.message-box__answered--typed', '“'), words);

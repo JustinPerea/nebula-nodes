@@ -8,7 +8,7 @@ import type { Character } from '../../types';
 /**
  * Error copy: "Couldn't save the character." Character Studio's save goes
  * through the same two-line notice as the board, heading over reason, and
- * its Retry is the retry (the design's WRAP rule: the reason drops its "try
+ * its Retry is the retry (design, WRAP rule: the reason drops its "try
  * again"). On 1fc3d846 a 503 read "Update character failed: 503". The real
  * lib/api.ts and apiFetch run; only the browser's fetch is stubbed.
  */
@@ -146,9 +146,9 @@ describe('the Character Try again', () => {
   });
 });
 
-// A failed save is still owed when another line (no
-// project open) replaces its own. The toolbar keeps its Retry, which saves;
-// the notice keeps that line in full, with no Retry of its own.
+// A failed save is still owed when another line (no project open) replaces
+// its own. The toolbar keeps its Retry, which saves; the notice keeps that
+// line in full, with no Retry of its own.
 describe('a Character save still owed under another line', () => {
   it('keeps the toolbar Try again, and Try again saves again', async () => {
     state.put = 503;

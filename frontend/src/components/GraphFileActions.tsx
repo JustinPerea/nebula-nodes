@@ -23,7 +23,7 @@ import type { LoadedGraph } from '../lib/graphFile';
 import type { NodeData } from '../types';
 import { refuseEditWhileOffline } from '../lib/backendConnection';
 
-/** The Toolbar's "Load graph" (the design's heading pattern for error copy). */
+/** The Toolbar's "Load graph" (the heading pattern for error copy; design). */
 const LOAD_GRAPH = "Nebula couldn’t load the canvas.";
 
 /** Until Projects finishes what it is doing (a rename, a save's answer), so
@@ -139,9 +139,8 @@ export function GraphFileActions() {
       replaced = true;
       useGraphStore.getState().finishCanvasReplacement({ kind: 'import', project: leaving ?? '', cutOff,
         show: leaving !== null });
-      // A file over the save limit opens: the project store says so
-      // with the design's Load graph line and pauses saving until
-      // it is trimmed.
+      // A file over the save limit opens: the project store says so with the
+      // approved Load graph line and pauses saving until it is trimmed.
       useProjectStore.getState().noteLoadedGraph(result.fileName ?? 'the canvas', asNewProject);
       // The old focused target may no longer exist after replacement. Clear
       // its UI state without running exit cleanup against the newly loaded IDs.
@@ -173,7 +172,7 @@ export function GraphFileActions() {
     } catch (error) {
       if (refuseOverLimit && error instanceof RequestFailedError && error.overSaveLimit) return 'over';
       console.error('Graph import failed; existing graph preserved:', error);
-      // The import's own checks read the design's lines by the answer's
+      // The import's own checks read the approved lines by the answer's
       // code, never the backend's words (design, PR #205); a refusal with no
       // code, or a code with no line, reads as a damaged file. The words stay
       // in the console above.
@@ -207,7 +206,7 @@ export function GraphFileActions() {
       const result = await loadFromFile();
       if (!result || !canLoadGraph(useGraphStore.getState())) return;
       if (result.warnings.length > 0) console.warn('[nebula] Load warnings:', result.warnings);
-      // The approved line (Justin): "Files over the limit open as a new project named
+      // Justin's rule: "Files over the limit open as a new project named
       // after the file. The open project is left as it was. Files under the
       // limit still replace the canvas, as today." The backend's save check
       // decides, exactly: the import into the open project asks to be

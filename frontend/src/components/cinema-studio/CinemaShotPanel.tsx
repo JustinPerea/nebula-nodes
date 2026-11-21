@@ -204,7 +204,7 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
           // Offline (or following an agent's switch) the prompt can't save
           // (the store refuses the edit), so it is read-only. Offline it has
           // no tooltip: the banner says why (design, PR #200); following, the
-          // design's wait line (PR #195).
+          // wait line (design, PR #195).
           readOnly={readOnly}
           {...lock.mark}
           title={lock.act({ kept: 'scene' }).title}

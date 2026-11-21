@@ -76,8 +76,8 @@ async function downloadOutput(url: string, filename: string): Promise<void> {
   } catch (err) {
     console.error('[nebula] output download', err);
     // "Couldn’t download the output. <reason>" (downloadWorldAsset's own
-    // lines keep their reason; anything else reads the design's general
-    // line). A canvas notice, not a window.alert.
+    // lines keep their reason; anything else reads the general line
+    // (design)). A canvas notice, not a window.alert.
     showNotice(failureMessage(err, "Couldn’t download the output."), 'error', err);
   }
 }

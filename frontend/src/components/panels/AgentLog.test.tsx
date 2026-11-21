@@ -220,7 +220,7 @@ describe('a dragged log (stored position)', () => {
   });
 });
 
-// PR9a: "See all actions →" at the foot of the Updates list opens the log,
+// PR #124: "See all actions →" at the foot of the Updates list opens the log,
 // so its expanded state lives in uiStore (agentLogOpen / openAgentLog).
 describe('the expanded state lives in uiStore', () => {
   beforeEach(() => {

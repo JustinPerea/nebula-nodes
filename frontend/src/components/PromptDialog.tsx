@@ -37,11 +37,10 @@ export function PromptDialog({ request, onDone, maxLength, cap, revealCounter = 
   confirm?: ActProps & { 'aria-disabled'?: true; 'data-held-pending'?: ''; 'aria-describedby'?: string; 'data-person-lock'?: string };
   /** Enter or OK pressed while `confirm` is disabled. */
   onRefused?: () => void;
-  /** A text that may run to several lines (the note for agents, design,
-   * PR #200): a textarea that grows to about 4 lines, then scrolls; it opens
-   * with the caret at the end and nothing selected, so typing adds to a kept
-   * note instead of replacing it. Enter sends, Shift+Enter starts a new
-   * line. */
+  /** A text that may run to several lines (the note for agents; design, PR #200):
+   * a textarea that grows to about 4 lines, then scrolls; it opens with the caret
+   * at the end and nothing selected, so typing adds to a kept note instead of
+   * replacing it. Enter sends, Shift+Enter starts a new line. */
   multiline?: boolean;
   /** The confirm button's words ("Send note" for the note). */
   confirmLabel?: string;

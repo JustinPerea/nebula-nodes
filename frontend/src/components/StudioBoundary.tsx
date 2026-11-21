@@ -77,15 +77,15 @@ interface StudioBoundaryProps {
 
 /**
  * A studio that throws while it renders (a scene an older Nebula saved
- * without `base`, data an outside app damaged) shows the design's contained
- * line with Back to canvas, instead of taking the whole app down to a white
+ * without `base`, data an outside app damaged) shows the contained line
+ * (design) with Back to canvas, instead of taking the whole app down to a white
  * screen (PR #198). Design: the studio's header stays (project bar, back to
  * Canvas, Updates, and the offline row under it); only the body is
  * replaced. The Agent log gets the node and the field; neither line names
  * who wrote the data. App keys it by screen and node, so opening another
  * one starts clean.
  *
- * Data that checks out reads the design's neutral line ("…but its data is
+ * Data that checks out reads the neutral line (design) ("…but its data is
  * fine. Reload Nebula to try again.") and the Agent log names the error. It
  * logs once per mount: it doesn't retry on data changes (App keys it by screen
  * and node), so a flood of repeated entries can't happen here. Nothing in the

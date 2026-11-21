@@ -334,7 +334,7 @@ export function CreateView() {
       if (mounted.current && !useGraphStore.getState().createCancelledLaunchIds.includes(genId)) {
         // Design, PR #204: in the app's notice region, never the toolbar row. A cluster or
         // start refused only for this tab goes on the promote (notify registers it by the
-        // refusal's own stamp: PR #204). Design: refused only for this tab, the design's own
+        // refusal's own stamp: PR #204). Design: refused only for this tab, it has its own
         // line (Generate is one-shot).
         runLine(isPersonRefusal(error) ? generateRefusedCopy(clusterAdded) : failureMessage(error, GENERATE_HEADING), error);
       }

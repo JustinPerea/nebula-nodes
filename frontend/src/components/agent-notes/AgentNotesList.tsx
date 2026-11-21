@@ -18,11 +18,11 @@ export interface AgentNotesListSection {
 }
 
 /**
- * The opened Updates list, as the design's still
- * (stills/updates-open.png) draws it: a header with the count, the read state
- * and where the list is kept; every update newest first with its author's
- * dot, name, label and clock time; each update's own buttons; and a footer
- * that explains Not now and links to the Agent log.
+ * The opened Updates list, as the design still (stills/updates-open.png)
+ * draws it: a header with the count, the read state and where the list is
+ * kept; every update newest first with its author's dot, name, label and
+ * clock time; each update's own buttons; and a footer that explains Not now
+ * and links to the Agent log.
  *
  * In Moodboard Studio with the board's own Updates (Justin's choice) it is
  * two sections in one list, "This board" first, then the project's: the

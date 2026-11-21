@@ -64,7 +64,7 @@ function useOutsideSpend() {
         // Design, PR #204: refused only because this tab isn't connected as you: on the
         // promote the line goes and the read runs again, through retryOnPromote.
         clearSetterOnPromote(exc, setError, line, null); // clears-on-promote: settings.spend-load
-        // Unless the held view settled, whose promote reads it anyway.
+        // Retried unless the held view settled, whose promote reads it anyway.
         retryOnPromote(exc, 'settings.spend-load', () => { if (!readsOnPromote.current) readAgain(); }); // clears-on-promote: settings.spend-load-retry
       });
   }, [readsOnPromote]);

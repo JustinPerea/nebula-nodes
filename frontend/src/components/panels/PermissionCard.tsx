@@ -72,7 +72,7 @@ export function PermissionCard({ part, agentName, onDecision }: {
   // An agent's ask with a decision on it, like a question. While this tab
   // isn't connected as the person, Allow once and Deny lock in place
   // (aria-disabled, focusable, the 150 ms rule) and unlock on the promote. The
-  // agent's own timeout keeps running. The design's line shows on the card, on
+  // agent's own timeout keeps running. The approved line shows on the card, on
   // its own row under the buttons, so the buttons have no tooltip; they point
   // at the line (aria-describedby).
   const lock = usePersonLock('answer this', open);

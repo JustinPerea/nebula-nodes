@@ -23,9 +23,9 @@ import '../styles/canvasProposals.css';
  * (CanvasMessageNotice); below it, a Cinema scene's clash prompt, which stays
  * until the person chooses (SceneClashNotices), and the scenes' stop lines, a
  * state that stays until the stop ends (design, SceneStopLines). The canvas
- * kept in this tab after a restore, with [Save as a project] (design,
- * PR #199). A project over the save limit: its one notice, and the
- * "what's large" panel it and the header open.
+ * kept in this tab after a restore, with [Save as a project] (design, PR #199).
+ * A project over the save limit: its one notice, and the "what's large" panel it
+ * and the header open.
  */
 export function RegionNotices({ canvas }: { canvas: boolean }) {
   return (

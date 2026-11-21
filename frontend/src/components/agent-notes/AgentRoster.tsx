@@ -32,8 +32,8 @@ const TICK_MS = 15_000;
  * you" and "Working" with how many agents are in each (a group with none
  * is left out; with no agents at all, so is the panel). Open, it lists
  * the two groups: Needs you (longest wait first) and Working (most recent
- * first). Only the person opens it: a new question never does. Copy is
- * the design's, 2026-10-25.
+ * first). Only the person opens it: a new question never does. Copy:
+ * design, 2026-10-25.
  */
 export function AgentRoster({
   projectId,

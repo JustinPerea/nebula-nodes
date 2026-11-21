@@ -1,4 +1,4 @@
-// PR #200: the held placeholder and the design's rulings on it.
+// PR #200: the held placeholder, and the design rules for it.
 // - Design: the dot, the name and the header sit in the same place on the
 //   placeholder and on the real card, so the swap on promote moves nothing.
 // - Design: a cover's Update says which kind, so the placeholder can say
@@ -50,7 +50,7 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); session.resetPersonSessionForTests(); });
 
-// The content starts at the same place on both cards ------------------------
+// -- the content starts at the same place on both cards ------------------------
 
 function px(value: string | undefined): number {
   const match = /^(-?\d+(?:\.\d+)?)px$/.exec((value ?? '').trim());
@@ -132,7 +132,7 @@ describe('Design: a cover\'s placeholder says which kind, from the Update\'s ref
   });
 });
 
-// The Commons count from the ref --------------------------------------------
+// -- the Commons count from the ref --------------------------------------------
 
 describe('The Commons count comes from the ref, never the text', () => {
   it('an agent named to look like a count can\'t change the header', () => {
@@ -157,7 +157,7 @@ describe('The Commons count comes from the ref, never the text', () => {
   });
 });
 
-// Focus follows the swap ----------------------------------------------------
+// -- focus follows the swap ----------------------------------------------------
 
 describe('A focused placeholder hands focus to its real card', () => {
   function heldStrip() {

@@ -82,7 +82,8 @@ function chipLabel(unread: number, needsYou: number): string {
   return unread > 0 ? `Updates, ${unread} unread` : 'Updates';
 }
 
-/** A card stays about 4 s (the design holds it 2.6 to 3.8 s), longer while hovered or focused. */
+/** A card stays about 4 s (design, mockup v5.2: 2.6 to 3.8 s), longer while
+ * hovered or focused. */
 const CARD_HOLD_MS = 4000;
 const HOLD_TICK_MS = 250;
 /**
@@ -1238,7 +1239,7 @@ const NO_IMAGES: string[] = [];
  * switch. The list is the open project's (the canvas surface, kept with the
  * project). Hidden while no project is open: a first start on Projects with
  * no project yet has no list to show. On the canvas it holds its own
- * top-right corner (PR9a); elsewhere it sits over the slot that screen's
+ * top-right corner (PR #124); elsewhere it sits over the slot that screen's
  * header keeps for it.
  *
  * In Moodboard Studio on a saved board (Justin 2026-10-21: "Two

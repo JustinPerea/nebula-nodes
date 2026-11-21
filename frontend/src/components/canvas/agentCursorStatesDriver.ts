@@ -1,8 +1,8 @@
 /**
  * Dev only: `?cursorStates=1` plays the cursor's states in sequence on
- * the real build, so a designer can tune against it at 1440: look, think,
- * type, run, propose, wait and error, each held a few seconds, on the first
- * node on the canvas (else the middle of the view), then again.
+ * the real build, so the cursor can be tuned against it at 1440: look,
+ * think, type, run, propose, wait and error, each held a few seconds, on the
+ * first node on the canvas (else the middle of the view), then again.
  *
  * It feeds local events straight to the presence store: no backend call,
  * no provider, nothing written. `window.nebulaCursorStates.play('think')`

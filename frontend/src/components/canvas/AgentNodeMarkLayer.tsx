@@ -11,7 +11,7 @@ import './agentNodeMarks.css';
 /**
  * The agents on the canvas's nodes (Justin, 2026-10-24: "The agent stays
  * on the node it's working on ... A node an agent is about to fill shows
- * as a placeholder in its colour"). The design's rulings, 2026-10-25, built
+ * as a placeholder in its colour"). The design rules, 2026-10-25, built
  * verbatim:
  *
  * - The mark: a pill just outside the node's top edge, left-aligned, 6 px

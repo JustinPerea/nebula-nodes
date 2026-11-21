@@ -29,7 +29,7 @@ interface NodeLabelProps {
  *
  * On reconnect the draft gets focus back, unless an agent renamed the node
  * meanwhile. Then the draft is dropped, so the agent's name isn't
- * overwritten, and the design's toast says so (no refocus). */
+ * overwritten, and the toast (design) says so (no refocus). */
 export function NodeLabel({ nodeId, label, displayName, defaultTitle }: NodeLabelProps) {
   // Unnamed: the saved label is either form of the default title (design), the
   // catalog name or the canvas title; it shows the canvas title. The rule is

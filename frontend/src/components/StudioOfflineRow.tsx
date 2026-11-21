@@ -4,13 +4,13 @@ import { useOfflinePulse } from '../hooks/useOfflinePulse';
 import { OFFLINE_LINE } from './BackendConnectionStatus';
 import { noteOfflineRowShown, STUDIO_OFFLINE_LINE_ID } from '../lib/useBackendOffline';
 
-/** How long Nebula is offline before a studio's row opens (design,
- * PR #198: "keep the existing offline delay"). The app had none: the
+/** How long Nebula is offline before a studio's row opens (design, PR #198:
+ * "keep the existing offline delay"). The app had none: the
  * canvas's banner shows on the first failed probe. A row that opens moves
  * the whole studio down, so a blip (one probe lost while the backend
  * reloads) must not open it; 1 s is under the 3 s probe interval, so a
  * real outage still shows on the first failed probe's answer plus a
- * second. Builder's value, still open for review. */
+ * second. A builder's value, still to be confirmed (design). */
 export const STUDIO_BANNER_DELAY_MS = 1_000;
 
 /** The close runs on --workspace-dock-spring (420ms); the line stays in the

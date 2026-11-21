@@ -3,7 +3,7 @@
 // kind), as the promoted cards order by createdAt, so they keep their places
 // on the promote after an Update fell back to the agent's older ask. Two
 // asks made in the same millisecond sort by proposal id held and promoted,
-// on the strip and the Commons line. AgentNameList counts unique names.
+// on the strip and the Commons line. The agentNameList helper counts unique names.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, render } from '@testing-library/react';
 import type { AgentNote } from '../../lib/agentNotes';
@@ -133,7 +133,7 @@ describe('Asks made in the same millisecond sort by proposal id, held and promot
   });
 });
 
-describe('AgentNameList counts unique names', () => {
+describe('agentNameList counts unique names', () => {
   it.each([
     [['A', 'A', 'B', 'B', 'C'], 'A, B and C'],
     [['A', 'A', 'A', 'A'], 'A'],

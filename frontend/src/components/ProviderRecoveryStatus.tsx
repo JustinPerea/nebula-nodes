@@ -74,8 +74,7 @@ export function ProviderRecoveryStatus({ reopenLine = null }: {
     try {
       await acknowledge(ambiguity.kind, ambiguity.nodeId);
     } catch (error) {
-      // Never an error's own message: a request's line, else the design's
-      // general line.
+      // Never an error's own message: a request's line, else the general line (design).
       setUnlockError(failureMessage(error, UNLOCK_NODE_HEADING));
     } finally {
       setUnlocking(null);
@@ -116,7 +115,7 @@ export function ProviderRecoveryStatus({ reopenLine = null }: {
           className="provider-recovery-status__ack"
           onClick={acknowledgeUncertainRun}
           {...lock.act({ title: UNLOCK_TITLE, kept: 'unlock' })}
-          // No node to name: the design's line (PR #114).
+          // No node to name: the general line (design, PR #114).
           aria-label={UNLOCK_RUN_ARIA}
         >
           <ShieldCheck size={15} strokeWidth={1.8} aria-hidden="true" />

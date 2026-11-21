@@ -60,7 +60,7 @@ function BatchNodeComponent({ id, data, selected }: NodeProps) {
         {items.length} items exceed the cap of {cap}. Reduce items or raise the cap in settings (maximum 25).
       </p>}
       {/* The run error reads like every node card's (error copy): the
-          person's line, the classifier's, or the design's general line over
+          person's line, the classifier's, or the general line (design) over
           a closed Details. Agents read nodeData.error itself, unchanged. */}
       {nodeData.state === 'error' && nodeData.error && <div role="alert">
         <NodeError className="batch-node__warning" raw={nodeData.error} category={nodeData.errorCategory}

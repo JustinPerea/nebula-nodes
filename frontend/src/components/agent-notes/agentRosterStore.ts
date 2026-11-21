@@ -132,7 +132,7 @@ export const useAgentRosterStore = create<AgentRosterState>((set) => ({
             verb: entry.lastAction.verb,
             nodeId: typeof entry.lastAction.nodeId === 'string' ? entry.lastAction.nodeId : null,
             label: typeof entry.lastAction.label === 'string' && entry.lastAction.label ? entry.lastAction.label : null,
-            // The action's own time, not the cursor's (the design's review: a click keeps the
+            // The action's own time, not the cursor's (design: a click keeps the
             // action before it).
             at: fetchedAt - seconds(entry.lastAction.secondsAgo) * 1000,
           }

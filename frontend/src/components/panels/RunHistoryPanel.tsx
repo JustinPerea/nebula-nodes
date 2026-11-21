@@ -264,10 +264,9 @@ export function RunHistoryPanel() {
                 return source?.state === 'current' && Boolean(source.snapshot);
               });
               // Design: one order, as the toolbar's: kept first (lib/canvasLock;
-              // design, PR #199), then the missing key (withKeyLock; design, PR
-              // #203), then the run, following, offline (lib/canvasLock).
-              // Offline, its own verb (PR #200; design, PR #200: "You can rerun
-              // it when Nebula reconnects.").
+              // design, PR #199), then the missing key (withKeyLock; design, PR #203),
+              // then the run, following, offline (lib/canvasLock). Offline, its own
+              // verb (design, PR #200: "You can rerun it when Nebula reconnects.").
               const replayProps = withKeyLock(lockedAction(lock, {
                 kept: recoveryReplayReady ? 'recover' : r.status === 'failed' ? 'retry' : 'rerun',
                 title: recoveryReplayReady

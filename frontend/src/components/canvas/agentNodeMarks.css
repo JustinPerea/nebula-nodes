@@ -54,7 +54,8 @@
 .agent-node-mark__row {
   position: absolute;
   left: 0;
-  bottom: calc(6px * var(--anm-scale, 1)); /* Design: a 6 px gap above the node's top edge, on screen */
+  /* Design: a 6 px gap above the node's top edge, on screen */
+  bottom: calc(6px * var(--anm-scale, 1));
   display: flex;
   align-items: center;
   gap: 4px;
@@ -185,12 +186,12 @@
   display: inline;
 }
 
-/* The node has keyboard focus: its pill shows the whole status,
-   not cut at the node's width, so a sighted keyboard user can read it; below
-   60% the dot shows its words as on its own focus. Past 480 px the status
-   wraps onto more lines (design: "keyboard users have no other way to read
-   the rest"); the row is anchored at its bottom, so the pill grows up, away
-   from the node. */
+/* The node has keyboard focus: its pill shows the whole status, not cut at
+   the node's width, so a sighted keyboard user can read it; below 60% the
+   dot shows its words as on its own focus. Past 480 px the status wraps onto
+   more lines (design: "keyboard users have no other way to read the rest");
+   the row is anchored at its bottom, so the pill grows up, away from the
+   node. */
 .agent-node-mark[data-focused='true'] .agent-node-mark__row {
   max-width: max(var(--anm-max), 480px);
   align-items: flex-end;

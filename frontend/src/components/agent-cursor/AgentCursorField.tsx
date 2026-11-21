@@ -428,8 +428,8 @@ class CursorField {
     if (before && node !== null && before.node === node && before.seq === seq) {
       // Carried by its node with no event of its own (a person's drag, an
       // agent's move, an undo, a node measured): it keeps its place, so the
-      // cursors one node carries keep their order all the way (design,
-      // PR #211). Whether a carry makes it arrive now is never this tab's
+      // cursors one node carries keep their order all the way (design, PR #211).
+      // Whether a carry makes it arrive now is never this tab's
       // call: the backend decides from its target chain
       // (agent_presence.carry_nodes) and tells every tab
       // (agentPresenceArrival, the rank change in report), so live tabs and
@@ -525,9 +525,9 @@ class CursorField {
       // the newest arrival too, the slot the insert gives it: the bottom,
       // unless a member aims more than 16 canvas units below its target, then
       // above that member. So the overlap band and chain range agree, and a
-      // straight drag moves the carry's slot one way only (design, PR #219:
-      // "drawn last" meant this). Display only, and it ends at the drop: the
-      // backend counts no arrival for it, so its slot follows its arrival
+      // straight drag moves the carry's slot one way only (design, PR #219: the
+      // earlier ruling "drawn last" meant this). Display only, and it ends at the
+      // drop: the backend counts no arrival for it, so its slot follows its arrival
       // order, with one glide if that differs (one accepted motion). The band
       // is measured in chain space, as the chain is: only a member whose
       // chain-input point (a port cursor's: its node's header point) the
@@ -838,8 +838,8 @@ class CursorField {
    * drawn now, its own say included (with its real widths): `wait` when one
    * of its own column's cursors below is still in the way (they glide out
    * of it), or a flying cursor the say waits for; `foreign` when a cursor
-   * of another column is in the way, which the say never moves (design,
-   * PR #211). A flyer counts only when its drawn block (arrow and name
+   * of another column is in the way, which the say never moves (design, PR #211).
+   * A flyer counts only when its drawn block (arrow and name
    * pill) is in the say's room or it is on its way to a spot under this
    * cursor; one just passing through elsewhere doesn't. Folded cursors
    * aren't drawn and don't count.

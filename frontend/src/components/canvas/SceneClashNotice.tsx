@@ -8,7 +8,7 @@ import type { SceneClashNotice } from '../../store/graphStore';
 
 /**
  * Design, PR #198: a Cinema scene changed somewhere else on a field the
- * person changed too. The design's line, with [Keep mine] and [Use Codex's]
+ * person changed too. The approved line, with [Keep mine] and [Use Codex's]
  * ([Use theirs] with no agent). It stays until the person chooses: meanwhile
  * the card is marked "Unsaved" and every save sends the other change for the
  * fields that clash, so nothing is overwritten unasked. One prompt per scene,

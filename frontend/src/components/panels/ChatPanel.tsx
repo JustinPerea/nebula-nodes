@@ -73,7 +73,7 @@ let chatRefSeq = 0;
 type ModelSelection = { model: string | null; effort: string | null };
 const NO_MODEL: ModelSelection = { model: null, effort: null };
 const PERSONAL_AGENT_RE = /^personal:[a-z0-9-]{1,32}$/;
-// /clear's canvas clear refused (a run going): the design's line, with
+// /clear's canvas clear refused (a run going): the approved line, with
 // the refusal under Clear's heading as the notice (lib/chatClear.ts
 // has the lines).
 const CLEAR_CANVAS = "Couldn’t clear the canvas.";
@@ -329,7 +329,7 @@ export function AssistantBubble({ message, agentName, onPermission }: {
 }) {
   const [expandedTools, setExpandedTools] = useState<Record<string, boolean>>({});
   // Apply writes the canvas: it takes the canvas lock (disabled, marked, the
-  // design's tooltip while following; offline too). Once the canvas its node
+  // approved tooltip while following; offline too). Once the canvas its node
   // id was read on is replaced (that id may name another node now) it stays,
   // disabled, and its tooltip says why (design, PR #200: never remove an
   // action without saying why).
@@ -1275,7 +1275,7 @@ export function ChatPanel() {
           }
           if (type === 'error') {
             const errText = String(event.message ?? 'unknown error');
-            // A person-only refusal says the design's line, by its code; the
+            // A person-only refusal says the approved line, by its code; the
             // backend's words, written for agents, go behind Details.
             const personRequired = event.code === PERSON_REQUIRED_CODE;
             let personRequiredLine = '';
@@ -1362,7 +1362,7 @@ export function ChatPanel() {
               return;
             }
             const active = Boolean(event.active);
-            // The backend's text is for the console; the person reads the design's line.
+            // The backend's text is for the console; the person reads the approved line.
             console.warn('[nebula] chat stop failed:', event.message);
             const notice = chatCancellationNotice('failed');
             applyCancellationEvent({ type: 'failed', active });

@@ -108,8 +108,8 @@ export function Inspector({ embedded = false }: InspectorProps) {
   const lock = useCanvasLock();
   const readOnly = lock.locked;
   // A file picker is a <label> around a hidden input: the input is disabled,
-  // and the label carries the lock's look and reason (follow, then offline,
-  // the design's line being "You can choose a file when Nebula reconnects.").
+  // and the label carries the lock's look and reason (follow, then offline;
+  // design: "You can choose a file when Nebula reconnects.").
   const lockedPicker = (title: string | undefined, offline: string) => ({
     ...lock.mark,
     title: lock.title({ title, offline }),
@@ -271,9 +271,9 @@ export function Inspector({ embedded = false }: InspectorProps) {
     return paramDefinitionsForRun(definition, routed, settingsCache.loaded ? settingsCache.apiKeys : {}, { seedOptIn: false });
   }, [definition, nodeParams, wiredKey, settingsCache.loaded, settingsCache.apiKeys]);
   // A node that can't run without its key (a keyed route's missing key), this
-  // one or one feeding it: Run is locked with its line as the reason (design,
-  // PR #203), aria-disabled so it keeps its focus and tooltip, and it reads
-  // the line out (keyLockedProps).
+  // one or one feeding it: Run is locked with its line as the reason
+  // (design, PR #203), aria-disabled so it keeps its focus and tooltip, and it
+  // reads the line out (keyLockedProps).
   const keyLock = useMemo(() => {
     if (!renderNodeId) return null;
     return runKeyLockLine(nodes, edges, { kind: 'node', nodeId: renderNodeId }, settingsCache);
@@ -584,8 +584,8 @@ export function Inspector({ embedded = false }: InspectorProps) {
     uploadNames.set(runKey, file.name);
     const formData = new FormData();
     formData.append('file', file);
-    // Design: "Couldn’t upload {filename}." then
-    // the reason, in the canvas notice (as a canvas drop says it).
+    // Design: "Couldn’t upload {filename}." then the reason, in the canvas notice
+    // (as a canvas drop says it).
     const heading = `Couldn’t upload ${quoted(shownFileName(file.name))}.`;
     type Uploaded = { ok: true; filePath: string; url: string; previewSize?: unknown } | { ok: false; error: unknown };
     startPaletteExtract<Uploaded>(
@@ -695,8 +695,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
             return '';
           }
           planPaletteFocus(runKey, colors.length);
-          // Only the palette, over the node's params as they are
-          // when it lands.
+          // Only the palette, over the node's params as they are when it lands.
           writeParamNow(nodeId, paramKey, colors);
           return paletteStatus(colors.length);
         }

@@ -31,9 +31,9 @@ import { useOfflineFirstBecause } from '../../hooks/useOfflineFirstBecause';
  * opening Note again starts with that text. PR #200 (design, 2026-10-28): on
  * its own project only. On another project the dialog starts empty and the
  * notice stays (it is shown beside the open dialog too) until its × drops it.
- * The approved line, verbatim: one note per project. Notices stack, newest at
- * the bottom, each with its own Copy note and ×; on another project each
- * names its own ("Your note for “Alpha” wasn’t sent because …"). A failed
+ * The design rule (PR #200), verbatim: one note per project. Notices stack,
+ * newest at the bottom, each with its own Copy note and ×; on another project
+ * each names its own ("Your note for “Alpha” wasn’t sent because …"). A failed
  * send's error shows on its own project only: elsewhere it would be about a
  * note the person can't see; the note waits there as its draft. Design: the
  * newest two show, with "Show 7 more" (the real count) opening the whole
@@ -68,9 +68,9 @@ export function PinComposer() {
   const noteEmpty = useCanvasPinsStore((s) => noteIsEmpty(s.draft));
   // While the person-gate banner shows (it was up as the dialog opened, or came
   // up while it was open), Send note waits, disabled in the shared style with
-  // its reason; a refused send's toast then leaves the fix to the banner, and
-  // so after the banner's ×, while the tab still isn't connected as the person
-  // (× hides the banner, not the condition).
+  // its reason; a refused send's toast then leaves the fix to the banner. It
+  // also waits after the banner's ×, while the tab still isn't connected as the
+  // person (× hides the banner, not the condition).
   const bannerUp = useSyncExternalStore(subscribePersonBanner, personBannerShown);
   // The one held state (useTabHeld: held, demoted, or not answered yet), with
   // the same lock and the 150 ms rule as every other ask (useLockPending),
@@ -178,7 +178,7 @@ export function PinComposer() {
   // "Your note wasn’t added." while the banner (which says how to fix it)
   // shows; the full refusal line when it doesn't. The toast defers to the
   // banner only while the banner shows; once it's dismissed, a refused
-  // send's toast says the full refusal line, as the design called for, and
+  // send's toast says the full refusal line (design), and
   // Send note stays held (gateBanner). A refused delete follows the same
   // rule: "Your note wasn’t deleted." while the banner shows, the full
   // line once it's gone, short again if it comes back. The server
@@ -202,8 +202,8 @@ export function PinComposer() {
   // never cuts a note (PR #200). Its height is the newest notes that fit the
   // cap, whole, so its last scroll position is a row's top, and the rows snap
   // to their tops (canvasPins.css), so every position it rests at starts on a
-  // note. A note cut at the bottom edge while it rests mid-list is accepted in
-  // the design (it's the usual sign there's more below); it is sized once on open,
+  // note. A note cut at the bottom edge while it rests mid-list is accepted
+  // (design: it's the usual sign there's more below); it is sized once on open,
   // when a note arrives and after a note's collapse ends, never after a scroll,
   // so it never jumps under the person's wheel. A note arriving while it is
   // open fades in place, and this runs in the same layout pass, so the list

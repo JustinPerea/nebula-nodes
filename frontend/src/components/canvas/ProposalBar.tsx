@@ -286,8 +286,8 @@ export function ProposalBar() {
   const canvasName = useCanvasRunName();
   const acceptTitle = current ? acceptChipTitle(current.view, canvasName, canvasAt) : null;
   // The count chip's tooltip, for screen readers too: the Accept button's
-  // description, beside the key lock's line when it has one (design,
-  // PR #203). Its name stays the visible text.
+  // description, beside the key lock's line when it has one (design, PR #203).
+  // Its name stays the visible text.
   const acceptCostId = useId();
   const shownViewId = current?.view.id ?? null;
   const detailsOpen = shownViewId !== null && detailsFor === shownViewId;
@@ -389,8 +389,8 @@ export function ProposalBar() {
   const priced = current.view.run.length > 0 && current.view.cost.paidRuns > 0
     && proposalEstimateLabel(current.view) !== null;
   const plan = proposalPlan(current.view);
-  // "List prices, not a quote" belongs to the price alone (design,
-  // PR #216): the plan line's last segment is the run chip's label.
+  // "List prices, not a quote" belongs to the price alone (design, PR #216):
+  // the plan line's last segment is the run chip's label.
   const price = priced ? proposalEstimateLabel(current.view) : null;
   const priceAt = price && plan.endsWith(` · ${price}`) ? plan.length - price.length : -1;
 

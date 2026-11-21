@@ -42,10 +42,9 @@ const isShownNotice = (id: number) => useGraphStore.getState().undoNotice?.id ==
 export function CanvasUndoNotice({ messagesOnly = false }: { messagesOnly?: boolean } = {}) {
   const stored = useGraphStore((state) => state.undoNotice);
   // Off the canvas, an agent edit's Undo stays on the canvas; the person's own
-  // "Deleted the node." (Create Studio's result delete) keeps its Undo. PR
-  // #204: offline comes first. A not-connected line (a refused save says why
-  // in the because form) waits while Nebula is offline; any other notice
-  // shows.
+  // "Deleted the node." (Create Studio's result delete) keeps its Undo.
+  // PR #204: offline comes first. A not-connected line (a refused save says why
+  // in the because form) waits while Nebula is offline; any other notice shows.
   const lineShown = useOfflineFirstBecause(stored?.text ?? null);
   const notice = (messagesOnly && stored?.offer && (!stored.entry || isForeignEdit(stored.entry))) || lineShown === null ? null : stored;
   const dismiss = useGraphStore((state) => state.dismissUndoNotice);

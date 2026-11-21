@@ -123,8 +123,8 @@ export function samePosition(a: Position, b: Position) {
 export const HEIGHT_STORAGE_KEY = 'nebula:agentLog:h';
 /** One arrow key moves the resize handle this far (24 px). */
 export const RESIZE_KEY_STEP = 24;
-/** The handle's name and tooltip (words from the design: the keys sit in
- * the same two sentences as the pointer). */
+/** The handle's name and tooltip (design: the keys sit in the same two
+ * sentences as the pointer). */
 export const RESIZE_HANDLE_LABEL = 'Resize the Agent log';
 export const RESIZE_HANDLE_TITLE = 'Drag or use the arrow keys to resize. Double-click or press Enter to fit the content.';
 

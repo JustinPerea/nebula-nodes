@@ -174,7 +174,7 @@ function MeshPreviewComponent({ src }: MeshPreviewProps) {
       try {
         if (!isSafeWorldUrl(src)) throw failed('The mesh URL is not safe to preview.');
         // No answer is a ConnectionLostError (fetchUrl); a TypeError after
-        // the answer is the design's general line, not "isn't answering".
+        // the answer is the general line (design), not "isn't answering".
         const response = await fetchUrl(backendAssetUrlSync(src), {
           cache: 'no-store',
           signal: controller.signal,

@@ -29,9 +29,9 @@ import { ModalPortal } from './ModalPortal';
  * no dot. Run hands back the words it was showing when it was clicked, so the run
  * sends what the person saw, not what was about to be drawn.
  *
- * Approved: rows scroll with everything else pinned, the scroll area reachable
- * by keyboard, initial focus on Cancel. With many paid nodes the rows scroll
- * inside the card, which never grows past the window
+ * The design rule: rows scroll with everything else pinned, the scroll area
+ * reachable by keyboard, initial focus on Cancel. With many paid nodes the rows
+ * scroll inside the card, which never grows past the window
  * (placeholder-run-dialog.css), so the heading, the changed line, the total, the
  * footnotes and the buttons stay on screen. A list that scrolls is a Tab stop
  * named by the heading; one that fits isn't. The line for placeholders that left

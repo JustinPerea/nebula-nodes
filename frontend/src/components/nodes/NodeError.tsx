@@ -13,7 +13,7 @@ interface NodeErrorProps {
   /** That line was written for a provider's answer: its words go
    * behind Details. */
   providerText?: boolean;
-  /** The provider the run called: the design's general line names it. */
+  /** The provider the run called: the general line (design) names it. */
   provider?: string;
   /** Where it shows: "shot" on the Cinema shot panel, whose heading and
    * general line say "the shot". */
@@ -41,7 +41,7 @@ interface NodeErrorProps {
 /**
  * A node's run error on its card (error copy, design): the heading
  * "Couldn’t run the node." over the person's line, the classifier's line,
- * or the design's general line, with the raw provider text behind a
+ * or the general line (design), with the raw provider text behind a
  * collapsed Details toggle when the line isn't it (lib/nodeErrorCopy.ts). A
  * line the handler wrote for the person never shows the specific text: that
  * is for agents. A line Nebula wrote itself (a refused start, a pre-run

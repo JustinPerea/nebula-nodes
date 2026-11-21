@@ -170,7 +170,7 @@ export function PaperSourceNode({ id, data, selected }: NodeProps) {
     : source ? 'Connected' : 'Not linked';
   const lastGood = Boolean(snapshot && source?.state !== 'current');
   // This session's line, else the record's: its line (lastErrorPerson) or,
-  // for a record saved before it, the design's general line with the text
+  // for a record saved before it, the general line (design) with the text
   // agents read behind Details. lastError itself is never the line.
   const recordLine = source?.lastError
     ? oneLine({ heading: REFRESH_HEADING, reason: source.lastErrorPerson || refusedFallbackCopy() })

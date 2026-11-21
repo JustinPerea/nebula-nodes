@@ -23,7 +23,7 @@ const LazyWorldEnvironmentViewer = lazy(() =>
   import('./WorldEnvironmentViewer').then((module) => ({ default: module.WorldEnvironmentViewer })),
 );
 
-/** The design's lines (PR #203) for a splat the viewer can't show, centred
+/** The approved lines (design, PR #203) for a splat the viewer can't show, centred
  * in the stage in place of the splat (never beside a generic one). */
 // Design, PR #203. The heading is what the download's own failure logs
 // under; the dialog shows the line.

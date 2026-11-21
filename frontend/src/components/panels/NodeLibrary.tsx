@@ -227,9 +227,9 @@ export function NodeLibrary() {
   function addNodeAtViewportCenter(definitionId: string) {
     // Read-only offline (design, PR #114) and while following (PR #200: the
     // store gate refused it, the click itself didn't): the project bar or
-    // the banner pulses. While the canvas is kept after a restore (design,
-    // PR #199) the node is the kept tab's own (the store's kept addNode), so
-    // only a tab-only refusal.
+    // the banner pulses. While the canvas is kept after a restore
+    // (design, PR #199) the node is the kept tab's own (the store's kept
+    // addNode), so only a tab-only refusal.
     if (refuseTabOnlyEdit()) return;
     const preferred = screenToFlowPosition({
       x: typeof window !== 'undefined' ? window.innerWidth / 2 : 640,
