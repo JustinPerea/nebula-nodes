@@ -4973,32 +4973,19 @@ body.app-slava-restraint .edit-node__open {
 }
 
 /* Punctuation touching a code span ("(" before it, ")" "," "." after it) shares a group with it
-   (lib/codeSpans glueToSpans). The rule: the group is never wider than its line, the punctuation stays on the
-   span's line ("(" on the span's first line, the closer on its last), and a span that fits moves to the next
-   line whole with its punctuation. An inline-flex box is atomic, so a line breaks only before or after it, and
-   max-width: 100% caps it at the line. The span is a flex item that may shrink (min-width: 0; an
-   overflow-wrap: anywhere item has a tiny min-content), so beside its punctuation it takes the width that is
-   left and wraps inside itself; the punctuation items do not shrink. The opener lines up with the span's first
-   line and the closer with its last. The punctuation is its own element because text directly inside a flex box
-   becomes anonymous items, and a bare text node there would not take align-self. */
+   (lib/codeSpans glueToSpans). The rule: the group is the inline-block, and the span flows inside it as
+   inline text. The group moves to the next line whole, and wraps inside only when it is wider than its line
+   (max-width: 100%; overflow-wrap: anywhere, the span's own rule moved to the group). The opener, the span and
+   the closer are one inline formatting context, so no line break falls after "(" or before the closer, and
+   the closer follows the span's last character wherever the span wraps. */
 body.app-slava-restraint .code-glue {
-  display: inline-flex;
+  display: inline-block;
   max-width: 100%;
   vertical-align: baseline;
-  align-items: first baseline;
+  overflow-wrap: anywhere;
 }
 
 body.app-slava-restraint .code-glue .code-span {
-  min-width: 0;
-  flex: 0 1 auto;
-}
-
-body.app-slava-restraint .code-glue__open,
-body.app-slava-restraint .code-glue__close {
-  flex: 0 0 auto;
-  white-space: pre;
-}
-
-body.app-slava-restraint .code-glue__close {
-  align-self: last baseline;
+  display: inline;
+  max-width: none;
 }

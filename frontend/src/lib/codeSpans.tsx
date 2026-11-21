@@ -61,16 +61,15 @@ function closerOf(text: string): string {
   return /['’]$/.test(run) && /^[\p{L}\p{N}]/u.test(text.slice(run.length)) ? run.replace(/['’]+$/, '') : run;
 }
 export const CODE_GLUE_CLASS = 'code-glue';
-export const CODE_GLUE_OPEN_CLASS = 'code-glue__open';
-export const CODE_GLUE_CLOSE_CLASS = 'code-glue__close';
 
 /**
  * Punctuation that touches a span stays on the span's line: the span is an inline-block, so a line may break
  * before and after it, which left "(" at the end of one line and the span at the start of the next. The touching
- * punctuation and the span go in one group (CSS: `.code-glue`, an inline-flex box no wider than its line; the
- * punctuation is its own element, because text directly inside a flex box becomes anonymous items). The span
- * shrinks to fit beside the punctuation, so a span as wide as the line wraps inside itself and keeps its "(" on
- * its first line and its ")" on its last. Text with no touching punctuation is returned as it was.
+ * punctuation and the span go in one group (CSS: `.code-glue`, an inline-block no wider than its line). The
+ * punctuation is plain text beside the span, and the span is inline inside the group, so all three share one
+ * inline formatting context: no break falls after "(" or before the closer, the group moves to the next line
+ * whole, and a group wider than the line wraps inside with the closer right after the span's last character.
+ * Text with no touching punctuation is returned as it was.
  */
 function glueToSpans(parts: ReactNode): ReactNode {
   if (!Array.isArray(parts)) return parts;
@@ -98,9 +97,9 @@ function glueToSpans(parts: ReactNode): ReactNode {
     if (!opener && !closer) { out.push(part); return; }
     const key = (part as { key?: string | null }).key ?? index;
     out.push(<span key={`glue-${key}`} className={CODE_GLUE_CLASS}>
-        {opener ? <span className={CODE_GLUE_OPEN_CLASS}>{opener}</span> : null}
+        {opener}
         {part}
-        {closer ? <span className={CODE_GLUE_CLOSE_CLASS}>{closer}</span> : null}
+        {closer}
       </span>);
   });
   return out;

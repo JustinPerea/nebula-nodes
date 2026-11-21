@@ -284,33 +284,37 @@ describe('punctuation that touches a span stays on the span’s line', () => {
     expect(groups(two).map((g) => g.textContent)).toEqual(['(a,', 'b).']);
     expect(two.textContent).toBe('Features (a, b).');
   });
-  it('the group is an inline-flex box capped at its line, and the span shrinks beside its punctuation (layout is measured in a real browser, not jsdom)', () => {
+  it('the group is the inline-block capped at its line, and the span flows inside it as inline text (layout is measured in a real browser, not jsdom)', () => {
     document.body.className = 'app-slava-restraint';
     const el = html('(`x`),');
     const group = groups(el)[0];
     const value = (node: Element, prop: string) => cascaded(node as HTMLElement).get(`|${prop}`)?.value;
-    expect(value(group, 'display')).toBe('inline-flex');
+    expect(value(group, 'display')).toBe('inline-block');
     expect(value(group, 'max-width')).toBe('100%');
-    expect(value(group, 'align-items')).toBe('first baseline');
+    expect(value(group, 'vertical-align')).toBe('baseline');
+    expect(value(group, 'overflow-wrap')).toBe('anywhere');
     const code = group.querySelector('code')!;
-    expect(value(code, 'min-width')).toBe('0');
-    expect(value(code, 'flex')).toBe('0 1 auto');
+    expect(value(code, 'display')).toBe('inline');
+    expect(value(code, 'max-width')).toBe('none');
+    // The span keeps its own face and ink inside the group.
+    expect(value(code, 'font-family')).toBeDefined();
+    expect(value(code, 'font-variant-ligatures')).toBe('none');
     expect(value(code, 'overflow-wrap')).toBe('anywhere');
-    const open = group.querySelector('.code-glue__open')!;
-    const close = group.querySelector('.code-glue__close')!;
-    expect(value(open, 'flex')).toBe('0 0 auto');
-    expect(value(close, 'flex')).toBe('0 0 auto');
-    expect(value(close, 'align-self')).toBe('last baseline');
-    expect([...group.children].map((c) => c.className)).toEqual(['code-glue__open', 'code-span', 'code-glue__close']);
-    expect(open.textContent).toBe('(');
-    expect(close.textContent).toBe('),');
-    expect(el.textContent).toBe('(x),');
+    // A span with no touching punctuation keeps its own inline-block.
+    const alone = html('Run `x` now').querySelector('code')!;
+    expect(value(alone, 'display')).toBe('inline-block');
+    expect(value(alone, 'max-width')).toBe('100%');
   });
-  it('every piece of punctuation is its own element, so the group has no bare text node (a flex box would make it an anonymous item)', () => {
-    const el = html('See "`a`, `b`" and `c`.');
-    for (const group of groups(el)) {
-      expect([...group.childNodes].every((n) => n.nodeType === Node.ELEMENT_NODE)).toBe(true);
-    }
+  it('the opener and the closer are plain text beside the span: no wrapper elements, and the text copies as the same string', () => {
+    const el = html('(`x`),');
+    const group = groups(el)[0];
+    expect([...group.childNodes].map((n) => n.nodeName)).toEqual(['#text', 'CODE', '#text']);
+    expect(group.firstChild?.textContent).toBe('(');
+    expect(group.lastChild?.textContent).toBe('),');
+    expect(group.querySelector('.code-glue__open, .code-glue__close')).toBeNull();
+    expect(el.textContent).toBe('(x),');
+    const many = html('See "`a`, `b`" and `c`.');
+    for (const g of groups(many)) expect(g.querySelectorAll(':scope > :not(code)')).toHaveLength(0);
   });
   it('an apostrophe after a span glues only when whitespace, punctuation or the end follows it', () => {
     const possessive = html('Read `x`\'s value and `y`’s too.');
