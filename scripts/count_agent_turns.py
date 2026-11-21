@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Count an agent's orientation turns in a `claude -p` stream-json transcript.
 
-Plan v2.7, PR26, section 5.10.1. GM's headless run
-(docs/agent-runs/2026-10-20-cli-headless.md) spent 8 of its 16 turns working
-out how to use Nebula rather than doing the person's work. This script counts
-the same way GM did, so a before-and-after run compares with his 8 of 16.
+Added in PR #125. The headless run in
+docs/agent-runs/2026-10-20-cli-headless.md spent 8 of its 16 turns working out
+how to use Nebula rather than doing the person's work. This script counts turns
+the way that run's were counted, so a before-and-after run compares with its 8
+of 16.
 
 A turn is one model response: the `assistant` events of one message (Claude
 Code writes one event per content block, all with the same `message.id`).
@@ -28,7 +29,7 @@ call in it is one of:
   shape, a param the node doesn't take).
 
 ``schema`` is its own kind, not ``lookup``, so a report shows how many calls
-went to loading schemas apart from looking up node types (PR26b).
+went to loading schemas apart from looking up node types (PR #134).
 
 Everything else is **needed**: reading the person's own work (``projects``,
 ``look``, ``selection``, ``pins``, ``moodboard list``/``show`` and their MCP
@@ -80,14 +81,13 @@ USAGE_PATTERNS = [
         r"\berror: the following arguments are required\b",
         r"\berror: argument [^:\n]+: expected\b",
         r"\berror: unknown [a-z ]+ (command|action)\b",
-        # Ids are bare since PR #198 fix round 12 (GM r19 answer 1); older
-        # transcripts quote them.
+        # Ids are bare since PR #198 (design); older transcripts quote them.
         r"\bNode (?:'[^']+'|[^\s'.:]+) not found\b",
         # describe_node's and the write paths' words for a node type that isn't one
         # (an unknown id, or a display name two nodes share).
         r"\bNo node type (?:'[^']+'|[^\s'.:]+)[.:]",
-        # GM #198 r23 answer 3: bare when id-shaped, in “…” otherwise, and
-        # its own line when none was given.
+        # Design, PR #198: bare when id-shaped, in “…” otherwise, and its own line
+        # when none was given.
         r"\bunknown node definition (?:'[^']+'|“[^”]+”|[^\s'.:]+)",
         r"\bNo node definition was given\.",
         r"`nebula [a-z-]+` doesn't take --",
@@ -97,7 +97,7 @@ USAGE_PATTERNS = [
         r"\bInput validation error\b",
         r"\bunexpected keyword argument\b",
         r"\b(No such|Unknown) tool\b",
-        # Argument errors in Nebula's words (PR26b; before it, then its one-line form).
+        # Argument errors in Nebula's words (PR #134; before it, then its one-line form).
         r"\bvalidation errors? for\b",
         r"\bField required\b",
         r"\bneeds node_id, or x and y\b",

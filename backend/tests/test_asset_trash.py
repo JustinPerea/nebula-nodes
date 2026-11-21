@@ -1,10 +1,10 @@
 """Deleted moodboards, characters and projects go to Recently deleted.
 
-Design-canvas answer D5 lets agents delete moodboards, on Justin's terms: "As
-long as we have undo an agent can do anything." A delete used to unlink the
-file, so nothing could undo it. Now a delete moves the asset to a trash
-(services/asset_trash.py) with who deleted it and when; anyone may restore it
-with the same id and contents; deleting for good is the person's alone.
+Agents may delete moodboards, on Justin's terms: "As long as we have undo an
+agent can do anything." A delete used to unlink the file, so nothing could
+undo it. Now a delete moves the asset to a trash (services/asset_trash.py)
+with who deleted it and when; anyone may restore it with the same id and
+contents; deleting for good is the person's alone.
 """
 from __future__ import annotations
 

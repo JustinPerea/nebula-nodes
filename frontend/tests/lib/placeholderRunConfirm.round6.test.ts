@@ -4,7 +4,7 @@ import type { NodeData } from '../../src/types';
 import { placeholderRunConfirm } from '../../src/lib/placeholderRunConfirm';
 import type { RunCost, RunScopeSummary } from '../../src/lib/runScope';
 
-// GM - Design, round 6 (2026-10-26), verbatim, and review 5 (H1, L5).
+// The design rulings (2026-10-26), verbatim.
 
 const codex = { id: 'ext:codex', name: 'Codex', color: '#F2C14E', verified: true };
 const claude = { id: 'ext:claude', name: 'Claude Code', color: '#5B9DFF', verified: false };
@@ -20,7 +20,7 @@ const summaryOf = (cost: Partial<RunCost>): RunScopeSummary => ({ total: 3, paid
 const text = (model: { rows: Array<{ name: string; model: string | null; price: string }> }) =>
   model.rows.map((row) => [row.name, row.model, row.price].filter(Boolean).join(' · '));
 
-describe('GM round 6, item 1: the footnotes', () => {
+describe('the footnotes (design)', () => {
   // f (Codex's FLUX still) and u (Codex's upscale) feed o; h (Codex's, priced) too.
   const nodes = [node('h', 'Hero still', codex), node('f', 'Flux still', codex), node('u', 'Upscale', codex),
     node('o', 'Final', undefined, 'image-compare')];
@@ -53,7 +53,7 @@ describe('GM round 6, item 1: the footnotes', () => {
   });
 });
 
-describe('GM round 6, item 2: a price waiting on its input', () => {
+describe('a price waiting on its input (design)', () => {
   const nodes = [node('in', 'Clip', undefined, 'image-input', { filePath: '/api/outputs/a.png' }),
     node('u', 'Upscale', codex, 'seedvr2-upscale')];
   const edges = [{ id: 'e', source: 'in', target: 'u', sourceHandle: 'image', targetHandle: 'image' }];
@@ -73,7 +73,7 @@ describe('GM round 6, item 2: a price waiting on its input', () => {
   });
 });
 
-describe('GM round 6, item 3 and review 5, L5: every dollar in the total has a row', () => {
+describe('every dollar in the total has a row (design)', () => {
   // Codex's placeholder h and the person's own paid node p both feed o (free).
   const nodes = [node('h', 'Hero still', codex), node('p', 'Plate', undefined), node('o', 'Final', undefined, 'image-compare')];
   const edges = [wire('h', 'o'), wire('p', 'o')];
@@ -92,7 +92,7 @@ describe('GM round 6, item 3 and review 5, L5: every dollar in the total has a r
       lines: [line('h', 'Hero still', 0.067, 0.067)], unpriced: ['Plate'] }))!;
     expect(text(model)).toEqual(['“Hero still” · Nano Banana 2 · 3.1 Flash · $0.067', '“Plate” · Nano Banana 2 · 3.1 Flash · price not listed']);
     expect(model.runLabel).toBe('Run');
-    // In cents, rounded up (review 6, L-e; GM round 7); the row keeps $0.067.
+    // In cents, rounded up (design); the row keeps $0.067.
     expect(model.totalLine).toBe('The listed prices total $0.07.');
     expect(model.notes).toEqual(['“Plate” has no list price, so the run may cost more.']);
   });
@@ -105,7 +105,7 @@ describe('GM round 6, item 3 and review 5, L5: every dollar in the total has a r
   });
 });
 
-describe('GM round 6, item 3: from Cinema the button says Generate', () => {
+describe('from Cinema the button says Generate (design)', () => {
   const scene = { version: 1, base: { model: 'nano-banana' }, aspectRatio: '16:9', shots: [{ id: 's1', prompt: 'a cat' }] };
   const nodes = [node('t', 'Hero prompt', codex, 'text-input'), node('h', 'Hero still', codex),
     node('cine', 'Scene', undefined, 'cinema-scene', { scene })];
@@ -130,7 +130,7 @@ describe('GM round 6, item 3: from Cinema the button says Generate', () => {
   });
 });
 
-describe('review 5, H1 (GM copy answer): once no placeholder is left', () => {
+describe('once no placeholder is left (design)', () => {
   const nodes = [node('h', 'Hero still'), node('p', 'Plate'), node('o', 'Final', undefined, 'image-compare')];
   const edges = [wire('h', 'o'), wire('p', 'o')];
   const priced = summaryOf({ low: 9.07, high: 9.07, lines: [line('h', 'Hero still', 9, 9), line('p', 'Plate', 0.07, 0.07)] });
@@ -142,7 +142,7 @@ describe('review 5, H1 (GM copy answer): once no placeholder is left', () => {
   it('"Run with Codex’s changes?" and "Codex finished setting up this node." with its rows as usual', () => {
     const model = placeholderRunConfirm(nodes, edges, 'o', priced, { shown: new Map([['h', codex]]) })!;
     expect(model.heading).toBe("Run with Codex’s changes?");
-    // One finished node: "this node" (GM - Design, round 7, item 1).
+    // One finished node: "this node" (design).
     expect(model.intro).toBe('Codex finished setting up this node.');
     expect(text(model)).toEqual(['“Hero still” · Nano Banana 2 · 3.1 Flash · $9.00', '“Plate” · Nano Banana 2 · 3.1 Flash · $0.07']);
     expect(model.rows.map((row) => row.agent?.name ?? null)).toEqual(['Codex', null]);

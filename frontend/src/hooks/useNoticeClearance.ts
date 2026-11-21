@@ -7,9 +7,9 @@ const GUTTER = 16;
 
 /**
  * How far above the window's bottom edge a modal's box must stop so a notice never lands on it
- * (review 6 MEDIUM-3, GM r11 answer 3: "capped like Styles"). The same line Styles and every
- * floating panel stop at (lib/bottomBar.ts floatingBottomLimit): above the bar and the notice
- * region's reserved band, shown or not, so the box never moves when a notice comes or goes.
+ * (design: "capped like Styles"). The same line Styles and every floating panel stop at
+ * (lib/bottomBar.ts floatingBottomLimit): above the bar and the notice region's reserved band,
+ * shown or not, so the box never moves when a notice comes or goes.
  */
 export function noticeClearance(viewportHeight = window.innerHeight): number {
   return Math.max(GUTTER, Math.round(viewportHeight - floatingBottomLimit(GUTTER, viewportHeight)));
@@ -19,7 +19,7 @@ export function noticeClearance(viewportHeight = window.innerHeight): number {
  * `--notice-clearance` for a modal's overlay (the model picker, the Lightbox, the comparison):
  * its stylesheet pads its bottom by at least that and caps its box's height to match. Measured
  * again when a bar (the composer) or the window changes size. While it is mounted the band
- * shows only the newest notice (GM r13 2, lib/noticeWaiting), so one notice never lands on the
+ * shows only the newest notice (design, lib/noticeWaiting), so one notice never lands on the
  * box.
  */
 export function useNoticeClearance(): CSSProperties {

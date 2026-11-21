@@ -416,7 +416,7 @@ function variantProblems(nodeId, entry, definition, catalog, fixtures) {
     }
   }
 
-  // Rule 13: the weight form the node needs (Q21 b).
+  // Rule 13: the weight form the node needs.
   const { weight } = entry;
   if (weight !== undefined && weight !== null) out.push(...weightProblems(weight, params, catalog, fixtures));
   const model = catalog?.models?.[nodeId];

@@ -3,16 +3,16 @@ import { blocked, lockLine, reasonOf } from './helpers/personLock';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 
 /**
- * PR #204 round 5:
- * - GM r4: the header says "2 · all unread" when every Update is unread, "5 · 2 unread" when
- *   some are; the count is the server's.
- * - Review 3 LOW-1: a refusal of a request sent before the promote, landing after it, clears its
- *   line and runs its retry at once (the sweep it waited for has run); it doesn't hold the tab.
- * - GM r5 item 2, "held is a state, not a path": (a) a fresh tab is locked from page load until
- *   the socket's first answer, with the 150 ms rule (a fast load never greys, a slow one greys
- *   and lifts, a click in that window does nothing); (b) a demoted tab is held: the Updates
- *   buttons, the Agents rows, the arrival card and an open proposal's Accept lock with the same
- *   lines, and what it synced stays listed.
+ * PR #204:
+ * - The header says "2 · all unread" when every Update is unread, "5 · 2 unread" when some are;
+ *   the count is the server's (design).
+ * - A refusal of a request sent before the promote, landing after it, clears its line and runs
+ *   its retry at once (the sweep it waited for has run); it doesn't hold the tab.
+ * - Held is a state, not a path (design): (a) a fresh tab is locked from page load until the
+ *   socket's first answer, with the 150 ms rule (a fast load never greys, a slow one greys and
+ *   lifts, a click in that window does nothing); (b) a demoted tab is held: the Updates buttons,
+ *   the Agents rows, the arrival card and an open proposal's Accept lock with the same lines, and
+ *   what it synced stays listed.
  */
 
 const flow = vi.hoisted(() => ({
@@ -92,9 +92,9 @@ const UPDATES = [COVER, QUESTION, CANVAS];
 const refused = (options: { sentBeforePromote?: boolean } = {}) => new RequestFailedError("Couldn’t mark the updates as read.", 403,
   { code: PERSON_REQUIRED_CODE, detail: 'Only the person can do this.', ...options });
 
-/** Round 13 (review 10 MEDIUM-1): a held tab sends no mark-read, so a refusal is one of a read
- * sent while connected and refused as the tab lost the person (a demote in flight): the gate's
- * answer holds the tab, as lib/backend does on a real 403. */
+/** A held tab sends no mark-read, so a refusal is one of a read sent while connected and refused as
+ * the tab lost the person (a demote in flight): the gate's answer holds the tab, as lib/backend
+ * does on a real 403. */
 const refusedInFlight = async () => { session.reportPersonRequired(); throw refused(); };
 
 function emit(event: unknown) {
@@ -158,7 +158,7 @@ afterEach(() => {
   session.resetPersonSessionForTests();
 });
 
-describe('GM r4: the header\'s count is the server\'s, and says when all of it is unread', () => {
+describe('the header\'s count is the server\'s, and says when all of it is unread', () => {
   it('every Update unread: "3 · all unread"; some: "5 · 2 unread"', () => {
     notesApi.markAgentNotesRead.mockImplementation(() => new Promise(() => {})); // the read never answers here
     render(<AppAgentNotes />);
@@ -174,7 +174,7 @@ describe('GM r4: the header\'s count is the server\'s, and says when all of it i
   });
 });
 
-describe('review 3 LOW-1: a refusal that lands after the promote', () => {
+describe('a refusal that lands after the promote', () => {
   it('a mark-read sent while held and refused after the promote clears its line and retries at once', async () => {
     let answer: (error: unknown) => void = () => {};
     notesApi.markAgentNotesRead.mockImplementationOnce(() => new Promise((_resolve, reject) => { answer = reject; }));
@@ -182,7 +182,7 @@ describe('review 3 LOW-1: a refusal that lands after the promote', () => {
     sync();
     const list = openList();
     await waitFor(() => expect(notesApi.markAgentNotesRead).toHaveBeenCalledTimes(1));
-    act(() => { session.reportPersonRequired(); }); // demoted while it was in flight (round 13)
+    act(() => { session.reportPersonRequired(); }); // demoted while it was in flight
     act(() => { session.notePersonPromoted(); }); // the sweep runs: nothing waits yet
     notesApi.markAgentNotesRead.mockResolvedValueOnce({ ids: ['u_cover', 'u_q', 'u_canvas'], unread: 0, projectId: 'p1' });
     await act(async () => { answer(refused({ sentBeforePromote: true })); });
@@ -194,8 +194,8 @@ describe('review 3 LOW-1: a refusal that lands after the promote', () => {
     expect(session.personGateHeld()).toBe(false);
   });
 
-  // Round 14 (GM r23 item 5): a refused in-flight read shows no line now (these two used to wait
-  // for MARK_READ_REFUSED_COPY); it waits for the promote in lib/personWork, not retryOnPromote.
+  // A refused in-flight read shows no line (these two used to wait for MARK_READ_REFUSED_COPY);
+  // it waits for the promote in lib/personWork, not retryOnPromote.
   it('a refusal of a request sent after the promote is this tab\'s state now: its read waits for the next promote, with no line', async () => {
     notesApi.markAgentNotesRead.mockImplementationOnce(refusedInFlight);
     render(<AppAgentNotes />);
@@ -251,7 +251,7 @@ describe('review 3 LOW-1: a refusal that lands after the promote', () => {
   });
 });
 
-describe('GM r5 2a: a fresh tab is locked from load until the socket\'s first answer', () => {
+describe('a fresh tab is locked from load until the socket\'s first answer', () => {
   it('a slow answer: locked at once in its own look (no grey, no reason), greys after 150 ms, lifts on the answer', () => {
     vi.useFakeTimers();
     session.resetPersonSessionForTests({ unanswered: true });
@@ -315,7 +315,7 @@ describe('GM r5 2a: a fresh tab is locked from load until the socket\'s first an
   });
 });
 
-describe('GM r5 2b: a demoted tab is held, everywhere, by the one state', () => {
+describe('a demoted tab is held, everywhere, by the one state', () => {
   it('the Updates buttons, the Agents rows and an open proposal\'s Accept lock with their lines; what it synced stays', async () => {
     render(<><AppAgentNotes /><AssetProposalStrip kind="project" targetId="p1" /></>);
     sync();
@@ -359,7 +359,7 @@ describe('GM r5 2b: a demoted tab is held, everywhere, by the one state', () => 
       return found!;
     });
     expect(asks(card).map((button) => [button.getAttribute('aria-disabled'), reasonOf(button)]))
-      // PR #204 round 11 (GM r19 3): the arrival card's one line covers Answer and dismiss.
+      // Design, PR #204: the arrival card's one line covers Answer and dismiss.
       .toEqual([['true', CARD_ANSWER_LOCK]]);
     fireEvent.click(asks(card)[0]);
     await act(async () => { await Promise.resolve(); });

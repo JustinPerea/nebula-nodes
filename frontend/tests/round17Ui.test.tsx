@@ -6,10 +6,10 @@ import type { RunRecord } from '../src/lib/runHistory';
 import type { EvaluationBatch } from '../src/lib/commonsEvaluationTypes';
 
 /**
- * Round 17 of PR #114, GM's visual rulings and the draft rules they extend:
- * - A: the bottom toolbar's Stop dots sit in the icon slot.
- * - B: Run history's Stop is at full opacity while a run is going.
- * - C: on the home screen the offline banner sits under the top bar.
+ * PR #114, the visual rulings (design) and the draft rules they extend:
+ * - The bottom toolbar's Stop dots sit in the icon slot.
+ * - Run history's Stop is at full opacity while a run is going.
+ * - On the home screen the offline banner sits under the top bar.
  * - Commons label drafts follow the rename-draft rules on reconnect.
  * - A dropped rename names who renamed the node only when its source is known.
  */
@@ -79,8 +79,8 @@ function running(id: string): RunRecord {
     snapshot: { nodes: [{ id: 'n1', definitionId: 'text-input', params: {}, outputs: {} }], edges: [] } };
 }
 
-describe('A: the bottom Stop\'s dots sit in its icon slot', () => {
-  it('the Stop icon is wrapped in a slot (16px since GM r18, G4), and the dots hang off that slot, not the button', () => {
+describe('the bottom Stop\'s dots sit in its icon slot', () => {
+  it('the Stop icon is wrapped in a slot (16px since a later design change), and the dots hang off that slot, not the button', () => {
     useGraphStore.setState({ isExecuting: true, isCancelling: false, nodes: [], edges: [] });
     render(<Toolbar />);
     const stop = screen.getByRole('button', { name: 'Stop' });
@@ -96,7 +96,7 @@ describe('A: the bottom Stop\'s dots sit in its icon slot', () => {
   });
 });
 
-describe('B: Run history\'s Stop is at full opacity while a run is going', () => {
+describe('Run history\'s Stop is at full opacity while a run is going', () => {
   it('the header Stop carries its own class, and that class is full opacity when enabled', () => {
     useGraphStore.setState({ runHistory: [running('r1')], isExecuting: true, isCancelling: false });
     useUIStore.setState((state) => ({ panels: { ...state.panels, history: { ...state.panels.history, visible: true } } }));
@@ -111,7 +111,7 @@ describe('B: Run history\'s Stop is at full opacity while a run is going', () =>
   });
 });
 
-describe('C: on the home screen the offline banner sits under the top bar', () => {
+describe('on the home screen the offline banner sits under the top bar', () => {
   it('the banner says where it is, and the home placement is right under the 72px bar and its border', () => {
     noteBackendConnection('offline');
     const { rerender } = render(<BackendConnectionStatus placement="home" />);
@@ -123,7 +123,8 @@ describe('C: on the home screen the offline banner sits under the top bar', () =
 
   it('App passes the home placement on the home screen', () => {
     const app = readFileSync(join(__dirname, '../src/App.tsx'), 'utf8');
-    // GM, PR #198 r1: every screen but the canvas and home is a studio (tests/pr198Fix1Ui.test.tsx).
+    // Design, PR #198: every screen but the canvas and home is a studio
+    // (tests/pr198Fix1Ui.test.tsx).
     // Design: its banner is the one that hides while the first-load line shows (tests/ConnectionBanner.firstLoad.test.tsx).
     expect(app).toMatch(/<ConnectionBanner placement=\{isHome \? 'home' : isCanvas \? 'workspace' : 'studio'\} \/>/);
   });
@@ -199,12 +200,12 @@ describe('Commons label drafts on reconnect (the rename-draft rules)', () => {
 
   it('the lines, exactly', () => {
     expect(LABELS_CHANGED_ELSEWHERE).toBe("You changed this reference’s labels in another tab while Nebula was offline, so your changes here weren’t saved.");
-    // GM r18: "changed", like the labels line.
+    // Design: "changed", like the labels line.
     expect(ACCENTS_CHANGED_ELSEWHERE).toBe("You changed this reference’s accents in another tab while Nebula was offline, so your changes here weren’t saved.");
   });
 });
 
-describe('a dropped rename names who renamed the node only when its source is known (GM follow-up)', () => {
+describe('a dropped rename names who renamed the node only when its source is known (design)', () => {
   const textNode = (label: string) => ({ id: 'n1', type: 'model-node', position: { x: 0, y: 0 },
     data: { label, definitionId: 'text-input', params: {}, state: 'idle', outputs: {} } });
   const sync = (edit: Record<string, unknown>) => {

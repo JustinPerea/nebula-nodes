@@ -107,7 +107,7 @@ SHARMA_PAIRS = [
     ((2.0776, 0.0795, -1.1350), (0.9033, -0.0636, -0.5514), 0.9082),
 ]
 
-# The negative hue wrap (Δh' < -180°, review 4 N1). No Sharma pair reaches it
+# The negative hue wrap (Δh' < -180°). No Sharma pair reaches it
 # away from zero chroma or exactly 180°, where dropping the branch changes
 # nothing. (50, -40, -20) has h' ≈ 206°, (50, 60, 10) h' ≈ 9°: Δh' ≈ -197°,
 # so without the wrap it gives 83.511, not 76.685. The reverse order takes the

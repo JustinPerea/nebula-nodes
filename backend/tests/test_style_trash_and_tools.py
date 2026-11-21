@@ -1,5 +1,5 @@
 """Styles (presets) join Recently deleted like boards and characters, and
-agents get them over MCP and the CLI (Justin's ruling, 2026-10-20; audit U5).
+agents get them over MCP and the CLI (Justin's ruling, 2026-10-20).
 
 - DELETE /api/presets/{id} moves a Style to Recently deleted (kind "style");
   anyone may, agents included, since restore_from_trash brings it back.
@@ -385,7 +385,7 @@ def test_cli_trash_takes_the_style_kind(styles, monkeypatch):
     assert asset_trash.TRASH_DIR == ".trash"
 
 
-# -- review fixes (2026-10-20) ------------------------------------------------------
+# -- internal params, starter Styles, the billing line -------------------------------
 
 def test_an_agents_params_update_keeps_the_internal_params_so_its_previous_undoes_it(styles):
     """An agent can't write internal (``_``) params, so it can't take them off

@@ -2,17 +2,17 @@ import { useCallback, useLayoutEffect, useRef, type FocusEvent } from 'react';
 
 import { FOCUS_LINE_ATTR, FOCUS_SCOPE_ATTR } from '../lib/lineAttrs';
 
-// Round 17 (review 13 NIT-3): the attributes live in lib/lineAttrs, so the lines that carry them
-// stay out of this module; it reads them.
+// The attributes live in lib/lineAttrs, so the lines that carry them stay out of this module;
+// it reads them.
 export { FOCUS_LINE_ATTR, FOCUS_SCOPE_ATTR };
 
 const FRAMES = 30;
 
 /**
  * What names a control well enough to find it again after a remount: its aria-label, name or id,
- * else (round 13, review 10 MEDIUM-2) its tag and the words that label it: the elements
- * aria-labelledby names, or the <label> around it without the control's own text (a select's
- * options), so an unlabelled field in a wrapping label ("Media", "Corrected only") is found too.
+ * else its tag and the words that label it: the elements aria-labelledby names, or the <label>
+ * around it without the control's own text (a select's options), so an unlabelled field in a
+ * wrapping label ("Media", "Corrected only") is found too.
  */
 function labelOf(element: HTMLElement): string | null {
   const own = element.getAttribute('aria-label') || element.getAttribute('name') || element.id;
@@ -41,13 +41,13 @@ function nameOf(pane: HTMLElement): string {
 }
 
 /**
- * The pane a control sits in, inside the handover's scope (round 14, review 11 MEDIUM-1): its
- * nearest data-focus-scope or labelled region, by that name. Two fields with the same words in
- * two panes (a reference's Role and the filter column's Role) are two controls.
+ * The pane a control sits in, inside the handover's scope: its nearest data-focus-scope or
+ * labelled region, by that name. Two fields with the same words in two panes (a reference's Role
+ * and the filter column's Role) are two controls.
  *
- * Round 17 (review 13 LOW-1): led by every data-focus-scope above that pane, so a labelled region
- * inside a scope (a membership's "Comments in Refs") stays that scope's. Two memberships of
- * same-named collections are two panes, not look-alikes told apart only by their place.
+ * The name is led by every data-focus-scope above that pane, so a labelled region inside a scope
+ * (a membership's "Comments in Refs") stays that scope's. Two memberships of same-named
+ * collections are two panes, not look-alikes told apart only by their place.
  */
 function paneOf(element: HTMLElement, scope: HTMLElement): string {
   const pane = element.parentElement?.closest<HTMLElement>(PANE);
@@ -78,25 +78,24 @@ interface Focused {
   path: HTMLElement[];
   /** The scope's named elements when focus was taken: none of them is the control come back. */
   there: WeakSet<Element>;
-  /** Round 15 (review 12 MEDIUM-1): how many of the scope's elements had this key when focus was
-   * taken, and which of them (in document order) this one was. Look-alikes in one pane (two
-   * memberships' Role) share a key; the one come back is the one at the same place, and only
-   * while the count is the same. */
+  /** How many of the scope's elements had this key when focus was taken, and which of them (in
+   * document order) this one was. Look-alikes in one pane (two memberships' Role) share a key;
+   * the one come back is the one at the same place, and only while the count is the same. */
   ordinal: number;
   count: number;
   /** Focus was handed here (a line or the heading) in place of the control `key` names: a later
    * change may move it on, to that control once it is back, or to a line that came meanwhile. */
   handed?: boolean;
-  /** Round 18h (review 16 MEDIUM-1, GM r38 2): the control that was disabled (or went inert) in
-   * place while it had focus. Focus went to the heading; once it is enabled again, and focus is
-   * still where the hook put it, it goes back to this very element. */
+  /** The control that was disabled (or went inert) in place while it had focus (design). Focus
+   * went to the heading; once it is enabled again, and focus is still where the hook put it, it
+   * goes back to this very element. */
   origin?: HTMLElement;
 }
 
 /**
- * Round 18h (review 16 MEDIUM-1): a focused control is gone when it left the page, and also when
- * it was disabled or went inert in place (offline disables Commons' fields). Chrome's focus fixup
- * drops such focus to <body> without a blur the person can follow, so the hook moves it on.
+ * A focused control is gone when it left the page, and also when it was disabled or went inert
+ * in place (offline disables Commons' fields). Chrome's focus fixup drops such focus to <body>
+ * without a blur the person can follow, so the hook moves it on.
  */
 export function focusGone(element: HTMLElement): boolean {
   return !element.isConnected || element.matches(':disabled') || element.closest('[inert]') !== null;
@@ -110,14 +109,13 @@ function sameKey(scope: HTMLElement, key: string): HTMLElement[] {
 }
 
 /**
- * The control come back (round 15, review 12 MEDIUM-1): never a guess between look-alikes. Of
- * the elements with its key, the one at its place, when there are as many as when focus was
- * taken, it is new (not there then) and it isn't disabled. Otherwise none, and focus goes to
- * the line.
+ * The control come back: never a guess between look-alikes. Of the elements with its key, the
+ * one at its place, when there are as many as when focus was taken, it is new (not there then)
+ * and it isn't disabled. Otherwise none, and focus goes to the line.
  */
 function cameBack(was: Focused, scope: HTMLElement): HTMLElement | undefined {
-  // Round 18h: the control disabled in place is the one to come back to, once it is enabled. If
-  // it left meanwhile (a promote remounted it), its look-alike at its place is, as below.
+  // The control disabled in place is the one to come back to, once it is enabled. If it left
+  // meanwhile (a promote remounted it), its look-alike at its place is, as below.
   if (was.origin?.isConnected) return focusGone(was.origin) || !scope.contains(was.origin) ? undefined : was.origin;
   if (!was.key) return undefined;
   const now = sameKey(scope, was.key);
@@ -127,9 +125,9 @@ function cameBack(was: Focused, scope: HTMLElement): HTMLElement | undefined {
 }
 
 /**
- * The line nearest where the control was (round 14): one in its own pane, else, from the nearest
- * ancestor still there outward, a line inside it or one a control inside it points at (Add's
- * menu went, Add's line explains it), else the first in the scope.
+ * The line nearest where the control was: one in its own pane, else, from the nearest ancestor
+ * still there outward, a line inside it or one a control inside it points at (Add's menu went,
+ * Add's line explains it), else the first in the scope.
  */
 function nearestLine(was: Focused, scope: HTMLElement): HTMLElement | null {
   const lines = [...scope.querySelectorAll<HTMLElement>(LINE)];
@@ -153,22 +151,22 @@ function nearestLine(was: Focused, scope: HTMLElement): HTMLElement | null {
 }
 
 /**
- * PR #204 round 11 (review 9 MEDIUM-3, GM r19 item 2): when a demote (or the promote) takes away
- * the control that had focus, focus moves on instead of dropping to the page: to the same
- * control if it is back (the promote remounts it, matched by labelOf), else to the section's
- * lock or not-connected line (`data-focus-line`, tabIndex -1), else to its heading. Only when the
- * focused control actually went away: while it is still there, or focus went somewhere else
- * meanwhile, nothing moves. `change` is what removes controls (the demote, the promote).
- * Spread `onFocus` on the section's root.
+ * PR #204 (design): when a demote (or the promote) takes away the control that had focus, focus
+ * moves on instead of dropping to the page: to the same control if it is back (the promote
+ * remounts it, matched by labelOf), else to the section's lock or not-connected line
+ * (`data-focus-line`, tabIndex -1), else to its heading. Only when the focused control actually
+ * went away: while it is still there, or focus went somewhere else meanwhile, nothing moves.
+ * `change` is what removes controls (the demote, the promote). Spread `onFocus` on the
+ * section's root.
  *
- * Round 14 (review 11 MEDIUM-1): "the same control" is a new element only, one that wasn't there
- * when focus was taken, with the same label in the same pane (the nearest data-focus-scope or
- * labelled region). A look-alike that was there all along, in another pane or the same one, is
- * another control: focus goes to the line instead.
+ * "The same control" is a new element only, one that wasn't there when focus was taken, with the
+ * same label in the same pane (the nearest data-focus-scope or labelled region). A look-alike
+ * that was there all along, in another pane or the same one, is another control: focus goes to
+ * the line instead.
  *
- * Round 15 (review 12 MEDIUM-1): when look-alikes in one pane all come back new (two
- * memberships' Role remount on the promote), the hook takes the one at the control's own place
- * among them, and goes to the line when their count changed. It never takes the first.
+ * When look-alikes in one pane all come back new (two memberships' Role remount on the
+ * promote), the hook takes the one at the control's own place among them, and goes to the line
+ * when their count changed. It never takes the first.
  */
 export function useFocusHandover(change: unknown, root: () => HTMLElement | null, heading: () => HTMLElement | null) {
   const last = useRef<Focused | null>(null);
@@ -191,9 +189,9 @@ export function useFocusHandover(change: unknown, root: () => HTMLElement | null
   useLayoutEffect(() => {
     const was = last.current;
     if (!was) return undefined;
-    // Round 14: a handed-over focus still on what it was handed to may move on (offline hid Add's
-    // line and focus went to the heading; back online, the line again; on the promote, the field).
-    // Round 18h: what the hook put focus on last, while it is still there.
+    // A handed-over focus still on what it was handed to may move on (offline hid Add's line and
+    // focus went to the heading; back online, the line again; on the promote, the field).
+    // handedNow: whether focus is still on what the hook put it on last.
     const handedNow = () => {
       const at = last.current;
       return at?.handed === true && document.activeElement === at.element;
@@ -236,9 +234,9 @@ export function useFocusHandover(change: unknown, root: () => HTMLElement | null
         hand(line, scope);
         return;
       }
-      // Round 18h (review 16 LOW-2): focus never waits on <body>. The heading holds it at once;
-      // a line that arrives a moment later (a held read answers on the next tick) still takes it
-      // from there, until FRAMES have passed.
+      // Focus never waits on <body>. The heading holds it at once; a line that arrives a moment
+      // later (a held read answers on the next tick) still takes it from there, until FRAMES have
+      // passed.
       const head = heading();
       if (head && document.activeElement !== head) {
         hand(head, scope);

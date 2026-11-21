@@ -1,6 +1,6 @@
 /*
  * Inter (200-600) and JetBrains Mono (400-600), shipped with the app so it asks
- * no outside server for fonts when it opens (Justin, Q103). These are the exact
+ * no outside server for fonts when it opens (Justin). These are the exact
  * woff2 files and @font-face rules the Google Fonts stylesheet the app used to
  * link served a desktop Chrome on 2026-10-21 (URL in README.md), with only the
  * URLs made local, so text renders as it did with the Google link. Both fonts are variable: each subset

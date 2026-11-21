@@ -1,9 +1,9 @@
 /**
- * PR #204 round 18 (GM r28 1): "Nebula couldn’t load …" lines destroy nothing, so they are
- * neutral in colour too: the same grey rule and ink as the Commons because line, one style for
- * every such line (the Commons page, its panes, the reference detail, the Commons settings).
- * Only a load says a line in noResponseBecause's form; CommonsErrorLine marks its box
- * `data-line-neutral`, and styles/becauseLine.css draws it as it draws a because line.
+ * PR #204 (design): "Nebula couldn’t load …" lines destroy nothing, so they are neutral in
+ * colour too: the same grey rule and ink as the Commons because line, one style for every such
+ * line (the Commons page, its panes, the reference detail, the Commons settings). Only a load
+ * says a line in noResponseBecause's form; CommonsErrorLine marks its box `data-line-neutral`, and
+ * styles/becauseLine.css draws it as it draws a because line.
  * Resolved through the app's own stylesheets (tests/helpers/cssCascade), not a copy of them.
  */
 import { cleanup, render } from '@testing-library/react';
@@ -37,7 +37,7 @@ const ERROR_TOKENS = /--sr-(?:error|danger|warning|accent)\b/;
 beforeEach(() => { document.body.className = 'app-slava-restraint'; });
 afterEach(() => { cleanup(); resetLinesForTests(); document.body.className = ''; });
 
-describe('a load line, whatever its reason, and only a load line, is marked neutral (GM r29 1)', () => {
+describe('a load line, whatever its reason, and only a load line, is marked neutral', () => {
   it('isLoadLine reads a load\'s line, and not an action\'s', () => {
     for (const line of Object.values(LOAD_LINES)) expect(isLoadLine(line), line).toBe(true);
     expect(isLoadLine(notConnectedBecause('load Commons', false))).toBe(true);
@@ -45,11 +45,11 @@ describe('a load line, whatever its reason, and only a load line, is marked neut
     expect(isLoadLine('Couldn’t save the settings. That setting isn’t available.')).toBe(false);
     expect(isLoadLine("Nebula didn't respond. Try again.")).toBe(false);
   });
-  it('every reason a load can get reads as GM wrote it (GM r29 1, r30); "Try again." only where it can help', () => {
+  it('every reason a load can get reads as the approved copy has it; "Try again." only where it can help', () => {
     const cases: Array<[string, number, string | undefined, string]> = [
       ['load Agent review', 503, undefined, noResponseBecause('load Agent review')],
       ['load Agent review', 408, undefined, noResponseBecause('load Agent review')],
-      // GM r31: a rate limit has its own line.
+      // Design: a rate limit has its own line.
       ['load Agent review', 429, undefined, 'Nebula couldn’t load Agent review because the server is busy. Try again in a moment.'],
       ['load Agent review', 502, undefined, noResponseBecause('load Agent review')],
       ['load Agent review', 500, 'Internal Server Error', 'Nebula couldn’t load Agent review because the server hit an error. Try again.'],
@@ -92,7 +92,7 @@ describe('a load line, whatever its reason, and only a load line, is marked neut
   });
 });
 
-describe('every "Nebula couldn’t load …" line resolves to the neutral tokens (GM r28 1)', () => {
+describe('every "Nebula couldn’t load …" line resolves to the neutral tokens', () => {
   for (const [where, line] of Object.entries(LOAD_LINES)) {
     it(where, () => {
       const view = render(<CommonsErrorLine line={line} />);
@@ -111,7 +111,7 @@ describe('every "Nebula couldn’t load …" line resolves to the neutral tokens
     expect(lineLook(load)).toEqual(lineLook(because));
   });
 
-  it('a load that failed for a reason the backend wrote is neutral too (GM r29 1)', () => {
+  it('a load that failed for a reason the backend wrote is neutral too', () => {
     for (const line of ['Nebula couldn’t load Agent review. The review set is closed.',
       'Nebula couldn’t load this reference because it isn’t there anymore. Reload to get the latest references.']) {
       const view = render(<CommonsErrorLine line={line} />);
@@ -131,7 +131,7 @@ describe('every "Nebula couldn’t load …" line resolves to the neutral tokens
   });
 });
 
-describe('one look for every neutral Commons line, wherever it sits (GM r30 1)', () => {
+describe('one look for every neutral Commons line, wherever it sits', () => {
   // Where a load's line shows: the page's row, a pane's heading (Agent review, Blind labeling,
   // which draw on a lighter fill), the settings pane, the reference detail.
   const PLACES: Array<[string, (line: JSX.Element) => JSX.Element]> = [
@@ -229,7 +229,7 @@ describe('design: one look for every warning notice, a fill and no edge', () => 
   });
 });
 
-describe('every Commons load line draws through CommonsErrorLine (GM r28 1: one style)', () => {
+describe('every Commons load line draws through CommonsErrorLine (one style)', () => {
   it('no Commons screen draws a failure line state as bare LineText', async () => {
     const { readdirSync, readFileSync } = await import('node:fs');
     const { join } = await import('node:path');
@@ -240,7 +240,7 @@ describe('every Commons load line draws through CommonsErrorLine (GM r28 1: one 
   });
 });
 
-describe('the held status slot (GM r28 3)', () => {
+describe('the held status slot', () => {
   // It imports the whole Commons view cold: a slow first import under load is not a failure.
   it('keeps the default status\'s place, drawn as nothing, with nothing to focus', { timeout: 30_000 }, async () => {
     const { StatusLine } = await import('../src/components/commons/CommonsView');
@@ -254,7 +254,7 @@ describe('the held status slot (GM r28 3)', () => {
   });
 });
 
-describe('the reasons mapped here are the backend\'s own words (round 18c)', () => {
+describe('the reasons mapped here are the backend\'s own words', () => {
   it('each detail LOAD_BECAUSE and the Commons-off line key on is in the backend, verbatim', async () => {
     const { readFileSync } = await import('node:fs');
     const { join } = await import('node:path');
@@ -263,7 +263,7 @@ describe('the reasons mapped here are the backend\'s own words (round 18c)', () 
       .map((file) => readFileSync(join(__dirname, '../../backend', file), 'utf8').replace(/’/g, "'")).join('\n');
     const { COMMONS_OFF_DETAIL } = await import('../src/lib/errorCopy');
     expect(backend).toContain(`detail="${COMMONS_OFF_DETAIL.replace(/’/g, "'")}"`);
-    // Round 18d (review 14 LOW-4): the blob route's own 404, not a longer "… not found".
+    // The blob route's own 404, not a longer "… not found".
     expect(backend).toContain('detail="not found"');
     for (const detail of LOAD_BECAUSE.keys()) {
       // The gone line is built from its parts (refusal_copy.gone("reference", "references")).

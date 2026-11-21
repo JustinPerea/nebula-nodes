@@ -43,7 +43,7 @@ const VISUAL_PROPS = new Set([
   'fontSize',
   'fontWeight',
   'gap',
-  // A studio's grid is its stylesheet's (fix/moodboard-board-layout, review 1 LOW-1).
+  // A studio's grid is its stylesheet's (PR #209).
   'grid',
   'gridArea',
   'gridColumn',

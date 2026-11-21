@@ -21,13 +21,12 @@ export function useNowUntil(untilSeconds: number | null | undefined): number {
   const [now, setNow] = useState(() => Date.now());
   const [seen, setSeen] = useState(untilSeconds);
   // The hold may arrive or change after mount (the view loads): it is compared with the clock at
-  // that moment, in this render, so an end already past never shows for a frame (review of
-  // PR #242 round 2, L7).
+  // that moment, in this render, so an end already past never shows for a frame (PR #242).
   let current = now;
   if (seen !== untilSeconds) {
     // Read once per change of `untilSeconds` (the state update below makes the next render skip
     // this), so the result is the same however often React renders in between.
-    // eslint-disable-next-line react-hooks/purity -- the check of PR #242 round 2 (L7) asks for the clock at this render
+    // eslint-disable-next-line react-hooks/purity -- PR #242 reads the clock here on purpose
     current = Date.now();
     setSeen(untilSeconds);
     setNow(current);

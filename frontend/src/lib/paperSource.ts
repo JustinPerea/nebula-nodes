@@ -55,7 +55,7 @@ export interface PaperSourceRecord {
   lastSuccessfulRefresh?: string;
   /** The specific text, for agents (word for word). */
   lastError?: string;
-  /** The card's line beside it (error copy round 3e, services/paper_copy.py). */
+  /** The card's line beside it (services/paper_copy.py). */
   lastErrorPerson?: string;
   sequence: number;
   changed?: boolean;
@@ -75,10 +75,10 @@ export interface PaperLinkRequest {
   scale: '1x' | '2x';
 }
 
-/** A Paper route's refusal (error copy round 3e). The heading names the
- * card's action; the reason is the route's `person` line (paper_routes), and
- * `detail.message`, the specific text, stays for the console and agents. A
- * refresh that failed carries the source record the backend kept. */
+/** A Paper route's refusal. The heading names the card's action; the reason
+ * is the route's `person` line (paper_routes), and `detail.message`, the
+ * specific text, stays for the console and agents. A refresh that failed
+ * carries the source record the backend kept. */
 export class PaperSourceError extends RequestFailedError {
   readonly source?: PaperSourceRecord;
 
@@ -124,7 +124,7 @@ async function paperRequest<T>(heading: string, path: string, body?: unknown): P
   try {
     payload = await response.json();
   } catch {
-    // An answer the browser can't read: GM's general line under the heading.
+    // An answer the browser can't read: the general line (design) under the heading.
     throw new PaperSourceError(heading, response.status, { reason: refusedFallbackCopy() });
   }
   requestSucceeded(heading);

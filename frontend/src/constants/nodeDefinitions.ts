@@ -4513,7 +4513,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
   'speridlabs-idol': {
     id: 'speridlabs-idol',
     displayName: 'Idol',
-    // GM, PR #203 r12 item 4, word for word.
+    // Design, PR #203, word for word.
     description: 'Turns one image into a 3D Gaussian splat you can explore. Made by Speridlabs, it runs free on Hugging Face. '
       + 'Add a Hugging Face token to use your own allowance.',
     category: '3d-gen',

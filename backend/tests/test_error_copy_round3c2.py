@@ -1,14 +1,15 @@
 """Error copy: Nebula's own run lines show again (design).
 
-The earlier node-run-error pass made every node run error with no person line read design's general line with
-the raw text behind "Details". That hid the lines Nebula already wrote for the
-person ("No mask painted yet — open the Mask Painter node and paint one", the
-route wiring lines, Meshy's Smart Topology line ...). Design's guard: "provider
-run errors often carry the one fact the person needs ... Don't let the
-general fallback hide them." A line Nebula wrote for the person is a written
-line, so each such raise carries it as its person line (``as_person_line``
-when the text already is that line, ``with_person_line`` with id-free words
-when the text names ids, paths, parameter keys or env vars).
+The earlier node-run-error pass made every node run error with no person line
+read the general line (design) with the raw text behind "Details". That hid the
+lines Nebula already wrote for the person ("No mask painted yet — open the Mask
+Painter node and paint one", the route wiring lines, Meshy's Smart Topology
+line ...). The design guard: "provider run errors often carry the one fact the
+person needs ... Don't let the general fallback hide them." A line Nebula wrote
+for the person is a written line, so each such raise carries it as its person
+line (``as_person_line`` when the text already is that line,
+``with_person_line`` with id-free words when the text names ids, paths,
+parameter keys or env vars).
 
 What agents, MCP, the run record and the journal read is the exception text,
 and none of it changes: the tests assert the exact texts beside the lines.
@@ -83,7 +84,7 @@ def test_as_person_line_marks_the_text_as_the_persons_line_and_changes_nothing()
 async def test_a_mask_painter_with_no_mask_shows_its_own_line() -> None:
     error = await _run_one(_node("mask-painter"))
     assert error.error == "No mask painted yet — open the Mask Painter node and paint one"
-    # Design's rules (no dash, a final period) on the card; agents keep the text.
+    # The design rules (no dash, a final period) on the card; agents keep the text.
     assert error.person == "No mask is painted yet. Open the Mask Painter node and paint one, then run the node again."
 
 
@@ -316,10 +317,11 @@ def _raises(path: Path) -> list[tuple[bool, str, ast.Call, ast.Call | None]]:
 
 
 # Raises in a run whose text has no person line: provider text and malformed
-# provider answers (design's general line, the raw text behind Details), timeouts
-# the classifier names, moderation (its own card), developer-only states, and
-# checks only an agent or an old saved graph can reach. The count may only go
-# down. A new raise in Nebula's own words gets a line instead.
+# provider answers (the general line, design, with the raw text behind
+# Details), timeouts the classifier names, moderation (its own card),
+# developer-only states, and checks only an agent or an old saved graph can
+# reach. The count may only go down. A new raise in Nebula's own words gets a
+# line instead.
 UNLINED_BASELINE: dict[str, int] = {
     "handlers/bfl.py": 8, "handlers/byteplus.py": 4, "handlers/cinema_scene.py": 6,
     "handlers/elevenlabs.py": 20, "handlers/fal_universal.py": 9, "handlers/gemini_omni.py": 8,
@@ -342,11 +344,11 @@ UNLINED_BASELINE: dict[str, int] = {
     "execution/stream_runner.py": 5, "execution/sync_runner.py": 4, "services/media_input.py": 3,
     "services/qc_common.py": 6, "services/qc_jev.py": 3, "services/typesafe_client.py": 23,
     "services/vision_llm.py": 8, "services/google_vertex.py": 2, "services/quiver_client.py": 9,
-    # A review raised two by one: handlers/replicate_model.py's
+    # Two entries were each raised by one later: handlers/replicate_model.py's
     # model_path and maker_routes_google.py's Vertex Veo model check read
     # Nebula's route table, never the person, so they are developer-only and
     # their person lines (which named the ids) went.
-    # Read by the guard from that review on. ffmpeg: tool output, timeouts
+    # The files below were added to the guard later. ffmpeg: tool output, timeouts
     # and developer-only input checks. krea_account: a schema mismatch and
     # malformed job answers. nous_auth: its internal _CredentialRejected
     # checks and the public sign-in errors, which the handler
@@ -356,14 +358,14 @@ UNLINED_BASELINE: dict[str, int] = {
     # doesn't expose), malformed answers and job states.
     "services/krea_mcp_generation.py": 17,
     # This pass lowered fourteen, mostly paid jobs Nebula stopped waiting on
-    # (design's slow-job line) and Krea's lines 1-10.
-    # A later review lowered minimax.py by one: its missing task id now reads
+    # (the slow-job line, design) and Krea's lines 1-10.
+    # minimax.py was lowered by one later: its missing task id now reads
     # MiniMax's own code (a refused key or no balance gets the table's line),
     # and the exception is built before the raise, so the guard can't read
     # its text; tests/test_error_copy_round3d.py pins it.
     # This pass lowered stream_runner.py by one: the image stream's
     # "ended without a final image event" is built before its raise, so the
-    # card can give a fal.ai job still running design's slow-job line;
+    # card can give a fal.ai job still running the slow-job line (design);
     # tests/test_error_copy_round3d2.py pins its text.
 }
 
@@ -391,7 +393,7 @@ FORBIDDEN_IN_A_LINE = re.compile(
     # snake_case ids and keys, a digit before the underscore too ("gen4_turbo").
     r"(?<![{\w])[a-z][a-z0-9]*_[a-z0-9_]+(?![}\w])|[A-Z]{2,}_[A-Z_]+|/api/|nebula trash|\bGET\b|"
     r"\{(?:path|file_path|image_value|img_str|audio_path|value|ref|raw|task_id|job_id|character_id|moodboard_id)\b|"
-    # Design's rules (no ids, no parentheses in error copy): a provider's
+    # The design rules (no ids, no parentheses in error copy): a provider's
     # kebab-case model id with a digit in it ("gpt-image-2", "k2-large"), a
     # dated one ("seedance-1-0-pro-250528"), one of the makers' id prefixes
     # with none ("grok-imagine-video", "fal-ai/..."), and a parenthesis.
@@ -411,7 +413,7 @@ FORBIDDEN_IN_A_LINE = re.compile(
     r"\b[A-Z][A-Za-z0-9]*-[A-Za-z0-9.]+-\d[\d.]*(?:-[A-Za-z0-9.]+)*\b|"
     r"(?<![\w-])(?![a-z]+(?:-[a-z]+)*-(?:to|and|or|of|in|on|by|for|the)-)[a-z]+(?:-[a-z]+){2,}\b(?!-)|"
     r"\b[\w.-]+/[\w.-]+|"
-    # (design's rule 5: "Never a param key, a port id or a code name
+    # (design rule 5: "Never a param key, a port id or a code name
     # ('filePath param', 'Array input', 'CameraPose input')"): a camelCase
     # name that starts lowercase ("filePath"; "xAI" is the provider's own
     # spelling), "... param", a type's name ("CameraPose"), and a type's name
@@ -490,7 +492,7 @@ def test_no_person_line_goes_on_a_moderation_block() -> None:
 # Details in every case.").
 def test_provider_text_keeps_gms_design() -> None:
     # A raise that carries the provider's own body or message keeps the
-    # classifier's line or design's general line, the raw text behind Details,
+    # classifier's line or the general line (design), the raw text behind Details,
     # unless its line is a with_provider_line, which keeps Details too.
     # (A status code isn't the provider's text: a line may leave it out.)
     provider = re.compile(r"\{[^}]*(\.text\b|\bbody\b|_error_detail|error_body|\bdetail\b|\bexc\b|\.json\(\)|\.message\b)[^}]*\}")
@@ -640,7 +642,8 @@ def test_quivers_own_credits_and_key_lines_reach_the_card() -> None:
     auth = _wrap_provider_error(QuiverAuthError("401 from QuiverAI", status_code=401))
     assert str(auth) == "QuiverAI auth failed — check QUIVER_API_KEY"
     assert person_line(auth) == "Add a QuiverAI API key in Settings to run this node."
-    # The classifier's own line for a rate limit, and provider text, keep design's design.
+    # The classifier's own line for a rate limit, and provider text, follow the
+    # design rule: provider text stays behind Details.
     assert person_line(_wrap_provider_error(QuiverRateLimitError("429", status_code=429))) is None
     assert person_line(_wrap_provider_error(QuiverServerError("upstream exploded", status_code=502))) is None
 
@@ -820,7 +823,7 @@ async def test_veos_model_lines_name_the_field_not_the_model_id() -> None:
 
 def test_a_route_tables_own_model_check_keeps_the_general_line() -> None:
     # The model comes from Nebula's route table, not from anything the person
-    # set: a developer-only state, so the card keeps design's general line.
+    # set: a developer-only state, so the card keeps the general line (design).
     from handlers.replicate_model import model_path
 
     exc = _raised(model_path, "not-a-model")

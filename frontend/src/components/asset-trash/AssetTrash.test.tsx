@@ -26,7 +26,7 @@ import { publishOpenProject } from '../../lib/currentProject';
 
 const board = (overrides: Partial<TrashedItem> = {}): TrashedItem => ({
   kind: 'moodboard', id: 'b1', name: 'Warm editorial', thumbnail: '/api/outputs/a.png', projectId: null,
-  deletedAt: '2026-10-18T12:00:00Z', deletedBy: { kind: 'agent', name: 'GM - Design' }, ...overrides,
+  deletedAt: '2026-10-18T12:00:00Z', deletedBy: { kind: 'agent', name: 'Studio Agent' }, ...overrides,
 });
 
 beforeEach(() => {
@@ -136,7 +136,7 @@ describe('RecentlyDeletedAssets', () => {
     render(<RecentlyDeletedAssets kind="moodboard" scope="global" onRestored={onRestored} />);
     fireEvent.click(await screen.findByRole('button', { name: /Recently deleted/ }));
     expect(screen.getByText('Warm editorial')).toBeTruthy();
-    expect(screen.getByText(/by GM - Design \(agent\)/)).toBeTruthy();
+    expect(screen.getByText(/by Studio Agent \(agent\)/)).toBeTruthy();
     expect(screen.getByText('Deleted moodboards stay here until you delete them for good.')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Restore Warm editorial' }));
     await waitFor(() => expect(onRestored).toHaveBeenCalledWith(board()));
