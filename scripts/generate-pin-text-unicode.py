@@ -1,7 +1,7 @@
-"""Generates the Unicode data the pin-text strip and count read (PR #200 fix
-round 13: review 12 M-1 and L-2, GM r21). One run writes the same bytes to
-both sides, so the backend (services/canvas_pins.py) and the canvas
-(frontend lib/canvasPins.ts) read the same data:
+"""Generates the Unicode data the pin-text strip and count read (PR #200,
+design). One run writes the same bytes to both sides, so the backend
+(services/canvas_pins.py) and the canvas (frontend lib/canvasPins.ts) read
+the same data:
 
   backend/data/pin_text_unicode.json
   frontend/src/lib/pinTextUnicode.json
@@ -108,8 +108,8 @@ def main(source: Path) -> None:
         "emoji-zwj-sequences.txt", "emoji-sequences.txt", "emoji-variation-sequences.txt",
         "StandardizedVariants.txt", "PropList.txt", "Scripts.txt", "IVD_Sequences.txt")}
 
-    # GM r23 (review 13 M-1): E0100-E01EF only for a pair the Ideographic
-    # Variation Database registers (葛 has 10; most ideographs have none).
+    # Design: E0100-E01EF only for a pair the Ideographic Variation Database
+    # registers (葛 has 10; most ideographs have none).
     ivd: dict[int, set[int]] = {}
     for line in files["IVD_Sequences.txt"].read_text(encoding="utf-8").splitlines():
         line = line.split("#", 1)[0].strip()
@@ -119,7 +119,7 @@ def main(source: Path) -> None:
         if 0xE0100 <= selector <= 0xE01EF:
             ivd.setdefault(base, set()).add(selector - 0xE0100)
 
-    # GM r21: 180B-180F only after a Mongolian letter (script Mongolian, a letter category).
+    # Design: 180B-180F only after a Mongolian letter (script Mongolian, a letter category).
     mongolian: set[int] = set()
     for line in files["Scripts.txt"].read_text(encoding="utf-8").splitlines():
         match = re.match(r"([0-9A-F.]+)\s*;\s*Mongolian\s*#\s*(L[a-z])", line)
@@ -127,7 +127,7 @@ def main(source: Path) -> None:
             low, high = span(match.group(1))
             mongolian.update(range(low, high + 1))
 
-    # GM r21: FE00-FE0F only after a base listed for that selector, in
+    # Design: FE00-FE0F only after a base listed for that selector, in
     # StandardizedVariants.txt or emoji-variation-sequences.txt.
     pairs: dict[int, set[int]] = {}
     for name in ("StandardizedVariants.txt", "emoji-variation-sequences.txt"):
@@ -136,9 +136,9 @@ def main(source: Path) -> None:
             if 0xFE00 <= selector <= 0xFE0F:
                 pairs.setdefault(selector, set()).add(base)
 
-    # Review 12 L-2, GM r21: a ZWJ chain is one character only when it is an
-    # RGI ZWJ sequence. Keys leave out FE0E/FE0F and the skin tones, so every
-    # tone of a sequence is one key (a chain matches whatever tones it has).
+    # Design: a ZWJ chain is one character only when it is an RGI ZWJ sequence.
+    # Keys leave out FE0E/FE0F and the skin tones, so every tone of a sequence is
+    # one key (a chain matches whatever tones it has).
     zwj: set[str] = set()
     longest = 0
     for fields in rows(files["emoji-zwj-sequences.txt"]):
@@ -152,8 +152,8 @@ def main(source: Path) -> None:
         zwj.add("|".join(parts))
         longest = max(longest, len(parts))
 
-    # Review 12 M-1, GM r21: a tag run is kept only when it spells an RGI
-    # subdivision flag after U+1F3F4 (England, Scotland, Wales).
+    # Design: a tag run is kept only when it spells an RGI subdivision flag after
+    # U+1F3F4 (England, Scotland, Wales).
     flags: set[str] = set()
     for fields in rows(files["emoji-sequences.txt"]):
         if fields[1] == "RGI_Emoji_Tag_Sequence":

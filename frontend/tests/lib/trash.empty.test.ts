@@ -8,9 +8,8 @@ import { emptyTrash } from '../../src/lib/trash';
 
 beforeEach(() => request.mockReset().mockResolvedValue({ ok: true, json: async () => ({ purged: 0 }) }));
 
-// Review 10, LOW-4 V15: Empty sends exactly what the list showed, so the
-// backend deletes nothing for good the person didn't see (an agent's delete
-// that landed after the list loaded stays restorable).
+// Empty sends exactly what the list showed, so the backend deletes nothing for good the
+// person didn't see (an agent's delete that landed after the list loaded stays restorable).
 describe('emptyTrash', () => {
   it('sends the shown items, kind and id only, with the list\'s filter', async () => {
     await emptyTrash({ kind: 'moodboard', scope: 'project', projectId: 'p1' },

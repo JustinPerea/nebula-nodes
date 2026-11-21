@@ -44,11 +44,11 @@ export function useProposalNotReady(entry: ProposalEntry | undefined): Array<Pro
 }
 
 /**
- * GM's Accept lock (PR #203 r6 item 1: "You can accept this after you add
+ * The Accept lock (design, PR #203: "You can accept this after you add
  * your Hugging Face token in Settings."), read from the run Accept would
  * start with the keys set now (lib/proposalAcceptLock), so it follows the
- * token both ways, whenever the proposal was made (review r4 LOW-1). The bar
- * alone reads it: it follows the whole canvas, which the ghosts needn't.
+ * token both ways, whenever the proposal was made. The bar alone reads it:
+ * it follows the whole canvas, which the ghosts needn't.
  */
 export function useProposalAcceptLock(entry: ProposalEntry | undefined): string | null {
   const cache = useUIStore((s) => s.settingsCache);

@@ -5,8 +5,8 @@ import { placeholderRunConfirm } from '../../src/lib/placeholderRunConfirm';
 import { summarizeRunScope, type RunCost, type RunScopeSummary } from '../../src/lib/runScope';
 import type { PricingTable } from '../../src/lib/pricing';
 
-// Q133 (Justin, 2026-10-25): the person's direct run always asks first when a
-// placeholder it would run calls a paid model. GM - Design's copy, verbatim.
+// Justin, 2026-10-25: the person's direct run always asks first when a
+// placeholder it would run calls a paid model. Design copy, verbatim.
 
 const codex = { id: 'ext:codex', name: 'Codex', color: '#F2C14E', verified: true };
 const cursor = { id: 'self:cursor', name: 'Cursor', color: '#5B8DEF', verified: false };
@@ -33,7 +33,7 @@ describe('placeholderRunConfirm', () => {
     expect(confirmFor(nodes, [wire('p', 'i')], 'i')).toBeNull();
   });
 
-  it("one agent's: GM's copy, a row per paid placeholder, the free ones in one line, the whole run's total", () => {
+  it("one agent's (design): a row per paid placeholder, the free ones in one line, the whole run's total", () => {
     const nodes = [
       node('p', 'text-input', 'Hero prompt', codex),
       node('i', 'nano-banana', 'Hero still', codex, { model: 'gemini-3-pro-image' }),
@@ -42,7 +42,7 @@ describe('placeholderRunConfirm', () => {
     const model = confirmFor(nodes, [wire('p', 'i'), wire('i', 'o', 'images')], 'o')!;
     expect(model.heading).toBe('Run 2 nodes Codex is still setting up?');
     expect(model.intro).toBe("Codex hasn’t finished these, so their settings may not be final.");
-    // GM - Design, round 6, item 3: every dollar in the total has a row; the
+    // Design: every dollar in the total has a row; the
     // run's own paid node is muted, with no agent.
     expect(model.rows).toEqual([{ nodeId: 'i', name: '“Hero still”', model: 'Nano Banana Pro · 3 Pro', modelKey: 'Nano Banana Pro · 3 Pro',
       setting: null, price: '$0.12', agent: codex },
@@ -86,8 +86,8 @@ describe('placeholderRunConfirm', () => {
     expect(model.confirmCost).toBeNull();
   });
 
-  // GM - Design, round 4 (2026-10-25), verbatim.
-  describe("GM's round-4 copy", () => {
+  // Design, 2026-10-25, verbatim.
+  describe('the copy ruled on 2026-10-25 (design)', () => {
     const line = (nodeId: string, name: string, low: number, high: number) =>
       ({ nodeId, name, low, high, runs: [1, 1] as [number, number] });
     const summaryOf = (cost: Partial<RunCost>): RunScopeSummary => ({ total: 1, paid: ['Hero still'], cost: {
@@ -116,7 +116,7 @@ describe('placeholderRunConfirm', () => {
         low: 0.12, high: 0.12, lines: [line('i', 'Hero still', 0.12, 0.12)], unpriced: ['Alt still'] }))!;
       expect(model.rows.map((row) => row.price)).toEqual(['$0.12', 'price not listed']);
       expect(model.runLabel).toBe('Run');
-      // GM, round 5: the amount doesn't cover the unlisted row, so it says what it is.
+      // Design: the amount doesn't cover the unlisted row, so it says what it is.
       expect(model.totalLine).toBe('The listed prices total $0.12.');
     });
 

@@ -103,7 +103,7 @@ describe('provider catalog', () => {
     expect(unlockSummary(fal)).toMatch(new RegExp(`^${unlockCount(fal)} nodes, including Kling V3$`));
   });
 
-  it('lists the names alone up to three nodes, then the count and one name (design r164)', () => {
+  it('lists the names alone up to three nodes, then the count and one name (design)', () => {
     const names = ['Nano Banana', 'Veo 3.1', 'Lyria 3', 'Imagen 4', 'Gemini'];
     expect(summarizeUnlocked(names.slice(0, 1))).toBe('Nano Banana');
     expect(summarizeUnlocked(names.slice(0, 2))).toBe('Nano Banana and Veo 3.1');

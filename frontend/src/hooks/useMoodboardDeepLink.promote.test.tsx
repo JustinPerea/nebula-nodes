@@ -1,10 +1,10 @@
-// GM, 2026-10-30: a promote never moves the person. Pasting the person link
+// A promote never moves the person (design, 2026-10-30). Pasting the person link
 // into a tab that shows Moodboard Studio keeps the Studio on the same board
 // (the link takes the hash, then personSession strips it). The tab keeps the
 // board it shows in its own storage, so a same-tab reload restores the
 // Studio even when the address has lost `#moodboard/<id>`. A board deleted
 // meanwhile opens the way a `#moodboard/<id>` link to it does, into the
-// Studio's own "Moodboard not found" (GM, PR #204 round 1: one behaviour for a
+// Studio's own "Moodboard not found" (design, PR #204: one behaviour for a
 // missing board however reached; MoodboardStudioView shows the message).
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, renderHook } from '@testing-library/react';
@@ -17,7 +17,8 @@ import { STUDIO_BOARD_KEY, useMoodboardDeepLink } from './useMoodboardDeepLink';
 import { useUIStore } from '../store/uiStore';
 import { useProjectStore } from '../store/projectStore';
 
-/** How this document was reached, as Navigation Timing says (GM, PR #204 round 3: restore only on a reload). */
+/** How this document was reached, as Navigation Timing says (design, PR #204: restore only on a
+ * reload). */
 function arrivedBy(type: string | null) {
   vi.spyOn(performance, 'getEntriesByType').mockImplementation(((kind: string) =>
     kind === 'navigation' && type ? [{ type } as unknown as PerformanceEntry] : []) as typeof performance.getEntriesByType);
@@ -47,7 +48,7 @@ beforeEach(() => {
 });
 afterEach(() => { setHash(''); window.sessionStorage.clear(); vi.restoreAllMocks(); });
 
-describe('GM 2026-10-30: the Studio stays open across a promote', () => {
+describe('the Studio stays open across a promote (design, 2026-10-30)', () => {
   it('the person link pasted while the Studio shows a board: same board, its link back in the address', () => {
     renderHook(() => useMoodboardDeepLink());
     act(() => { useUIStore.getState().enterMoodboardEditor('b1', 'project'); });
@@ -123,7 +124,7 @@ describe('GM 2026-10-30: the Studio stays open across a promote', () => {
   });
 });
 
-describe('GM, PR #204 round 3: restore only on a reload (review 1 LOW-2)', () => {
+describe('restore only on a reload (design, PR #204)', () => {
   for (const type of ['navigate', 'back_forward', 'prerender', null]) {
     it(`arriving by ${type ?? 'an unknown way'} (a typed address, a bookmark, a fresh link…) lands where it points and forgets the board`, () => {
       arrivedBy(type);
@@ -162,7 +163,7 @@ describe('GM, PR #204 round 3: restore only on a reload (review 1 LOW-2)', () =>
   });
 });
 
-describe('PR #204 review 1 LOW-1: the restore never overrides the person', () => {
+describe('the restore never overrides the person (PR #204)', () => {
   it('opens at once when the project is ready: no request first', () => {
     window.sessionStorage.setItem(STUDIO_BOARD_KEY, 'b1');
     renderHook(() => useMoodboardDeepLink());
@@ -211,7 +212,7 @@ describe('PR #204 review 1 LOW-1: the restore never overrides the person', () =>
   });
 });
 
-describe('PR #204 review 1 NIT-1: followStudio never writes over a person link', () => {
+describe('followStudio never writes over a person link (PR #204)', () => {
   it('a person link in the address before personSession reads it stays as it is', () => {
     renderHook(() => useMoodboardDeepLink());
     act(() => { useUIStore.getState().enterMoodboardEditor('b1', 'project'); });

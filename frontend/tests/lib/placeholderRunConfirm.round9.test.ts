@@ -4,7 +4,7 @@ import type { NodeData } from '../../src/types';
 import { placeholderRunConfirm } from '../../src/lib/placeholderRunConfirm';
 import type { RunCost, RunScopeSummary } from '../../src/lib/runScope';
 
-// Review 8 (L-a, L-b) with GM - Design's ruling on L-b (2026-10-26), verbatim.
+// The design rulings (2026-10-26), verbatim.
 
 const codex = { id: 'ext:codex', name: 'Codex', color: '#F2C14E', verified: true };
 const claude = { id: 'ext:claude', name: 'Claude Code', color: '#8AB4F8', verified: true };
@@ -19,7 +19,7 @@ const summaryOf = (cost: Partial<RunCost>): RunScopeSummary => ({ total: 3, paid
   low: 0, high: 0, lines: [], unpriced: [], plan: [], plus: [], awaitingInput: [], sizeRefs: [], ...cost } });
 const unpriced = summaryOf({});
 
-describe('review 8, L-a: a row names the model a free-text model param picks, as the card shows it', () => {
+describe('a row names the model a free-text model param picks, as the card shows it', () => {
   it.each([
     ['openrouter-universal', { model: 'openai/gpt-4o-mini' }, 'openai/gpt-4o-mini'],
     ['nous-portal-universal', { model: 'Hermes-4-405B' }, 'Hermes-4-405B'],
@@ -50,7 +50,7 @@ describe('review 8, L-a: a row names the model a free-text model param picks, as
   });
 });
 
-describe("GM - Design on review 8 L-b: a replay's placeholder its agent changed after the run was saved", () => {
+describe("a replay's placeholder its agent changed after the run was saved (design)", () => {
   const priced = summaryOf({ low: 0.2, high: 0.2, lines: [line('h', 'Hero still', 0.1, 0.1), line('o', 'Final', 0.1, 0.1)] });
 
   it('finished and changed: "Replay the saved version?", the saved version as a muted row', () => {
@@ -58,7 +58,7 @@ describe("GM - Design on review 8 L-b: a replay's placeholder its agent changed 
     const model = placeholderRunConfirm(nodes, [wire('h', 'o')], 'o', priced,
       { shown: new Map([['h', codex]]), changed: new Set(['h']) } as never)!;
     expect(model.heading).toBe('Replay the saved version?');
-    // GM - Design, round 10, item 1: the sentence names the node.
+    // Design: the sentence names the node.
     expect(model.intro).toBe('Codex changed “Hero still” after the run was saved. The replay uses the saved settings.');
     expect(model.savedLine).toBeNull();
     expect(model.leftLine).toBeNull();
@@ -66,7 +66,7 @@ describe("GM - Design on review 8 L-b: a replay's placeholder its agent changed 
     expect(model.runLabel).toBe('Run for $0.20');
   });
 
-  it('two changed: both named (GM round 10)', () => {
+  it('two changed: both named (design)', () => {
     const nodes = [node('h', 'Hero still'), node('p', 'Plate'), node('o', 'Final')];
     const model = placeholderRunConfirm(nodes, [wire('h', 'o'), wire('p', 'o')], 'o', priced,
       { shown: new Map([['h', codex], ['p', codex]]), changed: new Set(['h', 'p']) } as never)!;

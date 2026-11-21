@@ -1,15 +1,15 @@
-"""Agent cursors, PR #211 round 4 (review 3 and GM - Design's r9 answers).
+"""Agent cursors, PR #211 (design): where a pin reply and an accepted proposal land.
 
-- MEDIUM-1: a pin reply and an accepted proposal reach the person's tabs in
+- A pin reply and an accepted proposal reach the person's tabs in
   the person form, on the right session's cursor, and are in the replay, so
   no tab draws a second cursor with the same name and later tabs agree.
-- GM 1: "Accepted" lands on the cursor of the session that proposed it,
+- Design: "Accepted" lands on the cursor of the session that proposed it,
   recorded on the proposal, person side only. When that session has left by
   the accept, the person's tabs get no click.
 - A guard: no ``broadcast_raw`` in main.py sends a cursor event with a
   target outside ``_broadcast_presence``.
-- LOW-3 (B24): the replay ages ``did.secondsAgo``.
-- NIT-2: past the agent cap, the replay has no cursor for that agent.
+- The replay ages ``did.secondsAgo``.
+- Past the agent cap, the replay has no cursor for that agent.
 """
 from __future__ import annotations
 
@@ -52,7 +52,7 @@ def _look(api, node, headers):  # noqa: F811
     assert response.status_code == 200, response.text
 
 
-# -- MEDIUM-1: the pin reply ---------------------------------------------------
+# -- the pin reply ---------------------------------------------------------------
 
 @pytest.mark.parametrize("headers", [{}, AGENT_B], ids=["plain", "session"])
 def test_a_pin_reply_lands_on_the_resolving_sessions_own_cursor_and_is_replayed(sockets, person, headers):
@@ -86,7 +86,7 @@ def test_a_pin_reply_lands_on_the_resolving_sessions_own_cursor_and_is_replayed(
     assert replayed["say"] == "Warmed" and replayed["session"]["ordinal"] == mine["session"]["ordinal"]
 
 
-# -- MEDIUM-1 and GM 1: the accepted proposal ------------------------------------
+# -- the accepted proposal -------------------------------------------------------
 
 def _accept_key(api, proposal_id: str) -> str:  # noqa: F811
     return api.main.canvas_proposals.get(proposal_id).accept_key
@@ -116,7 +116,7 @@ def test_accepted_lands_on_the_proposing_sessions_cursor_while_it_is_live(socket
     (*_, proposing) = _frames(api.person_socket)
     assert proposing["action"] == "propose"
     # The cursor names the proposal it waits on, so a tab ends it when that
-    # one is settled; a reload's replay still says which (PR #224 final review).
+    # one is settled; a reload's replay still says which (PR #224).
     assert proposing["proposalId"] == proposal_id
     assert [c.get("proposalId") for c in api.main.agent_presence.replay() if c["action"] == "propose"] == [proposal_id]
     # Another session of the same agent acts in between: "Accepted" still
@@ -189,7 +189,7 @@ def test_the_proposing_session_never_reaches_an_agent(sockets, person):
 # -- the guard ---------------------------------------------------------------------
 #
 # A cheap first line, read from main.py's source. conftest.py checks the same
-# rule in behaviour, in every test (review 4, LOW-1): a cursor event with a
+# rule in behaviour, in every test: a cursor event with a
 # target that reaches a ConnectionManager sender other than through
 # _broadcast_presence fails the test that sent it.
 
@@ -288,7 +288,7 @@ def _functions(tree: ast.AST):
 
 @functools.lru_cache(maxsize=64)
 def _parsed(source: str):
-    """main.py parsed and walked once per source (review 5, N5: the guard
+    """main.py parsed and walked once per source (without the cache the guard
     took about 6 s): each function with its nodes and its name bindings."""
     functions = []
     for func in _functions(ast.parse(source)):
@@ -346,7 +346,7 @@ def cursor_broadcasts_outside_the_helper(source: str) -> list[int]:
     return sorted(set(bad))
 
 
-# What only the person's canvas may get (review 5, LOW-1): a cursor event in
+# What only the person's canvas may get: a cursor event in
 # the person form, and the replay of the live cursors.
 PERSON_FUNCS = frozenset({"person_form", "_person_form", "_accepted_person_form", "replay"})
 
@@ -362,7 +362,7 @@ def _dotted(node: ast.AST) -> str | None:
 
 
 # Frames that carry a ``session`` key of another meaning and may go to any
-# socket: a literal ``type`` outside this set (review 7, LOW-A). The set is
+# socket: a literal ``type`` outside this set. The set is
 # what only the person's canvas may get.
 PERSON_ONLY_TYPES = frozenset({"agentPresence", "agentPresenceReplay"})
 
@@ -372,8 +372,8 @@ def person_only_sends(source: str) -> list[tuple[int, str]]:
     PERSON_FUNCS (or a name, partial, lambda or ``getattr`` standing for
     one), a name (or ``self.x``) bound to one, a copy of one, a function
     returning one, any dict with a ``"session"`` key, literal or ``dict()``,
-    unless its ``type`` is a literal outside PERSON_ONLY_TYPES (review 7,
-    LOW-A), a name given a session after it was built (``e["session"] =``,
+    unless its ``type`` is a literal outside PERSON_ONLY_TYPES, a name given a
+    session after it was built (``e["session"] =``,
     ``e.update(session=...)``, ``e |= {...}``, ``e.setdefault("session",
     ...)``, ``e | {...}``), or a replay; read through ``a if c else b``,
     lists, tuples and sets (looped over, indexed or spread),
@@ -574,7 +574,7 @@ def test_no_cursor_event_is_broadcast_outside_broadcast_presence():
     source = (Path(__file__).resolve().parents[1] / "main.py").read_text(encoding="utf-8")
     assert cursor_broadcasts_outside_the_helper(source) == []
     # The one target=None emitter left (the Agent log only) stays allowed. _say_agent_action was the
-    # other: Phase 3 sends every one of its events through _broadcast_presence, a board write's with
+    # other: it now sends every one of its events through _broadcast_presence, a board write's with
     # its surface anchor and the rest with none (the person's copy is the event and its id).
     assert source.count("broadcast_raw(_point(") == 1
 
@@ -597,7 +597,7 @@ def test_the_guard_lets_the_allowed_shapes_through(shape):
     assert cursor_broadcasts_outside_the_helper(f"async def f():\n    {shape}\n") == []
 
 
-# -- LOW-3 (B24) and NIT-2 ------------------------------------------------------
+# -- the replay: ages, and the agent cap ------------------------------------------
 
 AGENT = AgentIdentity(id="ext:claude-code", name="Claude Code", color="#3FC1A5", verified=False)
 
@@ -617,8 +617,8 @@ def test_the_replay_ages_the_last_actions_time_by_the_cursors_age():
 
 
 def test_past_the_agent_cap_the_replay_has_no_cursor_for_that_agent(monkeypatch):
-    """NIT-2, documented: an agent past SESSION_AGENT_MEMORY gets the plain
-    cursor with no session (GM r5, "until room frees"), and nothing is kept
+    """Documented: an agent past SESSION_AGENT_MEMORY gets the plain
+    cursor with no session (design: "until room frees"), and nothing is kept
     for it, so a tab that connects now shows it only from its next event."""
     monkeypatch.setattr(presence_module, "SESSION_AGENT_MEMORY", 2)
     clock = Clock()
@@ -636,13 +636,13 @@ def test_past_the_agent_cap_the_replay_has_no_cursor_for_that_agent(monkeypatch)
     assert [c["agent"]["id"] for c in presence.replay()] == ["ext:x2"]
 
 
-# -- round 4b: the accept past the agent memory, one clock read, a failure ------
+# -- the accept past the agent memory, one clock read, a failure ------------------
 
 CODEX = {"X-Nebula-Agent": "Codex"}
 
 
 def test_no_accepted_click_for_an_agent_past_the_agent_memory(sockets, monkeypatch):
-    """GM - Design, PR #211 review 4 (3): its cursor is the unnumbered one,
+    """Design, PR #211: its cursor is the unnumbered one,
     which can't be tied to the proposing session, so the person's tabs get no
     click; agents still read the agent form."""
     api = sockets
@@ -663,7 +663,7 @@ def test_no_accepted_click_for_an_agent_past_the_agent_memory(sockets, monkeypat
 
 
 def test_an_accepted_click_reads_liveness_and_the_slot_at_one_time():
-    """Review 4, NIT-1: the live check and the slot it lands on are read with
+    """The live check and the slot it lands on are read with
     one clock read, so a TTL running out between two reads can't bring a
     cursor back for an ended session."""
     clock = Clock()
@@ -692,7 +692,7 @@ def test_an_accepted_click_reads_liveness_and_the_slot_at_one_time():
 
 
 def test_a_failed_accepted_person_form_sends_the_person_nothing(sockets, monkeypatch):
-    """Review 4, NIT-2 (R15): on a failure the person's tabs get no click,
+    """On a failure the person's tabs get no click,
     never the bare agent form (a tab would draw it as the plain cursor)."""
     api = sockets
     node = api.graph.add_node("text-input", {"value": "hi"})
@@ -714,7 +714,7 @@ def test_a_failed_accepted_person_form_sends_the_person_nothing(sockets, monkeyp
 
 
 def test_the_runtime_guard_fails_a_cursor_event_sent_around_the_helper(sockets):
-    """conftest.py's check (review 4, LOW-1), run here by hand: a targeted
+    """conftest.py's check, run here by hand: a targeted
     cursor event sent straight to broadcast_raw is recorded; one through
     _broadcast_presence, and one with no target, are not."""
     import asyncio

@@ -1,24 +1,24 @@
-"""What the person reads when a Commons call is refused (GM - Design, error-copy round 2).
+"""What the person reads when a Commons call is refused (design, error copy).
 
-GM: "Raw backend exception text: fix it at the backend. Log str(exc) and send
+Design: "Raw backend exception text: fix it at the backend. Log str(exc) and send
 written copy." And on the split: "People get the written line and agents keep
 the specific detail." So a refusal carries two texts: its message (str(exc)),
 specific and technical, for agents (they read `detail` to fix their call) and
-the log; and `person`, a line written to GM's patterns, for the person's UI.
+the log; and `person`, a line written to the error-copy patterns (design), for the person's UI.
 Messages already written for people (most of evaluation.EvaluationError's)
 need no `person`: they are the line.
 """
 from __future__ import annotations
 
-# GM's 4xx fallback, the same words the frontend shows for a refusal with no reason.
-# Round 3f (GM): under a heading, "drop "That didn't work."".
+# The 4xx fallback (design), the same words the frontend shows for a refusal with no reason.
+# Design: under a heading, "drop "That didn't work."".
 FALLBACK = "Try again, or reload the page if it keeps happening."  # the browser line, a sentinel: never sent, the frontend says the shell's line
 
-# GM's lines, verbatim.
+# Lines from the design, verbatim.
 BAD_FILTERS = "Those filters didn’t work. Clear them and try again."
 UNKNOWN_SETTING = "That setting isn’t available. Reload to get the latest settings."
 
-# Written to GM's patterns; listed in docs/notes/2026-10-22-fix-error-copy.md for GM.
+# Written to the error-copy patterns (design); listed in docs/notes/2026-10-22-fix-error-copy.md.
 BAD_SETTING_VALUE = "That value doesn’t work for this setting. Reload to get the latest settings."
 FOLDER_UNREADABLE = "Nebula can’t read that folder. Check that it exists and that Nebula can open it."
 

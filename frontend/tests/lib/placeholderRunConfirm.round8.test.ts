@@ -4,7 +4,7 @@ import type { NodeData } from '../../src/types';
 import { formatConfirmUsd, placeholderRunConfirm, roundUpToCent } from '../../src/lib/placeholderRunConfirm';
 import type { RunCost, RunScopeSummary } from '../../src/lib/runScope';
 
-// Review 7 (L1, L4) and GM - Design's round 8 (item 2), verbatim.
+// The design rulings, verbatim.
 
 const codex = { id: 'ext:codex', name: 'Codex', color: '#F2C14E', verified: true };
 
@@ -17,7 +17,7 @@ const line = (nodeId: string, name: string, low: number, high: number) => ({ nod
 const summaryOf = (cost: Partial<RunCost>): RunScopeSummary => ({ total: 3, paid: [], cost: {
   low: 0, high: 0, lines: [], unpriced: [], plan: [], plus: [], awaitingInput: [], sizeRefs: [], ...cost } });
 
-describe('GM round 8, item 2: the left line under the still-setting-up heading too', () => {
+describe('the left line under the still-setting-up heading too (design)', () => {
   it('body, then the left line ("1 node Codex was setting up is no longer in this run.")', () => {
     // h is still Codex's placeholder; g, which the dialog showed, was deleted.
     const nodes = [node('h', 'Hero still', codex), node('o', 'Final', undefined, 'image-compare')];
@@ -44,7 +44,7 @@ describe('GM round 8, item 2: the left line under the still-setting-up heading t
   });
 });
 
-describe("review 7, L1: a replay's saved copy of a placeholder that is no longer on the canvas", () => {
+describe("a replay's saved copy of a placeholder that is no longer on the canvas", () => {
   // The replay still sends h's saved copy (it runs, priced in the total), but
   // Codex's placeholder is gone: never "finished", it left this run.
   const priced = summaryOf({ low: 1.2, high: 1.2, lines: [line('h', 'Hero still', 0.6, 0.6), line('o', 'Final', 0.6, 0.6)] });
@@ -71,7 +71,7 @@ describe("review 7, L1: a replay's saved copy of a placeholder that is no longer
   });
 });
 
-describe('review 7, L4: any amount above zero confirms at least $0.01', () => {
+describe('any amount above zero confirms at least $0.01', () => {
   it.each([4e-7, 4.9e-7, 1e-9, Number.MIN_VALUE])('%s rounds up to $0.01', (amount) => {
     expect(roundUpToCent(amount)).toBe(0.01);
     expect(formatConfirmUsd(amount)).toBe('$0.01');

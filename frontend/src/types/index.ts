@@ -238,9 +238,9 @@ export interface RouteSpec {
   optionalKeys?: string[];
   /** A keyed route whose run can't start without its key, in the person's
    *  words ("You can run X after you add your Hugging Face token in
-   *  Settings."; Idol's in PR #203 rounds 4 to 6). Without the key, Run is disabled with this as its reason,
-   *  the engine and the router refuse agent and CLI runs with it before
-   *  anything is sent. */
+   *  Settings."; Idol's in PR #203). Without the key, Run is disabled with this
+   *  as its reason, the engine and the router refuse agent and CLI runs with it
+   *  before anything is sent. */
   missingKeyLine?: string;
   /** A keyless route whose run, with one of its `optionalKeys` set, can bill
    *  the key owner's own account past a free allowance (Idol: a Hugging Face
@@ -392,12 +392,12 @@ export interface CinemaShot {
   /** Lets one shot deviate from the shared palette/look without breaking the rest. */
   overrides?: { palette?: Partial<CinemaSceneSpec['palette']>; look?: Partial<CinemaSceneSpec['look']> };
   /** `error` is the text agents read. The error* fields are how the Cinema
-   *  panel reads a failure, as a node card reads its run error (error copy
-   *  round 3c-2): the classifier's category and line, the handler's person
-   *  line, and the full raw text for Details when `error` was cut. */
+   *  panel reads a failure, as a node card reads its run error: the
+   *  classifier's category and line, the handler's person line, and the full
+   *  raw text for Details when `error` was cut. */
   output?: { imageUrl?: string; status: 'idle' | 'running' | 'done' | 'error'; error?: string; hash?: string;
     errorCategory?: string; errorFriendly?: string; errorPerson?: string; errorProviderText?: boolean;
-    /** The provider the shot's base model called (round 3f): GM's general line names it. */
+    /** The provider the shot's base model called: the general line (design) names it. */
     errorProvider?: string; errorRaw?: string };
   /** Candidate variations of this shot (one base-model run per distinct seed).
    *  The canonical image (output.imageUrl, the dynamic port, Send-to-motion) is
@@ -825,21 +825,21 @@ export interface NodeData {
    *  still holds the raw provider string for the expandable debug details. */
   errorCategory?: string;
   errorFriendly?: string;
-  /** The person's line for a run error (error copy round 3c, GM - Design:
-   *  "the canvas shows the written line"): the handler wrote it, with no ids
-   *  or record names. `error` keeps the specific text for agents; the card
-   *  never shows it beside this line (lib/nodeErrorCopy.ts). */
+  /** The person's line for a run error (design: "the canvas shows the written
+   *  line"): the handler wrote it, with no ids or record names. `error` keeps
+   *  the specific text for agents; the card never shows it beside this line
+   *  (lib/nodeErrorCopy.ts). */
   errorPerson?: string;
-  /** That line was written for a provider's answer (round 3d, GM: "Raw
-   *  provider text stays behind Details in every case."): the card keeps
-   *  `error`, the provider's words, behind Details. */
+  /** That line was written for a provider's answer (design: "Raw provider text
+   *  stays behind Details in every case."): the card keeps `error`, the
+   *  provider's words, behind Details. */
   errorProviderText?: boolean;
-  /** The provider the run called, from the route the backend took (round 3f,
-   *  the ErrorEvent's `provider`): the card's general line says "Details
-   *  shows what {Provider} said." Never read from `error`'s text. */
+  /** The provider the run called, from the route the backend took (the
+   *  ErrorEvent's `provider`): the card's general line says "Details shows
+   *  what {Provider} said." Never read from `error`'s text. */
   errorProvider?: string;
   /** Nebula refused the run before it started (the pre-call check): the
-   *  card's heading is "Nebula couldn’t start the run." (GM, PR #203 r32),
+   *  card's heading is "Nebula couldn’t start the run." (design, PR #203),
    *  the Agent log's. Card-only (node_errors.card), like errorPerson. */
   errorNotStarted?: boolean;
   /** The error is a missing-key one (ErrorEvent `missing_credential`, a pre-call check's
@@ -849,7 +849,7 @@ export interface NodeData {
    *  (answered no, 0.12)", and the gate node that caused it. */
   skipReason?: string;
   skipGateNodeId?: string;
-  /** An agent's placeholder (Q125 item 3): the backend's flag with its
+  /** An agent's placeholder: the backend's flag with its
    *  owner, while the agent sets the node up. Runs skip it; only the backend
    *  changes it (lib/pendingNodes.ts). */
   pending?: import('../lib/pendingNodes').PendingFlag;

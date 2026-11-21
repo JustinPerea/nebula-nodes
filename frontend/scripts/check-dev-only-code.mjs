@@ -1,4 +1,4 @@
-// Dev-only code never ships (GM r49): the ?cursorStates=1 driver
+// Dev-only code never ships (design): the ?cursorStates=1 driver
 // (src/components/canvas/agentCursorStatesDriver.ts) is imported behind
 // import.meta.env.DEV, so a production build drops it. This fails the build
 // if its marker, or its module's name, reaches any built asset.

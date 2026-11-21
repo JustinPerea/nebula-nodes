@@ -6,8 +6,8 @@ import { useBackendOffline } from '../lib/useBackendOffline';
 /** Marks a control locked by usePersonLock (tests read it; styles may). Its value is the verb. */
 export const PERSON_LOCK_ATTR = 'data-person-lock';
 
-/** Marks a locked control whose line is held back on purpose (offline comes first, GM r23 3; or
- * the Commons' Add waiting for the page's because line, GM r23 1): lib/lockPlacement lets it be
+/** Marks a locked control whose line is held back on purpose (offline comes first, design; or
+ * the Commons' Add waiting for the page's because line, design): lib/lockPlacement lets it be
  * without a line on screen. */
 export const LOCK_LINE_HELD_ATTR = 'data-lock-line-held';
 
@@ -24,8 +24,8 @@ export interface PersonLock {
   locked: boolean;
   /** The lock's words ("You can <verb> when this tab is connected as you."), shown or not. */
   line: string;
-  /** The line is on screen (after the first moment: GM r5 2a; never while Nebula is offline:
-   * GM r23 3, offline comes first). */
+  /** The line is on screen (after the first moment, design; never while Nebula is offline:
+   * offline comes first). */
   shown: boolean;
   /** The line's element id, for aria-describedby. */
   id: string;
@@ -37,7 +37,7 @@ export interface PersonLock {
 }
 
 /**
- * PR #204 round 18i (GM r39 Fix E): a lock whose reason isn't the person's (the Commons is off),
+ * PR #204 (design): a lock whose reason isn't the person's (the Commons is off),
  * in the one lock's shape: aria-disabled and still focusable, its line under the control through
  * components/PersonLock's PersonLockLine, pointed at by aria-describedby, no tooltip.
  */
@@ -61,17 +61,17 @@ export function useLineLock(line: string, locked: boolean): PersonLock {
 }
 
 /**
- * PR #204 round 10 (GM r15): the one lock for a control whose route is the person's alone
+ * PR #204 (design): the one lock for a control whose route is the person's alone
  * (personGateRoutes.py: require_person / person_only / the Commons' human_dep). While this tab
  * isn't connected as the person, the control stays where it is and focusable (aria-disabled, the
  * shared disabled look after the first moment), the line sits under it with no tooltip, and both
- * lift on the promote. A demoted tab locks too (GM r16 Q4). The line renders through
+ * lift on the promote. A demoted tab locks too (design). The line renders through
  * components/PersonLock; tests/personLockSweep.ratchet.test.ts fails a control that reaches a
  * person-only route without this.
  *
- * Round 14 (GM r23 3): offline comes first. While Nebula is offline the control stays locked but
- * its line is hidden: the offline notice says what is wrong, and connecting this tab wouldn't be
- * enough. Back online, still not connected, the line shows.
+ * Offline comes first (design). While Nebula is offline the control stays locked but its line
+ * is hidden: the offline notice says what is wrong, and connecting this tab wouldn't be enough.
+ * Back online, still not connected, the line shows.
  */
 export function usePersonLock(verb: string, active = true): PersonLock {
   // `active`: whether the control is live at all (an ask still open); a closed one never locks.

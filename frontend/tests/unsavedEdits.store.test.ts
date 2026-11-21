@@ -1,11 +1,11 @@
 /**
- * Q116 a) (Justin, 2026-10-23): "a): "Download your edits" plus "Continue
- * without them"." The question: "If the backend refuses it for good, for
+ * Justin, 2026-10-23: "Download your edits" plus "Continue without them".
+ * The question it answered: "If the backend refuses it for good, for
  * example because it's too large, the Projects screen can't load: every Try
  * again sends the same copy and gets the same refusal. The only way past is
  * reloading the page, which throws the edits away without saying so."
  *
- * GM - Design's screen for it (copy verbatim): heading "Couldn't save your
+ * The screen for it (design, copy verbatim): heading "Couldn't save your
  * edits.", the reason ("These edits are too large for Nebula to save.
  * Download them so nothing is lost, or continue without them." for too
  * large; otherwise the mapped reason with the same second sentence), and
@@ -131,7 +131,7 @@ afterEach(async () => {
 });
 
 describe('a recovered copy the backend refuses for good', () => {
-  it("too large: GM's screen, no Try again, and the copy is never sent again", async () => {
+  it("too large: the approved screen, no Try again, and the copy is never sent again", async () => {
     falleBehind();
     vi.mocked(projects.recoverProject).mockRejectedValue(tooLarge());
     await useProjectStore.getState().retry();
@@ -150,7 +150,7 @@ describe('a recovered copy the backend refuses for good', () => {
     expect(reloadPage).not.toHaveBeenCalled();
   });
 
-  it('another refusal for good: the mapped reason, then GM\'s second sentence', async () => {
+  it('another refusal for good: the mapped reason, then the approved second sentence', async () => {
     falleBehind();
     vi.mocked(projects.recoverProject).mockRejectedValue(refusal('Recovery ID already belongs to a different snapshot', 409));
     await useProjectStore.getState().retry();
@@ -166,7 +166,7 @@ describe('a recovered copy the backend refuses for good', () => {
       'Project limit reached. Download them so nothing is lost, or continue without them.' });
   });
 
-  it("a refusal with no reason of its own: GM's second sentence alone (the general line says reload)", async () => {
+  it("a refusal with no reason of its own: the approved second sentence alone (the general line says reload)", async () => {
     falleBehind();
     vi.mocked(projects.recoverProject).mockRejectedValue(refusal(refusedFallbackCopy(), 422));
     await useProjectStore.getState().retry();
@@ -295,7 +295,7 @@ describe('every path that sends the held copy', () => {
     emit({ type: 'graphSync', workspaceRevision: 'rev-b', paramsVersion: GRAPH_PARAMS_VERSION, nodes: [], edges: [], empty: true,
       projectSwitch: { projectId: 'beta', projectName: 'beta', previousProjectId: 'alpha', previousProjectName: 'Glass campaign',
         previousRevision: 'rev-a', actor: { kind: 'agent', name: 'Claude' } } });
-    // GM, 2026-10-24: the screen names the agent and the project it opens.
+    // Design, 2026-10-24: the screen names the agent and the project it opens.
     await vi.waitFor(() => expect(state().unsavedEdits).toEqual({ reason: TOO_LARGE,
       agentOpening: { agent: 'Claude', projectName: 'beta' } }));
     expect(state().error).toBeNull();
@@ -331,13 +331,13 @@ describe('every path that sends the held copy', () => {
   });
 });
 
-// GM r9 (2), #204 round 7: refused while the load saves the recovered edits, the verb says so.
+// Design, PR #204: refused while the load saves the recovered edits, the verb says so.
 const NOT_CONNECTED_SAVE = 'Nebula couldn’t save your unsaved edits because this tab isn’t connected as you. Open the link Nebula printed when it started.';
 
-describe("review: refusals reconnecting can fix, and files Load graph can't open", () => {
+describe("refusals reconnecting can fix, and files Load graph can't open", () => {
   const BILLING = "zz1: Changing how a Krea node is billed (_kreaAuth) is the person's call, so it needs their OK.";
 
-  // PR #204 r6 (GM r7 2): no Try again while the reason is "not connected"; the promote retries.
+  // Design, PR #204: no Try again while the reason is "not connected"; the promote retries.
   it('a tab not connected as the person (person_required): no Try again, and the same copy saves on the promote', async () => {
     falleBehind();
     vi.mocked(projects.recoverProject).mockRejectedValueOnce(refusal(BILLING, 403, { code: 'person_required' }));
@@ -385,13 +385,13 @@ describe("review: refusals reconnecting can fix, and files Load graph can't open
   });
 });
 
-/** GM - Design, 2026-10-23, verbatim (Q116 a). */
-describe("GM's lines in the store", () => {
+/** Design, 2026-10-23, verbatim. */
+describe("the approved lines in the store", () => {
   const BILLING = "zz1: Changing how a Krea node is billed (_kreaAuth) is the person's call, so it needs their OK.";
   const errorDetails = () => (projectStore as unknown as {
     projectErrorDetails?: (state: unknown) => string | null }).projectErrorDetails?.(state()) ?? null;
 
-  // PR #204 r6 (GM r7 2): the load screen's because form, no Try again; Details as before.
+  // Design, PR #204: the load screen's because form, no Try again; Details as before.
   it("a person-only refusal under \"Couldn’t recover the project.\": the because line, the backend's words behind Details", async () => {
     falleBehind();
     vi.mocked(projects.recoverProject).mockRejectedValueOnce(
@@ -413,7 +413,7 @@ describe("GM's lines in the store", () => {
     expect(errorDetails()).toBeNull();
   });
 
-  it("a download that couldn't be written: GM's line 2, the copy still held, and a retry writes it", async () => {
+  it("a download that couldn't be written: the approved second line, the copy still held, and a retry writes it", async () => {
     falleBehind();
     vi.mocked(projects.recoverProject).mockRejectedValue(tooLarge());
     await useProjectStore.getState().retry();

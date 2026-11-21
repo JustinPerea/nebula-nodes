@@ -22,7 +22,7 @@ import './store/agentNotesStore';
 // Questions agents asked (store/agentQuestionsStore.ts): the form is deferred
 // with the corner; the store keeps every set and its key from hello on.
 import './store/agentQuestionsStore';
-// The Message box's thread and listeners (r50): fed from load, as the log's store.
+// The Message box's thread and listeners: fed from load, as the log's store.
 import './store/personThreadStore';
 import { KeyboardShortcuts } from './components/KeyboardShortcuts';
 import { ConnectionBanner } from './components/ConnectionBanner';
@@ -57,7 +57,7 @@ import './App.css';
 import './styles/layouts.css';
 // The single supported appearance is available to every workspace.
 import './styles/slava-restraint.css';
-// GM r24 item 2: one disabled look for every button, whatever the reason.
+// One disabled look for every button, whatever the reason (design).
 import './styles/disabled-buttons.css';
 import './styles/agent-name.css';
 
@@ -110,17 +110,16 @@ function ZoomManifestRecorder() {
   return null;
 }
 
-/** A studio inside its boundary (PR #198 review 2, M2): one that can't
- * render shows GM's line and Back to canvas instead of blanking the app.
+/** A studio inside its boundary (PR #198): one that can't render shows the
+ * line (design) and Back to canvas instead of blanking the app.
  * Keyed by screen and node, so opening another starts clean. */
 function StudioScreenBoundary({ screen, children }: { screen: StudioScreen; children: ReactNode }) {
   const nodeId = useUIStore((s) => (screen === 'cinema-editor' ? s.cinemaEditorNodeId
     : screen === 'remotion-editor' ? s.remotionEditorTargetNodeId : screen === 'editor' ? s.editorTargetNodeId : null));
   const label = useGraphStore((s) => (nodeId ? s.nodes.find((node) => node.id === nodeId)?.data.label ?? null : null));
   // The data check for the node the studio edits (Cinema, the video editor,
-  // the composition editor): "missing or damaged" only when it names a field
-  // (review 4, L3). A node that's gone is missing (GM r6 item 4: the code
-  // knows which).
+  // the composition editor): "missing or damaged" only when it names a field.
+  // A node that's gone is missing (design: the code knows which).
   const problem = () => {
     if (!nodeId) return null;
     const node = useGraphStore.getState().nodes.find((candidate) => candidate.id === nodeId);
@@ -231,7 +230,7 @@ export default function App() {
 
     window.addEventListener('nebula:settings-saved', handleSettingsSaved);
     // The placeholder run dialog reads the keys again before it prices a run
-    // (store/graphStore.ts refreshSettingsCache; review 4, M1).
+    // (store/graphStore.ts refreshSettingsCache).
     window.addEventListener('nebula:settings-refresh', handleSettingsSaved);
     return () => {
       cancelled = true;
@@ -284,7 +283,7 @@ export default function App() {
   const assetsPanelVisible = useUIStore((s) => s.panels.assets.visible);
 
   const commonsEnabled = useUIStore((s) => s.commonsEnabled);
-  // PR #204 round 18d (GM r32 1): a tab opened on the Commons while the backend runs without it
+  // PR #204 (design): a tab opened on the Commons while the backend runs without it
   // opens to the Commons-off view, over whichever screen it would have shown (the Projects home
   // after a reload). Nothing of the canvas's or a project's mounts behind it.
   const commonsOffRoute = useUIStore((s) => s.commonsOffShown) && !commonsEnabled;
@@ -298,12 +297,12 @@ export default function App() {
   const isCreate = viewMode === 'create';
   const isBrandShowcase = viewMode === 'brand-showcase';
   const homeSettings = useHomeSettingsDock(isHome);
-  // Review 18 MEDIUM-2 (GM r30 item 2): the open project's reopen in place
-  // that can't go yet (a run, a World Labs hold) says when it can, under its card.
-  // The card's lock line goes the moment the hold ends (GM r31, 2).
+  // The open project's reopen in place that can't go yet (a run, a World Labs
+  // hold) says when it can, under its card. The card's lock line goes the
+  // moment the hold ends (design).
   const reopenHoldNow = useSyncExternalStore(subscribeReopenHold, readReopenHold);
-  // While Projects shows, Nebula's verdict on that reopen is kept current
-  // (review 19 item 1): the lock is Nebula's own, read before the press.
+  // While Projects shows, Nebula's verdict on that reopen is kept current: the
+  // lock is Nebula's own, read before the press.
   useEffect(() => (isHome ? watchOpenHold() : undefined), [isHome]);
 
   // Design: the first load found no server (trying again, or out of tries): its line shows on Projects.
@@ -362,7 +361,7 @@ export default function App() {
     <ReactFlowProvider>
       <ConnectionBanner placement={isHome ? 'home' : isCanvas ? 'workspace' : 'studio'} />
       <PersonRequiredBanner />
-      {/* The World Labs notice; the held-reopen line it clears is its second line (GM r33, 6). */}
+      {/* The World Labs notice; the held-reopen line it clears is its second line (design). */}
       <ProviderRecoveryStatus reopenLine={isCanvas && projects.heldReopenLine?.place === 'worldLabsNotice'
         ? { line: projects.heldReopenLine.line, onDismiss: projects.dismissHeldReopenLine } : null} />
       <ProjectCoordinator />
@@ -395,14 +394,14 @@ export default function App() {
       {isCanvas && <ChatLauncher />}
       {isCanvas && <Toolbar />}
       {isCanvas && <AgentLog />}
-      {/* Updates on every screen, with the open project's list (Q107 a); one
-          mount, so the list, the card and the count carry across screens. */}
+      {/* Updates on every screen, with the open project's list; one mount, so
+          the list, the card and the count carry across screens. */}
       {!isBrandShowcase && <AgentNotes />}
-      {/* The agent cursors on the surfaces beside the canvas (Phase 3): above
-          the docks, below modals and the notice region. */}
+      {/* The agent cursors on the surfaces beside the canvas: above the docks,
+          below modals and the notice region. */}
       {!isHome && !isBrandShowcase && <AgentScreenLayer canvasMounted={isCanvas} />}
       {!isHome && !isBrandShowcase && !isCommons && <CommandPalette />}
-      {/* The app's one notice region, above every panel and Studio (GM - Design,
+      {/* The app's one notice region, above every panel and Studio (Design,
           2026-10-23): the canvas's notices with their Undo or Redo and the
           proposal bar, the written lines on the other screens, and every
           toast on every screen ("One region, one stack, and nothing else

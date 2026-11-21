@@ -1,16 +1,15 @@
 /**
- * PR #204 round 6. Two ratchets on the promote mechanism, read with the TypeScript parser:
+ * PR #204. Two ratchets on the promote mechanism, read with the TypeScript parser:
  *
- * 1. GM r6 (2), the shared-line rule: a "not connected" refusal of anything that retries on the
+ * 1. The shared-line rule (design): a "not connected" refusal of anything that retries on the
  *    promote says why in the "because" form ("Nebula couldn’t <do it> because this tab isn’t
  *    connected as you. …"), never "then try again" or "This change needs your OK". Every
  *    `retryOnPromote(` call's enclosing function words its line with `notConnectedBecause(` (or
  *    `markReadRefusedCopy(`, which is built on it).
- * 2. Review 4 LOW-3 (held-state-ui): a request is done again on the promote through
- *    `retryOnPromote` only. A clear callback (what `clearsOnPromote`, `clearRefusedOnPromote`,
- *    `clearLineOnPromote` and `clearSetterOnPromote` run) only takes a line down: a call in it
- *    that reads like a request (retry, save, send, dismiss, load, fetch, flush, refresh,
- *    hydrate, setAttempt…) fails.
+ * 2. A request is done again on the promote through `retryOnPromote` only. A clear callback (what
+ *    `clearsOnPromote`, `clearRefusedOnPromote`, `clearLineOnPromote` and `clearSetterOnPromote`
+ *    run) only takes a line down: a call in it that reads like a request (retry, save, send,
+ *    dismiss, load, fetch, flush, refresh, hydrate, setAttempt…) fails.
  */
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
@@ -80,9 +79,9 @@ function isBecause(expr: ts.Expression, fn: ts.Node): boolean {
 const SHOWS = /^(?:set[A-Z]\w*|setState|set|notify|showNotice|showError|styleLine|show\w*Line|show\w*)$/;
 
 /**
- * Review 5 LOW-2 (round 7): per call site, not per function. In the block that holds each
- * `retryOnPromote(` (the branch it runs in), every call that shows a line passes it a because-form
- * line (or an object whose line-ish property is one), and at least one such call is there.
+ * Per call site, not per function. In the block that holds each `retryOnPromote(` (the branch it
+ * runs in), every call that shows a line passes it a because-form line (or an object whose
+ * line-ish property is one), and at least one such call is there.
  */
 export function retriesWithoutBecause(sources = files().map(parse)): string[] {
   const bad: string[] = [];
@@ -92,7 +91,7 @@ export function retriesWithoutBecause(sources = files().map(parse)): string[] {
     let block: ts.Node | undefined = call.parent;
     while (block && !ts.isBlock(block) && !ts.isSourceFile(block)) block = block.parent;
     if (!fn || !block) { bad.push(where(source, call)); return; }
-    // Round 7: a retry whose line another function words (a scene save's answer, settled before
+    // A retry whose line another function words (a scene save's answer, settled before
     // the retry registers) names it, `// because-line: sceneRefusal`, and that function must
     // word the person gate's refusal with notConnectedBecause.
     let statement: ts.Node = call;
@@ -136,7 +135,7 @@ export function retriesWithoutBecause(sources = files().map(parse)): string[] {
   return bad;
 }
 
-/** Calls a clear may make: setters, and reads that change nothing (review 5 LOW-1: only these). */
+/** Calls a clear may make: setters, and reads that change nothing (only these). */
 const SETTER = /^(?:set|setState|set[A-Z]\w*|patch|delete|clear|clear\w*(?:Error|Line|Notice|Message)s?)$/;
 const PURE = /^(?:get|getState|has|includes|map|filter|find|findIndex|some|every|slice|concat|keys|values|entries|fromEntries|assign|max|min|now|trim|startsWith|endsWith|test|indexOf|join|split|toString|String|Number|Boolean|isArray|stringify|parse|from|reduce|flatMap|sort|at|current|isPersonRefusal|saysPersonRequired|current\w*|shotPortId|nodeKeyStatus)$/;
 /** Setters whose only effect is to make an effect request again. */
@@ -202,9 +201,9 @@ function wrappers(source: ts.SourceFile, clears: Record<string, number>): Record
 }
 
 /**
- * Review 4 LOW-3, review 5 LOW-1 (round 7): a clear only takes a line down. Its callback (and
- * clearSetterOnPromote's setter) may call setters and pure reads; any other call fails, inline,
- * by name (a same-file function read in turn), or through a wrapper that hands its callback on.
+ * A clear only takes a line down. Its callback (and clearSetterOnPromote's setter) may call
+ * setters and pure reads; any other call fails, inline, by name (a same-file function read in
+ * turn), or through a wrapper that hands its callback on.
  */
 export function requestsInClears(sources = files().map(parse)): string[] {
   const bad: string[] = [];
@@ -233,7 +232,7 @@ export function requestsInClears(sources = files().map(parse)): string[] {
 
 const fixture = (text: string) => ts.createSourceFile(join(SRC, 'fixture.ts'), text, ts.ScriptTarget.Latest, true);
 
-describe('GM r6 (2): what retries on the promote says why in the because form', () => {
+describe('what retries on the promote says why in the because form (design)', () => {
   it('every retryOnPromote caller words its line with notConnectedBecause', { timeout: 60_000 }, () => {
     expect(retriesWithoutBecause()).toEqual([]);
   });
@@ -257,12 +256,12 @@ describe('GM r6 (2): what retries on the promote says why in the because form', 
   });
 });
 
-describe('review 4 LOW-3: nothing retries outside retryOnPromote', () => {
+describe('nothing retries outside retryOnPromote', () => {
   it('no clear callback makes a request', { timeout: 60_000 }, () => {
     expect(requestsInClears()).toEqual([]);
   });
 
-  it('the ratchet catches a retry inside a clear callback (M18), inline or by name', () => {
+  it('the ratchet catches a retry inside a clear callback, inline or by name', () => {
     const inline = fixture(`clearRefusedOnPromote(e, () => { setError(null); setAttempt((n) => n + 1); });`);
     expect(requestsInClears([inline])).toEqual(['fixture.ts:1 setAttempt()']);
     const store = fixture(`clearLineOnPromote(e, () => get().error, line, () => { set({ error: null }); void get().retry(); });`);
@@ -273,24 +272,24 @@ describe('review 4 LOW-3: nothing retries outside retryOnPromote', () => {
     expect(requestsInClears([clean])).toEqual([]);
   });
 
-  // Review 5 LOW-1 (round 7): the reviewer's three survivors, K1-K3, each fail it now.
-  it('K1: a request a list of names never had (markRead) fails it: only setters and reads may run', () => {
+  // Three request forms an earlier version of the check let through each fail it now.
+  it('a request a list of names never had (markRead) fails it: only setters and reads may run', () => {
     const k1 = fixture(`clearLineOnPromote(e, () => get().error, line, () => { setState({ error: null }); void getState().markRead(surface); });`);
     expect(requestsInClears([k1])).toEqual(['fixture.ts:1 markRead()']);
   });
-  it('K2: a wrapper that hands its callback to a clear (clearsOnPromoteIf) is a clear too', () => {
+  it('a wrapper that hands its callback to a clear (clearsOnPromoteIf) is a clear too', () => {
     const k2 = fixture(`function clearsOnPromoteIf(error, clear) { if (error) clearsOnPromote(clear); }
 clearsOnPromoteIf(failure, () => { set({ line: null }); void useGraphStore.getState().runAll(); });`);
     expect(requestsInClears([k2])).toEqual(['fixture.ts:2 runAll()']);
   });
-  it('K3: clearSetterOnPromote\'s setter is read', () => {
+  it('clearSetterOnPromote\'s setter is read', () => {
     const k3 = fixture(`clearSetterOnPromote(exc, (u) => { setError(u); getOutsideSpend().then(setView); }, line, null);`);
     expect(requestsInClears([k3]).length).toBeGreaterThan(0);
   });
 });
 
-describe('review 5 LOW-2: the because rule reads each retry\'s own line', () => {
-  it('K4: a generic line beside an unreachable notConnectedBecause still fails it', () => {
+describe('the because rule reads each retry\'s own line', () => {
+  it('a generic line beside an unreachable notConnectedBecause still fails it', () => {
     const k4 = fixture(`function f(err) { setError(failureMessage(err, "Couldn’t save the style.")); if (false) notConnectedBecause('x'); retryOnPromote(err, 'k', () => go()); }`);
     expect(retriesWithoutBecause([k4])).toHaveLength(1);
   });
@@ -310,7 +309,7 @@ function f(e) {
   });
 });
 
-// ---------- review 4 MEDIUM-1, LOW-1, LOW-2: the trace follows rethrows and fails closed ----------
+// ---------- the trace follows rethrows and fails closed ----------
 
 import { callersOf, gatedRoutes, untracedApiText, withSources } from './personGatedCallers';
 
@@ -348,7 +347,7 @@ const PROBES: Record<string, Record<string, string>> = {
     'components/C.tsx': panel(`import { api } from '../lib/a';`, 'api.save()') },
 };
 
-describe('review 4 LOW-1: a frontend request the trace used to miss is found, or must be declared', () => {
+describe('a frontend request the trace used to miss is found, or must be declared', () => {
   for (const [form, files] of Object.entries(PROBES)) {
     it(form, () => {
       const found = withSources(files, () => callersOf(PRESETS));
@@ -393,12 +392,12 @@ const UNTRACED: Record<string, string> = {
   'lib/spatialValue.ts must be an unsigned relative /api/outputs/ path': 'a validation message',
   'lib/storedImage.ts /api/outputs/': 'SERVED: which image paths are Nebula\'s own',
   'lib/storedImage.ts /api/presets/thumbnails/': 'SERVED',
-  // Round 7 (gates-security LOW-1): the bare prefix is listed now, never skipped.
+  // The bare prefix is listed too, never skipped.
   'lib/backend.ts /api/': 'rewriteExecutionAssetUrls: `value.startsWith(\'/api/\')`, which run values are backend paths; sends nothing',
   'lib/canvasSelection.ts /api/': 'outputUrls: `value.startsWith(\'/api/\')`, which outputs are URLs; sends nothing',
 };
 
-describe('round 6: every /api/ text the trace can\'t follow is declared', () => {
+describe('every /api/ text the trace can\'t follow is declared', () => {
   it('and every declaration is still there', { timeout: 60_000 }, () => {
     const keyOf = (entry: { file: string; text: string }) => Object.keys(UNTRACED)
       .find((key) => key === `${entry.file} ${entry.text}` || (`${entry.file} ${entry.text}`.startsWith(key) && key.split(' ').length > 2));
@@ -409,10 +408,10 @@ describe('round 6: every /api/ text the trace can\'t follow is declared', () => 
   });
 });
 
-describe('review 4 MEDIUM-1: a store action that throws on is followed into the components that call it', () => {
+describe('a store action that throws on is followed into the components that call it', () => {
   const cluster = () => gatedRoutes().find((route) => route.method === 'POST' && route.path === '/api/graph/cluster')!;
 
-  // GM r8 (3), #204 r7: Generate's line goes to the notice region through notify (graph.notify).
+  // Design, PR #204: Generate's line goes to the notice region through notify (graph.notify).
   it('today: CreateView\'s catch on authorGenerationCluster registers (runLine, through notify)', { timeout: 60_000 }, () => {
     const found = callersOf(cluster());
     expect(found.has('store/graphStore.ts#authorGenerationCluster')).toBe(false); // followed past
@@ -457,7 +456,7 @@ export function Mutant({ setLine }: { setLine: (line: string) => void }) {
   });
 });
 
-// ---------- review 4 LOW-2: the backend forms the line scan missed ----------
+// ---------- the backend forms the line scan missed ----------
 
 const ROUTE_HEAD = `from fastapi import APIRouter, Depends, FastAPI\napp = FastAPI()\n`;
 const BACKEND_PROBES: Record<string, { files: Record<string, string>; expect: string }> = {
@@ -476,7 +475,7 @@ const BACKEND_PROBES: Record<string, { files: Record<string, string>; expect: st
   'router-level dependencies=': { files: { 'routes/probe.py': `from fastapi import APIRouter, Depends\nfrom routes.krea_connector import person_only\nrouter = APIRouter(prefix="/api/p", dependencies=[Depends(person_only)])\n@router.get("/probe")\ndef probe():\n    return {}\n` }, expect: 'GET /api/p/probe' },
 };
 
-describe('review 4 LOW-2: backend routes behind the gate, read with ast', () => {
+describe('backend routes behind the gate, read with ast', () => {
   for (const [form, probe] of Object.entries(BACKEND_PROBES)) {
     it(form, { timeout: 30_000 }, () => {
       expect(gatedRoutes(probe.files).map((route) => `${route.method} ${route.path}`).join(',')).toBe(probe.expect);

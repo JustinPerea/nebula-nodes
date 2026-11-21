@@ -18,7 +18,7 @@ export function moodboardHash(id: string): string {
 }
 
 /**
- * The board the Studio shows, kept in this tab's own storage (GM,
+ * The board the Studio shows, kept in this tab's own storage (design,
  * 2026-10-30: a promote never moves the person). The address can lose its
  * `#moodboard/<id>` without the person leaving: the person link takes the
  * hash, then is stripped from it. A same-tab reload or reconnect then
@@ -84,13 +84,13 @@ function replaceHash(hash: string): void {
  * past the Projects screen into it; with no open project it waits for the
  * person to open one.
  *
- * Review 11 of PR #199: going past Projects counts as the person's own
- * open of the project only when their navigation (loading the page with the
- * link, or changing the hash) is what opens it. Nothing an agent does sets
- * the hash with a hashchange (the Studio follows a board with replaceState,
- * which fires none), so the one way an agent could drive it is a link that
- * waits: if the tab follows an agent's switch meanwhile, the project it
- * then goes into is the agent's, and the open isn't the person's.
+ * PR #199: going past Projects counts as the person's own open of the
+ * project only when their navigation (loading the page with the link, or
+ * changing the hash) is what opens it. Nothing an agent does sets the hash
+ * with a hashchange (the Studio follows a board with replaceState, which
+ * fires none), so the one way an agent could drive it is a link that waits:
+ * if the tab follows an agent's switch meanwhile, the project it then goes
+ * into is the agent's, and the open isn't the person's.
  */
 export function useMoodboardDeepLink(): void {
   useEffect(() => {
@@ -100,11 +100,11 @@ export function useMoodboardDeepLink(): void {
     // No board in the address: the tab's own record of the Studio it showed
     // (a reload after the person link took the hash). It opens the way the
     // hash would: a board deleted meanwhile gets the Studio's own "Moodboard
-    // not found", the same as a #moodboard/<id> link to it (GM, PR #204
-    // round 1: one behaviour for a missing board however reached). Only on a
-    // reload (GM, PR #204 round 3): a typed address, a bookmark or a fresh
-    // link lands where it points, and the tab forgets the board. A reconnect
-    // that doesn't navigate never remounts this, so the Studio just stays.
+    // not found", the same as a #moodboard/<id> link to it (design, PR #204:
+    // one behaviour for a missing board however reached). Only on a reload
+    // (design, PR #204): a typed address, a bookmark or a fresh link lands
+    // where it points, and the tab forgets the board. A reconnect that doesn't
+    // navigate never remounts this, so the Studio just stays.
     let restoring = false;
     if (!pending && neutralHash(window.location.hash) && navigationType() === 'reload') {
       pending = keptStudioBoard();
@@ -112,7 +112,7 @@ export function useMoodboardDeepLink(): void {
     }
     // The view when the restore was armed: if the person moves before it
     // opens (another board, the canvas, any other view), their move wins
-    // (review 1 LOW-1). Opened at once once the project is ready, no request first.
+    // (PR #204). Opened at once once the project is ready, no request first.
     const armedView = { mode: useUIStore.getState().viewMode, board: useUIStore.getState().moodboardEditorId };
 
     const openPending = () => {
@@ -166,7 +166,7 @@ export function useMoodboardDeepLink(): void {
         openPending();
         return;
       }
-      // The person link (GM, 2026-10-30): a promote never moves the person.
+      // The person link (design, 2026-10-30): a promote never moves the person.
       // personSession takes it in and strips it, which leaves the address
       // without the board; the Studio stays and its link comes back.
       let arrived = window.location.hash;

@@ -4,12 +4,12 @@ import { fileURLToPath } from 'node:url';
 import { startupSet } from './lib/startupChunks.mjs';
 
 /**
- * PR #199 round 17 (GM r23, 3): a canvas kept in this tab is only here, so
+ * PR #199 (design): a canvas kept in this tab is only here, so
  * what protects it must never wait for a lazy chunk. Two things must load
  * with the app itself (the entry chunk or a chunk the entry imports
  * statically, which the browser fetches before the entry runs), never in a
  * chunk that loads later and can fail on its own (the lazy
- * `catalogRestoreCopy` chunk, or the project flows chunk, round 25):
+ * `catalogRestoreCopy` chunk, or the project flows chunk):
  * - the kept unload guard (store/projectStore.ts registers it with
  *   `window.addEventListener('beforeunload', …)` and marks its kept branch
  *   with the literal 'nebula-kept-unload-guard'), so a reload or a tab
@@ -18,7 +18,7 @@ import { startupSet } from './lib/startupChunks.mjs';
  *   full sentence the notice says when that chunk failed while kept.
  * The bundler may place a module the entry and lazy chunks share in a common
  * chunk the entry imports instead of in the entry file itself; that is as
- * early as the entry, so it counts (round 25: it did, for projectStore).
+ * early as the entry, so it counts (it did, for projectStore).
  *
  * Run after `vite build`. The build folder: the first argument, else dist
  * (dist-desktop for the desktop build), as check-build-budget.mjs reads it.
@@ -31,12 +31,11 @@ const distDir = process.argv[2]
 /** String literals minification keeps, each in its guard's own code path. */
 const MARKERS = [
   // The kept guard's own literal (store/projectStore.ts KEPT_UNLOAD_MARK),
-  // beside its registration: any other beforeunload can't pass for it
-  // (review 16 kept-ui NIT-2).
+  // beside its registration: any other beforeunload can't pass for it.
   { what: 'the kept unload guard', pattern: /nebula-kept-unload-guard/ },
   { what: 'the unload guard registration', pattern: /addEventListener\((["'`])beforeunload\1/ },
-  // The last word is the shared tab/window word (lib/tabWord, round 20 of
-  // PR #199): built as a call inside the template literal, or a literal.
+  // The last word is the shared tab/window word (lib/tabWord, PR #199):
+  // built as a call inside the template literal, or a literal.
   { what: 'the kept fallback line', pattern: /before your latest edits were saved\. They(?:’|\\u2019)re kept in this (?:tab|window|\$\{[\w$]+\(\)\})\./ },
 ];
 

@@ -1,15 +1,15 @@
-"""One order of precedence for what a board sends (design-canvas gap 18).
+"""One order of precedence for what a board sends (design).
 
 Justin's answers (2026-10-19):
 
-- P1: by default Nebula leaves a measured colour that clashes with the
-  Direction or Avoid list out of the brief, lists it with the reason, and Keep
-  anyway puts it back. Per board (``clashMode``) he can pick flag only, no
-  measured colours once there's a Direction, or keep everything.
-- P2: the colour-word check runs now; a second check can add findings later,
+- By default Nebula leaves a measured colour that clashes with the Direction or
+  Avoid list out of the brief, lists it with the reason, and Keep anyway puts it
+  back. Per board (``clashMode``) he can pick flag only, no measured colours once
+  there's a Direction, or keep everything.
+- The colour-word check runs now; a second check can add findings later,
   each recording which check found it (``foundBy``).
-- P3: a "Left out of the brief" list with reasons and Keep anyway.
-- P4: board notes (and image notes, and the cues lifted from them) never go to
+- A "Left out of the brief" list with reasons and Keep anyway.
+- Board notes (and image notes, and the cues lifted from them) never go to
   generators by default; a board or a node opts in. Only the person may opt in.
 
 The board below is the Good Machines board 4df26f93ff63 as the studio set it on
@@ -78,7 +78,7 @@ def hexes(items: list[dict]) -> list[str]:
     return [item["hex"] for item in items]
 
 
-# -- P1 a): the default --------------------------------------------------------
+# -- the default ---------------------------------------------------------------
 
 def test_the_good_machines_board_leaves_out_its_clashing_accents():
     brief = compose(gm_board())
@@ -194,7 +194,7 @@ def test_keep_all_sends_everything_but_still_runs_the_check():
     assert colour_check(board)["findings"]
 
 
-# -- P4: notes ----------------------------------------------------------------------
+# -- notes --------------------------------------------------------------------------
 
 @pytest.mark.parametrize("direction", [GM_DIRECTION, ""])
 def test_notes_never_reach_generators_by_default(direction):

@@ -27,8 +27,8 @@ const entrySize = (await stat(entryPath)).size;
 const entryGzipSize = gzipSync(entryBytes).byteLength;
 // Measured 2026-11-14 after the startup-set defer (docs/notes/2026-11-14-perf-startup-set-defer.md):
 // 394,268 raw / 125,652 gzip, down from 477,203 / 148,357. Merging main (417a238b) took the
-// entry to 399,592 / 127,624 (+5,324 / +1,972). Design round 1 (the fallback card, the reveal
-// and the hold line) added +5,686 / +1,705: 405,278 / 129,329. Review round 1 (the hold's
+// entry to 399,592 / 127,624 (+5,324 / +1,972). The design changes (the fallback card, the reveal
+// and the hold line) added +5,686 / +1,705: 405,278 / 129,329. The review fixes (the hold's
 // ceiling, the owed fit, the swap marks, the live region) added +650 / +274: 405,928 / 129,603.
 // The limits are that plus 8,000 raw / 3,500 gzip, rounded up to the next 100.
 const MAX_ENTRY_BYTES = 414_000;
@@ -44,9 +44,9 @@ if (entrySize > MAX_ENTRY_BYTES || entryGzipSize > MAX_ENTRY_GZIP_BYTES) {
 // The entry alone is not the startup cost: chunks it imports statically or
 // modulepreloads load before the first paint too. Measured with `npm run build`
 // after the 2026-11-14 defer: 1,841,464 raw / 481,238 gzip in 44 chunks (it was
-// 1,923,389 / 502,295 in 40). After merging main and the later rounds it was
-// 1,847,267 / 483,364; design round 1 added +5,686 / +1,704 (1,852,953 / 485,068);
-// review round 1 added +650 / +275: 1,853,603 / 485,343, still 44 chunks. The limits
+// 1,923,389 / 502,295 in 40). After merging main and the later changes it was
+// 1,847,267 / 483,364; the design changes added +5,686 / +1,704 (1,852,953 / 485,068);
+// the review fixes added +650 / +275: 1,853,603 / 485,343, still 44 chunks. The limits
 // are that plus 8,000 raw / 3,500 gzip, rounded up to the next 1,000 raw and 100 gzip.
 // What left the set: the node cards for the less common
 // kinds (Edit, Remotion, Cinema scene, Character, Camera rig, Reference set,
@@ -60,9 +60,9 @@ if (entrySize > MAX_ENTRY_BYTES || entryGzipSize > MAX_ENTRY_GZIP_BYTES) {
 // measured cost: a canvas kept in the tab after a restore is only in that tab,
 // so what keeps it safe loads with the app (the kept unload guard and fallback
 // line, the kept edit steps in graphStore, keptWires' refusals, Projects home's
-// kept notice, the bottom bar's kept state). Its round 28 notes measured lazy
-// splits of these; a kept edit that waits for a chunk is refused for good when
-// that chunk can't load, which is when a canvas is kept, so they stay.
+// kept notice, the bottom bar's kept state). Measuring lazy splits of these
+// showed that a kept edit that waits for a chunk is refused for good when that
+// chunk can't load, which is when a canvas is kept, so they stay.
 // The failure-lines PR (every failure line is one sentence, "Nebula couldn’t ‹do X› because ‹reason›.") cost
 // +7,545 raw / +2,445 gzip over main (1,860,086 / 487,696): 1,867,631 / 490,141, still 45 chunks. The limits are the
 // ones above plus that cost, rounded up to the next 1,000 raw and 100 gzip. The cost is the clause table design's

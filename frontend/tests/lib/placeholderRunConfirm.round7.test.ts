@@ -4,7 +4,7 @@ import type { NodeData } from '../../src/types';
 import { formatConfirmUsd, placeholderRunConfirm, roundUpToCent } from '../../src/lib/placeholderRunConfirm';
 import type { RunCost, RunScopeSummary } from '../../src/lib/runScope';
 
-// GM - Design, round 7 (2026-10-26) and its answers to review 6 (L-b, L-e), verbatim.
+// The design rulings (2026-10-26), verbatim.
 
 const codex = { id: 'ext:codex', name: 'Codex', color: '#F2C14E', verified: true };
 const claude = { id: 'ext:claude', name: 'Claude Code', color: '#5B9DFF', verified: false };
@@ -18,7 +18,7 @@ const line = (nodeId: string, name: string, low: number, high: number) => ({ nod
 const summaryOf = (cost: Partial<RunCost>): RunScopeSummary => ({ total: 3, paid: [], cost: {
   low: 0, high: 0, lines: [], unpriced: [], plan: [], plus: [], awaitingInput: [], sizeRefs: [], ...cost } });
 
-describe('GM round 7, item 1: "finished setting up this node / these nodes"', () => {
+describe('"finished setting up this node / these nodes" (design)', () => {
   const edges = [wire('h', 'o'), wire('p', 'o')];
   const priced = summaryOf({ low: 0.5, high: 0.5, lines: [line('h', 'Hero still', 0.43, 0.43), line('p', 'Plate', 0.07, 0.07)] });
 
@@ -44,7 +44,7 @@ describe('GM round 7, item 1: "finished setting up this node / these nodes"', ()
   });
 });
 
-describe('review 6, L-b (GM answer): placeholders the dialog showed that left the run', () => {
+describe('placeholders the dialog showed that left the run (design)', () => {
   const priced = summaryOf({ low: 0.07, high: 0.07, lines: [line('p', 'Plate', 0.07, 0.07)] });
 
   it('one, none finished: "Run without the node Codex was setting up?" / "It\'s no longer in this run."', () => {
@@ -90,7 +90,7 @@ describe('review 6, L-b (GM answer): placeholders the dialog showed that left th
   });
 });
 
-describe('GM round 7, item 2: rows priced by their input under a total', () => {
+describe('rows priced by their input under a total (design)', () => {
   const nodes = [node('h', 'Hero still', codex), node('u', 'Upscale', codex), node('g', 'Grade', codex), node('f', 'Flux still', codex),
     node('o', 'Final', undefined, 'image-compare')];
   const edges = [wire('h', 'o'), wire('u', 'o'), wire('g', 'o'), wire('f', 'o')];
@@ -132,14 +132,14 @@ describe('GM round 7, item 2: rows priced by their input under a total', () => {
     expect(model.notes).toEqual(['3 nodes have no price yet, so the run may cost more.']);
   });
 
-  it('only unlisted rows keep round 6\'s words', () => {
+  it('only unlisted rows keep their earlier words', () => {
     const model = placeholderRunConfirm(nodes.filter((n) => !['u', 'g'].includes(n.id)), edges, 'o', summaryOf({ ...total,
       unpriced: ['Flux still'], ...ids(['f'], []) }))!;
     expect(model.notes).toEqual(['“Flux still” has no list price, so the run may cost more.']);
   });
 });
 
-describe('review 6, L-e (GM answer): amounts the person confirms show cents, rounded up', () => {
+describe('amounts the person confirms show cents, rounded up (design)', () => {
   it.each([
     [0.201, '$0.21', 0.21],
     [10.481, '$10.49', 10.49],

@@ -1,13 +1,13 @@
 /**
- * PR #199 fix round 23, GM r35 COPY 1, verbatim: a new project refused at
- * the project limit says "You have 501 projects and the limit is 500. You
- * can make a new one after you delete 2 projects." with the real numbers,
- * and "after you delete 1 project" for one. One shared line
- * (lib/errorCopy overProjectLimitCopy) that every refusal of a new project
- * reads from the answer's numbers (`projectCount`, `projectLimit`,
- * `deletes`), through the real request client. The list may be past the
- * limit after a restore, an Undo of a delete or the person's save of kept
- * edits; only new projects are refused.
+ * PR #199, design copy, verbatim: a new project refused at the project
+ * limit says "You have 501 projects and the limit is 500. You can make a
+ * new one after you delete 2 projects." with the real numbers, and "after
+ * you delete 1 project" for one. One shared line (lib/errorCopy
+ * overProjectLimitCopy) that every refusal of a new project reads from the
+ * answer's numbers (`projectCount`, `projectLimit`, `deletes`), through the
+ * real request client. The list may be past the limit after a restore, an
+ * Undo of a delete or the person's save of kept edits; only new projects
+ * are refused.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -24,8 +24,8 @@ const json = (status: number, body: unknown) => new Response(JSON.stringify(body
   { status, headers: { 'content-type': 'application/json' } });
 afterEach(() => fetch.mockReset());
 
-describe('GM r35: the over-limit line', () => {
-  it("GM's words, with the real numbers", () => {
+describe('the over-limit line', () => {
+  it('the approved words, with the real numbers', () => {
     expect(overProjectLimitCopy(501, 500, 2))
       .toBe('You have 501 projects and the limit is 500. You can make a new one after you delete 2 projects.');
     expect(overProjectLimitCopy(500, 500, 1))

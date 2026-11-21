@@ -113,13 +113,12 @@ export function isKreaAuthorizationUrl(value: string): boolean {
 }
 
 /**
- * A Krea call, one line on failure (error copy round 3e, GM: "Couldn't
- * {verb} {object}." then the reason). The reason comes from what kind of
- * failure it was, never from the error or the answer's body: network and
- * parsing exceptions, and Krea's own answers, can contain credential-bearing
- * URLs, so nothing of theirs is kept, shown or logged. The one thing read
- * from a refusal is Nebula's own person gate `code`: a person-only refusal
- * says GM's line for it (Q116 a).
+ * A Krea call, one line on failure (design: "Couldn't {verb} {object}." then
+ * the reason). The reason comes from what kind of failure it was, never from
+ * the error or the answer's body: network and parsing exceptions, and Krea's
+ * own answers, can contain credential-bearing URLs, so nothing of theirs is
+ * kept, shown or logged. The one thing read from a refusal is Nebula's own
+ * person gate `code`: a person-only refusal says the line (design) for it.
  */
 async function kreaJson<T>(heading: string, path: string, init?: RequestInit): Promise<T> {
   let response: Response;

@@ -54,7 +54,7 @@ export function useDialogFocusTrap(
       const active = document.activeElement;
       // The dialog itself holds focus while a button it disabled or removed
       // can't (a download, Try again): Tab goes to the first control and
-      // Shift+Tab to the last, as from outside (PR #203 r2 review, MEDIUM 1).
+      // Shift+Tab to the last, as from outside (PR #203).
       const outside = !dialog.contains(active) || active === dialog;
       if (event.shiftKey && (active === first || outside)) {
         event.preventDefault();

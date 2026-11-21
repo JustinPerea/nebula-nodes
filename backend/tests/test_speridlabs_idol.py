@@ -75,7 +75,7 @@ async def run_node(params: dict[str, Any] | None = None, inputs=None, keys: dict
 
 
 def keyless_idol() -> dict[str, Any]:
-    """Idol's definition, keyless (PR #203 round 7: the first live call ran
+    """Idol's definition, keyless (PR #203: the first live call ran
     with no token). Built from the registry either way, so the keyless rules'
     tests never depended on which state the registry was in."""
     definition = json.loads(json.dumps(registry()["speridlabs-idol"]))
@@ -195,7 +195,7 @@ async def test_a_run_sends_the_schema_body_and_returns_a_world_v2_splat(monkeypa
 
 @pytest.mark.asyncio
 async def test_without_a_token_the_node_runs_anonymously_with_no_auth_header(monkeypatch, capsys):
-    """PR #203 round 7: the first live call ran with no token (every request
+    """PR #203: the first live call ran with no token (every request
     200, 27.6 s, a valid splat), so the route is keyless. A run without the
     token goes out through the route with no token header at all, as the
     live call did."""
@@ -210,7 +210,7 @@ async def test_without_a_token_the_node_runs_anonymously_with_no_auth_header(mon
 
 def test_the_engines_preflight_passes_idol_with_or_without_a_token():
     """Agent and CLI runs (MCP run tools, nebula run, apply and run) all go
-    through the engine's pre-run check. Keyless (round 7), Idol passes it
+    through the engine's pre-run check. Keyless, Idol passes it
     either way; a keyed route's own line still refuses there (the keyed half)."""
     from execution.engine import validate_graph
     from models.graph import GraphEdge
@@ -365,7 +365,7 @@ async def test_progress_creeps_on_heartbeats_and_ends_at_one(monkeypatch):
 
 @pytest.mark.parametrize("provider", ["auto", "hf-space"])
 def test_the_node_is_keyless_with_an_optional_token_that_may_bill(provider):
-    """Round 7, idol.md "Switching back to keyless" step 1: keys [],
+    """idol.md "Switching back to keyless" step 1: keys [],
     optionalKeys HF_TOKEN, no missingKeyLine, empty envKeyName and
     directKeyName. With the token, a run may bill the person's own Hugging
     Face account (mayBillWithKey); without it, nothing can."""
@@ -451,7 +451,7 @@ def test_the_space_route_rules_are_validated():
 
 
 def test_a_keyless_route_cant_carry_a_missing_key_line():
-    """The keyless half (review r5 LOW-2): built from keyless_idol, so it
+    """The keyless half: built from keyless_idol, so it
     passes before and after idol.md's switch back."""
     keyless = keyless_idol()
     keyless["routes"][0]["missingKeyLine"] = NEEDS_TOKEN
@@ -506,7 +506,7 @@ NO_GPU = "No GPU was available"
 DURATION = ("The requested GPU duration (120s) is larger than the maximum allowed"
             "Subscribe to Hugging Face PRO to allow GPU tasks up to 40 min - https://huggingface.co/subscribe/pro?from=ZeroGPU")
 
-# GM, PR #203 r12 item 6: the anonymous quota and Space-limit refusals share one line.
+# Design, PR #203: the anonymous quota and Space-limit refusals share one line.
 ANON_QUOTA_LINE = ("Hugging Face’s free GPU time for Idol is used up for now. Try again later, "
                    "or add your Hugging Face token in Settings to use your own allowance.")
 OWN_QUOTA_LINE = ("Your Hugging Face GPU allowance is used up for now. Try again later, "
@@ -540,7 +540,7 @@ DURATION_OWN_LINE = ("It needs more GPU time per run than your Hugging Face acco
     (SPACE_LIMIT, True, NOT_APPLIED_LINE),
     (QUEUE_NO_IP, True, NOT_APPLIED_LINE),
     (DURATION, False, DURATION_ANON_LINE),
-    # GM r6 #7: signed in, a duration refusal means the token didn't apply
+    # Design: signed in, a duration refusal means the token didn't apply
     # (any account's allowance is past the Space's ask).
     (DURATION, True, NOT_APPLIED_LINE),
 ])
@@ -570,7 +570,7 @@ def test_zerogpu_kinds_read_the_spaces_package_texts(message, kind):
 
 # spaces' texts for an IP with no account behind it (meta.auth None): the
 # bare "your ZeroGPU quota" label, and the API call's suffix. Sent with a
-# token, either means the token didn't apply (PR #203 r2 review, MEDIUM 2).
+# token, either means the token didn't apply (PR #203).
 ANON_RUNS = ("You have exceeded your ZeroGPU runs limit. "
              "Authenticate with a Hugging Face token for more quota - https://huggingface.co/settings/tokens")
 ANON_BARE = "You have exceeded your ZeroGPU quota (180s requested vs. 120s left). Try again in 23:59:00."
@@ -827,7 +827,7 @@ async def test_a_call_without_an_event_id_is_a_signature_error(monkeypatch):
 @pytest.mark.parametrize("status, keys, line", [
     (401, {"HF_TOKEN": TOKEN}, TOKEN_LINE),
     (403, {"HF_TOKEN": TOKEN}, TOKEN_LINE),
-    # Without a token, a 401 or 403 isn't about one (review L7, M09).
+    # Without a token, a 401 or 403 isn't about one.
     (401, None, "Idol couldn’t use this image. Try another one, or open Details to see why."),
     (403, None, "Idol couldn’t use this image. Try another one, or open Details to see why."),
     (502, None, STARTING),
@@ -893,7 +893,7 @@ TOO_LARGE_LINE = ("This splat is too large for Nebula to keep. "
 
 
 def test_the_too_large_line_names_the_field_that_sets_the_size():
-    # GM: the line names the Inspector field that controls the splat's size.
+    # Design: the line names the Inspector field that controls the splat's size.
     shared = {p["key"]: p for p in registry()["speridlabs-idol"]["sharedParams"]}
     assert shared["gaussians"]["label"] == "Gaussians" and "Lower Gaussians" in TOO_LARGE_LINE
 
@@ -1082,7 +1082,7 @@ async def test_a_ply_that_streams_exactly_to_the_cap_is_kept(monkeypatch):
     assert world["assets"]["splats"][0]["asset"]["byteLength"] == len(splat_ply(64))
 
 
-# -- PR #203 round 2 -----------------------------------------------------------------
+# -- PR #203: per-node files, setting bounds, token and URL checks ------------------
 
 
 def _two_plys():
@@ -1212,7 +1212,7 @@ async def test_a_token_with_a_character_tokens_cant_have_gets_gms_line_and_sends
     with pytest.raises(idol.IdolSpaceError) as excinfo:
         await run_direct(keys={"HF_TOKEN": bad_token})
     assert not isinstance(excinfo.value, UnicodeError)
-    # GM PR #203 r2: the card's version says Settings; the field's says "here".
+    # Design, PR #203: the card's version says Settings; the field's says "here".
     assert person_line(excinfo.value) == ("The token has a character Hugging Face tokens can’t have. "
                                           "Copy it again from Hugging Face, then paste it in Settings.")
     assert bad_token not in str(excinfo.value)
@@ -1283,12 +1283,12 @@ def test_the_mode_values_are_the_routes_value_map_read_backwards():
 
 
 def test_a_run_names_hugging_face_as_the_provider_it_called():
-    """Review LOW 11: the card's "Details shows what … said" named nobody on
-    an anonymous run, and "Hugging Face" on a signed-in one."""
+    """Before, the card's "Details shows what … said" named nobody on an
+    anonymous run, and "Hugging Face" on a signed-in one."""
     from execution.provider_status import called_provider
 
     assert called_provider("speridlabs-idol", {"_provider": "auto"}, {"HF_TOKEN": TOKEN}) == "Hugging Face"
-    # Keyless (round 7): an anonymous run calls the Space too.
+    # Keyless: an anonymous run calls the Space too.
     assert called_provider("speridlabs-idol", {"_provider": "auto"}, {}) == "Hugging Face"
     # Not every keyless-looking None: a node that calls no provider still has none.
     assert called_provider("text-input", {}, {}) is None
@@ -1312,7 +1312,7 @@ def test_optional_keys_must_be_a_list_of_key_names(bad):
 
 
 
-# -- PR #203 round 3 -----------------------------------------------------------------
+# -- PR #203: download size and header checks, padded tokens, billing text ----------
 
 
 def _ply_routes(answer):
@@ -1339,7 +1339,7 @@ def _streamed(body: bytes, *, step: int = 1024, headers: dict[str, str] | None =
 
 @pytest.mark.asyncio
 async def test_a_download_that_isnt_a_ply_is_cut_off_after_its_first_bytes(monkeypatch):
-    """Review L5: the header is checked from the stream's first 64 KiB, not
+    """The header is checked from the stream's first 64 KiB, not
     after the whole file (up to 128 MiB) has come."""
     served: list[int] = []
     body = b"<html>" + b"x" * (8 * 1024 * 1024)
@@ -1410,7 +1410,7 @@ async def test_a_headerless_stream_past_the_cap_is_too_large(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_a_content_length_exactly_at_the_cap_is_kept(monkeypatch):
-    """Review L7, M14: the cap is "over", not "at"."""
+    """The cap is "over", not "at"."""
     monkeypatch.setattr(idol, "MAX_PLY_BYTES", len(splat_ply(64)))
     idol_hosts(monkeypatch, ply=splat_ply(64))
     world = world_of(await run_direct())
@@ -1419,7 +1419,7 @@ async def test_a_content_length_exactly_at_the_cap_is_kept(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_a_result_on_another_space_is_refused_and_never_fetched(monkeypatch):
-    """Review L7, M10: only Idol's own host, not any *.hf.space."""
+    """Only Idol's own host, not any *.hf.space."""
     other = "https://someone-else.hf.space/gradio_api/file=/tmp/x.ply"
     hosts = idol_hosts(monkeypatch, stream=sse(complete(url=other)))
     with pytest.raises(idol.IdolSpaceError) as excinfo:
@@ -1430,7 +1430,7 @@ async def test_a_result_on_another_space_is_refused_and_never_fetched(monkeypatc
 
 @pytest.mark.asyncio
 async def test_a_redirect_from_the_space_is_not_followed(monkeypatch):
-    """Review L7, M16: a 3xx from the Space never takes the token elsewhere."""
+    """A 3xx from the Space never takes the token elsewhere."""
     public_dns(monkeypatch)
     hosts = FakeHosts(monkeypatch, [
         *space_routes(info=None)[:2],
@@ -1445,7 +1445,7 @@ async def test_a_redirect_from_the_space_is_not_followed(monkeypatch):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("padded", [f"  {TOKEN}  ", f"{TOKEN}\n", f"\t{TOKEN}\r\n"])
 async def test_a_token_padded_with_spaces_or_a_line_break_still_runs(monkeypatch, padded):
-    """Review L7, M24, and GM r2: trimmed without a word."""
+    """A padded token is trimmed without a word (design)."""
     hosts = idol_hosts(monkeypatch)
     world_of(await run_node(keys={"HF_TOKEN": padded}))
     sent = {r.headers.get("x-hf-authorization") or r.headers.get("authorization")
@@ -1454,7 +1454,7 @@ async def test_a_token_padded_with_spaces_or_a_line_break_still_runs(monkeypatch
 
 
 def test_a_padded_result_url_is_refused():
-    """Review N10: urlsplit and httpx read a leading space differently."""
+    """urlsplit and httpx read a leading space differently."""
     for url in (f" {RESULT_URL}", f"{RESULT_URL} ", f"\n{RESULT_URL}"):
         with pytest.raises(idol.IdolSpaceError) as excinfo:
             idol._result_url({"url": url, "path": None})
@@ -1463,7 +1463,7 @@ def test_a_padded_result_url_is_refused():
 
 @pytest.mark.asyncio
 async def test_a_negative_zero_guidance_is_sent_as_zero(monkeypatch):
-    """Review N10: -0.0 is in range, but the Space should get 0.0."""
+    """-0.0 is in range, but the Space should get 0.0."""
     hosts = idol_hosts(monkeypatch)
     await run_direct(cfg_scale=-0.0)
     sent = hosts.sent("POST", re.escape(f"{API}/call/run"))[0].content
@@ -1486,7 +1486,7 @@ async def test_a_value_the_space_doesnt_take_names_only_its_field(monkeypatch, p
 @pytest.mark.asyncio
 @pytest.mark.parametrize("status", [401, 403])
 async def test_a_result_stream_that_refuses_the_token_says_so(monkeypatch, status):
-    """Review L4: the stream, like upload and call/run, maps 401 and 403."""
+    """The stream, like upload and call/run, maps 401 and 403."""
     public_dns(monkeypatch)
     FakeHosts(monkeypatch, [
         *space_routes(),
@@ -1514,17 +1514,17 @@ def test_describe_node_tells_agents_who_can_bill_past_the_allowance():
     for keys, is_set in (({}, False), (SIGNED_IN, True)):
         out = _describe_routes(registry()["speridlabs-idol"], keys, lambda _route: [])
         [row] = out["routes"]
-        # As the token is set now (review 7 of PR #203, LOW-1).
+        # As the token is set now.
         assert row["billing"] == (HF_SPACE_BILLING_TOKEN if is_set else HF_SPACE_BILLING_FREE)
         assert "$1 per 10" in row["billing"] and "PRO, Team or Enterprise" in row["billing"]
         assert "https://huggingface.co/docs/hub/spaces-zerogpu" in row["billing"]
-        # Round 7: keyless, and with the token set an agent proposes it.
+        # Keyless, and with the token set an agent proposes it.
         assert row["billing"].startswith("May cost here" if is_set else "Free here")
         assert "(propose_change)" in row["billing"]
         assert row["keys"] == [] and row["optionalKeys"] == [{"key": "HF_TOKEN", "set": is_set}]
 
 
-# -- round 4 -------------------------------------------------------------------
+# -- keyless quick runs, compressed downloads, the settings check -----------------
 
 IDOL_KEY_LINE = "You can run Idol after you add your Hugging Face token in Settings."
 
@@ -1543,7 +1543,7 @@ def _quick_idol(pend, monkeypatch, keys, *, headers):
 
 
 def test_quick_runs_idol_without_a_token_for_agents_and_the_person(pend, monkeypatch):
-    """Round 7: keyless, so `nebula quick` / /api/quick runs Idol with no
+    """Keyless, so `nebula quick` / /api/quick runs Idol with no
     token for anyone, with no proposal: nothing can bill."""
     from tests.conftest import PERSON
     from tests.test_canvas_proposals import CLAUDE
@@ -1678,7 +1678,7 @@ def test_credentials_update_trims_the_hugging_face_token(monkeypatch, person):
     assert response.status_code == 200, response.text
     assert settings_service._INJECTED_KEYS["HF_TOKEN"] == "hf_x"
     # Empty once trimmed: refused, as the Settings field refuses it, and the
-    # saved token stays (GM, PR #203 r17 item 1). "" still removes it.
+    # saved token stays (design, PR #203). "" still removes it.
     response = client.post("/api/credentials/update", json={"provider": "HF_TOKEN", "key": " \n\u200b"})
     assert response.status_code == 422, response.text
     assert settings_service._INJECTED_KEYS["HF_TOKEN"] == "hf_x"
@@ -1691,20 +1691,20 @@ def test_credentials_update_trims_the_hugging_face_token(monkeypatch, person):
 
 
 def test_the_signed_in_duration_line_stays_in_code_unused():
-    """GM r6 #7: kept for the first live run, not shown today."""
+    """Design: kept for the first live run, not shown today."""
     from execution.person_line import person_line as line_of
 
     assert line_of(idol.duration_error(detail="x", signed_in=True)) == DURATION_OWN_LINE
     error = idol.classify_space_error(DURATION, signed_in=True)
     assert line_of(error) == NOT_APPLIED_LINE
-    # Review r4 LOW-3: agents read both causes; the text is the same for both.
+    # Agents read both causes; the text is the same for both.
     assert "either the token didn't apply, or a free account's per-task cap is under the ask" in str(error)
 
 
-# -- round 5 -------------------------------------------------------------------
+# -- keyless helpers, the hub rule, a download that won't decode ------------------
 
 def test_the_keyless_helpers_survive_the_switch_back(monkeypatch):
-    """Review r4 LOW-2: idol.md says the keyless rules' tests pass before and
+    """idol.md says the keyless rules' tests pass before and
     after the switch back (step 1 drops missingKeyLine). Here the registry is
     already keyless, as after step 1, and both helpers still build it."""
     from services.node_registry import NodeRegistry
@@ -1724,7 +1724,7 @@ def test_the_keyless_helpers_survive_the_switch_back(monkeypatch):
 
 
 @pytest.mark.parametrize("answer, missing", [
-    # Review r4 NIT-2: huggingface_hub checks these two first, and neither is
+    # huggingface_hub checks these two first, and neither is
     # a missing repo, whatever the status or message with them.
     (httpx.Response(401, headers={"x-error-code": "RevisionNotFound"}), False),
     (httpx.Response(404, headers={"x-error-code": "EntryNotFound",
@@ -1741,8 +1741,8 @@ def test_the_hub_rule_reads_revision_and_entry_answers_first(answer, missing):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("encoding", ["gzip", "deflate"])
 async def test_a_compressed_download_that_wont_decode_says_the_download_line(monkeypatch, encoding):
-    """GM, PR #203 r8 item 4: httpx's DecodingError is an HTTPError, which the
-    run read as no connection. It is a failed download, in GM's line."""
+    """Design, PR #203: httpx's DecodingError is an HTTPError, which the run used to
+    read as no connection. It is a failed download, said by the download line."""
     from execution.person_line import person_line as line_of
 
     public_dns(monkeypatch)

@@ -17,7 +17,7 @@ export interface ExecutionValidationError {
   portId: string;
   /** The specific text agents keep, word for word. */
   message: string;
-  /** The card's line (error copy round 3e); null/absent: GM's general line, `message` behind Details. */
+  /** The card's line; null/absent: the general line (design), `message` behind Details. */
   person?: string | null;
   /** This check is a missing key (or a Krea sign-in): the card draws its line neutral. */
   missingKey?: boolean;
@@ -29,7 +29,7 @@ export interface ExecutionStartResult {
   errorCount?: number;
   errors?: ExecutionValidationError[];
   runId?: string;
-  /** Agents' placeholders (and what needs them) the run skipped: node id -> reason (Q125 item 3). */
+  /** Agents' placeholders (and what needs them) the run skipped: node id -> reason. */
   skipped?: Record<string, string>;
   /** How many it skipped and whose, for the line under Run (lib/pendingNodes.ts). */
   pendingSkipped?: import('./pendingNodes').PendingSkipSummary | null;
@@ -45,7 +45,7 @@ export interface ExecutionStatusResult {
   runId: string;
   status: 'running' | 'cancelling' | 'cancelled' | 'completed' | 'failed';
   /** A Stop reached the backend before this run did: it never started, and
-   * the backend refuses to start it (round 16 of PR #114). */
+   * the backend refuses to start it (PR #114). */
   pendingAdmission?: boolean;
 }
 
@@ -61,21 +61,20 @@ export class ExecutionStartRejectedError extends RequestFailedError {
   }
 }
 
-/** A refused start, named by its call: GM's line for the status, or the
- * backend's written reason. */
-/** GM - Design, round 16 of PR #114 (locked): a run start Nebula refused
- * with 507 because a run-safety store (the paid-start fence, the recovery
- * journal, durable Stop state) couldn't be saved, before any provider call;
- * it lasts until Nebula restarts (review 15, extra check 3). The screen's
- * heading names the node ("Couldn’t run “<node>”."). Only for that store's
- * 507 (round 17, review 16 L5: the answer's `code`, backend
+/** A refused start, named by its call: the line for the status (design), or
+ * the backend's written reason. */
+/** Design, PR #114 (locked): a run start Nebula refused with 507 because a
+ * run-safety store (the paid-start fence, the recovery journal, durable Stop
+ * state) couldn't be saved, before any provider call; it lasts until Nebula
+ * restarts. The screen's heading names the node ("Couldn’t run “<node>”.").
+ * Only for that store's 507 (the answer's `code` tells them apart, backend
  * RUN_SAFETY_STORAGE_CODE); the project store's 507 has its own line
  * (PROJECT_LIST_REASON), since a restart doesn't clear it. */
 export const RUN_SAFEGUARDS_REASON = 'It couldn’t save its run safeguards. Restart Nebula, then try again.';
-/** GM - Design, r18 of PR #114 (storage case): a run start Nebula refused
- * with 507 because it couldn't read or write its project list (the project
- * store's `code`), before any provider call. A restart doesn't clear it
- * (review 17 G1); a connected drive with space does. The heading names the
+/** Design, PR #114 (storage case): a run start Nebula refused with 507
+ * because it couldn't read or write its project list (the project store's
+ * `code`), before any provider call. A restart doesn't clear it; a connected
+ * drive with space does. The heading names the
  * node ("Couldn’t run “<node>”.") or the run ("Couldn’t start the run."). A
  * corrupt catalog file is a separate gap (with Justin), not this line. */
 export const PROJECT_LIST_REASON = 'It can’t read its project list. Check that the drive Nebula saves to is connected and has space, then try again.';
@@ -105,11 +104,11 @@ async function executionStartResponseError(heading: string, response: Response):
     { heading, detail: error.detail, code: error.code, sentAt: error.sentAt });
 }
 
-/* Every call below names its action (GM, error-copy round 2: "Couldn't
- * {verb} {object}." then the reason; "Never 'failed:', '(HTTP 503)' or
- * status codes in the UI. Keep them in the console."). apiRequest makes the
- * words: GM's line for no answer, 408, 429 and 5xx; else the backend's
- * written reason; else GM's line for the status. */
+/* Every call below names its action (design: "Couldn't {verb} {object}." then
+ * the reason; "Never 'failed:', '(HTTP 503)' or status codes in the UI. Keep
+ * them in the console."). apiRequest makes the words: the line (design) for no
+ * answer, 408, 429 and 5xx; else the backend's written reason; else the line
+ * (design) for the status. */
 
 export async function getExecutionStatus(runId: string): Promise<ExecutionStatusResult> {
   const response = await apiRequest("Couldn’t check the run.", `/api/executions/${encodeURIComponent(runId)}`, {
@@ -126,7 +125,7 @@ export async function cancelExecution(runId: string, signal?: AbortSignal): Prom
 }
 
 /** The headings for the status bar's "I’ve checked Marble" and Run
- * History's "Forget ID" (round 3, GM: named after what the button does);
+ * History's "Forget ID" (design: named after what the button does);
  * the store and the screens use these. */
 export const UNLOCK_NODE_HEADING = "Couldn’t unlock the node.";
 export const FORGET_RECOVERY_HEADING = "Couldn’t forget the recovery safeguard.";
@@ -136,7 +135,7 @@ export async function acknowledgeProviderStartAmbiguity(
   nodeId: string,
   runId: string,
 ): Promise<void> {
-  // Round 3 (GM): what the person clicked. The status bar's "I’ve checked
+  // Named after what the person clicked (design). The status bar's "I’ve checked
   // Marble" unlocks one node.
   await apiRequest(UNLOCK_NODE_HEADING,
     `/api/provider-start-ambiguities/${encodeURIComponent(kind)}/${encodeURIComponent(nodeId)}/${encodeURIComponent(runId)}`,
@@ -204,8 +203,8 @@ export async function executeNode(
   runId?: string,
   preserveGraphParams = false,
   approvalId?: string,
-  /** The agents' paid placeholders the person confirmed running (Q133;
-   * components/PlaceholderRunDialog.tsx): the backend refuses the person's
+  /** The agents' paid placeholders the person confirmed running
+   * (components/PlaceholderRunDialog.tsx): the backend refuses the person's
    * direct run over any without exactly these. */
   confirmedPlaceholders?: string[],
   /** The upper total (USD) that dialog showed: the backend refuses a run it prices higher. */
@@ -233,7 +232,7 @@ export async function generateCinemaShot(
   seed?: number,
   variations?: number,
   runId?: string,
-  /** A shot is the person's direct run of the scene (Q133): as executeNode. */
+  /** A shot is the person's direct run of the scene: as executeNode. */
   confirmedPlaceholders?: string[],
   confirmedCost?: number,
 ): Promise<{ status: string; shotId?: string; variations?: number; errorCount?: number; errors?: ExecutionValidationError[] }> {
@@ -321,7 +320,7 @@ export interface AgentSetup {
 }
 
 /** `heading` names the call ("Couldn’t revoke the app."); the backend's
- * written reason (Settings shows it) or GM's line comes after it. */
+ * written reason (Settings shows it) or the general line (design) comes after it. */
 async function agentAppsCall<T>(path: string, init: RequestInit | undefined, heading: string): Promise<T> {
   const response = await apiRequest(heading, path, init);
   return response.json() as Promise<T>;
@@ -646,7 +645,7 @@ export async function fetchCLIGraph(): Promise<{
   empty: boolean;
   activeProjectId?: string | null;
   workspaceRevision?: string;
-  /** The canvas's revision (round 19): the tab sends it back with its graph writes. */
+  /** The canvas's revision: the tab sends it back with its graph writes. */
   canvasRevision?: string;
   providerRecoveries?: ProviderRecoveryCheckpoint[];
   providerStartAmbiguities?: ProviderStartAmbiguity[];
@@ -654,7 +653,7 @@ export async function fetchCLIGraph(): Promise<{
   /** Agent edits waiting for a canvas to lay out their new nodes (services/canvas_arrange.py). */
   arrange?: unknown;
 }> {
-  // GM PR #205 r8 item 3: the startup, Retry and follow read says the same
+  // Design, PR #205: the startup, Retry and follow read says the same
   // heading as Load canvas; the reason after it tells the two apart.
   const response = await apiRequest('Nebula couldn’t load the canvas.', '/api/graph/export');
   return rewriteBackendAssetUrls(await response.json());
@@ -761,12 +760,12 @@ type MoodboardCreateInput = Omit<Moodboard, 'id' | 'version' | 'thumbnail' | 'cr
   & { briefOverride?: { text: string } | null };
 type MoodboardUpdateInput = Partial<MoodboardCreateInput>;
 
-/* Board calls name their action (GM, error-copy round 2: "Couldn’t save the
- * board. <reason>" replaces "Save failed: <reason>"), and apiRequest says
- * the reason: GM's lines for no answer, 408, 429 and 5xx; else the backend's
- * written reason; else GM's line for the status. A FastAPI field list
+/* Board calls name their action (design: "Couldn’t save the board. <reason>"
+ * replaces "Save failed: <reason>"), and apiRequest says the reason: the lines
+ * (design) for no answer, 408, 429 and 5xx; else the backend's written reason;
+ * else the line (design) for the status. A FastAPI field list
  * ("images.0.url: field required") is not a reason the person can read: it
- * says GM's fallback line, and the list stays in the error's `detail` and
+ * says the fallback line (design), and the list stays in the error's `detail` and
  * the console. Never a status code. */
 export const SAVE_BOARD = "Couldn’t save the moodboard.";
 
@@ -796,11 +795,11 @@ export async function fetchMoodboard(id: string): Promise<Moodboard | null> {
  *  `repeated`, as it is now, instead of making a second one. */
 /** A create's answer. A repeat (the request id's board already made) is
  *  the board as it is now, with the attempt that made it and its version
- *  then (round 6g), so the Studio rebases on what that attempt sent. */
+ *  then, so the Studio rebases on what that attempt sent. */
 export type MoodboardCreated = Moodboard & { repeated?: boolean; madeAttempt?: number | null; madeVersion?: number };
 
 export async function createMoodboard(body: MoodboardCreateInput & { requestId?: string; attempt?: number }): Promise<MoodboardCreated> {
-  // The save heading: a create is the board's first save, and the person never reads "create" (GM r14).
+  // The save heading: a create is the board's first save, and the person never reads "create" (design).
   const response = await apiRequest(SAVE_BOARD, '/api/moodboards', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -857,7 +856,7 @@ export async function analyzeMoodboard(id: string): Promise<Moodboard> {
 /** Keep a board's hand-written brief after the board changed: clears
  *  "board changed since you edited this" until the next change. */
 export async function keepMoodboardBriefOverride(id: string): Promise<Moodboard> {
-  const heading = "Couldn’t save your brief."; // GM, round 3
+  const heading = "Couldn’t save your brief."; // the call's own heading (design)
   const response = await apiRequest(heading, `/api/moodboards/${encodeURIComponent(id)}/brief-override/keep`,
     { method: 'POST' }, { allow: [404] });
   if (!response.ok) throw await moodboardWriteError(response, heading);
