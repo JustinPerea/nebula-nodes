@@ -375,6 +375,98 @@ describe('check-internal-ids: what is scanned', () => {
   });
 });
 
+describe('check-internal-ids: agent-facing markdown', () => {
+  const md = 'skills/x/SKILL.md';
+
+  it('counts ids in a paragraph, a heading, a list item and a table cell', () => {
+    expect(kinds(md, 'Round 901b changed the lines.\n')).toEqual(['round']);
+    expect(kinds(md, '# Q901 spacing\n')).toEqual(['question']);
+    expect(kinds(md, '- see review 901, LOW-1 for it\n')).toEqual(['review', 'review']);
+    expect(kinds(md, '| col | note |\n| --- | --- |\n| a | GM r901 |\n')).toEqual(['gm', 'round']);
+    expect(kinds(md, '> Q901 a quote\n')).toEqual(['question']);
+    expect(kinds(md, 'See [round 901](https://example.com/a) for it.\n')).toEqual(['round']);
+  });
+
+  it('does not count round, question or review ids in a fence, a code span or a link target', () => {
+    expect(count(md, '```sh\nnebula run --note "round 901 Q901 review 901,"\n```\n')).toBe(0);
+    expect(count(md, '~~~\nQ901 r901 LOW-1\n~~~\n')).toBe(0);
+    expect(count(md, 'Pass `--round 901` or `Q901` or `review 901,` here.\n')).toBe(0);
+    expect(count(md, 'Pass ``a ` Q901 b`` here.\n')).toBe(0);
+    expect(count(md, 'See [the page](https://example.com/round-901/Q901/review%20901) now.\n')).toBe(0);
+    expect(count(md, '[ref]: https://example.com/Q901 "title"\n')).toBe(0);
+  });
+
+  it('counts the text after a fence or code span closes', () => {
+    expect(kinds(md, '```\ncode\n```\nRound 901 here\n')).toEqual(['round']);
+    expect(kinds(md, 'Run `x` after round 901 ends.\n')).toEqual(['round']);
+  });
+
+  it('counts the word lane in prose, not in a code span or a fence', () => {
+    expect(kinds(md, 'Give each lane its own cursor.\n')).toEqual(['lane']);
+    expect(count(md, 'Pass `--lane 3` to pick it.\n')).toBe(0);
+    expect(count(md, '```\nnebula --lane a\n```\n')).toBe(0);
+  });
+
+  it('counts the studio initials everywhere, a code fence and a code span included', () => {
+    expect(kinds(md, '```\nGM says so\n```\n')).toEqual(['gm']);
+    expect(kinds(md, 'Pass `GM` here.\n')).toEqual(['gm']);
+  });
+
+  it('reports the line the id is on', () => {
+    expect(scanSource(md, 'a\n```\nQ901\n```\nround 901\n').map((m) => m.line)).toEqual([5]);
+  });
+
+  it('keeps a stray backtick from pairing across a blank line', () => {
+    expect(kinds(md, 'a stray ` tick\n\nnext `code` prose Q901 here `e` end\n')).toEqual(['question']);
+    expect(kinds(md, 'a stray ` tick\n  \nnext `code` prose Q901 here `e` end\n')).toEqual(['question']);
+  });
+
+  it('keeps a stray backtick from pairing across a fence', () => {
+    expect(kinds(md, 'a stray ` tick\n```\nx\n```\nprose Q901 `c` end\n')).toEqual(['question']);
+  });
+
+  it('treats an unmatched backtick run as literal text', () => {
+    expect(kinds(md, 'use ``` to fence; Q901 prose `x` and more\n')).toEqual(['question']);
+  });
+
+  it('treats a line that starts with inline triple backticks as a code span, not a fence', () => {
+    expect(kinds(md, '```x``` then Q901 prose\nQ902 next\n')).toEqual(['question', 'question']);
+  });
+
+  it('closes a fence only with its own character and at least its own length', () => {
+    expect(kinds(md, '```\nQ901\n~~~\nQ902\n```\nQ903 after\n')).toEqual(['question']);
+    expect(kinds(md, '~~~\nQ901\n```\nQ902\n~~~\nQ903 after\n')).toEqual(['question']);
+    expect(kinds(md, '````\nQ901\n```\nQ902\n````\nQ903 after\n')).toEqual(['question']);
+    expect(kinds(md, '```\nQ901\n````\nQ902 after\n')).toEqual(['question']);
+    expect(kinds(md, '~~~\nQ901\n~~~```\nround 902\n~~~\nQ903 after\n')).toEqual(['question']);
+  });
+
+  it('runs an unclosed fence to the end of the file', () => {
+    expect(count(md, 'before\n```\nQ901\nround 902\n')).toBe(0);
+  });
+
+  it('blanks a code span across one newline', () => {
+    expect(count(md, 'Pass `--a\nQ901` here.\n')).toBe(0);
+  });
+
+  it('does not count ids in an autolink or a bare URL', () => {
+    expect(count(md, 'See <https://x.test/round-901/Q901/lanes> now.\n')).toBe(0);
+    expect(count(md, 'See https://x.test/Q901/lane now.\n')).toBe(0);
+    expect(kinds(md, 'See https://x.test/a, then Q901.\n')).toEqual(['question']);
+  });
+
+  it('reads only the listed markdown roots', () => {
+    expect(isScanned('docs/MCP-SETUP.md')).toBe(true);
+    expect(isScanned('skills/nebula/SKILL.md')).toBe(true);
+    expect(isScanned('skills/nebula/references/a.md')).toBe(true);
+    expect(isScanned('.agents/skills/krea/SKILL.md')).toBe(true);
+    expect(isScanned('docs/OTHER.md')).toBe(false);
+    expect(isScanned('README.md')).toBe(false);
+    expect(isScanned('.planning/a.md')).toBe(false);
+    expect(isScanned('frontend/src/a.md')).toBe(false);
+  });
+});
+
 describe('check-internal-ids: baseline', () => {
   const matches = { 'a.ts': [{ line: 3, text: '// GM wants it', kind: 'gm', match: 'GM' }] };
 
@@ -496,6 +588,18 @@ describe('check-internal-ids: command line on a scratch tree', () => {
     expect(r.out).toContain('frontend/src/a.ts:3');
     expect(r.out).toContain('"design"');
     expect(r.out).toContain('grid-area');
+  });
+
+  it('reads the listed markdown roots in a tree without git', () => {
+    write('docs/MCP-SETUP.md', 'GM wants it.\n');
+    write('skills/nebula/SKILL.md', 'fine\n');
+    write('docs/OTHER.md', 'GM wants it.\n');
+    write('.agents/skills/k/SKILL.md', 'GM too.\n');
+    const r = run();
+    expect(r.code).toBe(1);
+    expect(r.out).toContain('docs/MCP-SETUP.md:1');
+    expect(r.out).toContain('.agents/skills/k/SKILL.md:1');
+    expect(r.out).not.toContain('docs/OTHER.md');
   });
 
   it('fails a new file with a match', () => {
