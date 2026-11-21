@@ -36,8 +36,8 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 // punctuation, a severity id or "round"), so a mid-sentence "review 12" is not counted.
 // In code files, round, question and review ids are restricted to comments and titles so
 // identifiers, SVG attributes and CSS values never trip the check. "round N" is skipped when it
-// reads as arithmetic (a decimal point, "decimal places", digits) and a question id after
-// "quarter" or "fiscal" is skipped. Existing matches are frozen in internal-ids-baseline.json; a file's count
+// reads as arithmetic (a decimal point, "decimal places", digits) and a question id after "quarter"
+// or "fiscal" is skipped. Existing matches are frozen in internal-ids-baseline.json; a file's count
 // may fall, never rise, and a file missing from the baseline may have none. A moved or split file
 // keeps its allowance: `--move <old> <new>` carries it over (repeat the pair to split one gone file
 // into several in a single call; the baseline is written only when the check then passes, and
