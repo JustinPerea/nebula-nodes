@@ -239,18 +239,18 @@ from services.canvas_proposals import (
     place_new_nodes,
     summarize_cost,
 )
-# Proposals outside the graph: a project's cover, a board's “Moodboard notes to generators” (U16).
+# Proposals outside the graph: a project's cover, a board's “Moodboard notes to generators”.
 from services.asset_proposals import AssetProposal, asset_proposals
 from services.asset_proposals import parse_change as parse_asset_change, summary as asset_proposal_summary
 from services.asset_proposals import (RESTART_OUTCOME, outcome_line as asset_outcome_line,
                                       update_detail as asset_update_detail, update_text as asset_update_text)
-# Each canvas proposal's Update too (Justin's Q112 a).
+# Each canvas proposal's Update too (Justin's call).
 from services.canvas_proposals import model_label
 from services.canvas_proposals import plan_name as card_name
 from services.canvas_proposals import update_outcome as canvas_outcome_line, update_text as canvas_update_text
 from services.canvas_proposals import MAX_RUN as PROPOSAL_MAX_RUN
 from services.canvas_proposals import MAX_OPEN_PER_AGENT, MAX_OPEN_TOTAL
-# Questions an agent asks the person (Q125 item 1), modelled on proposals.
+# Questions an agent asks the person, modelled on proposals.
 from services.agent_questions import (
     CLOSED_OUTCOME as QUESTIONS_CLOSED_OUTCOME,
     RESTART_OUTCOME as QUESTIONS_RESTART_OUTCOME,
@@ -266,7 +266,7 @@ from services.agent_questions import (
 )
 from services.agent_presence import request_headers_scope
 from services.text_cut import clean_name
-# The Agents panel (Q125 item 2): each agent's status line and the roster.
+# The Agents panel: each agent's status line and the roster.
 from services.agent_status import AgentStatusBook, StatusError, Waiting, build_roster, clean_status_text
 from services import channel_listeners
 from services import person_thread
@@ -341,10 +341,10 @@ except Exception as exc:
 else:
     _STATE_PATH = _STATE_DIR / "state.json"
 # The names files were uploaded with, by their stored (content-hash) name
-# (services/upload_names.py, GM r48 Q1 on #222).
+# (services/upload_names.py, design, PR #222).
 upload_names.configure(_STATE_DIR / "upload-names.json")
 
-# Whether a canvas was saved before this boot (round 21): a missing
+# Whether a canvas was saved before this boot: a missing
 # canvas-revisions.json then can't be a first run, so the canvas revisions
 # start from a boot-unique base (CanvasUndoBook), never at 0.
 _STATE_EXISTED_AT_BOOT = bool(_STATE_PATH is not None and (
@@ -362,11 +362,12 @@ def _catalog_restore_note(record: Mapping[str, Any], *, canvas_block: bool = Fal
     """What agents read about a catalog restore (GET /api/projects
     `catalogRestore.note`, start_here, the journal): what happened, from
     where, what came back, what the copy decided, where the damaged file is
-    kept. Not the person's notice (frontend catalogRestoreCopy.ts has GM's
-    lines). ``canvas_block``: the note goes beside the live `canvasNotFiled`
-    block (the listing, start_here, `nebula context`, `nebula projects`), so
-    it leaves the waiting canvas to that block and doesn't say it twice (GM
-    r23 e on PR #199); the journal's note, alone, still says it."""
+    kept. Not the person's notice (frontend catalogRestoreCopy.ts has the
+    design's lines). ``canvas_block``: the note goes beside the live
+    `canvasNotFiled` block (the listing, start_here, `nebula context`,
+    `nebula projects`), so it leaves the waiting canvas to that block and
+    doesn't say it twice (design, PR #199); the journal's note, alone, still
+    says it."""
     def count(key: str) -> int:
         # What still holds, when the record was checked against the list now.
         value = record.get(f"{key[:-5]}CountNow") if key.endswith("Count") and f"{key[:-5]}CountNow" in record \
@@ -385,10 +386,10 @@ def _catalog_restore_note(record: Mapping[str, Any], *, canvas_block: bool = Fal
     if record.get("source") and record.get("copyAt"):
         parts.append(f"That copy is from {record['copyAt']}.")
     if record.get("kind") == "restored" and record.get("damagedReadWhole") is False:
-        # GM r19 on PR #199, 6a: "may be missing" only when project records
+        # Design (PR #199): "may be missing" only when project records
         # went unread, as the person's notice says it.
         if record.get("damagedRecordsUnread") is False and catalog_recovery.restore_said_more(record):
-            # GM r22 on PR #199, 1: "no project is missing" only under the
+            # Design (PR #199): "no project is missing" only under the
             # person's rule (nothing else said, catalogRestoreCopy.ts
             # saidAtFirst), never beside a project that wasn't added back.
             parts.append("The damaged file couldn't be read whole, but the damage came after its project records, "
@@ -408,9 +409,9 @@ def _catalog_restore_note(record: Mapping[str, Any], *, canvas_block: bool = Fal
     if updated:
         parts.append(f"{projects(updated)} {'were' if updated != 1 else 'was'} brought up to date from the "
                      "damaged file (updatedFromDisk).")
-    # GM r18 on PR #199: readable records left out because the list was
+    # Design (PR #199): readable records left out because the list was
     # at its project limit have their own line (the person's says the same).
-    # GM r21 on PR #199, 4: the canvas's line owns the open project, as on
+    # Design (PR #199): the canvas's line owns the open project, as on
     # the person's notice (catalogRestoreCopy.ts savedFrom/failedListed):
     # when the note says the open canvas was filed or waits on the limit,
     # the open project's own left-out row isn't said again.
@@ -492,7 +493,7 @@ def _catalog_restore_note(record: Mapping[str, Any], *, canvas_block: bool = Fal
     return " ".join(parts)
 
 
-# Where each kind of restore row says its project is (GM r4 of PR #199, the
+# Where each kind of restore row says its project is (design, PR #199, the
 # stale-lines rule): "projects", "trash", "own group" (the row's `trashed`
 # says which), or "gone" (in neither).
 _RESTORE_ROW_PLACE = {"addedBack": "own group", "updatedFromDisk": "own group", "notAddedBack": "gone",
@@ -554,7 +555,7 @@ def _restore_as_it_holds(record: Mapping[str, Any], catalog: Mapping[str, Any]) 
         view[key] = rows
     waiting = view.get("canvasNotFiled")
     if isinstance(waiting, dict):
-        # Still waiting live, or held aside (opening a project held it: M-3).
+        # Still waiting live, or held aside (opening a project held it).
         live = _canvas_not_filed_now() or next(iter(_held_canvases()), None)
         if live is None:
             waiting["current"] = False
@@ -588,12 +589,12 @@ def _catalog_restore_view(record: Mapping[str, Any] | None,
         view[f"{key}Count"] = view[f"{key}Count"] if isinstance(view[f"{key}Count"], int) else len(view[key])
     if "noLongerHold" in record:
         view["noLongerHold"] = record["noLongerHold"]
-    # GM r18 on PR #199: the readable records left out at the limit, and
-    # that limit (records from before round 14 have neither).
+    # Design (PR #199): the readable records left out at the limit, and
+    # that limit (records from before it was tracked have neither).
     for key in ("notAddedBackLimitCount", "projectLimit"):
         if isinstance(record.get(key), int):
             view[key] = record[key]
-    # GM r19 on PR #199, 6a: whether the damaged file held records Nebula
+    # Design (PR #199): whether the damaged file held records Nebula
     # couldn't read; left out for records from before it (unknown).
     if isinstance(record.get("damagedRecordsUnread"), bool):
         view["damagedRecordsUnread"] = record["damagedRecordsUnread"]
@@ -605,7 +606,7 @@ def _catalog_restore_view(record: Mapping[str, Any] | None,
 # Restores made while main.py is still importing (the boot read of the
 # catalog, _resolve_canvas_owner_at_boot): the journal isn't defined yet, so
 # each record waits here and is journaled at startup (_journal_boot_restores;
-# review 11 of PR #199, LOW-1).
+# PR #199).
 _boot_restores: list[dict[str, Any]] = []
 
 
@@ -643,8 +644,8 @@ def _tell_catalog_restore(view: dict[str, Any]) -> None:
     under a tab that may hold edits not saved yet: it gets a graphSync
     carrying the restore notice's id (export_graph_for_frontend), the same
     way a reconnect after a boot restore does, so it keeps those edits and
-    says so instead of having its writes refused (review 11 of PR #199,
-    HIGH-1). And `projectsChanged` lists again."""
+    says so instead of having its writes refused (PR #199). And
+    `projectsChanged` lists again."""
     data = {key: view.get(key) for key in ("id", "kind", "reason", "source", "copyAt", "addedBackCount",
                                            "notAddedBackCount", "revertedCount", "cameBackCount",
                                            "backInTrashCount", "keptDeletedCount", "projectCount")}
@@ -655,8 +656,8 @@ def _tell_catalog_restore(view: dict[str, Any]) -> None:
     data["setAside"] = [path.name for path in kept]
     data["addedBack"] = [{"id": row.get("id"), "name": row.get("name")} for row in (view.get("addedBack") or [])[:20]]
     _journal("project.catalogRestored", data=data, summary=view.get("note", ""), actor={"kind": "system"})
-    # The selection named the canvas before the restore (review 15
-    # kept-wires-ui LOW-1): agents read none until the tab publishes again.
+    # The selection named the canvas before the restore: agents read none
+    # until the tab publishes again.
     selection_context.clear()
     try:
         loop = asyncio.get_running_loop()
@@ -671,7 +672,7 @@ project_store.on_restore = _on_catalog_restore
 
 def _canvas_owner_for_restore() -> Any:
     """Which project the live canvas is, for a restore choosing which
-    project to open (ProjectStore.canvas_owner; review 1 of PR #199, H1):
+    project to open (ProjectStore.canvas_owner; PR #199):
     that project, None for no project's (unfiled, or unproven), or
     catalog_recovery.UNKNOWN when state.json never recorded it."""
     from services import catalog_recovery
@@ -689,22 +690,22 @@ def _fresh_digest() -> str:
     """The live canvas's nodes and wires as the graph holds them, as a
     digest (what it was when protected; kept with the record for the logs:
     no longer a condition). Defined before the boot read of the catalog: a
-    restore there protects again with it (review 11 of PR #199, nit 4: the
-    export it used came later in the file, so a boot restore stored zeros)."""
+    restore there protects again with it (PR #199: the export it used came
+    later in the file, so a boot restore stored zeros)."""
     return hashlib.sha256(json.dumps(cli_graph.get_state(), sort_keys=True,
                                      default=str).encode("utf-8")).hexdigest()
 
 
 def _protect_after_restore(catalog: dict[str, Any]) -> None:
     """A restore that couldn't read the damaged catalog whole reopened the
-    live canvas's own project (ProjectStore.protect_after_restore; review 10
-    of PR #199, HIGH-1): whether that project was the person's canvas still
-    protected may be what the damage took, so it is protected again, in the
-    restore's own commit. Better a needless copy than an empty project: the
-    agent's next write saves the canvas into it untouched and works on a
-    copy, until the person's own open or first own edit (GM r13, 1). An
-    agent's own copy (its note in state.json) isn't the person's canvas.
-    Under the store's lock: reads only the catalog given and the live canvas."""
+    live canvas's own project (ProjectStore.protect_after_restore; PR #199):
+    whether that project was the person's canvas still protected may be what the
+    damage took, so it is protected again, in the restore's own commit. Better a
+    needless copy than an empty project: the agent's next write saves the canvas
+    into it untouched and works on a copy, until the person's own open or first
+    own edit (design). An agent's own copy (its note in state.json) isn't the
+    person's canvas. Under the store's lock: reads only the catalog given and
+    the live canvas."""
     owner = cli_graph.owner
     if not isinstance(owner, str) or owner != catalog.get("activeProjectId") or owner not in catalog["projects"]:
         return
@@ -753,10 +754,10 @@ node_removals = RemovalLedger()
 # Updates (plan section 5.9): the agent's and the reader's notices, kept with
 # the project (main canvas) or beside each board. Same getter as pins.
 agent_notes = AgentNotes(lambda: project_store)
-# Questions agents ask the person (Q125 item 1), kept on the project record
+# Questions agents ask the person, kept on the project record
 # like pins and Updates (services/agent_questions.py). Same getter.
 agent_questions = QuestionBook(store=lambda: project_store)
-# Each agent's status line (Q125 item 2): in memory only, like cursors.
+# Each agent's status line: in memory only, like cursors.
 agent_status = AgentStatusBook()
 # Which --channel listeners are around (services/channel_listeners.py). Memory only.
 channel_book = channel_listeners.ListenerBook()
@@ -766,10 +767,10 @@ thread_book = person_thread.PersonThread(lambda: project_store)
 thread_send_cap = person_thread.SendCap()
 # reply_to_person's pace per agent (Justin, 2026-11-03): 5 in a row, then one every 2 s.
 thread_reply_pace = person_thread.ReplyPace()
-# Which push each reply answers (review 4 of #225): the listener reports each
+# Which push each reply answers (PR #225): the listener reports each
 # deliberate push; a reply answers its session's oldest open one. Memory only.
 thread_ledger = push_ledger.PushLedger()
-# The runs agents started, while they go (Q125 item 3): the mark on the node
+# The runs agents started, while they go: the mark on the node
 # they run, and the done card after (services/run_done_cards.py). In memory.
 agent_runs = AgentRunBook()
 
@@ -781,10 +782,10 @@ def _agent_sign(identity: AgentIdentity) -> None:
 
 
 _request_workspace_revision: ContextVar[str | None] = ContextVar("workspace_revision", default=None)
-# The canvas a tab's request was made for (X-Nebula-Canvas-Revision), round 19.
+# The canvas a tab's request was made for (X-Nebula-Canvas-Revision).
 _request_canvas_revision: ContextVar[str | None] = ContextVar("canvas_revision", default=None)
 _execution_workspace_context: ContextVar[dict[str, Any] | None] = ContextVar("execution_workspace", default=None)
-# A fenced route's request came from a canvas tab (X-Nebula-Tab), round 20.
+# A fenced route's request came from a canvas tab (X-Nebula-Tab).
 _request_from_tab: ContextVar[bool] = ContextVar("request_from_tab", default=False)
 _live_graph_load_failed = False
 if _STATE_PATH is not None and _STATE_PATH.exists():
@@ -822,7 +823,7 @@ def _finish_params_upgrade_at_boot(*, live_graph_advanced: bool) -> bool:
 def _resolve_canvas_owner_at_boot(graph: CLIGraph, store: ProjectStore, *, state_loaded: bool) -> None:
     """Which project the live canvas is, when state.json didn't say (saved
     before it recorded it, or no state.json at all). Read before any
-    restore, so a damaged catalog's copy never decides it (review 1, H1):
+    restore, so a damaged catalog's copy never decides it:
     - no catalog (a fresh install, or a canvas from before projects): left
       unknown, so the catalog's open project, as before;
     - a canvas that didn't load (none saved, persistence off, a failed
@@ -831,12 +832,12 @@ def _resolve_canvas_owner_at_boot(graph: CLIGraph, store: ProjectStore, *, state
     - a catalog that reads: its open project, as before this was recorded;
     - a damaged one whose head still says which project was open: that
       one, the same bytes an intact catalog would have been believed on
-      (review 2 of PR #199, L8: upgrade day, a pre-PR state.json beside a
-      catalog already damaged; the restore then opens that project and the
-      canvas goes back into it, rather than into a second project);
+      (PR #199: upgrade day, a pre-PR state.json beside a catalog already
+      damaged; the restore then opens that project and the canvas goes
+      back into it, rather than into a second project);
     - a missing one, or a head that doesn't read: unproven, so the listing
       files the canvas as its own project instead of saving it into the
-      restored list's. Never the copy's open project (review 1, H1)."""
+      restored list's. Never the copy's open project."""
     if graph.owner is not OWNER_UNKNOWN:
         return
     if not store.path.exists():
@@ -864,7 +865,7 @@ _resolve_canvas_owner_at_boot(cli_graph, project_store,
 if cli_graph.owner is not OWNER_UNKNOWN and _STATE_PATH is not None and not _live_graph_load_failed:
     cli_graph._maybe_persist()
 try:
-    project_store.sweep_orphans()  # temporary files a crash left behind (review 1, L7)
+    project_store.sweep_orphans()  # temporary files a crash left behind
 except Exception as exc:  # noqa: BLE001 - housekeeping at boot never stops it
     print(f"[projects] could not sweep temporary files: {exc}", flush=True)
 
@@ -880,7 +881,7 @@ provider_recovery_store = ProviderRecoveryStore(
 # Each node's last run error, per project, kept across restarts (services/node_errors.py).
 node_errors = NodeErrors(_STATE_DIR / "node-errors.json" if _STATE_PATH is not None else None)
 # Which run's result last landed on each node, for a handoff's "the newer
-# run wins" (services/node_result_runs.py; review 18 handoff-reopen MEDIUM-3).
+# run wins" (services/node_result_runs.py).
 node_result_runs = NodeResultRuns()
 
 
@@ -901,7 +902,7 @@ _restore_node_errors()
 def _legacy_record_place(catalog: Mapping[str, Any], record: Mapping[str, Any]) -> str | None:
     """The one project (counting Recently deleted) whose stored run history
     has the record's run, for the one-time stamp of a record saved before
-    stamps (PR #199 round 23); None when none or several do. Run history
+    stamps (PR #199); None when none or several do. Run history
     only, never a World ID."""
     run_id = record.get("runId")
     if not isinstance(run_id, str) or not run_id:
@@ -935,8 +936,8 @@ provider_start_guard = ProviderStartGuard(
 )
 
 
-# A node's World Labs paid state, in the person's words. GM - Design's
-# wording for round 13 of PR #114 (verbatim, each line under the screen's own
+# A node's World Labs paid state, in the person's words. The design's
+# wording for PR #114 (verbatim, each line under the screen's own
 # "Couldn't <action>." heading; node names are card titles in curly quotes):
 # - active (a start still in flight): "A World Labs run is still starting.
 #   Try again in a moment."
@@ -954,9 +955,8 @@ WORLD_LABS_STARTING_PERSON = "A World Labs run is still starting. Try again in a
 WORLD_LABS_NEEDS_CHECK_PERSON = "A World Labs run needs your check first. Use the notice at the top of the screen."
 # Nebula couldn't journal a recovery it read from the canvas at boot, and the
 # retry's real journal write just failed too. A reload doesn't re-run that
-# bootstrap (it runs once, when the backend starts; the notes for round 13
-# give the mechanism), so the line says restart. GM, round 15 of PR #114
-# (item 5): "Couldn't <action>. Nebula couldn't save its World Labs
+# bootstrap (it runs once, when the backend starts), so the line says
+# restart. Design (PR #114): "Couldn't <action>. Nebula couldn't save its World Labs
 # safeguards. Restart Nebula, then try again." The screen's own heading
 # supplies "Couldn't <action>.".
 WORLD_LABS_BOOTSTRAP_PERSON = "Nebula couldn't save its World Labs safeguards. Restart Nebula, then try again."
@@ -971,7 +971,7 @@ def _quoted_fields(fields: Sequence[str]) -> str:
 
 def _paid_state_person(state: str, *, node: str | None = None, fields: Sequence[str] = (),
                        subject: str | None = None) -> str:
-    """GM's line for a World Labs `state`. `node` is the held node's card
+    """The design's line for a World Labs `state`. `node` is the held node's card
     title (recovery, params); `fields` the labels of the ID fields that hold
     an ID (params). `subject` (a canvas replacement: _held_person_subject)
     is the line's whole subject instead, as placed by the hold's own rules:
@@ -992,15 +992,15 @@ def _paid_state_person(state: str, *, node: str | None = None, fields: Sequence[
     return f"{name} has a World Labs ID in its settings. Check it in Marble, then clear {_quoted_fields(fields)}."
 
 
-# The two buttons, by GM's round 13 labels.
-UNLOCK_BUTTON = "\u201cI\u2019ve checked Marble\u201d"  # curly apostrophe, GM r33 on PR #199
+# The two buttons, by the design's labels.
+UNLOCK_BUTTON = "\u201cI\u2019ve checked Marble\u201d"  # curly apostrophe (design, PR #199)
 FORGET_BUTTON = "\u201cForget ID\u201d"
-# Round 3b: a canvas edit that raced a change to the shared recovery journal.
+# A canvas edit that raced a change to the shared recovery journal.
 CANVAS_JOB_CHANGED_PERSON = "A node's World Labs job changed while Nebula saved the canvas. Reload, then try again."
 
 
 def _paid_capacity_person(limit: int | None) -> str:
-    """A full World Labs journal (GM - Design, after 3b: "Nebula is already
+    """A full World Labs journal (design: "Nebula is already
     waiting on {n} World Labs jobs, the most it can track. Check them in
     Marble and clear some in Run history, then try again." Used for a run and
     a canvas edit alike)."""
@@ -1014,7 +1014,7 @@ def _paid_capacity_person(limit: int | None) -> str:
 
 def _paid_job_changed_person(button: str) -> str:
     """The hold or record the button acts on changed since the page read it
-    (a newer start replaced it): round 3b."""
+    (a newer start replaced it)."""
     return f"This node is waiting on a newer World Labs job. Reload to see it, check it in Marble, then use {button}."
 
 
@@ -1027,8 +1027,8 @@ def _start_refusal(exc: ProviderStartConflictError, *, own_node: bool = False, r
     reason = getattr(exc, "reason", "active")
     if reason == "cancelled":
         # A Stop that beat the run's admission: it names no World Labs state
-        # (listed for GM, round 3b), and says what every reused-id refusal
-        # says (_stopped_id_refusal; PR #198 review 1, N1).
+        # (listed for the design), and says what every reused-id refusal
+        # says (_stopped_id_refusal; PR #198).
         return HTTPException(status_code=409, detail=_stopped_id_refusal(run_id) if run_id else str(exc))
     if reason == "capacity":
         person = _paid_capacity_person(getattr(exc, "limit", None))
@@ -1067,7 +1067,7 @@ def _graph_paid_refusal(specific: str, state: str, *, node: str | None = None,
                         fields: Sequence[str] = (), subject: str | None = None) -> HTTPException:
     """409 for replacing the whole canvas (clear it, open or make a project,
     replace the graph, restore a bundle) while World Labs state holds a node.
-    The person's line (GM, round 13: _paid_state_person) leaves the action
+    The person's line (design: _paid_state_person) leaves the action
     out: the screen's own heading ("Couldn't clear the canvas.") names it."""
     return refusal_copy.refusal(409, specific, _paid_state_person(state, node=node, fields=fields, subject=subject),
                                 route="canvas")
@@ -1085,10 +1085,10 @@ def _paid_start_refusal(action: str) -> HTTPException:
 
 
 def _paid_bootstrap_refusal(action: str) -> HTTPException:
-    """409 ``code: "paid_bootstrap"`` (PR #199 round 22, review 20
-    agents-docs LOW-2): Nebula couldn't save its World Labs recovery journal
-    and the write just tried again failed too, so a canvas replacement
-    waits. Its detail, its code and the hold beside it all say bootstrap."""
+    """409 ``code: "paid_bootstrap"`` (PR #199): Nebula couldn't save its
+    World Labs recovery journal and the write just tried again failed too,
+    so a canvas replacement waits. Its detail, its code and the hold beside
+    it all say bootstrap."""
     return _coded(_graph_paid_refusal(_graph_bootstrap_specific(action), "bootstrap"), "paid_bootstrap")
 
 
@@ -1112,7 +1112,7 @@ def _paid_replacement_state() -> tuple[str, dict[str, Any]] | None:
     (any project's); ("params", {"nodeId"}) for a World Labs node on the live
     canvas whose settings hold an ID; ("bootstrap", {}) while Nebula couldn't
     journal a recovery it read at boot (the raising path retries that first).
-    None when none holds. One read of the ambiguity list (review 13, nit 7):
+    None when none holds. One read of the ambiguity list:
     the rule is literally b2b1529e's."""
     if provider_start_guard.has_active():
         return "active", {}
@@ -1162,9 +1162,9 @@ def _reject_graph_replacement_during_paid_start(action: str, *, catalog: Mapping
     fields: list[str] = []
     if state == "params":
         fields = _recovery_field_labels([cli_graph.nodes.get(facts["nodeId"]) or {}])
-    # The person's subject, placed as the hold places it (PR #199 round 22,
-    # review 20 LOW-5): never the live canvas's node of the same id when the
-    # record is another project's.
+    # The person's subject, placed as the hold places it (PR #199): never
+    # the live canvas's node of the same id when the record is another
+    # project's.
     raise _graph_paid_refusal(_graph_unresolved_specific(action), state, fields=fields,
                               subject=_held_person_subject(catalog, state, facts))
 
@@ -1275,7 +1275,7 @@ def _hold_place(catalog: Mapping[str, Any], state: str, facts: Mapping[str, Any]
         node_id = str(records[0].get("nodeId") or "") or None
         stamped = _stamped_project_id(records[0]) if state == "recovery" else None
         if stamped is not None:
-            # The record's stamp places it (PR #199 round 23); a project
+            # The record's stamp places it (PR #199); a project
             # deleted for good can't be known any more.
             project = _catalog_project(catalog, stamped)
         else:
@@ -1291,12 +1291,12 @@ def _hold_place(catalog: Mapping[str, Any], state: str, facts: Mapping[str, Any]
     return node_id, project, name
 
 
-# The World Labs node types a record can name (GM r36 item 1 on PR #199).
+# The World Labs node types a record can name (design, PR #199).
 WORLD_LABS_NODE_TYPES = ("worldlabs-environment", "worldlabs-world-export")
 
 
 def _stamped_project_id(record: Mapping[str, Any]) -> str | None:
-    """The project the record's stamp names (PR #199 round 23), or None."""
+    """The project the record's stamp names (PR #199), or None."""
     stamp = provider_recovery_store.stamp_of(record.get("runId"), record.get("nodeId")) or {}
     project_id = stamp.get("projectId")
     return project_id if isinstance(project_id, str) and project_id else None
@@ -1312,9 +1312,9 @@ def _catalog_project(catalog: Mapping[str, Any], project_id: Any) -> Mapping[str
 
 
 def _record_node_type(record: Mapping[str, Any]) -> str | None:
-    """A World Labs record's node type, as the node picker names it (GM r36
-    item 1 on PR #199): the node type stored with the record's stamp when
-    it is a World Labs one ("World Labs Environment", "World Labs Export"),
+    """A World Labs record's node type, as the node picker names it
+    (design, PR #199): the node type stored with the record's stamp when it
+    is a World Labs one ("World Labs Environment", "World Labs Export"),
     else "World Labs Environment" for a record holding an Existing World ID
     (a field only that node has), else None ("A World Labs node"). Never
     guessed from a node id."""
@@ -1338,9 +1338,9 @@ def _held_node_type(state: str, facts: Mapping[str, Any]) -> str | None:
 
 def _held_person_subject(catalog: Mapping[str, Any], state: str, facts: Mapping[str, Any]) -> str | None:
     """The subject of the person's line for a held recovery or params state
-    (GM r34 A1 on PR #199): the node by its card title, "“World”", when its
+    (design, PR #199): the node by its card title, "“World”", when its
     project is the open one; "“World” from “Alpha”" for another project's
-    record (GM r32's "from" shape); "A World Labs Environment node" (its
+    record (the design's "from" shape); "A World Labs Environment node" (its
     type) when the node's name can't be known, "A World Labs node" when its
     type can't be either. Never a bare type name, never the live canvas's
     node that only shares the id. None for the other states (their lines
@@ -1378,7 +1378,7 @@ def _graph_replacement_hold(catalog: Mapping[str, Any] | None = None,
     guard read does), and while the bootstrap state holds, the read makes
     the same real journal write the press's fence makes
     (_clear_bootstrap_error_after_real_write), so the read and the press
-    never disagree (PR #199 round 22, review 20 NIT-1): the state clears
+    never disagree (PR #199): the state clears
     when that write holds, and stays (its detail true) when it fails."""
     held = _paid_replacement_state()
     if held is not None and held[0] == "bootstrap":
@@ -1428,7 +1428,7 @@ def _with_hold(exc: HTTPException, hold: Mapping[str, Any] | None) -> CodedRefus
 
 
 def _graph_bootstrap_specific(action: str) -> str:
-    """Agents' detail for the bootstrap state (round 14 of PR #114): the
+    """Agents' detail for the bootstrap state (PR #114): the
     retry was made, the journal still can't be written, and only a backend
     restart helps. The person reads WORLD_LABS_BOOTSTRAP_PERSON."""
     return (f"Cannot {action}: Nebula retried saving its World Labs recovery journal and "
@@ -1436,22 +1436,22 @@ def _graph_bootstrap_specific(action: str) -> str:
 
 
 def _retry_graph_recovery_bootstrap(action: str) -> bool:
-    """The bootstrap retry path (round 14 of PR #114). Before the bootstrap
+    """The bootstrap retry path (PR #114). Before the bootstrap
     state refuses, re-run the re-seed a run start does
     (_claim_fresh_paid_worldlabs_starts' prepare_recovery_journal) under the
     lifecycle fence a canvas replacement takes (_paid_graph_mutation), then
-    prove the journal takes a real write (round 15, review 14's M4:
-    ProviderRecoveryStore.verify_writable; the store's sticky health flag
+    prove the journal takes a real write
+    (ProviderRecoveryStore.verify_writable; the store's sticky health flag
     isn't asked, and a re-seed with no IDs to seed writes nothing). True
     (and the error cleared) only when that write held; False (the error
     kept) when it still can't be written. Reached only where the error is
     set, outside the fence: the bundle restore's pre-check and the open's
     ahead-of-time check (_open_ingress_verdict_off_loop). Never under the
-    fence (PR #199 round 22, review 20 agents-docs LOW-2): the fence is
-    taken again here, so a nested retry answered a false "paid start is
-    settling"; a fenced guard refuses bootstrap directly instead.
+    fence (PR #199): the fence is taken again here, so a nested retry
+    answered a false "paid start is settling"; a fenced guard refuses
+    bootstrap directly instead.
 
-    The paid-start fence's own storage failing (review 14's L7) is that
+    The paid-start fence's own storage failing is that
     store's error, not the journal's: it answers the 507 a canvas
     replacement answers for it and leaves the bootstrap error as it was."""
     global _graph_recovery_bootstrap_error
@@ -1496,8 +1496,8 @@ def _clear_bootstrap_error_after_real_write() -> None:
     fence by every canvas change, and by a read of the hold
     (_graph_replacement_hold) without it, so the read answers what the
     press would. Never refuses by itself, so an ordinary edit that takes
-    the fence isn't refused for this state (round 15: which states refuse
-    is unchanged); it only stops clearing it on a seed that wrote nothing."""
+    the fence isn't refused for this state (which states refuse is
+    unchanged); it only stops clearing it on a seed that wrote nothing."""
     global _graph_recovery_bootstrap_error
     if _graph_recovery_bootstrap_error is None:
         return
@@ -1523,7 +1523,7 @@ def _paid_graph_mutation(action: str):
                 list(cli_graph.nodes.values()), source="mutation-preflight",
                 project_id=cli_graph.owner,
             )
-            # Round 15: the seed may have written nothing (no IDs on the
+            # The seed may have written nothing (no IDs on the
             # canvas), so it alone can't clear the bootstrap error.
             _clear_bootstrap_error_after_real_write()
             yield
@@ -1570,7 +1570,7 @@ def _ensure_shared_graph_recoveries(
 ) -> list[dict[str, str | None]]:
     """Seed the journal from a canvas's World Labs IDs. ``project_id``: the
     project that canvas is (its owner), which stamps each record this adds
-    (PR #199 round 23); None or not a project id: unstamped (it holds)."""
+    (PR #199); None or not a project id: unstamped (it holds)."""
     checkpoints = _graph_worldlabs_recovery_checkpoints(nodes)
     if not checkpoints:
         return []
@@ -1675,7 +1675,7 @@ if _bootstrap_checkpoints:
 app = FastAPI(title="Nebula Node Backend", version="0.1.0")
 # This backend process's id, new on every start (the socket's first graphSync).
 BACKEND_BOOT_ID = uuid4().hex
-# When it started, in microseconds since the epoch (PR #198 review 11, L-4):
+# When it started, in microseconds since the epoch (PR #198):
 # a tab orders processes by it, so a late answer from a process that two
 # quick restarts replaced never takes the newer one's place.
 BACKEND_BOOT_STARTED_AT = _time_module.time_ns() // 1000
@@ -1687,7 +1687,7 @@ _DISK_FULL_ERRNOS = {errno.ENOSPC, getattr(errno, "EDQUOT", errno.ENOSPC)}
 def _storage_full(exc: BaseException) -> bool:
     """The store failed because the disk (or the person's quota) is full: an
     OSError with ENOSPC or EDQUOT in the error's causes. Read from the cause,
-    never the text (error copy round 3f)."""
+    never the text (error copy)."""
     seen: set[int] = set()
     current: BaseException | None = exc
     while current is not None and id(current) not in seen:
@@ -1701,24 +1701,24 @@ def _storage_full(exc: BaseException) -> bool:
 def _storage_error_body(exc: ProjectStoreError) -> dict[str, Any]:
     """A storage refusal's JSON: ``detail`` as before (agents read it), and an
     additive ``storage: "full"`` when the disk is full, so the Projects view
-    can say the one cause a person can fix (GM, round 3f). A store limit (413)
+    can say the one cause a person can fix (design). A store limit (413)
     adds ``limit``: "projects" or "storage", so the Projects screen doesn't
-    call a full store "too large" when it can't keep a tab's unsaved edits
-    (Q116 a)."""
+    call a full store "too large" when it can't keep a tab's unsaved edits.
+    """
     return {"detail": str(exc), **({"storage": "full"} if _storage_full(exc) else {}),
             **({"limit": exc.limit} if isinstance(exc, ProjectLimitError) else {}),
             # The limit's number, beside the project limit (the create refusal's line names it).
             **({"projectLimit": project_store_module.MAX_PROJECTS}
                if isinstance(exc, ProjectLimitError) and exc.limit == "projects" else {}),
-            # How many projects there are, where the route knows (a kept save: GM r22 on PR #199).
+            # How many projects there are, where the route knows (a kept save: design, PR #199).
             **({"projectCount": exc.project_count}
                if isinstance(exc, ProjectLimitError) and isinstance(getattr(exc, "project_count", None), int) else {}),
-            # How many to delete before it fits (GM r35 on PR #199: the tab's over-limit line).
+            # How many to delete before it fits (design, PR #199: the tab's over-limit line).
             **({"deletes": exc.deletes}
                if isinstance(exc, ProjectLimitError) and isinstance(getattr(exc, "deletes", None), int) else {})}
 
 
-# Which store a 507 came from (round 17 of PR #114, review 16 L5), so the
+# Which store a 507 came from (PR #114), so the
 # canvas words a refused run start by its cause: the project store (catalog
 # or project storage unreadable) or the run-safety stores (the paid-start
 # fence, the recovery journal, durable Stop state). Additive, beside detail.
@@ -1748,7 +1748,7 @@ async def run_safety_storage_refusal(request, exc: RunSafetyStorageRefusal):
 
 
 class ProjectSizeRefusal(HTTPException):
-    """A 413 because a project would be over the save limit (Q118): the
+    """A 413 because a project would be over the save limit: the
     snapshot a tab sent, or what an agent's edit would leave the open project
     at. Its answer carries ``limit: "size"`` (beside the store's "projects"
     and "storage"), ``sizeBytes`` and ``limitBytes`` beside ``detail``, so the
@@ -1773,7 +1773,7 @@ async def project_size_refusal(request, exc: ProjectSizeRefusal):
 class CodedRefusal(HTTPException):
     """A refusal whose answer carries fields beside ``detail`` (``fields``:
     ``code`` and what goes with it), so a client picks its line by the cause,
-    never by the words (PR #198 review 5, GM question 3). ``detail`` is the
+    never by the words (PR #198, design). ``detail`` is the
     text it always was, for each audience (refusal_copy). The codes a scene
     write (``PUT /api/graph/node/{id}``, the canvas's restore) can answer:
 
@@ -1788,13 +1788,13 @@ class CodedRefusal(HTTPException):
     - ``canvas_replaced``: the same project is open, but its canvas was
       cleared or replaced (an import) since, so node ids may name new nodes;
       the same ``project`` and ``switchedBy`` (_canvas_replaced_refusal; PR
-      #198 review 6, M1: a clear is not a switch);
+      #198: a clear is not a switch);
     - ``params_outdated`` (the params-version gate's own answer);
     - ``node_gone`` (404): the node isn't on the canvas; ``deletedBy`` names
-      who deleted it, or null (_scene_write_gone; fix round 12);
+      who deleted it, or null (_scene_write_gone);
     - ``unknown_definition`` (400): a node write named a definition the
       registry doesn't have, or none; ``definitionId`` is the raw value sent
-      (``""`` for none) (_refuse_unknown_definition; fix round 14).
+      (``""`` for none) (_refuse_unknown_definition).
 
     Raised where those helpers are used by other routes too: the fields are
     additive."""
@@ -1839,7 +1839,7 @@ def _canvas_change_actor() -> dict[str, str]:
 def _note_canvas_change() -> None:
     """Call right after a commit that replaced the live canvas, before any
     await: the canvas it left (_graph_fence) and who asked. Never fails."""
-    # Scene reads aren't forgotten here (fix round 9, M-1): their scope
+    # Scene reads aren't forgotten here: their scope
     # names the project and its canvas epoch, which a clear or import moves.
     try:
         _last_canvas_change.clear()
@@ -1884,15 +1884,15 @@ def _agent_readers() -> tuple[tuple[str, ...], tuple[str, ...]] | None:
     the keys its reads are kept under, and the keys its writes are checked
     against, in order. None for the person and anonymous callers.
 
-    - A verified token: its chat session, or the token itself (fix round 9,
-      M-2), for both; never a name's reader.
+    - A verified token: its chat session, or the token itself, for both; never
+    a name's reader.
     - A name with the ``X-Nebula-Agent-Session`` the MCP server sends (one per
       process): read under its session and under the name's newest session
       read; a write checks its own session's read, else the newest session
       read, else the name's session-less read.
     - A name alone (the CLI, a plain PUT): read under the bare name; a write
       checks its own read first, and the newest session read only when it
-      never read (fix round 11, review 10 L-1). So an MCP read still guards
+      never read. So an MCP read still guards
       a CLI write that never read, but never refreshes a CLI read: a CLI
       write built on its own older read is refused, even after a fresh MCP
       read (the agent runs ``nebula look`` and redoes it)."""
@@ -1938,11 +1938,11 @@ def _writer_chain() -> tuple[str, ...] | None:
 
 
 def _scene_changed_refusal(node_id: str, node: dict[str, Any]) -> CodedRefusal:
-    """PR #198 fix round 8, H2: a scene write built on a scene that changed
+    """PR #198: a scene write built on a scene that changed
     since (services/scene_keys.py). Nothing was saved; the answer carries the
     scene Nebula has now, its key and who changed it last, so the writer can
     put its change on top and send it again."""
-    # GM r12 answer 4, verbatim. The person's canvas never shows it (it
+    # Design, verbatim: the person's canvas never shows it (it
     # merges, or asks with its own line), and no Agent log row or toast says
     # an agent's refusal (it is the agent's to redo).
     label = _quoted(_node_label(node_id))
@@ -1972,7 +1972,7 @@ CANVAS_OUT_OF_DATE = "This canvas is out of date. Open the current project befor
 def _canvas_revision() -> str:
     """Which canvas is live in the open project: its id epoch
     (canvas_undo_book.epoch), new on every clear and every import, when node
-    ids start again at n1 (round 19 of PR #195, review 18 H-A). Opening or
+    ids start again at n1 (PR #195). Opening or
     making a project moves the workspace revision instead. PR #114's
     ``_graph_fence`` reads this same epoch for agents' writes, so a Clear is a
     replacement for both. Every graphSync, GET /api/graph/export and the
@@ -1985,15 +1985,14 @@ def _canvas_revision() -> str:
 def _check_workspace_revision(revision: str | None = None) -> None:
     supplied = revision if revision is not None else _request_workspace_revision.get()
     current = _workspace_context()
-    # The canvas a tab's request names (X-Nebula-Canvas-Revision, round 19 of
-    # PR #195): a write made for a canvas cleared or replaced since may name
-    # new nodes by its ids. Compared below with the open canvas, or, for a tab
-    # still on the unfiled canvas's revision, with that canvas's epoch when it
-    # was filed.
+    # The canvas a tab's request names (X-Nebula-Canvas-Revision, PR #195): a
+    # write made for a canvas cleared or replaced since may name new nodes by
+    # its ids. Compared below with the open canvas, or, for a tab still on the
+    # unfiled canvas's revision, with that canvas's epoch when it was filed.
     expected_canvas = _canvas_revision()
     if supplied is not None and supplied != current["workspaceRevision"]:
         # A tab still on the unfiled canvas's revision is on the same canvas,
-        # if nothing replaced it since its filing (round 13 of PR #114, H1).
+        # if nothing replaced it since its filing (PR #114).
         filed = _filed_canvases.get(supplied)
         if not (filed is not None and filed[1]["workspaceRevision"] == current["workspaceRevision"]
                 and filed[1]["activeProjectId"] == current["activeProjectId"]
@@ -2006,14 +2005,14 @@ def _check_workspace_revision(revision: str | None = None) -> None:
 
 
 # A write that awaits lands only on the canvas that was open when it was asked
-# (review 9 of PR #114). Node ids restart per project and after a clear or an
+# (PR #114). Node ids restart per project and after a clear or an
 # import, and agents send no workspace revision, so a route that awaits (the
 # model catalog, a spend check, a file read) and then writes by node id would
 # otherwise write the project opened meanwhile. Such a route takes
 # _graph_fence() before its first await and calls _refuse_if_graph_moved()
-# right before it writes; the notes for round 10 list every route.
+# right before it writes.
 # "changed since", not "another project is open": true after a switch away
-# and back to the same project too (round 11).
+# and back to the same project too.
 GRAPH_MOVED_DETAIL = ("The open project changed since this started, so nothing was changed. Read the canvas again "
                       "and send the change again if it still fits.")
 GRAPH_RESTARTED_DETAIL = ("The canvas was cleared or replaced since, so nothing was changed. Read the canvas again "
@@ -2029,15 +2028,15 @@ def _graph_fence() -> tuple[str, str | None, int]:
     return workspace["workspaceRevision"], project_id, canvas_undo_book.epoch(project_id)
 
 
-# Filing the unfiled canvas is a rename, not a move (round 13 of PR #114,
-# review 12's H1/H2). GET /api/projects on an empty catalog files the live
-# unfiled canvas as "Recovered canvas": the same graph and ids under a new
-# project id and workspace revision. Each filing notes, in the step that
-# commits it, the unfiled canvas's (revision, id epoch) and what it became,
-# so a write fenced on the unfiled canvas, a tab request carrying its
-# revision, and a run admitted on it all read as the filed project. Only that
-# exact canvas translates: a clear or a switch after the filing moves the new
-# project's revision or epoch, and the comparison then refuses as before.
+# Filing the unfiled canvas is a rename, not a move (PR #114). GET
+# /api/projects on an empty catalog files the live unfiled canvas as
+# "Recovered canvas": the same graph and ids under a new project id and
+# workspace revision. Each filing notes, in the step that commits it, the
+# unfiled canvas's (revision, id epoch) and what it became, so a write fenced
+# on the unfiled canvas, a tab request carrying its revision, and a run
+# admitted on it all read as the filed project. Only that exact canvas
+# translates: a clear or a switch after the filing moves the new project's
+# revision or epoch, and the comparison then refuses as before.
 _FILED_CANVASES_KEPT = 64
 _filed_canvases: OrderedDict[str, tuple[int, dict[str, Any], int]] = OrderedDict()
 
@@ -2080,8 +2079,8 @@ def _refuse_if_graph_moved(fence: tuple[str, str | None, int]) -> None:
     person reads the canvas's own out-of-date line (a tab that sent its
     revision gets it from _check_workspace_revision); agents the detail."""
     _check_workspace_revision()
-    # The waiting-canvas guard again, in the write step (review 7 of PR #199,
-    # N-4): a restore may have landed during the route's awaits.
+    # The waiting-canvas guard again, in the write step (PR #199): a restore
+    # may have landed during the route's awaits.
     _fence_waiting_canvas(_canvas_guard_action.get())
     fence = _filed_fence(fence)
     revision, project_id, epoch = _graph_fence()
@@ -2092,14 +2091,14 @@ def _refuse_if_graph_moved(fence: tuple[str, str | None, int]) -> None:
                                                             route="canvas"))
 
 
-# A run writes back only to the canvas it registered on (round 11 of PR #114,
-# review 10's F4). Node ids restart after a clear or an import and per
-# project, and a run's outputs, params, node errors, node events and Cinema
-# merges land by node id, so each checks the canvas the run noted at
-# registration (_register_run) and drops itself if the open project or its
-# id epoch moved. Nothing is journaled for a write that didn't happen.
-# Normally unreachable: a registered run blocks a clear, an import, a switch
-# and a delete of the open project (_project_replacement_guard).
+# A run writes back only to the canvas it registered on (PR #114). Node ids
+# restart after a clear or an import and per project, and a run's outputs,
+# params, node errors, node events and Cinema merges land by node id, so each
+# checks the canvas the run noted at registration (_register_run) and drops
+# itself if the open project or its id epoch moved. Nothing is journaled for
+# a write that didn't happen. Normally unreachable: a registered run blocks a
+# clear, an import, a switch and a delete of the open project
+# (_project_replacement_guard).
 def _run_canvas_now() -> tuple[str | None, int]:
     project_id = _workspace_context()["activeProjectId"]
     return project_id, canvas_undo_book.epoch(project_id)
@@ -2118,7 +2117,7 @@ def _adopt_run_canvases(new_project_id: str) -> None:
     live graph and ids (GET /api/projects or POST /api/projects filing it as
     "Recovered canvas"): nothing was replaced, so the runs noted on it, and
     its nodes' last errors, move to the new project. Call it in the step
-    that commits the catalog, before any await (round 12 of PR #114, G1m).
+    that commits the catalog, before any await (PR #114).
     Only runs noted on the unfiled canvas as it is now move: one noted on an
     older unfiled canvas (its epoch moved since) stays dropped."""
     execution_runs.adopt_canvas((None, canvas_undo_book.epoch(None)),
@@ -2254,8 +2253,8 @@ def _catalog_read_in_flight(signature: tuple[int, int, int]) -> bool:
     """ProjectStore.read_in_flight: whether the shared off-loop read of this
     catalog file is running for a reader on this event loop. The reader then
     answers the last projection instead of parsing the file on the loop
-    (fix round 2 of PR #199, L2: the parse that finds a 102 MB file damaged
-    held the loop 1.6 s). A worker thread (no running loop) reads it."""
+    (PR #199: the parse that finds a 102 MB file damaged held the loop
+    1.6 s). A worker thread (no running loop) reads it."""
     try:
         loop = asyncio.get_running_loop()
     except RuntimeError:
@@ -2269,10 +2268,10 @@ def _hand_off_catalog_restore() -> bool:
     event's workspace context, the pins of a /ws connect, the journal's
     project tag) that found catalog.json damaged hands the restore to the
     shared worker-thread read and answers the last projection, so the loop
-    never restores or waits on the lock for one (review 2 of PR #199, L2:
-    3.3 s at 31 MB, 14.1 s at 102 MB). In a worker thread (no running
-    loop) the reader restores itself, as before. Not after the same file
-    failed off the loop: the reader then gets that error itself."""
+    never restores or waits on the lock for one (PR #199: 3.3 s at 31 MB,
+    14.1 s at 102 MB). In a worker thread (no running loop) the reader
+    restores itself, as before. Not after the same file failed off the
+    loop: the reader then gets that error itself."""
     try:
         loop = asyncio.get_running_loop()
     except RuntimeError:
@@ -2294,7 +2293,7 @@ async def _read_catalog_off_loop() -> None:
     """When catalog.json changed outside this process (or was damaged), read
     it once in a worker thread before the request reads it on the loop: a
     restore of a large catalog takes seconds to minutes, and on the loop it
-    held up every request, canvas event and run (review 1 of PR #199, L5).
+    held up every request, canvas event and run (PR #199).
     Concurrent requests wait on the same read. A failure is left to the
     request, which reads again and answers its own error."""
     if not project_store.needs_reading():
@@ -2321,7 +2320,7 @@ FENCE_BEFORE_ROUTE = "before-route"
 # revision headers for it.
 FENCE_IN_ROUTE = "in-route"
 # What a graph write does to the canvas, for a canvas waiting to be saved as
-# a project (review 6 of PR #199, M-1; _fence_waiting_canvas): "clear" (DELETE
+# a project (PR #199; _fence_waiting_canvas): "clear" (DELETE
 # /api/graph), "replace" (a graph load) or "change" (every other write).
 CANVAS_ACTION_ATTR = "__nebula_canvas_action__"
 CANVAS_ACTIONS = ("change", "clear", "replace")
@@ -2338,7 +2337,7 @@ def graph_write(endpoint: Any = None, *, checks_in_route: bool = False, canvas_a
 
     A FENCE_IN_ROUTE route is returned as it is (it checks in the step that
     writes). A FENCE_BEFORE_ROUTE route is wrapped so its body starts with
-    the check again (follow-up to PR #195, review 23 L-1): between the
+    the check again (follow-up to PR #195): between the
     middleware's check and the route body the event loop turns a few times,
     and an agent's open waiting at its last await can commit a switch there.
     The wrapper runs the check and then the body in the same synchronous step
@@ -2417,7 +2416,7 @@ _canvas_guard_action: ContextVar[str] = ContextVar("canvas_guard_action", defaul
 
 def _saved_canvas_reply(note: Mapping[str, Any] | None) -> dict[str, Any]:
     """The agent's reply's ``savedCanvas`` when its write filed the person's
-    canvas first (GM's rule (a)): {id, name, copy?, message}."""
+    canvas first (the design's rule): {id, name, copy?, message}."""
     saved = (note or {}).get("saved")
     if not saved:
         return {}
@@ -2426,7 +2425,7 @@ def _saved_canvas_reply(note: Mapping[str, Any] | None) -> dict[str, Any]:
     message = canvas_saved_for_agent(action, saved["name"], kept=kept)
     waits = _copy_waits() if note.get("copy") else None
     if waits is not None:
-        # GM r10, 3: the agent is told at the time that its copy waits.
+        # Design: the agent is told at the time that its copy waits.
         message += f" {CANVAS_COPY_WAITS[waits]}"
     return {"savedCanvas": {"id": saved["id"], "name": saved["name"],
                             **({"kept": True} if kept else {}),
@@ -2435,7 +2434,7 @@ def _saved_canvas_reply(note: Mapping[str, Any] | None) -> dict[str, Any]:
                             "message": message}}
 
 
-# GM r10, 3: the second sentence of an agent's reply when the copy its change
+# Design: the second sentence of an agent's reply when the copy its change
 # was made on can't be saved as a project now. (A clear's or a load's new
 # canvas has no project and is never saved as the person's, so it never waits.)
 CANVAS_COPY_WAITS = {
@@ -2500,7 +2499,7 @@ async def project_workspace_fence(request: Request, call_next):
     guarded = fence is not None
     supplied = request.headers.get("x-nebula-workspace-revision") if guarded else None
     from_tab = request.headers.get("x-nebula-tab") is not None
-    # Round 19 (review 18, H-B): a canvas tab's graph write always says which
+    # A canvas tab's graph write always says which
     # project it was made in. Every tab request carries X-Nebula-Tab (the
     # canvas's apiFetch) and agents, the CLI and MCP never send one, so the
     # no-header pass stays theirs only. Without it the tab's write is refused
@@ -2514,8 +2513,8 @@ async def project_workspace_fence(request: Request, call_next):
     canvas_token = _request_canvas_revision.set(request.headers.get("x-nebula-canvas-revision") if guarded else None)
     tab_token = _request_from_tab.set(from_tab and guarded)
     execution_token = _execution_workspace_context.set(None)
-    # The waiting-canvas guard's record for this request (review 6 of PR
-    # #199, M-1): every graph write goes through it, here before the route
+    # The waiting-canvas guard's record for this request (PR #199): every
+    # graph write goes through it, here before the route
     # (FENCE_BEFORE_ROUTE) or in the route's write step (FENCE_IN_ROUTE,
     # _refuse_tab_write_without_revision).
     guard_note: dict[str, Any] = {}
@@ -2583,7 +2582,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-    # The model picker's failure kind (MODEL_SETTINGS_FAILURE_HEADER, review 12 L-4).
+    # The model picker's failure kind (MODEL_SETTINGS_FAILURE_HEADER).
     expose_headers=["X-Nebula-Failure"],
 )
 # Added after CORS so it runs first (Starlette wraps later middleware around
@@ -2591,7 +2590,7 @@ app.add_middleware(
 app.add_middleware(AgentWorkspaceContext)
 # Lets graph routes see who is calling, so agent edits move that agent's cursor.
 # Every identified request is also a sign that the agent is still there,
-# which keeps its status line alive (Q125 item 2, services/agent_status.py).
+# which keeps its status line alive (services/agent_status.py).
 app.add_middleware(RequestHeadersContext, on_agent=lambda identity: _agent_sign(identity))
 app.add_middleware(LocalRequestGuard)
 
@@ -2660,9 +2659,9 @@ RESTORE_MAX_PATH_BYTES = 1024
 RESTORE_COPY_CHUNK_BYTES = 1024 * 1024
 # A bundle's graph.json may be as large as the bundle Load graph accepts (the
 # frontend's GRAPH_BUNDLE_MAX_IMPORT_BYTES, 512 MiB of files + 16 MiB), the
-# size a plain .nebula opens up to (Q121 a, Justin 2026-10-24: "Bundles work
-# like plain files"). The save limit is the import's to check, not this one:
-# a graph over 16 MiB opens as a new project with saving paused (Q118/Q120).
+# size a plain .nebula opens up to (Justin 2026-10-24: "Bundles work like
+# plain files"). The save limit is the import's to check, not this one: a
+# graph over 16 MiB opens as a new project with saving paused.
 RESTORE_MAX_GRAPH_BYTES = 528 * 1024 * 1024
 RESTORE_MAX_GRAPH_NODES = 10_000
 RESTORE_MAX_GRAPH_EDGES = 50_000
@@ -2863,7 +2862,7 @@ def _read_restore_member_bytes(
 
 
 def _graph_file_refusal(status_code: int, detail: str, code: str, **fields: Any) -> CodedRefusal:
-    """A bundle's graph.json refused for its shape (PR #205 r11 item 2): the
+    """A bundle's graph.json refused for its shape (PR #205): the
     answer keeps ``detail``, the engine's words that agents, the CLI and the
     log read, and adds ``code`` (with the limit where there is one) so the
     person's tab picks its line by the cause, never by the words:
@@ -3537,8 +3536,8 @@ def _imported_output_type_is_valid(actual: str, declared: str | None) -> bool:
         return False
     if declared is None or declared == "Any":
         return True
-    # The shared rule (port_rules.json's alsoCompatible, review 16
-    # kept-ui-rules NIT-3); a value whose own type is Any fits no typed port.
+    # The shared rule (port_rules.json's alsoCompatible); a value whose own
+    # type is Any fits no typed port.
     return actual != PORT_RULES["any"] and port_types_compatible(actual, declared)
 
 
@@ -3697,7 +3696,7 @@ def _ref_identity(value: Any) -> tuple[str, str] | None:
     from) is its root-relative path; any other path is the file it resolves
     to, when that file exists. Two refs with the same name in different
     folders (a node's ``{id}_final.png`` in two run folders, ``~/a/photo.png``
-    and ``~/b/photo.png``) are different files (#226 review 4, LOW-1)."""
+    and ``~/b/photo.png``) are different files (PR #226)."""
     if not isinstance(value, str) or not value:
         return None
     ref = value
@@ -3734,12 +3733,11 @@ def _unresolved_ref_key(value: str) -> tuple[str, str]:
     is its path under that folder: the folder itself is what is gone, the
     rest still says which output it was. Any other path is the path itself,
     absolute and in the filesystem's own case spelling, so ``a/photo.png``
-    and ``b/photo.png`` stay two files after both are deleted (#226 review 5,
-    NIT-3)."""
+    and ``b/photo.png`` stay two files after both are deleted (PR #226)."""
     ref = urlsplit(value).path if value.startswith(("http://", "https://")) else value
     if ref is not value and not ref.startswith(_OUTPUTS_URL_PREFIX):
         # An outside URL is its whole URL, as _ref_identity reads it: never a
-        # local path that happens to share its path (#226 6d check, LOW).
+        # local path that happens to share its path (PR #226).
         return ("url", value)
     if ref.startswith(_OUTPUTS_URL_PREFIX):
         return ("output", ref[len(_OUTPUTS_URL_PREFIX):])
@@ -3780,7 +3778,7 @@ def _same_ref_file(old: Any, new: Any) -> bool:
 def _drop_stale_preview_size(before: dict[str, Any], after: dict[str, Any]) -> None:
     """A `_previewSize` belongs to the file it was read from (services/preview_size.py).
     When the preview now names another file, or none, the size goes with the
-    old one (#226 review 2, NIT-2). A move of the same file keeps it."""
+    old one (PR #226). A move of the same file keeps it."""
     if "_previewSize" not in after:
         return
     shown = _ref_file_name(after.get("_previewUrl"))
@@ -3790,12 +3788,12 @@ def _drop_stale_preview_size(before: dict[str, Any], after: dict[str, Any]) -> N
 
 def _preview_follows_file(graph: Any, node_id: str, before: dict[str, Any], sent: Mapping[str, Any]) -> None:
     """After a merge of ``sent`` into an Image Input's params, the preview
-    follows the file (#226 review 3, NIT-2). An agent or the CLI that names
+    follows the file (PR #226). An agent or the CLI that names
     another ``filePath`` without a ``_previewUrl`` gets the new file's served
     URL as its preview, or no preview when the file isn't under the output
     root (the canvas sync's normalizer imports it and fills one in). One that
     names another file (``filePath``, ``_previewUrl``) also leaves the old
-    file's ``_previewSize`` behind, so it goes (#226 review 2, NIT-2). The
+    file's ``_previewSize`` behind, so it goes (PR #226). The
     Inspector's own upload sends the new file's URL and size with it, and
     keeps them."""
     node = graph.nodes.get(node_id)
@@ -4007,10 +4005,10 @@ def _scene_writes_strict() -> bool:
     """Whether this request's Cinema scene is refused when it can't be filled
     in (services/cinema_scene_spec.py): an agent-authored write (an agent's
     marker, the CLI, a script). The person's canvas tab, with or without
-    this launch's person token, gets its scene converted instead (PR #198
-    review 3, H1): a tab whose token predates a restart must never have the
-    person's typing refused. It picks words and shapes, never authority, so
-    it reads the request as refusal_copy does."""
+    this launch's person token, gets its scene converted instead (PR #198): a
+    tab whose token predates a restart must never have the person's typing
+    refused. It picks words and shapes, never authority, so it reads the
+    request as refusal_copy does."""
     return not refusal_copy.person_reads()
 
 
@@ -4022,9 +4020,9 @@ def _person_only_refusal(detail: str) -> HTTPException | PersonGateError:
     or a token from before Nebula restarted; also curl, or the CLI without
     NEBULA_AGENT_NAME) gets the person gate's ``code: person_required`` beside
     the same detail, as require_person answers: reconnecting fixes it, and
-    the canvas reads the code, never the words (GM - Design, Q116 a: "Use it
-    for every person-only refusal, not just Krea billing."). Nothing more is
-    allowed either way: only the answer says why."""
+    the canvas reads the code, never the words (design: "Use it for every
+    person-only refusal, not just Krea billing."). Nothing more is allowed
+    either way: only the answer says why."""
     if has_agent_marker(current_request_headers()):
         return HTTPException(status_code=403, detail=detail)
     return PersonGateError(403, detail, PERSON_REQUIRED)
@@ -4086,7 +4084,7 @@ def _reserve_spend(key: str, label: str, ask: str,
     held past the wait, or one that can't be locked, opened or read
     (LedgerBusy), refused as an unreadable pricing table is, with a 503:
     nothing was checked or counted, so the run never starts on what this
-    backend last saw. GM - Design's words (review of PR #242)."""
+    backend last saw. The design's words (PR #242)."""
     try:
         return agent_spend_ledger.reserve(key, label, check)
     except agent_spend.LedgerBusy as exc:
@@ -4193,7 +4191,7 @@ async def _require_run_spend_approval(
     (the approval matches the request; only ``nodes`` are priced). ``fence``
     (_graph_fence, taken before the route's first await) is checked right
     after the measure, before the approval is used up or anything counts
-    (round 11 of PR #114, as run_graph does)."""
+    (PR #114, as run_graph does)."""
     try:
         measured = await _measure_run_inputs(nodes, edges)
         if fence is not None:
@@ -4395,16 +4393,16 @@ def _require_spend_approval(
         _place_hold(run_id, key, dict(decision.per_node), dict(decision.plan_per_node), at=at)
 
 
-# Only a caller that names itself gets a waiting run's proposal (the
-# coordinator, round 2 of PR #212, until Justin decides otherwise): a script,
-# curl or a tab not opened from the link over the total is refused, as POST
+# Only a caller that names itself gets a waiting run's proposal (decided
+# in PR #212, until Justin decides otherwise): a script, curl or a
+# tab not opened from the link over the total is refused, as POST
 # /api/canvas/proposals refuses it. Where a name is missing elsewhere, "An
-# agent" stands in (GM - Design, 2026-10-31).
+# agent" stands in (design, 2026-10-31).
 
 # One waiting run's dedupe and proposal at a time per (caller, nodes,
 # project): _open_canvas_proposal awaits (it measures inputs) before it
 # creates, so without this, retries of one run arriving together each opened
-# a copy (review 1 of PR #212, L-1). Each entry is [lock, users], dropped
+# a copy (PR #212). Each entry is [lock, users], dropped
 # when its last user leaves.
 _waiting_locks: dict[tuple[str, tuple[str, ...], str | None], list[Any]] = {}
 
@@ -4433,8 +4431,8 @@ def _open_waiting_proposal(identity: AgentIdentity, run_ids: list[str], project_
 
 async def _log_slots_full(identity: AgentIdentity, line: str) -> None:
     """The person's Agent log line for a run that waited with no slot left
-    for its proposal: neutral, with no bar or card (GM - Design,
-    2026-10-31: "there's nothing to OK"). Decoration; never fails the route."""
+    for its proposal: neutral, with no bar or card (design, 2026-10-31:
+    "there's nothing to OK"). Decoration; never fails the route."""
     try:
         event = _point(identity, target=None, action="click", say="", log=line)
         event["tone"] = "muted"
@@ -4445,7 +4443,7 @@ async def _log_slots_full(identity: AgentIdentity, line: str) -> None:
 
 def _waiting_answer(wait: agent_spend.DailyWait, proposal_id: str, *, run_id: str | None = None) -> JSONResponse:
     """202: the run didn't start; it waits for the person's OK as proposal
-    ``proposal_id``. ``message`` is GM's line for agents, with the numbers
+    ``proposal_id``. ``message`` is the design's line for agents, with the numbers
     exact beside it (``dailyTotal``)."""
     numbers = wait.as_dict()
     body: dict[str, Any] = {
@@ -4476,18 +4474,18 @@ async def _propose_waiting_run(held: _WaitForOk, fence: Any, *, run_id: str | No
     """A run that isn't the person's would pass the daily total: it becomes a
     proposal to run the same canvas nodes, which the person accepts on the
     canvas (Accept runs it, as the person's), and the caller hears that it
-    waits (GM - Design, 2026-10-31). The same caller asking again for the
+    waits (design, 2026-10-31). The same caller asking again for the
     same nodes is pointed at the proposal it already has.
 
     Refused instead, in the total's words: a caller that didn't name itself
     (a script is told to name itself; a tab not opened from the link reads
     its own lock line, from the person gate's code); a run Nebula can't make
     a proposal of (more nodes than a proposal runs, a node not on the
-    canvas, a proposal error); one whose slots are full (GM's line, and the
-    person's Agent log says so); and, on the routes that run the request's
-    own nodes (``asked``: /api/execute, /api/execute-node), one whose nodes
-    aren't the canvas's as Accept would run them, so the line and its
-    estimate never price something else (review 1 of PR #212, N-3)."""
+    canvas, a proposal error); one whose slots are full (the design's line,
+    and the person's Agent log says so); and, on the routes that run the
+    request's own nodes (``asked``: /api/execute, /api/execute-node), one
+    whose nodes aren't the canvas's as Accept would run them, so the line and
+    its estimate never price something else (PR #212)."""
     wait = held.decision.wait
     assert wait is not None
     refusal = held.decision.refusal or ""
@@ -4514,7 +4512,7 @@ async def _propose_waiting_run(held: _WaitForOk, fence: Any, *, run_id: str | No
             await _log_slots_full(identity, wait.slots_full_log(run_names, len(mine)))
             raise _person_only_refusal(wait.slots_full_line(len(mine)))
         if len(everyone) >= MAX_OPEN_TOTAL:
-            # Nebula's own cap, GM's lines (PR #212 r2, item 3).
+            # Nebula's own cap, the design's lines (PR #212).
             await _log_slots_full(identity, wait.total_full_log(run_names, len(everyone)))
             raise _person_only_refusal(wait.total_full_line(len(everyone)))
         details = {**wait.as_dict(), "nodeIds": run_ids, "names": run_names,
@@ -4634,7 +4632,7 @@ async def restore_outputs(request: Request, rewriteLinks: bool = False) -> dict:
     graph with the old-path → served-URL mapping only after both graph
     validation and asset extraction succeed.
 
-    ``?rewriteLinks=true`` (agents: graph_file_client.py, Q123 a) also
+    ``?rewriteLinks=true`` (agents: graph_file_client.py) also
     rewrites the graph's links to the restored files as the canvas does
     after this answer, and adds the canvas's ``warnings``: a graph ready for
     POST /api/graph/import. The person's tab doesn't ask for it.
@@ -4796,16 +4794,15 @@ async def _person_startup() -> None:
 async def _sweep_settings_temp_files() -> None:
     """A save cut short between its temp file and the rename leaves a full
     copy of settings.json beside it, keys included: removed at each start
-    (services/settings.sweep_stale_temp_files; review 15 of PR #203,
-    settings-keychain LOW-2). First, an in-place write cut short that left
-    settings.json unparseable is put back from the copy kept for it
-    (services/settings.restore_settings_from_backup; review 16, settings
-    MEDIUM-1 d), journaled as settings.restored and logged, both with
-    settings_restored_line."""
+    (services/settings.sweep_stale_temp_files; PR #203). First, an
+    in-place write cut short that left settings.json unparseable is put
+    back from the copy kept for it
+    (services/settings.restore_settings_from_backup), journaled as
+    settings.restored and logged, both with settings_restored_line."""
     global _settings_notice
     restored = restore_settings_from_backup()
     if isinstance(restored, NotRestored):
-        # Review 18 of PR #203, settings LOW-2: a verified copy Nebula can't
+        # PR #203: a verified copy Nebula can't
         # put back is said, never left silent.
         line = settings_not_restored_line(restored)
         logging.getLogger("nebula.settings").warning("%s", line)
@@ -4817,17 +4814,17 @@ async def _sweep_settings_temp_files() -> None:
         _journal("settings.restored", data={"file": shown_path(restored.path), "keptAt": shown_path(restored.kept)},
                  summary=line, actor={"kind": "system"})
         # The person sees it once, at the top of Settings until dismissed
-        # (GM, PR #203 r38 item 5's fallback: Updates holds agents' notes,
-        # which agents list, so it takes no system card yet).
+        # (the design's fallback, PR #203: Updates holds agents' notes, which
+        # agents list, so it takes no system card yet).
         _settings_notice = {"kind": "restored", "line": line, "path": shown_path(restored.kept)}
         settings_notice_store.save_notice(_settings_notice)
     else:
-        # One from an earlier start the person hasn't dismissed (GM r40 item 6).
+        # One from an earlier start the person hasn't dismissed (design).
         _settings_notice = settings_notice_store.load_notice()
     sweep_stale_temp_files()
 
 
-# GM, PR #203 r36 item B6b: why the settings were put back, when that is
+# Design (PR #203): why the settings were put back, when that is
 # known, and where the file the restore replaced is kept. The copy is only
 # ever left by an in-place save that didn't finish; a file that isn't that
 # save's mix of old and new text was changed since, for a reason Nebula
@@ -4844,13 +4841,13 @@ def settings_restored_line(restored: Any) -> str:
 
 
 # A verified copy Nebula couldn't put back at start (services/settings.
-# NotRestored; review 18 of PR #203, settings LOW-2), for the server log and
-# the journal (settings.not_restored). GM, PR #203 r39 item 3, verbatim.
+# NotRestored; PR #203), for the server log and the journal
+# (settings.not_restored). Design (PR #203), verbatim.
 SETTINGS_NOT_RESTORED = ("Nebula has a saved copy of your settings but couldn’t put it back, because it isn’t allowed "
                          "to change {path}. It’ll try again the next time Nebula starts.")
 
 
-# GM, PR #203 r40 item 3, verbatim: a copy not put back for any cause other
+# Design (PR #203), verbatim: a copy not put back for any cause other
 # than not being allowed (a full disk, an I/O error, another save).
 SETTINGS_NOT_RESTORED_OTHER = ("Nebula has a saved copy of your settings but couldn’t put it back. It’ll try again "
                                "the next time Nebula starts.")
@@ -4858,7 +4855,7 @@ SETTINGS_NOT_RESTORED_OTHER = ("Nebula has a saved copy of your settings but cou
 
 def settings_not_restored_line(result: Any) -> str:
     """The settings.not_restored line for a NotRestored, by its cause
-    (review 19 of PR #203, settings LOW-4): "isn’t allowed to change" with
+    (PR #203): "isn’t allowed to change" with
     the path that refuses (what settings_write_block found, the copy folder,
     else the settings file) only when Nebula isn't allowed; else the line
     with no cause."""
@@ -4871,10 +4868,9 @@ def settings_not_restored_line(result: Any) -> str:
     return SETTINGS_NOT_RESTORED.format(path=shown_path(where))
 
 
-# The settings line the person sees once (settings.restored's, GM r38 item
-# 5): set at start, shown at the top of Settings until the person dismisses
-# it, for this launch. Never in what agents read: its routes are the
-# person's only.
+# The settings line the person sees once (settings.restored's, design): set
+# at start, shown at the top of Settings until the person dismisses it, for
+# this launch. Never in what agents read: its routes are the person's only.
 _settings_notice: dict[str, str] | None = None
 
 
@@ -4965,7 +4961,7 @@ async def _personal_agents_shutdown() -> None:
 async def _journal_boot_restores() -> None:
     """The restores made while main.py imported (_boot_restores): journaled
     now that the journal exists, so an agent watching events sees a boot
-    restore too (`project.catalogRestored`, review 11 of PR #199, LOW-1)."""
+    restore too (`project.catalogRestored`, PR #199)."""
     while _boot_restores:
         record = _boot_restores.pop(0)
         try:
@@ -5112,15 +5108,15 @@ def _roll_back_upload_node(project_id: str | None, epoch: int, node_id: str, nod
                            file_name: str) -> bool:
     """Take back the node an upload added to ``project_id`` when its sync
     failed. Node ids restart per project, so the id alone says nothing once
-    another project opened during the sync (review 8 of PR #114: the
-    rollback removed the other project's n1). Still open: from the live
-    graph, as before. Closed since: from its stored snapshot, where the
-    switch saved it with the node. Either way only while the project's ids
-    are the ones the upload saw (no clear or import since: its undo epoch)
-    and the id still holds this upload's node; otherwise nothing is
-    touched. True when it came off the live graph: the caller syncs the
-    open canvas, which may have been sent it (a switch away and back
-    during the sync reopened the project with the node in it)."""
+    another project opened during the sync (PR #114: the rollback removed
+    the other project's n1). Still open: from the live graph, as before.
+    Closed since: from its stored snapshot, where the switch saved it with
+    the node. Either way only while the project's ids are the ones the
+    upload saw (no clear or import since: its undo epoch) and the id still
+    holds this upload's node; otherwise nothing is touched. True when it
+    came off the live graph: the caller syncs the open canvas, which may
+    have been sent it (a switch away and back during the sync reopened the
+    project with the node in it)."""
     if canvas_undo_book.epoch(project_id) != epoch:
         return False
     if _open_project_id() == project_id:
@@ -5160,7 +5156,7 @@ async def upload_names_route(file: list[str] = Query(default=[])) -> dict[str, A
     """{"names": {stored name: the name it was uploaded with}} for the stored
     names asked (``?file=<name>``, repeated; at most 200), those Nebula
     recorded. The canvas reads it to name a file param (frontend
-    lib/uploadNames.ts, GM r48 Q1 on #222); agents get the same name in
+    lib/uploadNames.ts, design, PR #222); agents get the same name in
     look_at_canvas."""
     return {"names": upload_names.recorded_names(file[:200])}
 
@@ -5206,8 +5202,8 @@ async def upload_file_consolidated(
     # upload still works with the project catalog unreadable).
     fence = None
     if wants_node:
-        # Fenced in the route (graph_write(checks_in_route=True), round 20 of
-        # PR #195, review 19 H2): only an upload that adds a node writes the
+        # Fenced in the route (graph_write(checks_in_route=True), PR #195):
+        # only an upload that adds a node writes the
         # canvas. A tab's drop that says no project, or one made for a
         # project or canvas that isn't open, is refused here, and again in
         # the step that adds the node, after the file read and the probe.
@@ -5277,7 +5273,7 @@ async def upload_file_consolidated(
     url = f"/api/outputs/chat-uploads/{saved_path.name}"
     filename = file.filename or f"{digest}{ext}"
     # The name it was sent with, for every surface that names a file param
-    # holding it (services/upload_names.py, GM r48 Q1 on #222).
+    # holding it (services/upload_names.py, design, PR #222).
     upload_names.record(saved_path.name, file.filename)
 
     # Base response — present for every caller.
@@ -5291,7 +5287,7 @@ async def upload_file_consolidated(
     # An image's size as shown, so its preview has its height before it
     # decodes (services/preview_size.py; the Inspector keeps it as
     # `_previewSize`, and a node made here gets it below). Header only, and
-    # off the event loop (#226 review 2, MEDIUM-2).
+    # off the event loop (PR #226).
     shown_size = await asyncio.to_thread(preview_size, content) if node_type == "image-input" else None
     if shown_size is not None:
         response["previewSize"] = shown_size
@@ -5354,13 +5350,13 @@ async def upload_file_consolidated(
         # The same step as the add, after every await: an agent's switch or
         # clear while the file was read or probed refuses the drop. The file
         # stays stored either way (content-addressed), but the node goes only
-        # to the canvas it was dropped on (review 9 of PR #114; it checks the
-        # tab's revisions first, round 20 of PR #195).
+        # to the canvas it was dropped on (PR #114; it checks the tab's
+        # revisions first, PR #195).
         _refuse_if_graph_moved(fence)
         node_id = cli_graph.add_node(node_type, node_params, position=new_position)
         # The event as the write made it, and the project it went to: it is
         # published only once the sync went out (a failed one rolls the node
-        # back), which may be after a switch (round 8 of PR #114).
+        # back), which may be after a switch (PR #114).
         added_event = _node_added_event(node_id)
         written_to = _open_project_id()
         written_epoch = canvas_undo_book.epoch(written_to)
@@ -5373,7 +5369,7 @@ async def upload_file_consolidated(
             # no success fields. The uploaded file stays on disk (it is a
             # valid, content-addressed artifact, same as a create_node=false
             # upload); only the graph mutation is rolled back, in the project
-            # it was made in, never in one opened during the sync (review 8).
+            # it was made in, never in one opened during the sync.
             try:
                 live = _roll_back_upload_node(written_to, written_epoch, node_id, node_type, saved_path.name)
             except Exception:
@@ -5381,13 +5377,13 @@ async def upload_file_consolidated(
             if live:
                 # The stored project too, at once: a switch away and back
                 # during the sync saved the node into it, and a crash before
-                # the next save would bring it back (round 10).
+                # the next save would bring it back.
                 try:
                     await _save_live_project(written_to)
                 except Exception:
                     pass
-                # Canvas = backend: the sync any server-side removal sends
-                # (round 10). Best-effort, like the rollback: the socket that
+                # Canvas = backend: the sync any server-side removal sends.
+                # Best-effort, like the rollback: the socket that
                 # failed may fail again, and the 500 below still stands.
                 try:
                     await _broadcast_graph_sync()
@@ -5460,15 +5456,15 @@ def _websocket_has_agent_marker(websocket: WebSocket) -> bool:
         return True
 
 
-# How long kept mode outlasts the person's kept tab's socket (GM's call on
-# review 13 NIT-2 of PR #199): a network blip, the tab's reload, or the
-# backend's own restart closes the socket, and the tab says keptEdits again
-# after its next hello (it reconnects every 3 s). Without this, an agent's
-# write in that gap landed on a canvas the tab won't show. Each closed kept
-# tab holds its own grace, so another tab's kept:false never ends it (design);
-# a tab that said kept:false before closing ends nothing, as it held none.
+# How long kept mode outlasts the person's kept tab's socket (the design's
+# call on PR #199): a network blip, the tab's reload, or the backend's own
+# restart closes the socket, and the tab says keptEdits again after its next
+# hello (it reconnects every 3 s). Without this, an agent's write in that gap
+# landed on a canvas the tab won't show. Each closed kept tab holds its own
+# grace, so another tab's kept:false never ends it (design); a tab that said
+# kept:false before closing ends nothing, as it held none.
 KEPT_GRACE_SECONDS = 10.0
-# A restart (GM r22 on PR #199, 5): the kept tabs are remembered in the state
+# A restart (design, PR #199): the kept tabs are remembered in the state
 # dir (KEPT_MARKER_NAME), and the grace starts again when the new backend
 # starts serving, one per remembered tab, for the usual grace plus the tab's
 # 3 s reconnect and its hello (person token fetch, promote, keptEdits):
@@ -5480,16 +5476,15 @@ KEPT_MARKER_NAME = "kept-tab.json"
 # Beside a marker that couldn't be removed: "<marker>.ignored", the digest of
 # the marker it names, so later boots don't pause agents for it again.
 KEPT_MARKER_IGNORED = ".ignored"
-# PR #204 round 4: a tab says it is one: ``X-Nebula-Tab`` (its tab id, which the canvas already
+# PR #204: a tab says it is one: ``X-Nebula-Tab`` (its tab id, which the canvas already
 # sends on writes; the CLI and MCP never send it) on its Updates reads, and ``?tab=1`` on its
 # socket, where a browser can't set headers. It is a claim, not an agent marker: it never makes a
 # request the person (person_gate is untouched) and only decides who sees a shared asset Update's
-# ``asks`` and ``firstSince`` (agent_notes.for_reader). The claim needs no secret (security
-# review LOW-2, r5): any local program, a page on any localhost origin, or an agent sandboxed
-# with localhost network access can send it without a marker and read those two counts. Agents
-# that reach Nebula only through MCP or the CLI can't: neither ever sends the claim.
-# The counts are payload shape, not a secret: GET /api/asset-proposals and the journal let any
-# agent work them out (security review LOW-1).
+# ``asks`` and ``firstSince`` (agent_notes.for_reader). The claim needs no secret: any local
+# program, a page on any localhost origin, or an agent sandboxed with localhost network access
+# can send it without a marker and read those two counts. Agents that reach Nebula only through
+# MCP or the CLI can't: neither ever sends the claim. The counts are payload shape, not a secret:
+# GET /api/asset-proposals and the journal let any agent work them out.
 TAB_CLAIM_HEADER = "x-nebula-tab"
 TAB_CLAIM_PARAM = "tab"
 
@@ -5537,7 +5532,7 @@ class ConnectionManager:
         self.browser_connections: set[WebSocket] = set()
         self.share_views: dict[WebSocket, dict[str, Any]] = {}
         # The person's tabs that keep edits Nebula couldn't save after a
-        # restore (GM r15 on PR #199, the kept mode): agents' writes wait for them.
+        # restore (design, PR #199, the kept mode): agents' writes wait for them.
         self.kept_tabs: set[WebSocket] = set()
         # The X-Nebula-Tab each kept socket said it has (its keptEdits frame),
         # so a request can be matched to a tab Nebula knows keeps edits
@@ -5629,7 +5624,7 @@ class ConnectionManager:
                 self._claim_grace()
                 self.kept_tabs.add(websocket)
         elif websocket in self.kept_tabs:
-            # This tab no longer keeps edits; another's grace holds (NIT-1).
+            # This tab no longer keeps edits; another's grace holds.
             self.kept_tabs.discard(websocket)
         else:
             # A closed kept tab back saying it no longer keeps edits: its grace ends.
@@ -5645,9 +5640,9 @@ class ConnectionManager:
         """Whether a person's tab keeps unsaved edits now: a connected one, or
         one whose socket closed (or that a restart remembered) and whose
         grace hasn't run out. Graces that ran out go first, and the marker
-        follows (review 15 agents-grace LOW-1: with another kept tab still
-        connected, an expired grace stayed counted, and a restart then held
-        agents for a tab long gone)."""
+        follows (before, with another kept tab still connected, an expired grace
+        stayed counted, and a restart then held agents for a tab long
+        gone)."""
         self._expire_graces()
         self._remember_kept()
         return any(websocket in self.browser_connections for websocket in self.kept_tabs) or bool(self.kept_graces)
@@ -5663,7 +5658,7 @@ class ConnectionManager:
         """Write (atomically) or remove the state dir's kept marker, so a
         restart knows how many tabs kept edits. Best effort: a marker that
         can't be written loses only the restart's grace; its temporary file
-        never stays behind (review 15 agents-grace NIT-1). A marker that
+        never stays behind. A marker that
         can't be removed is said once, then treated as no marker: this run
         stops trying, and the ignore note beside it (KEPT_MARKER_IGNORED)
         stops the next boots from pausing agents for it again."""
@@ -5695,7 +5690,7 @@ class ConnectionManager:
             self._ignore_note().unlink(missing_ok=True)
         except OSError as exc:
             self._say_marker_once(f"[main] couldn't write the kept marker {path}: {exc}")
-            # Remembered (review 16 agents-grace NIT-2): every selection and
+            # Remembered: every selection and
             # view read asks, so a marker that can't be written (a directory
             # where it goes) is tried again only when the count changes.
             self._marker_count = count
@@ -5735,7 +5730,7 @@ class ConnectionManager:
     def start_boot_grace(self) -> int:
         """At boot: a grace for each kept tab the marker remembers (a restart
         while a tab kept edits), from now. Returns how many. Only a regular
-        file is a marker (review 15 agents-grace NIT-1), and one an earlier
+        file is a marker, and one an earlier
         run couldn't remove after its grace holds none."""
         path = self.kept_marker
         if path is None or not path.exists():
@@ -5747,7 +5742,7 @@ class ConnectionManager:
             self._say_marker_once(f"[main] the kept marker {path} couldn't be removed before; it is ignored")
             return 0
         if not self._state_dir_writable(path.parent):
-            # Review 16 agents-grace NIT-1: in a folder Nebula can't write, no
+            # In a folder Nebula can't write, no
             # run since it became so could have written this marker, and none
             # could remove it or note it as ignored, so it would pause agents
             # at every boot. It is no marker (MCP-SETUP: once at most).
@@ -5768,11 +5763,11 @@ class ConnectionManager:
         return min(tabs, 64)
 
     # The errors that say no run could write a file in the folder: no
-    # permission (EACCES, EPERM) or a read-only file system (EROFS). Review
-    # 17 agents-docs NIT-3: any other (a full disk, a quota, an I/O error,
-    # too many open files) says nothing about who could write there, and a
-    # marker written before it is a real one, so the folder counts as
-    # writable and the marker holds its grace.
+    # permission (EACCES, EPERM) or a read-only file system (EROFS). Any
+    # other (a full disk, a quota, an I/O error, too many open files) says
+    # nothing about who could write there, and a marker written before it
+    # is a real one, so the folder counts as writable and the marker holds
+    # its grace.
     _CANT_WRITE_ERRNOS = frozenset({errno.EACCES, errno.EPERM, errno.EROFS})
 
     @classmethod
@@ -5856,7 +5851,7 @@ class ConnectionManager:
     async def broadcast_raw(self, data: dict[str, Any], *, others: dict[str, Any] | None = None) -> None:
         """Send `data` to every socket; with `others`, only the person's canvas
         sockets (a verified hello) get `data` and every other socket gets
-        `others` (review 14 LOW-1 of PR #200: the pins' person form)."""
+        `others` (PR #200: the pins' person form)."""
         forms: dict[tuple[Any, ...], str] = {}
         disconnected: list[WebSocket] = []
         sends: list[tuple[WebSocket, str]] = []
@@ -5869,7 +5864,7 @@ class ConnectionManager:
         # Every socket's send at once, each bounded: one that stalls can't hold
         # the sync-order lock (and so every sync, hello and delete answer) for
         # the others. A socket that times out or fails is closed; its tab
-        # reconnects and gets a fresh hello (PR #205 final review, LOW).
+        # reconnects and gets a fresh hello (PR #205).
         results = await asyncio.gather(*(self._send_bounded(c, text) for c, text in sends))
         disconnected.extend(connection for (connection, _text), sent in zip(sends, results) if not sent)
         for conn in disconnected:
@@ -5896,8 +5891,8 @@ class ConnectionManager:
     def _form(self, connection: WebSocket, base: dict[str, Any], forms: dict[tuple[Any, ...], str]) -> str:
         """`base` as this socket gets it, serialised once per form. An Updates message always
         goes through its reader's form (agent_notes.for_reader), whichever form a broadcast
-        hands this socket (PR #204 r5, security review NIT-1: an `others=` form or a
-        broadcast_others of Updates never skips the filter)."""
+        hands this socket (PR #204: an `others=` form or a broadcast_others of Updates never
+        skips the filter)."""
         if base.get("type") == "agentNotes":
             view = self.share_view(connection)
             key: tuple[Any, ...] = (id(base), view["sees_share"], view["agent_id"])
@@ -5931,7 +5926,7 @@ class ConnectionManager:
         # Every socket's send at once, each bounded, as broadcast_raw does: a
         # tab whose socket stalls can't hold the write route that told the tabs
         # (the person's own board edit among them). One that times out or fails
-        # is closed and dropped; its tab reconnects (PR #233 pre-merge review).
+        # is closed and dropped; its tab reconnects (PR #233).
         connections = list(self.browser_connections)
         results = await asyncio.gather(*(self._send_bounded(connection, message) for connection in connections))
         for connection, sent in zip(connections, results):
@@ -5944,11 +5939,11 @@ manager = ConnectionManager(_STATE_DIR / KEPT_MARKER_NAME if _STATE_PATH is not 
 
 def _kept_hides_reads() -> bool:
     """Whether a person's tab keeps edits now (the live ``manager``, which
-    tests swap): agents then read no selection and no view (PR #199 round
-    17, review 15 kept-wires-ui LOW-1). The server ignores what was
-    published before kept mode, so nothing can go stale: every reader
-    (GET /api/canvas/selection, look_at_canvas, start_here, `nebula`, the
-    chat and ACP prompt context) goes through these two stores."""
+    tests swap): agents then read no selection and no view (PR #199). The
+    server ignores what was published before kept mode, so nothing can go
+    stale: every reader (GET /api/canvas/selection, look_at_canvas,
+    start_here, `nebula`, the chat and ACP prompt context) goes through
+    these two stores."""
     return manager.kept_in_tab()
 
 
@@ -5958,7 +5953,7 @@ agent_presence.hide_view = _kept_hides_reads
 
 @app.on_event("startup")
 async def _kept_grace_at_boot() -> None:
-    """A restart while the person's tab kept edits (GM r22 on PR #199, 5):
+    """A restart while the person's tab kept edits (design, PR #199):
     agents stay paused until that tab is back and says so, or its grace runs
     out (ConnectionManager.start_boot_grace)."""
     if count := manager.start_boot_grace():
@@ -6049,7 +6044,7 @@ def _event_to_camel(event: ExecutionEvent) -> dict[str, Any]:
                     "nodeId": e.get("node_id", e.get("nodeId", "")),
                     "portId": e.get("port_id", e.get("portId", "")),
                     "message": e.get("message", ""),
-                    # The card's line (error copy round 3e); None: GM's general line.
+                    # The card's line (error copy); None: the design's general line.
                     "person": e.get("person"),
                     # Only when true, as _validation_response has it: a missing
                     # key draws neutral, so a socket client sees it too.
@@ -6065,7 +6060,7 @@ def _validation_response(errors: list[ValidationErrorDetail]) -> dict[str, Any]:
 
     The canvas's own run calls (/api/execute, a node's run, a shot): each
     error's `message` is the specific text and `person` the card's line
-    (error copy round 3e). Agents' runs answer with _refused_cli_run, which
+    (error copy). Agents' runs answer with _refused_cli_run, which
     keeps `message` alone."""
     return {
         "status": "validation_error",
@@ -6114,13 +6109,13 @@ async def _announce_validation_errors(errors: list[ValidationErrorDetail], run_i
     looks on the canvas like the person's refused click on Run.
 
     An agent's refused run (MCP, the CLI, an in-app chat turn, any route)
-    reaches the person's Agent log as one merged line, whoever asked (GM, PR
-    #203 r30 item 1): its cursor's event carries it as the log line
+    reaches the person's Agent log as one merged line, whoever asked
+    (design, PR #203): its cursor's event carries it as the log line
     (_say_refused_run). Returns the line when no cursor carried it (the
     browser's own request, or a refusal with no node to point at), so
     /api/graph/run can still give it to an in-app chat turn."""
     node_errors.record_validation(errors)
-    # Journaled before the broadcast's await (round 8 of PR #114).
+    # Journaled before the broadcast's await (PR #114).
     for node_id, message in _validation_messages(errors).items():
         if node_id:
             _journal_execution_event(ErrorEvent(node_id=node_id, error=message, run_id=run_id), run_id)
@@ -6145,11 +6140,11 @@ async def _say_refused_run(errors: list[ValidationErrorDetail]) -> str | None:
     if first is None or identify_agent(current_request_headers()) is None:
         return line
     # The cursor quotes the node like every other bubble; the log has the
-    # run's line, whole: Nebula's own line is never cut (GM, PR #203 r33 item 2).
-    # Needs say r34's form (GM r38 item 1); any other line is named once by
-    # the node's own name (_bubble_line, GM r38 item 2). A needs or route
-    # bubble is its first sentence, which names what's needed or wrong; the
-    # action sentence is on the card and in the log (GM, PR #203 r39 item 5).
+    # run's line, whole: Nebula's own line is never cut (design, PR #203).
+    # A needs stop names the node by its quoted name, then what it needs (_bubble_needs; design);
+    # any other line is named once by the node's own name (_bubble_line, design). A needs or route
+    # bubble is its first sentence, which names what's needed or wrong; the action sentence is on
+    # the card and in the log (design, PR #203).
     needs = _bubble_needs(first, errors)
     bubble = (_first_sentence(f"{_quoted(_node_label(first))} {needs}") if needs
               else _bubble_line(first, person.get(first) or ""))
@@ -6187,8 +6182,8 @@ def _whole_sentences(line: str) -> str:
 def _named_line(node_id: str, line: str) -> str:
     """A line that opens with the node's quoted type name, opening with its
     own name instead (_node_label: the person's label when it was renamed,
-    else its type's name; never both; GM, PR #203 r38 item 2, r39 item 8).
-    Any other line is returned as it is."""
+    else its type's name; never both; design, PR #203). Any other line is
+    returned as it is."""
     named = _quoted(_node_label(node_id))
     node = cli_graph.nodes.get(node_id) or {}
     definition_id = str(node.get("definitionId") or "")
@@ -6204,8 +6199,8 @@ def _bubble_line(node_id: str, line: str) -> str:
     """A card line in the cursor bubble, named once by the node's name
     (_named_line): a line that opens with the name is its first sentence,
     which says what's wrong ("“Hero shot” can’t run on fal.ai with
-    “Resolution” set to 1.5K."; GM, PR #203 r39 item 5); any other line
-    follows "“Hero shot” can’t run."."""
+    “Resolution” set to 1.5K."; design, PR #203); any other line follows
+    "“Hero shot” can’t run."."""
     named = _quoted(_node_label(node_id))
     own = _named_line(node_id, line)
     if own.startswith(named):
@@ -6215,15 +6210,15 @@ def _bubble_line(node_id: str, line: str) -> str:
 
 def _bubble_needs(node_id: str, errors: list[ValidationErrorDetail]) -> str | None:
     """The bubble's words after the node's name when all it needs is inputs
-    connected and maybe its key (person_line.needs_bubble, GM r38 item 1),
+    connected and maybe its key (person_line.needs_bubble, design),
     its inputs in the node's input order; None for any other stop."""
     from execution.person_line import needs_bubble
 
     own = [error for error in errors if error.node_id == node_id]
     unwired = [error for error in own if error._stop == "input"]
     # A stop that is only its key (a plain key check, or a routed node's
-    # route with no key set; review 19 of PR #203, MEDIUM-1), its words set
-    # where the check is made (ValidationErrorDetail._key).
+    # route with no key set; PR #203), its words set where the check is
+    # made (ValidationErrorDetail._key).
     keyed = [error for error in own if error._key]
     if not unwired or len(unwired) + len(keyed) != len(own) or len(keyed) > 1:
         return None
@@ -6255,7 +6250,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
         # Events emitted while a browser is disconnected are not replayed.
         # Reconnect therefore starts with an authoritative graph, provider
         # safety journal, and retained execution-status snapshot.
-        # bootId: which backend process this is (round 15 of PR #114). A tab
+        # bootId: which backend process this is (PR #114). A tab
         # holding a create whose answer was lost releases it only when the
         # backend restarted (a new bootId); after a mere reconnect the create
         # may still land, and a later sync shows it. Numbered and sent in the
@@ -6268,11 +6263,11 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
             # On a timeout or failure it is closed and dropped; its tab reconnects.
             sync_text = json.dumps({"type": "graphSync", **export, "syncSeq": _next_graph_sync_seq(),
                                     "bootId": BACKEND_BOOT_ID, "bootStartedAt": BACKEND_BOOT_STARTED_AT,
-                                    # What this boot's renumbering adds (PR #199 rounds 17, 18).
+                                    # What this boot's renumbering adds (PR #199).
                                     **_boot_first_sync()})
             if not await manager._send_bounded(websocket, sync_text):
                 return
-        # The agents' form until a verified hello promotes this socket (review 14 LOW-1).
+        # The agents' form until a verified hello promotes this socket.
         await manager.send_direct(websocket, json.dumps(_pins_message()))
         await _settle_proposal_updates()
         await manager.send_direct(websocket, json.dumps(manager.for_socket(websocket, _canvas_notes_message())))
@@ -6281,7 +6276,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
             if manager.is_browser(websocket):
                 # The person's tab (promoted by its hello with this launch's
                 # person token: an agent's socket never gets here) says which
-                # project it shows (GM r11, 2).
+                # project it shows (design).
                 try:
                     frame = loads_checked(raw)
                 except (ValueError, RecursionError):
@@ -6307,12 +6302,12 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                 # Accept keys travel only to the person's canvas sockets.
                 # The tab also reads this proposalSync as "promoted": it is
                 # sent here, on a verified hello, and nowhere else, and it
-                # clears the tab's person hold and banner (GM r29 item 3 of
-                # PR #200; frontend lib/wsClient). personRequired below is the
-                # demote. Keep the two in step if this changes.
+                # clears the tab's person hold and banner (design, PR #200;
+                # frontend lib/wsClient). personRequired below is the demote.
+                # Keep the two in step if this changes.
                 await manager.send_direct(websocket, json.dumps(_proposal_sync_message()))
                 await manager.send_direct(websocket, json.dumps(await _asset_proposal_sync_message()))
-                # Open question sets with their answer keys (Q125 item 1), same rule.
+                # Open question sets with their answer keys, same rule.
                 await _send_questions_sync(websocket)
                 # Who listens to the canvas (channel readiness), person form (before
                 # the pins and the replay, which stay the last syncs).
@@ -6326,11 +6321,11 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                                                       "places": _person_recovery_places()}))
                 # Now the person's canvas: their pins with registered variants kept.
                 await manager.send_direct(websocket, json.dumps(_pins_message(person=True)))
-                # Every live cursor, person form, for this tab only (GM -
-                # Design, PR #211 r3): numbers match across tabs because each
-                # shows the backend's. Built here, after the other syncs, so
-                # every cursor event built before it is reflected in it. An
-                # event built before it can still reach this tab after it
+                # Every live cursor, person form, for this tab only (design,
+                # PR #211): numbers match across tabs because each shows the
+                # backend's. Built here, after the other syncs, so every
+                # cursor event built before it is reflected in it. An event
+                # built before it can still reach this tab after it
                 # (broadcast_raw picks each socket's form at send time); it
                 # carries the same key and number, so nothing doubles.
                 await manager.send_direct(websocket, json.dumps({"type": "agentPresenceReplay",
@@ -6355,7 +6350,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
 
 def _chat_ref(payload: dict[str, Any]) -> dict[str, str]:
     """The tab's own `ref` for a message, echoed on its person_required refusal so the tab
-    reads the refusal against the promote that message went out under (PR #204 round 7).
+    reads the refusal against the promote that message went out under (PR #204).
     A short string only; anything else is left out."""
     ref = payload.get("ref")
     return {"ref": ref} if isinstance(ref, str) and 0 < len(ref) <= 64 else {}
@@ -6854,7 +6849,7 @@ async def chat_websocket(websocket: WebSocket) -> None:
 
 def _personal_agent_http_error(exc: personal_agents.PersonalAgentError) -> HTTPException:
     status = {"not_found": 404, "conflict": 409}.get(exc.code, 400)
-    if status == 404:  # GM's 404 pattern (error-copy round 3); these routes are the person's only
+    if status == 404:  # The design's 404 pattern (error-copy); these routes are the person's only
         return refusal_copy.not_found(exc.message, "agent", "agents")
     return HTTPException(status_code=status, detail=exc.message)
 
@@ -7011,9 +7006,9 @@ async def agent_spend_status(request: Request) -> dict[str, Any]:
     """The spending limits and what the calling agent's session has used, so an
     agent can plan before it runs anything. The person's canvas isn't limited.
     A settings file Nebula can't read answers as start_here's spend part
-    does, 200 with the read line and its code (review 14, settings-gate
-    LOW-2: a 500 before, or the default limits for a file that isn't an
-    object): MCP get_spend_limits and `nebula spend` say it."""
+    does, 200 with the read line and its code (a 500 before, or the default
+    limits for a file that isn't an object): MCP get_spend_limits and `nebula
+    spend` say it."""
     unreadable = _settings_read_refusal()
     if unreadable is not None:
         return {"note": unreadable, "code": SETTINGS_UNREADABLE_CODE}
@@ -7041,7 +7036,7 @@ async def agent_spend_status(request: Request) -> dict[str, Any]:
         # says so, in the sentence the refusal and the waiting run end with
         # (weekday form), and gives the hold's end beside it. ``known`` comes
         # from the same read as ``until``, so a stand-in end is never shown
-        # as a time (review of PR #242 round 2, L2).
+        # as a time (PR #242).
         if not here.known:
             # Not the hold: the ledger can't be read at all right now, so
             # paid runs are refused until it can and no end time is known.
@@ -7090,7 +7085,7 @@ def _outside_view() -> dict[str, Any]:
     if outside.until is not None:
         # An unreadable ledger holds every limit until then: Settings shows
         # each limit's usage as used up and says why, in its live form.
-        # ``known`` is from the same read as ``until`` (L2).
+        # ``known`` is from the same read as ``until``.
         if not outside.known:
             # The ledger can't be read at all: no amount is known and no end
             # time either, so Settings says that and shows no figure.
@@ -7210,7 +7205,7 @@ async def revoke_agent_app(app_id: str) -> dict[str, Any]:
     require_person(current_request_headers())
     if not (app_tokens.valid_id(app_id) and app_token_store.revoke(app_id)):
         raise refusal_copy.not_found("No connected app with that id", "app", "apps")
-    # Its listeners go now, not at their TTL (boundary LOW-1): the box stops
+    # Its listeners go now, not at their TTL: the box stops
     # offering them, and a send to one is refused as stopped.
     agent_id = f"{channel_listeners.APP_ID_PREFIX}{app_id}"
     dropped = channel_book.drop_agent(agent_id)
@@ -7219,9 +7214,9 @@ async def revoke_agent_app(app_id: str) -> dict[str, Any]:
         _schedule_channel_expiry()
     thread_ledger.forget_agent(agent_id)
     # Its messages still in flight can't be delivered any more (a new token
-    # is a new agent): they settle as dropped (#225 review 2), whether one of
-    # its listeners was still registered or not (review 4: by agent, not by
-    # listener id, which a Nebula restart changes).
+    # is a new agent): they settle as dropped (PR #225), whether one of
+    # its listeners was still registered or not (by agent, not by listener
+    # id, which a Nebula restart changes).
     try:
         settled = await asyncio.to_thread(thread_book.drop_for, agent_id)
     except (ProjectStoreError, OSError):
@@ -7411,7 +7406,7 @@ PROVIDER_CHOICE_NOTE = (
 # is sent, and the agent proposes the run instead; the rest of the run goes
 # ahead (Justin decided, 2026-10-31; handlers/speridlabs_idol.run_idol).
 # Without the token, agents run it as any free node. Every surface that lists
-# the node says so, as the token is set now (review 7 of PR #203, LOW-1):
+# the node says so, as the token is set now (PR #203):
 # describe_node's route `billing` (`nebula info`'s BILLING line), the
 # find_nodes row's `billing` where it runs free (`nebula nodes` prints it
 # under the table), and start_here's notes (`nebula context`). The notes name
@@ -7442,8 +7437,8 @@ def _space_billing(definition: Mapping[str, Any], api_keys: Mapping[str, Any],
                    params: Mapping[str, Any] | None = None) -> str | None:
     """The billing note for a node whose run may bill the person's own
     account with their key (a Hugging Face Space: Idol), from its cost class
-    (model_pricing.cost_class, the one function every surface reads; review 8
-    of PR #203, LOW-3), else None. ``params`` picks the route ({} is Auto's)."""
+    (model_pricing.cost_class, the one function every surface reads; PR #203),
+    else None. ``params`` picks the route ({} is Auto's)."""
     cost_class = model_pricing.cost_class(definition, params or {}, api_keys)
     if cost_class not in (model_pricing.MAY_COST, model_pricing.FREE):
         return None
@@ -7749,10 +7744,10 @@ async def health() -> dict:
     # paramsVersion: the desktop app compares it with its built frontend's
     # stamp (nebula-build.json) at launch and refuses to open a bundle built
     # for another version (desktop/frontend-build.mjs). Not a secret.
-    # bootId: which backend process answers (round 16 of PR #114, M4). A tab
+    # bootId: which backend process answers (PR #114). A tab
     # notes it from every health probe and socket hello, with or without a
     # project open, and a new one means the backend restarted. bootStartedAt
-    # orders processes (PR #198 review 11, L-4). Not secrets.
+    # orders processes (PR #198). Not secrets.
     return {"status": "ok", "app": "nebula", "version": "0.1.0", "paramsVersion": PARAMS_VERSION,
             "bootId": BACKEND_BOOT_ID, "bootStartedAt": BACKEND_BOOT_STARTED_AT}
 
@@ -7786,7 +7781,7 @@ async def set_canvas_selection(body: dict[str, Any]) -> dict[str, Any]:
     after = selection_context.current()
     tab_only = selection_context.tab_only()
     # The selection agents can see, and how many nodes only the person's tab
-    # has (review 17 agents-docs LOW-1): selecting just a duplicate is a
+    # has: selecting just a duplicate is a
     # selection, never "cleared". Two selections of tab-local nodes with the
     # same count read the same to agents (no id is kept), so no event.
     if (set(after), tab_only) != before:
@@ -7810,7 +7805,7 @@ def _selection_summary(live: list[str], tab_only: int) -> str:
 
 def _did(verb: str, node_id: str | None = None, label: str | None = None) -> dict[str, Any]:
     """What an agent's action was, for the Agents panel's line when it has no
-    status (Q125 item 2, GM: Moved “Hero shots” · 2 min ago): a past-tense
+    status (design: Moved “Hero shots” · 2 min ago): a past-tense
     verb and the node it names, by the node's label (else its model's name)."""
     if node_id is not None and label is None and node_id in cli_graph.nodes:
         label = _node_label(node_id)
@@ -7834,13 +7829,13 @@ def _person_form(event: dict[str, Any], identity: Any, headers: Any, *, session:
                  **kwargs: Any) -> dict[str, Any] | None:
     """agent_presence.person_form, built apart from the agent form, so a
     failure in the person's copy is logged and never silences the agent form
-    or fails the route (review 1, LOW-1).
+    or fails the route.
 
     On that failure the person's tabs get the agent form with this session's
     real number when its cursor is already live (``session_tag``), else
     nothing for this event (None). Never the bare agent form: a tab reads an
     event with no session as the plain cursor, number 1, and would drop
-    whichever session holds 1 (review 2, NIT-3)."""
+    whichever session holds 1."""
     if session is _HEADERS_SESSION:
         session = presence_session(headers)
     try:
@@ -7872,14 +7867,14 @@ async def _broadcast_presence(event: dict[str, Any], person: dict[str, Any] | No
 
 def _accepted_person_form(event: dict[str, Any], proposal: Proposal) -> dict[str, Any] | None:
     """The person tabs' copy of the "Accepted" click: on the cursor of the
-    session that proposed it (GM - Design, PR #211 r9 item 1). The request
+    session that proposed it (design, PR #211). The request
     is the person's, so the session is the one recorded on the proposal when
     it was made (``Proposal.presence_session``, person side only). When that
     session's cursor has left by now, None: the person's tabs get no click
     (a cursor coming back for an ended session would be false; the node's
     run state shows what happened), and agents still get the agent form.
     The same holds for an agent past the agent memory, whose cursor has no
-    session to tie the click to (GM - Design, PR #211 review 4). On any
+    session to tie the click to (design, PR #211). On any
     failure, None too: never the bare agent form, which a tab would draw as
     the plain cursor."""
     try:
@@ -7908,15 +7903,14 @@ async def _show_agent(
 
     ``did`` (_did) is what the action was, for the Agents panel. ``log`` is
     the Agent log's line when it differs from the bubble's ``say`` (e.g. a
-    field the card shows no label for, named there by its key while the
-    bubble leaves it out: GM - Design, round 16 of PR #195); an action with
-    neither is logged in the Agents panel's words ("Changed “Hero”"), so no
-    action is left out of the log (MCP-SETUP.md, PR #198 r1). ``words``
-    computes (say, log) inside the guard (_set_params_bubble). ``log_whole``:
-    ``log`` is Nebula's own whole line (a refused run's), never cut
-    (agent_presence.clean_log). Never fails
-    the route that called it: presence is decoration on top of an edit that
-    already succeeded.
+    field the card shows no label for, named there by its key while the bubble
+    leaves it out: design, PR #195); an action with neither is logged in the
+    Agents panel's words ("Changed “Hero”"), so no action is left out of the
+    log (MCP-SETUP.md, PR #198). ``words`` computes (say, log) inside the guard
+    (_set_params_bubble). ``log_whole``: ``log`` is Nebula's own whole line (a
+    refused run's), never cut (agent_presence.clean_log). Never fails the route
+    that called it: presence is decoration on top of an edit that already
+    succeeded.
 
     ``shows`` is what the edit really was on the person's tabs (``type`` for
     a param edit, ``run``, ``propose``, ``error``); ``action`` stays the
@@ -8054,17 +8048,17 @@ _RUN_EVENT_VERBS = {"run.started": "started", "run.finished": "finished", "run.f
                     "run.skipped": "skipped"}
 
 
-# Which Cinema shots a live run is rendering (GM, PR #198 r2: a shot that is
-# rendering can't be removed; r3: nor can its scene be deleted): run id -> a
-# set of (node id, shot id), shot None when the run renders the whole scene.
-# A set, so a run that renders several scenes protects every one (review 3,
-# M1). A run counts while the registry holds it as running or cancelling
-# (_run_is_active), and from the start of its admission before that (L1:
-# _cinema_admission_scope). A whole-scene entry goes once the engine is done
-# with that scene (_scene_render_done, L2), so a downstream video's long
-# render doesn't hold the scene that fed it. A shot run's upstream scenes
-# stay until it ends, since each variation pass renders them again (review 4,
-# M2). An entry for a run that ended is dropped the next time anyone looks.
+# Which Cinema shots a live run is rendering (design, PR #198: a shot that is
+# rendering can't be removed: nor can its scene be deleted): run id -> a set
+# of (node id, shot id), shot None when the run renders the whole scene. A
+# set, so a run that renders several scenes protects every one. A run counts
+# while the registry holds it as running or cancelling (_run_is_active), and
+# from the start of its admission before that (_cinema_admission_scope). A
+# whole-scene entry goes once the engine is done with that scene
+# (_scene_render_done), so a downstream video's long render doesn't hold
+# the scene that fed it. A shot run's upstream scenes stay until it ends,
+# since each variation pass renders them again. An entry for a run that ended
+# is dropped the next time anyone looks.
 _cinema_renders: OrderedDict[str, set[tuple[str, str | None]]] = OrderedDict()
 # Runs being admitted (noted, not registered yet): run id -> monotonic deadline.
 _cinema_admitting: dict[str, float] = {}
@@ -8076,7 +8070,7 @@ CINEMA_ADMISSION_SECONDS = 600.0
 
 @contextmanager
 def _cinema_admission_scope() -> Iterator[None]:
-    """A run route's admission (PR #198 review 3, L1): a render it notes counts
+    """A run route's admission (PR #198): a render it notes counts
     as live from that moment, through validation and the spending check's
     awaits, until the route returns. By then the run has registered (the
     registry decides from there) or was refused (the render is dropped)."""
@@ -8114,7 +8108,7 @@ def _note_cinema_render(run_id: str, node_id: str, shot_id: str | None) -> None:
 def _note_scene_renders(run_id: str, nodes: Iterable[Any], *, shot: tuple[str, str] | None = None) -> None:
     """The Cinema renders a run sets out to make: every scene among ``nodes``
     whole, except ``shot``'s scene, of which a shot run renders only that
-    shot (review 3, L2)."""
+    shot."""
     for node in nodes:
         if node.definition_id == "cinema-scene" and (shot is None or node.id != shot[0]):
             _note_cinema_render(run_id, node.id, None)
@@ -8127,7 +8121,7 @@ def _scene_render_done(run_id: str | None, node_id: str) -> None:
     failed or was skipped, a cached one included): its shots are free again.
     A shot run holds everything it noted until it ends: its own shot (its
     result merges then) and its upstream scenes, which every variation pass
-    renders again (review 4, M2). A shot run is one that noted a shot."""
+    renders again. A shot run is one that noted a shot."""
     renders = _cinema_renders.get(run_id or "")
     if renders is None or any(shot_id is not None for _node, shot_id in renders):
         return
@@ -8196,7 +8190,7 @@ def _rendering_shots(node_id: str, order: list[str]) -> tuple[list[str], list[st
 
 
 def _shot_names(numbers: list[int]) -> tuple[str, bool]:
-    """“Shot 2”, “Shot 2” and “Shot 3”, or "4 shots" (GM, PR #198 r3), and
+    """“Shot 2”, “Shot 2” and “Shot 3”, or "4 shots" (design, PR #198), and
     whether it is more than one."""
     names = [f"\u201cShot {number}\u201d" for number in numbers]
     if len(names) >= 4:
@@ -8217,7 +8211,7 @@ def _removal_person_line(action: str | None, numbers: list[int], stoppable: bool
     An undo or redo, in the because form: "Nebula couldn’t undo because it
     would remove “Shot 2”, which is still running. Stop the run first." ("…Wait for it to
     finish." when there's no Stop for it). Several shots, and a studio edit
-    that isn't an undo, are builder's forms on GM's pattern."""
+    that isn't an undo, are builder's forms on the design's pattern."""
     what, several = _shot_names(numbers)
     end = "Stop the run first." if stoppable else "Wait for it to finish."
     if action in RESTORE_ACTIONS:
@@ -8231,7 +8225,7 @@ def _refuse_removing_rendering_shots(node_id: str, node: dict[str, Any], current
                                      kept: set[str], *, action: str | None = None) -> None:
     """409 when a write would remove a shot a live run is rendering, with
     what to do: stop the run or wait for it. Agents read the shot, the run
-    and how to stop it; the person reads GM's line (``action``: the undo or
+    and how to stop it; the person reads the design's line (``action``: the undo or
     redo this write is)."""
     removed = [shot_id for shot_id in current if shot_id not in kept]
     if not removed:
@@ -8248,7 +8242,7 @@ def _refuse_removing_rendering_shots(node_id: str, node: dict[str, Any], current
         f"Shot {order.index(shot_id) + 1} ({shot_id}) of {name} ({node_id}) is still rendering (run {run_id}), "
         f"so it can’t be removed. Stop the run first (cancel_run, or `nebula cancel {run_id}`; a run the "
         "person started is theirs to stop) or wait for it to finish, then try again. Nothing changed.")
-    # Pinned to its shots (PR #198 review 5, GM question 3): the canvas puts
+    # Pinned to its shots (PR #198, design): the canvas puts
     # back only ``shotIds`` and sends the rest of the save again.
     raise _RenderingSceneRefusal(409, refusal_copy.refusal_detail(
         specific, _removal_person_line(action, numbers, stoppable), route="canvas"),
@@ -8260,8 +8254,8 @@ class _RenderingSceneRefusal(CodedRefusal):
     shots, saying which (``code: "rendering_shots"``, ``rendering``: their
     ids in scene order, their numbers as the rail shows them, and whether
     any run rendering them can be stopped), so the canvas can word a
-    multi-select delete's kept scene in GM's form (PR #198 review 4, M1) and
-    put back only those shots of a refused save (review 5), without reading
+    multi-select delete's kept scene in the design's form (PR #198) and
+    put back only those shots of a refused save, without reading
     it out of the line. ``run_ids`` (not in the answer) names the runs, for
     the undo line that says which."""
 
@@ -8273,8 +8267,8 @@ class _RenderingSceneRefusal(CodedRefusal):
 
 
 def _refuse_deleting_rendering_scene(node_id: str, node: Mapping[str, Any], *, action: str | None = None) -> None:
-    """409 for deleting a Cinema scene while one of its shots renders (GM,
-    PR #198 r3 item 1: "refuse for agents and the person"). Agents: "Couldn’t
+    """409 for deleting a Cinema scene while one of its shots renders
+    (design, PR #198: "refuse for agents and the person"). Agents: "Couldn’t
     delete “Scene”, node n4. “Shot 2” is still running, run <id>." The
     person: "Couldn’t delete “Scene”. “Shot 2” is still running. Stop the run
     first." ("Wait for it to finish." with no Stop); an undo or redo that
@@ -8296,8 +8290,8 @@ def _refuse_deleting_rendering_scene(node_id: str, node: Mapping[str, Any], *, a
     else:
         end = "Stop the run first." if stoppable else "Wait for it to finish."
         person = f"Couldn’t delete {name}. {what} {verb} still running. {end}"
-    # The Agent log says it too, under the agent's name (GM: "Agent log +
-    # agent refusal"); a no-op for the person's own request.
+    # The Agent log says it too, under the agent's name (design: "Agent
+    # log + agent refusal"); a no-op for the person's own request.
     _log_agent_refusal(specific)
     raise _RenderingSceneRefusal(409, refusal_copy.refusal_detail(specific, person, route="canvas"),
                                  {"shotIds": shots, "shots": numbers, "stoppable": stoppable}, run_ids)
@@ -8321,7 +8315,7 @@ def _log_agent_refusal(line: str) -> None:
 
 # A late result for a shot that wasn't there when it landed (only its port
 # kept it): (node id, shot id) -> {url, variations}. A shot an undo brings
-# back adopts it with the variations it came with (review 3, L3). In memory
+# back adopts it with the variations it came with. In memory
 # and bounded: after a restart the adopted shot keeps the image alone.
 _late_shot_results: OrderedDict[tuple[str, str], dict[str, Any]] = OrderedDict()
 
@@ -8370,11 +8364,11 @@ def _note_run(run_id: str) -> None:
 
 
 # When a node's run result landed (epoch ms, the clock the tab's run records
-# use; PR #199 round 21, review 19 LOW-3): Nebula's stamp, kept beside the run
-# result (not part of the unit _run_result moves: a tab never sets it), on the
-# live node and in the node's stored ``data``. It moves with the node when it
-# is renumbered. A handoff's "newer run" (_tab_result_is_newer) reads it when
-# Nebula didn't see both runs land in this process (a restart).
+# use; PR #199): Nebula's stamp, kept beside the run result (not part of the
+# unit _run_result moves: a tab never sets it), on the live node and in the
+# node's stored ``data``. It moves with the node when it is renumbered. A
+# handoff's "newer run" (_tab_result_is_newer) reads it when Nebula didn't see
+# both runs land in this process (a restart).
 RESULT_LANDED_KEY = "resultLandedAt"
 
 
@@ -8406,7 +8400,7 @@ def _stamp_result_landed(node_id: str, run_id: str, *, persist: bool) -> None:
         project = _workspace_context()["activeProjectId"]
     at = _time_module.time() * 1000
     node_result_runs.landed(project if isinstance(project, str) else None, node_id, run_id, at=at)
-    # The stamp kept with the result (PR #199 round 21, review 19 LOW-3): a
+    # The stamp kept with the result (PR #199): a
     # handoff after a restart still knows when Nebula's result landed. On the
     # live node (state.json), and from there in the project's stored copy
     # (the export carries it; every save keeps it from the live graph).
@@ -8472,8 +8466,8 @@ def _journal_execution_event(event: Any, run_id: str | None) -> None:
         if stopped:
             # A stop at a call only the person may make (Idol's Hugging Face
             # call with their token): marked, with the agent's words whole, so
-            # an agent reading later learns to propose (review 19 of PR #203,
-            # LOW-2). Nebula wrote them; they carry no key.
+            # an agent reading later learns to propose (PR #203). Nebula wrote
+            # them; they carry no key.
             data["proposalNeeded"] = True
             data["error"] = str(_journal_safe_value(event.error or "", key="error"))[:600]
         elif isinstance(event, ErrorEvent):
@@ -8509,7 +8503,7 @@ def _custom_node_label(raw: Any, definition_id: str) -> str | None:
         return None
     label = " ".join(raw.split())[:MAX_NODE_LABEL_LENGTH]
     definition = node_registry.get(definition_id) or {}
-    # GM - Design, round 18: either form of the default title (the catalog
+    # Design: either form of the default title (the catalog
     # name, or the canvas title without its gateway) is no name of its own.
     if not label or label == definition.get("displayName") or (definition and node_route.is_default_title(definition, label)):
         return None
@@ -8517,8 +8511,8 @@ def _custom_node_label(raw: Any, definition_id: str) -> str | None:
 
 
 def _node_label(node_id: str, graph: CLIGraph | None = None) -> str:
-    """A node's name: its own label, else its canvas title (review 18 M-D:
-    agents, the cursor and the Agent log name it as the canvas does,
+    """A node's name: its own label, else its canvas title (agents, the
+    cursor and the Agent log name it as the canvas does,
     node_route.node_name), else its type, else its id. ``graph`` is a staged
     copy (a proposal's), else the live canvas."""
     node = (graph or cli_graph).nodes.get(node_id) or {}
@@ -8565,11 +8559,11 @@ def _run_names(nodes: list[GraphNode]) -> Callable[[str], str]:
 async def _refuse_unchosen_models(run_id: str, nodes: list[GraphNode], edges: list[GraphEdge],
                                   api_keys: Mapping[str, Any], skips: Mapping[str, Any]) -> dict[str, Any] | None:
     """The person's direct run (a node's, a shot's) of a Krea node with no
-    model chosen is refused before its paid-placeholder confirmation: GM -
-    Design, round 12 addendum b, "Don't ask someone to approve a run that
-    can't go out." The same line validate_graph gives every other run path,
-    on the route the run takes (review 13, M-1: a maker key that takes the
-    run without the field is no refusal)."""
+    model chosen is refused before its paid-placeholder confirmation (design:
+    "Don't ask someone to approve a run that
+    can't go out."). The same line validate_graph gives every other run path,
+    on the route the run takes (a maker key that takes the run without the
+    field is no refusal)."""
     errors = unchosen_model_errors(nodes, edges, api_keys, name_of=_run_names(nodes))
     if not errors:
         return None
@@ -8579,7 +8573,7 @@ async def _refuse_unchosen_models(run_id: str, nodes: list[GraphNode], edges: li
 
 def _quoted(label: str) -> str:
     """A node's name in a cursor bubble, in curly quotes as the Agents panel
-    shows it (GM - Design, 2026-10-25: Connecting “A” to “B”), without
+    shows it (design, 2026-10-25: Connecting “A” to “B”), without
     doubling quotes already around the name (services/node_names.py)."""
     return node_names.quoted(label)
 
@@ -8602,7 +8596,7 @@ def _cli_run_line(results: Mapping[str, Any], errors: Mapping[str, Any], gated: 
     period; two or more end each with one.
 
     ``stopped`` are the nodes that stopped at a call only the person may make
-    (a proposal, r211 item 3): they didn't run and didn't fail, so they are
+    (a proposal): they didn't run and didn't fail, so they are
     neither in the ran list nor the failed sentence; the row says what the
     done card says, "“Idol” is waiting for you to run it because it could bill
     your Hugging Face account." (run_done_cards.waiting_text). ``names`` are
@@ -8631,13 +8625,13 @@ def _cli_run_line(results: Mapping[str, Any], errors: Mapping[str, Any], gated: 
     return sentences[0] if len(sentences) == 1 else " ".join(f"{sentence}." for sentence in sentences)
 
 
-# The Agents panel's verb for a point_at with nothing else behind it (Q125
-# item 2). GM - Design's review of PR #193: keep only "Pointed at “X”" and
-# "Looked at “X”" on a node and "Looked around" at a spot; "Clicked",
-# "Dragged to" and a bare "Moved", "Clicked" or "Dragged" at a spot are cut
-# ("'Moved · just now' reads like the agent moved a node, and the rest is
-# noise"). A cut gesture names nothing: the cursor keeps the agent's previous
-# action, with that action's own time (agent_presence.point).
+# The Agents panel's verb for a point_at with nothing else behind it. The
+# design's review of PR #193: keep only "Pointed at “X”" and "Looked at “X”"
+# on a node and "Looked around" at a spot; "Clicked", "Dragged to" and a bare
+# "Moved", "Clicked" or "Dragged" at a spot are cut ("'Moved · just now'
+# reads like the agent moved a node, and the rest is noise"). A cut gesture
+# names nothing: the cursor keeps the agent's previous action, with that
+# action's own time (agent_presence.point).
 _POINTED_AT_NODE = {"move": "Pointed at", "look": "Looked at"}
 _POINTED_AT_SPOT = {"look": "Looked around"}
 
@@ -8841,9 +8835,9 @@ async def point_agent_cursor(body: dict[str, Any]) -> dict[str, Any]:
             "placed": placed, **({"anchorNames": names} if names else {})}
 
 
-# ---------- The Agents panel: status lines and the roster (Q125 item 2) ----------
+# ---------- The Agents panel: status lines and the roster ----------
 #
-# Justin, 2026-10-24 ("Yes, all four, in that order"), item 2: "An Agents
+# Justin, 2026-10-24 ("Yes, all four, in that order"): "An Agents
 # panel: Needs you / Working ... MCP: set_status(text, node_id). Proposals
 # and questions feed 'Needs you' on their own." Every surface sets a status
 # through set_agent_status (MCP set_status, `nebula status`) and reads the
@@ -8894,7 +8888,7 @@ async def _sweep_agent_statuses() -> None:
     _schedule_status_expiry()
 
 
-# ---------- Placeholders (Q125 item 3): the idle rule ----------
+# ---------- Placeholders: the idle rule ----------
 #
 # A placeholder turns normal when its agent has made no request for
 # pending_nodes.IDLE_SECONDS (the status line's rule and clock: any
@@ -8949,7 +8943,7 @@ def _clear_pending(node_ids: Iterable[str]) -> list[str]:
 
 def _person_touched(node_ids: Iterable[str]) -> list[str]:
     """The person edited these nodes (params, name, position, a connection): any
-    placeholder among them turns normal (GM: "on any edit by the person").
+    placeholder among them turns normal (design: "on any edit by the person").
     Agents' edits through the same routes leave them as they are."""
     if not _is_person_request():
         return []
@@ -9045,7 +9039,7 @@ async def list_canvas_agents() -> dict[str, Any]:
 # ---------- Channel readiness (services/channel_listeners.py) ----------
 #
 # Whether a Claude Code session listens to the canvas (mcp_server.py
-# --channel), per agent session: the Message box's lines read it (PR C).
+# --channel), per agent session: the Message box's lines read it.
 # The person's tabs get every listener, with its cursor's key and number,
 # in a channelListeners message on each change and after a verified hello;
 # an agent reads only its own (GET /api/canvas/channel, MCP channel_status).
@@ -9103,7 +9097,7 @@ _listener_settle_lock = asyncio.Lock()
 
 
 async def _settle_gone_listeners() -> None:
-    """Settle what the listener book saw go (round 5c LOW-2, round 5d).
+    """Settle what the listener book saw go.
     Lapsed listeners (beats stopped, window open): their waiting messages
     read "lapsed" (a comeback beat forgets a pending lapse under the same lock). Gone for
     good (window over, ended, stopped, evicted): dropped. One lock orders this
@@ -9115,7 +9109,7 @@ async def _settle_gone_listeners() -> None:
 
 async def _settle_gone_listeners_locked() -> None:
     # A store that fails mid-way gives the rest back (the failed one first) to
-    # be tried again shortly: taken items are never just lost (5d check, LOW).
+    # be tried again shortly: taken items are never just lost.
     lapsed_items = channel_book.take_lapsed()
     for index, (agent_id, session, listener_id) in enumerate(lapsed_items):
         try:
@@ -9146,9 +9140,9 @@ async def _sweep_channel_listeners() -> None:
 def _channel_caller() -> tuple[AgentIdentity, str | None]:
     """The listener's agent, by its Settings app token only. A tokenless
     caller (a name alone) or a token Nebula doesn't know is refused (401)
-    with GM r81's line and a code: listener_no_token or
+    with the design's line and a code: listener_no_token or
     listener_token_invalid. An in-app agent's turn token is refused too
-    (J3, Justin 2026-11-04: listener_in_app_token): only a token from
+    (Justin 2026-11-04: listener_in_app_token): only a token from
     Settings › Connect your agent listens. The identity comes from the
     token, so one agent's token never registers as another (a name header
     beside it is ignored)."""
@@ -9171,7 +9165,7 @@ async def report_channel_listener(body: Any = Body(None)) -> dict[str, Any]:
     """A --channel listener's beat: {state: listening|stopped, reason?:
     idle|error, projectId?, nonce?}. Answers with its entry, whose listenerId a
     person.message names to reach it. ``nonce`` is the listener process's
-    own (D2): a second process naming the same agent session gets 409
+    own: a second process naming the same agent session gets 409
     listener_session_taken while the first's entry lives."""
     identity, session = _channel_caller()
     try:
@@ -9193,7 +9187,7 @@ async def report_channel_listener(body: Any = Body(None)) -> dict[str, Any]:
         await _settle_gone_listeners_locked()
         if state == "listening" and (not known or changed):
             # Back inside its lapse window, in the same session: what was marked
-            # lapsed for its going away is served to it once (round 5d). A
+            # lapsed for its going away is served to it once. A
             # settle and this revive run under one lock, so a row is never
             # dropped while its own listener is listening inside the window.
             try:
@@ -9207,7 +9201,7 @@ async def report_channel_listener(body: Any = Body(None)) -> dict[str, Any]:
     if not known:
         # A new process on this session (a listener that restarted): the
         # pushes Nebula recorded for the session that no reply answered yet,
-        # so its span picks up where the old process left it (review 4).
+        # so its span picks up where the old process left it.
         answer["openPushes"] = thread_ledger.open_pushes(identity.id, session)
     return answer
 
@@ -9215,7 +9209,7 @@ async def report_channel_listener(body: Any = Body(None)) -> dict[str, Any]:
 @app.delete("/api/agent/channel")
 async def end_channel_listener(nonce: str | None = None) -> dict[str, Any]:
     """Its session ended: the canvas shows it as not connected. ``nonce``:
-    the listener process's own (D2), so another process's entry stays."""
+    the listener process's own, so another process's entry stays."""
     identity, session = _channel_caller()
     if channel_book.gone(identity, session, channel_listeners.parse_nonce(nonce)):
         await _broadcast_channel_listeners()
@@ -9243,7 +9237,7 @@ async def read_channel_listeners() -> dict[str, Any]:
 
 # ---------- The Message box's thread (services/person_thread.py) ----------
 #
-# GM r50: the person messages a listening Claude Code session from the
+# Design: the person messages a listening Claude Code session from the
 # Agent log; it answers with reply_to_person. Rows are kept per project. The
 # person reads every row (the personThread message, GET /api/canvas/thread).
 # Every connected agent reads the whole thread too, as pins (Justin,
@@ -9328,9 +9322,9 @@ def _thread_listener_ids(identity: AgentIdentity, session: str | None) -> list[s
 
 def _listener_process(identity: AgentIdentity, session: str | None, nonce: str | None) -> None:
     """The inbox, accepted and held routes answer only the process that
-    holds this session's listener entry (review 4 LOW-4: the nonce bound the
-    beat only, so a process refused there could still read the inbox and
-    take a message meant for the live one). 409, as for a beat."""
+    holds this session's listener entry (before, the nonce bound the beat only, so a
+    process refused there could still read the inbox and take a message
+    meant for the live one). 409, as for a beat."""
     if channel_book.taken_by_another(identity, session, channel_listeners.parse_nonce(nonce)):
         raise HTTPException(status_code=409, detail=channel_listeners.SESSION_TAKEN_LINE,
                             headers={"X-Nebula-Code": channel_listeners.SESSION_TAKEN_CODE})
@@ -9339,10 +9333,10 @@ def _listener_process(identity: AgentIdentity, session: str | None, nonce: str |
 def _reply_listeners(identity: AgentIdentity, session: str | None) -> tuple[list[channel_listeners.Listener], int]:
     """The listeners a reply answers for, and how many fresh ones it
     wouldn't guess between. This session's own entry (the launch command
-    gives Claude Code's shell its listener's session, D2). Else the agent's
+    gives Claude Code's shell its listener's session). Else the agent's
     one fresh listening entry (a terminal started some other way); with two
-    or more, none: Nebula won't guess which session the reply is from
-    (round 5, D2), and the count says so. A crashed session's leftover entry
+    or more, none: Nebula won't guess which session the reply is from,
+    and the count says so. A crashed session's leftover entry
     isn't fresh (channel_listeners.FRESH_SECONDS), so it never blocks one."""
     own = [entry for entry in channel_book.for_agent(identity.id) if entry.session == (session or "")]
     if own:
@@ -9365,7 +9359,7 @@ async def read_person_thread(limit: int = 50) -> Any:
     headers = current_request_headers()
     identity = identify_agent(headers)
     if identity is None and has_agent_marker(headers) and not is_person(headers):
-        # An agent that didn't say who it is (review 1, NIT-3): the thread is
+        # An agent that didn't say who it is: the thread is
         # read by name, so say how to give one.
         raise HTTPException(status_code=400, detail=(
             "Nebula couldn’t show the thread because this agent has no name. Set NEBULA_AGENT_NAME or pass --as "
@@ -9386,10 +9380,10 @@ async def read_person_thread(limit: int = 50) -> Any:
 async def send_person_message(body: Any = Body(None)) -> Any:
     """The person messages one listening session: {text, to: <listenerId>,
     nodeIds?, clientId?}. Only the person can. The listener named in ``to``
-    wakes at once (PR A's deliberate send). Refused only when that listener
+    wakes at once (a deliberate send). Refused only when that listener
     is gone or stopped (409 listener_stopped, with the person's line). Past
     SEND_CAP messages to that listener in an hour it is accepted and held
-    (GM r55): the row reads ``held`` until the listener pushes it."""
+    (design): the row reads ``held`` until the listener pushes it."""
     require_person(current_request_headers())
     if not isinstance(body, dict):
         raise HTTPException(status_code=422, detail="Send {text, to, nodeIds?, clientId?}")
@@ -9461,7 +9455,7 @@ async def accept_thread_messages(body: Any = Body(None), nonce: str | None = Non
     """The listener pushed these to its session: {messageIds, questionIds?}
     (one push). The person's box then reads "Waiting for Claude" for each
     message (Nebula saw the push go, never that Claude read it). The push
-    goes in the push ledger (review 4): a reply from this session answers
+    goes in the push ledger: a reply from this session answers
     its oldest open push. A message counts when it is this caller's and was
     sent or held, or (a re-send after Nebula restarted) already accepted
     for this agent; a question set when this agent asked it and the person
@@ -9487,7 +9481,7 @@ async def accept_thread_messages(body: Any = Body(None), nonce: str | None = Non
         if asked is not None and asked.agent.id == identity.id and asked.status == "answered":
             items.append((question_id, push_ledger.QUESTION, asked.project_id))
     thread_ledger.record(identity.id, session, items)
-    for project_id, rows in changed:  # wherever each was sent (boundary LOW-2)
+    for project_id, rows in changed:  # wherever each was sent
         await _broadcast_thread(project_id, rows)
     return {"accepted": [row["id"] for _, rows in changed for row in rows]}
 
@@ -9521,26 +9515,25 @@ async def reply_to_person(body: Any = Body(None)) -> Any:
     node, its cursor flies there and says the reply's first sentence (140
     characters at most), on the person's tabs only. The person can't post
     here: they send messages. Only an agent with a Settings token replies
-    (J1, Justin 2026-11-04, the same as listening): a name alone or an
+    (Justin 2026-11-04, the same as listening): a name alone or an
     in-app agent's turn token gets 401 with a line saying what to do
     (reply_no_token, reply_in_app_token). Paced per token agent (ReplyPace:
     5 in a row, then one every 2 s): past it, 429 replies_rate_limited with
     retryAfter (s) and a line saying when it can reply again; nothing is
     saved, and a reply Nebula refuses later never spends one.
 
-    Review 4 (the push ledger, services/push_ledger.py): the reply answers
-    the oldest open push of this session's listener (D2: Claude Code's shell
+    The push ledger (services/push_ledger.py): the reply answers
+    the oldest open push of this session's listener (Claude Code's shell
     shares its listener's session; a terminal started otherwise answers for
-    the agent's one fresh listener, and with two or more Nebula won't
-    guess: ``replyTo`` None and a ``note`` saying why). It goes to that
-    push's project's thread (GM r100.3, r112.2), with an Update on the open
-    project when that is another one (GM r112.1: one per agent and project
-    while unread). A reply that answers no push is a follow-up in the open
-    project's thread, with no Update; with no project open, 409 no_project
-    (GM r110's line). ``nodeId`` is checked against the open canvas only
-    when the reply goes there; for another project's thread it is ignored,
-    with a ``note``, and no cursor flies (GM r108 b). The cursor that flies
-    is the session's that took the push (GM r100.1)."""
+    the agent's one fresh listener, and with two or more Nebula won't guess:
+    ``replyTo`` None and a ``note`` saying why). It goes to that push's
+    project's thread, with an Update on the open project when that is
+    another one (design: one per agent and project while unread). A reply
+    that answers no push is a follow-up in the open project's thread, with
+    no Update; with no project open, 409 no_project. ``nodeId`` is checked
+    against the open canvas only when the reply goes there; for another
+    project's thread it is ignored, with a ``note``, and no cursor flies
+    (design). The cursor that flies is the session's that took the push."""
     headers = current_request_headers()
     identity = identify_agent(headers)
     if identity is None and is_person(headers):
@@ -9566,7 +9559,7 @@ async def reply_to_person(body: Any = Body(None)) -> Any:
     taker = listeners[0] if listeners else None
     key = (identity.id, taker.session) if taker is not None else None
     # Where it would go, before checking the node: only the open canvas's
-    # nodes can be checked (review 4 LOW-3: node ids repeat across projects).
+    # nodes can be checked (node ids repeat across projects).
     try:
         target = await asyncio.to_thread(thread_book.reply_target, thread_ledger, key)
     except ProjectStoreError as exc:
@@ -9597,24 +9590,24 @@ async def reply_to_person(body: Any = Body(None)) -> Any:
         project_id, row = await asyncio.to_thread(thread_book.add_reply, fields, ledger=thread_ledger, key=key,
                                                   taker_session=taker_session)
     except person_thread.ThreadError as exc:
-        thread_reply_pace.refund(identity.id)  # nothing was saved (live L1)
+        thread_reply_pace.refund(identity.id)  # nothing was saved
         return _thread_refusal(exc)
     except ProjectStoreError as exc:
         thread_reply_pace.refund(identity.id)
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     # Always journaled (only its ids when narrowed): its own listener removes
-    # the push it names (replyTo; PR A, J4; review 4).
+    # the push it names (replyTo).
     _journal(person_thread.REPLY_EVENT, node_id=row.get("nodeId"), data=person_thread.reply_event_data(row),
              summary="replied to the person", project_id=project_id)
     await _broadcast_thread(project_id, [row])
     open_id = _workspace_context()["activeProjectId"]
     if project_id != open_id:
         await _post_reply_elsewhere(identity, project_id, row["id"])
-    # The cursor that flies is the session's that took the push (GM r100.1:
-    # one Claude is one cursor), so a reply from its own shell never makes a
-    # "· 2"; with no push answered, the caller's own. Only on the canvas the
-    # reply is about (GM r108 b): one saved in another project's thread
-    # flies nothing, and the Update is the signal.
+    # The cursor that flies is the session's that took the push (design: one
+    # Claude is one cursor), so a reply from its own shell never makes a "· 2";
+    # with no push answered, the caller's own. Only on the canvas the
+    # reply is about (design): one saved in another project's thread flies
+    # nothing, and the Update is the signal.
     cursor_session = (taker.session or None) if taker is not None and row.get("replyTo") else session
     if node_id is not None and project_id == open_id:
         try:
@@ -9640,7 +9633,7 @@ async def reply_to_person(body: Any = Body(None)) -> Any:
 
 
 def _project_name(project_id: str) -> str:
-    """A project's name as the person reads it; an unnamed one is “Untitled” (GM r108 d)."""
+    """A project's name as the person reads it; an unnamed one is “Untitled” (design)."""
     try:
         project = (project_store.read().get("projects") or {}).get(project_id) or {}
     except Exception:  # noqa: BLE001 - a name is decoration
@@ -9649,7 +9642,7 @@ def _project_name(project_id: str) -> str:
 
 
 async def _post_reply_elsewhere(identity: AgentIdentity, project_id: str, reply_id: str) -> None:
-    """GM r100.3, r112.1: the reply went to another project's thread (the
+    """Design: the reply went to another project's thread (the
     push it answers was sent there): an Update on the open project names
     that project, and its Open action opens that thread at the reply. One
     per agent and project while unread, updated in place with a count from
@@ -9693,7 +9686,7 @@ def _mark_tab_connected(snapshot: dict[str, Any]) -> None:
 async def get_canvas_snapshot() -> dict[str, Any]:
     """Read the canvas as data: what's on screen, node states, wires, selection, agent cursors.
     A selection holding nodes only the person's tab has adds ``tabOnlyCount``
-    and ``tabOnlyNote`` beside ``selection`` (review 17 agents-docs LOW-2)."""
+    and ``tabOnlyNote`` beside ``selection``."""
     read = selection_context.snapshot(cli_graph, node_registry)
     snapshot = agent_presence.snapshot(cli_graph, node_registry, selected_ids=read.get("selectedNodeIds", []))
     snapshot.update(tab_only_fields(read))
@@ -9719,7 +9712,7 @@ async def get_canvas_snapshot() -> dict[str, Any]:
     await _sweep_proposals()
     snapshot["proposals"] = [_proposal_brief(p) for p in canvas_proposals.open_list()]
     snapshot["providerHolds"] = _provider_holds_for_agents()
-    # Fix round 8, H2: each Cinema scene's key (send it back as ifSceneKey);
+    # Each Cinema scene's key (send it back as ifSceneKey);
     # this agent has read these scenes now (services/scene_keys.py).
     keys = scene_keys.keys_of(cli_graph.nodes)
     scope = _scene_scope()
@@ -9792,7 +9785,7 @@ def _start_node_notes(rows: list[dict[str, Any]], context: Mapping[str, Any], vi
     if via == "cli":
         # Data in MCP words (find_nodes' needsKeyFor, describe_node's note):
         # a shell-only agent reads the `nebula` commands. The notes below are
-        # worded where they are written (review 11, NIT-7).
+        # worded where they are written.
         notes = [_cli_words(note) for note in notes]
     look = agent_words.worded("{describe}", via)
     propose = agent_words.worded("{propose}", via)
@@ -9825,7 +9818,7 @@ def _cli_words(text: str) -> str:
 def _quick_propose_hint(definition_id: str, where: str) -> str:
     """What a quick run an agent can't start points at instead, in its
     reader's words: a node on the canvas, then a proposal to run it (the CLI
-    names `nebula create <id>`; review 9 of PR #203, keys NIT-3)."""
+    names `nebula create <id>`; PR #203)."""
     if where == agent_words.CLI:
         add = f"`nebula create {definition_id}`"
     else:
@@ -9840,16 +9833,15 @@ async def agent_start_here(request: Request) -> dict[str, Any]:
     the node types that run here with prices, and the spend limits, each in
     its own budget (services/agent_start.py). MCP `start_here` and `nebula
     context` print it; the CLI's ``X-Nebula-Surface: cli``, the one signal
-    every CLI request sends (services/agent_words; review 10 of PR #203,
-    NIT-4), words its hints as `nebula` commands. A CLI from before the
-    header sends ``?via=cli`` instead, read only when the header is missing
-    (review 11, LOW-1)."""
+    every CLI request sends (services/agent_words; PR #203), words its hints as
+    `nebula` commands. A CLI from before the header sends ``?via=cli`` instead,
+    read only when the header is missing. """
     headers = current_request_headers()
     via = agent_words.surface(headers, request.query_params.get("via"))
     caller = identify_agent(headers)
     read = selection_context.snapshot(cli_graph, node_registry)
     snapshot = agent_presence.snapshot(cli_graph, node_registry, selected_ids=read.get("selectedNodeIds", []))
-    # The selection's nodes only the person's tab has, counted (review 17 agents-docs LOW-2).
+    # The selection's nodes only the person's tab has, counted.
     snapshot.update(tab_only_fields(read))
     _mark_tab_connected(snapshot)
     catalog = project_store.read()  # every project's name, for the boards part
@@ -9881,7 +9873,7 @@ async def agent_start_here(request: Request) -> dict[str, Any]:
     else:
         # A settings file Nebula can't read: no node runs (each run fails
         # closed on it) and the limits can't be read, so both parts carry
-        # the read line instead of a 500 (review 13 of PR #203, LOW-3).
+        # the read line instead of a 500 (PR #203).
         nodes = agent_start.nodes_part([], total=len(node_registry.get_all()), notes=[unreadable], via=via)
         spend = {"note": unreadable, "code": SETTINGS_UNREADABLE_CODE}
     restore = _catalog_restore_view(project_store.restore_notice(), catalog)
@@ -9942,7 +9934,7 @@ async def _journal_wait(request: Request, **kwargs: Any) -> dict[str, Any]:
     Every long-poll on the journal holds one of its MAX_WAITERS (32) slots.
     Without this, a client that gave up (an MCP client cancelling its poll,
     a closed terminal) held its slot for the rest of the wait, up to 25 s, and
-    33 of them made every watcher's next poll a 429 (review 1 of PR #114).
+    33 of them made every watcher's next poll a 429 (PR #114).
     Now the wait stops and frees the slot at once (_ClientGone, a 499 nobody
     reads). A connected client sees no difference."""
     journal = _events_journal()
@@ -9956,7 +9948,7 @@ async def _journal_wait(request: Request, **kwargs: Any) -> dict[str, Any]:
             await asyncio.wait({waiting})  # the server's receive failed: wait it out as before
     finally:
         if gone.done() and not gone.cancelled():
-            gone.exception()  # a receive that failed as the wait ended: read it, nothing more (review 2)
+            gone.exception()  # a receive that failed as the wait ended: read it, nothing more
         gone.cancel()
         abandoned = not waiting.done()
         if abandoned:
@@ -10014,7 +10006,7 @@ async def get_canvas_events(request: Request) -> dict[str, Any]:
             kinds=kinds,
             exclude_actor_id=exclude,
             keep_own=frozenset({OWN_REPLY_KIND}) if own_replies in {"1", "true"} else frozenset(),
-            # ...and its own pin answers, from this same session only (round 5, D1).
+            # ...and its own pin answers, from this same session only.
             own_session=(presence_session(current_request_headers()) if identity is not None
                          and own_replies in {"1", "true"} else None),
         )
@@ -10028,8 +10020,8 @@ def _pins_message(*, person: bool = False) -> dict[str, Any]:
     """The `canvasPins` WebSocket message for the active project (empty when unreadable).
 
     `person=True` is the form for the person's canvas sockets only (a verified
-    hello): registered IVD variants kept (GM r23). Every other socket, an agent's
-    or a tab without the person token, gets the agents' form (review 14 LOW-1)."""
+    hello): registered IVD variants kept (design). Every other socket, an agent's
+    or a tab without the person token, gets the agents' form."""
     try:
         listing = canvas_pins.list(person=person)
     except (PinError, ProjectStoreError):
@@ -10046,7 +10038,7 @@ async def _broadcast_pins() -> None:
 
 def _journal_detached(pins: list[dict[str, Any]], reason: str) -> None:
     """Journal pins that just lost their node. In the same step as the write
-    that detached them, before any await (round 8 of PR #114): the event then
+    that detached them, before any await (PR #114): the event then
     names the project the pins are in, and lands before any switch that
     follows (a late one named the project opened next, and the --channel
     listener read A's change as B's)."""
@@ -10060,9 +10052,9 @@ def _journal_detached(pins: list[dict[str, Any]], reason: str) -> None:
         )
 
 
-# ---------- What a node delete removed, and its undo (GM, 2026-10-23) ----------
+# ---------- What a node delete removed, and its undo (design, 2026-10-23) ----------
 #
-# GM - Design, item 1: "Make undo complete. ... Reopen a proposal only if it's
+# Design: "Make undo complete. ... Reopen a proposal only if it's
 # still valid against the restored graph. If one can't be reopened, the Undo
 # notice says so." Every node delete (DELETE /api/graph/node, an agent's
 # apply, a restore that removes nodes: Cmd+Z of an add, redo of a delete)
@@ -10081,7 +10073,7 @@ def _journal_detached(pins: list[dict[str, Any]], reason: str) -> None:
 # Node ids are not unique over time (an import or a clear restarts the
 # counter at n1, a restore may put any id back, each project has its own n1),
 # so a record undoes exactly one delete of exactly one node and nothing
-# matches it by the node id alone (second review): the record carries its
+# matches it by the node id alone: the record carries its
 # project and model, node_removals knows what each id was minted for, and a
 # later delete of a node a restore brought back names the removal that
 # restore consumed (``replaces``), the only record renewed to it.
@@ -10151,7 +10143,7 @@ def _journal_removed_nodes(entries: list[dict[str, Any]], *, note: str,
     """node.removed, then its pins (pin.detached) and the proposals it closed
     (proposal.invalidated), node by node. Right after _remove_side_effects,
     before the delete's graphSync: in the step that made the delete, so each
-    event names the project the node was deleted from (round 8 of PR #114)."""
+    event names the project the node was deleted from (PR #114)."""
     for entry in entries:
         gone = entry["gone"]
         _journal(
@@ -10236,7 +10228,7 @@ async def _proposal_reopen_misfit(proposal: Proposal) -> str | None:
         return "it expired"
     models = await _look_up_models(_spec_models_wanted(proposal.spec))
     if proposal.project_id != _workspace_context()["activeProjectId"]:
-        # Another project opened during the lookup (review 8): the live graph
+        # Another project opened during the lookup: the live graph
         # is that project's now, so the checks below would read the wrong one.
         return ANOTHER_PROJECT
     try:
@@ -10267,7 +10259,7 @@ async def _asset_reopen_misfit(proposal: AssetProposal, exported: dict[str, Any]
 
 def _proposal_closed(proposal_id: str) -> bool:
     """Whether a canvas or asset proposal has closed (or is gone): an Update
-    pointing at it may be taken over by a reopen (PR #202 review 2 LOW-C)."""
+    pointing at it may be taken over by a reopen (PR #202)."""
     proposal = asset_proposals.get(proposal_id) or canvas_proposals.get(proposal_id)
     return proposal is None or not proposal.is_open
 
@@ -10277,7 +10269,7 @@ async def _reopen_update(ref: Mapping[str, Any] | None, proposal_id: str,
                          share: Callable[[], Mapping[str, Any]] | None = None) -> None:
     """Its Update reviews the proposal again (op "changed", the note as it is now); an asset
     proposal's ref carries its ``detail`` again (asset_proposals.update_detail), and its
-    words are that proposal's (``text``, asset_proposals.update_text; review 1 LOW-1)."""
+    words are that proposal's (``text``, asset_proposals.update_text)."""
     if not ref:
         return
     try:
@@ -10326,7 +10318,7 @@ def _reattach_removed_pins(records: list[dict[str, Any]], back: Mapping[str, str
     and proposals those removals detached or closed: a pin by its
     ``detachedBy`` and model, a proposal by a (removal, node) pair in its
     ``closed_by``. Synchronous, in the restore's own step, before the
-    caller's edit.undone (review 8 of PR #114): the pins go back and are
+    caller's edit.undone (PR #114): the pins go back and are
     journaled (pin.reattached) here. Returns what the second half
     (_reopen_removed_proposals, after the sync) needs, with the restore's
     ``reattached`` (pin ids) and ``pinsLeft`` ({id, reason, code}) so far."""
@@ -10355,7 +10347,7 @@ def _reattach_removed_pins(records: list[dict[str, Any]], back: Mapping[str, str
         if verdict is None and any(by_pin.get(str(pin_id)) == record["nodeId"] for pin_id in record.get("pins") or []):
             consumed.setdefault(record["nodeId"], record["id"])
     _note_restored(project_id, back, consumed)
-    # Journaled in the step that put them back, broadcast after the sync (round 8 of PR #114).
+    # Journaled in the step that put them back, broadcast after the sync (PR #114).
     for pin in pins["reattached"][:50]:
         node_id = (pin.get("anchor") or {}).get("nodeId")
         _journal(
@@ -10372,7 +10364,7 @@ def _reattach_removed_pins(records: list[dict[str, Any]], back: Mapping[str, str
 def _note_reopen_in_link() -> None:
     """Right after a proposal.reopened: the restore's link (if it has one)
     lists it at once. A later proposal's fit check awaits, and the person's
-    Cmd+Z of this undo landing then reads the link (review 9 of PR #114)."""
+    Cmd+Z of this undo landing then reads the link (PR #114)."""
     link = _canvas_edit_link.get()
     if link is not None:
         _note_link_events(link["id"])
@@ -10387,7 +10379,7 @@ async def _reopen_removed_proposals(plan: dict[str, Any], project_id: str | None
     doesn't fit the restored graph, expired, lost its tag to a clear, an
     import or a project switch, or that Nebula no longer has (a restart;
     proposals live in memory). A proposal is reopened (and journaled) only
-    while its project is still the one open (review 8)."""
+    while its project is still the one open."""
     out: dict[str, list[Any]] = plan["out"]
     relevant: list[dict[str, Any]] = plan["relevant"]
     if plan["pins_back"]:
@@ -10416,7 +10408,7 @@ async def _reopen_removed_proposals(plan: dict[str, Any], project_id: str | None
             continue
         reason = await _proposal_reopen_misfit(proposal)
         if reason is None and proposal.project_id != _workspace_context()["activeProjectId"]:
-            # Another project opened during the check's await (review 8): no reopen, no event.
+            # Another project opened during the check's await: no reopen, no event.
             reason = ANOTHER_PROJECT
         if reason is None:
             try:
@@ -10425,7 +10417,7 @@ async def _reopen_removed_proposals(plan: dict[str, Any], project_id: str | None
                 reason = exc.detail
         if reason is None:
             reopened.append(proposal)
-            # In the step that reopened it, tagged with its project (round 8 of PR #114).
+            # In the step that reopened it, tagged with its project (PR #114).
             _journal(
                 "proposal.reopened",
                 node_id=next(iter(sorted(proposal.references, key=_node_order)), None),
@@ -10493,7 +10485,7 @@ async def _reopen_removed_proposals(plan: dict[str, Any], project_id: str | None
         else:
             out["notReopened"].append({"id": proposal.id, "reason": reason})
     for proposal in reopened_assets:
-        # PR #204 round 4: a newer ask from the same agent on the same target posted while this
+        # PR #204: a newer ask from the same agent on the same target posted while this
         # one was closed, and its Update replaced this one's (_same_ask). This ask joins that live
         # Update, as if it had been open then; the refresh below counts it there. Without this it
         # pointed at an Update that's gone: no Update of its own, and one too few on the live one.
@@ -10504,10 +10496,10 @@ async def _reopen_removed_proposals(plan: dict[str, Any], project_id: str | None
         else:
             await _reopen_update(proposal.update, proposal.id, asset_update_detail(proposal), asset_update_text(proposal),
                                  _share_reader(proposal, proposal.update))
-        # Review 3 LOW-2 (#204 r5): either way it is open again with a new expiry, and its old
+        # PR #204: either way it is open again with a new expiry, and its old
         # timer may have fired while it was closed: check it when it is due.
         _schedule_asset_expiry(proposal)
-    # MEDIUM-1: an ask reopened under an Update another open ask still holds
+    # An ask reopened under an Update another open ask still holds
     # leaves that Update on the other ask (reopen_proposal); it now stands for
     # one more, so it says so.
     for ref in {_ref_key(p.update): p.update for p in reopened_assets if p.update}.values():
@@ -10545,9 +10537,9 @@ def _undo_extras_text(result: Mapping[str, Any]) -> str:
 
 class PinRefusal(HTTPException):
     """A pin route's refusal: ``detail`` for the person, and the PinError's
-    extra fields (``code``, byte counts) beside it for agents (GM r12 answer
-    3 of PR #200: the hidden-text refusal names note_hidden_too_long, the
-    raw byte count and the limit; the person's line never does)."""
+    extra fields (``code``, byte counts) beside it for agents (design of PR
+    #200: the hidden-text refusal names note_hidden_too_long, the raw byte
+    count and the limit; the person's line never does)."""
 
     def __init__(self, exc: PinError) -> None:
         super().__init__(status_code=exc.status, detail=exc.detail)
@@ -10567,7 +10559,7 @@ def _pin_http_error(exc: PinError) -> HTTPException:
 async def list_canvas_pins() -> dict[str, Any]:
     """Notes the person pinned for agents in the open project (open first, newest first).
 
-    GM r23: the person's canvas reads the shown form (a registered
+    Design: the person's canvas reads the shown form (a registered
     ideographic variant kept); anyone else, agents, `nebula pins`, MCP and
     the channel, reads agents' form, without any variation selector."""
     try:
@@ -10583,15 +10575,13 @@ async def create_canvas_pin(body: dict[str, Any]) -> dict[str, Any]:
 
     Body: {text, nodeId} or {text, position: {x, y}}.
 
-    Round 23 (review 22, M-1): a graph write for the fence. A note's anchor
-    is a node id (or a spot) of the canvas it was written on, and ids restart
-    at n1 in every project and after a clear, so a note sent after an agent
-    opened another project, or cleared this one, would land on that canvas's
-    n1 and be journaled to the agent working there as the person's request.
-    The canvas tab sends the project and canvas the note was composed on
-    (X-Nebula-Workspace-Revision, X-Nebula-Canvas-Revision); the fence refuses
-    it (409, the canvas's out-of-date line) when either moved, or when a tab
-    sends none, before anything is pinned or journaled.
+    A graph write for the fence. A note's anchor is a node id (or a spot) of the canvas it was
+    written on, and ids restart at n1 in every project and after a clear, so a note sent after an
+    agent opened another project, or cleared this one, would land on that canvas's n1 and be
+    journaled to the agent working there as the person's request. The canvas tab sends the
+    project and canvas the note was composed on (X-Nebula-Workspace-Revision,
+    X-Nebula-Canvas-Revision); the fence refuses it (409, the canvas's out-of-date line) when
+    either moved, or when a tab sends none, before anything is pinned or journaled.
     """
     require_person(current_request_headers())
     try:
@@ -10607,7 +10597,7 @@ async def create_canvas_pin(body: dict[str, Any]) -> dict[str, Any]:
     # went to: a switch (and a pin on the project it opens) journaled during
     # an await here would come first, and this event, naming the project
     # left, would then make the --channel listener drop the open project's
-    # pin (review 6 of PR #114, LOW-1). The same in delete and resolve.
+    # pin (PR #114). The same in delete and resolve.
     anchor = pin.get("anchor") or {}
     _journal(
         "pin.added",
@@ -10626,7 +10616,7 @@ async def create_canvas_pin(body: dict[str, Any]) -> dict[str, Any]:
 @graph_write
 async def delete_canvas_pin(pin_id: str) -> dict[str, Any]:
     """Delete a note. Only the person can do this. Fenced as a graph write
-    (round 23, see create_canvas_pin): a delete made for a canvas that has
+    (see create_canvas_pin): a delete made for a canvas that has
     gone is refused, never looked up in the canvas open now."""
     require_person(current_request_headers())
     try:
@@ -10649,7 +10639,7 @@ async def delete_canvas_pin(pin_id: str) -> dict[str, Any]:
 async def resolve_canvas_pin(pin_id: str, body: dict[str, Any]) -> dict[str, Any]:
     """An agent answers a note in one line, which resolves it and moves its cursor there.
 
-    Fenced as a graph write like the other pin routes (round 23): agents send
+    Fenced as a graph write like the other pin routes: agents send
     no revision, so for them it is the 404 that says the note isn't in the
     open project (canvas_pins.resolve_in)."""
     identity = identify_agent(current_request_headers())
@@ -10668,7 +10658,7 @@ async def resolve_canvas_pin(pin_id: str, body: dict[str, Any]) -> dict[str, Any
         summary=pin_resolved_summary(pin_id, pin, reply),
         project_id=project_id,
         # Its own session's listener ends the span this pin's push opened
-        # (canvas_events.OWN_SESSION_KINDS, round 5 D1); kept beside the journal.
+        # (canvas_events.OWN_SESSION_KINDS); kept beside the journal.
         session=presence_session(current_request_headers()),
     )
     await _broadcast_pins()
@@ -10683,7 +10673,7 @@ async def resolve_canvas_pin(pin_id: str, body: dict[str, Any]) -> dict[str, Any
         event = _point(identity, target=target, action="click", say=reply,
                        did=_did("Replied on", node) if node else {"verb": "Replied"})
         # The resolving request's own session's cursor on the person's tabs,
-        # kept for the replay (PR #211 review 3, MEDIUM-1); agents read the
+        # kept for the replay (PR #211); agents read the
         # agent form, as before.
         await _broadcast_presence(event, _person_form(event, identity, current_request_headers()))
     except Exception:  # noqa: BLE001 - the cursor is decoration on a saved reply
@@ -10718,7 +10708,7 @@ class AgentNotesReadBody(BaseModel):
 
 def _note_http_error(exc: NoteError) -> HTTPException | JSONResponse:
     if exc.code == "note_not_found":
-        # GM's 404 pattern for the person (error-copy round 3); agents keep the detail.
+        # The design's 404 pattern for the person (error-copy); agents keep the detail.
         detail = refusal_copy.refusal_detail(exc.detail, refusal_copy.gone("update", "updates"))
         return JSONResponse(status_code=exc.status, content={"detail": detail, "code": exc.code})
     if exc.code:
@@ -10804,7 +10794,7 @@ async def post_canvas_agent_note(body: AgentNoteBody) -> Any:
                                          graph_nodes=cli_graph.nodes)
     except NoteError as exc:
         return _raise_note_error(exc)
-    _journal_note(result["note"], "canvas")  # before any await (round 8 of PR #114)
+    _journal_note(result["note"], "canvas")  # before any await (PR #114)
     await _broadcast_raw_quietly(_notes_message("canvas", "added", project_id=result["projectId"],
                                                 note=result["note"], unread=result["unread"],
                                                 removed=result["removed"]))
@@ -10965,7 +10955,7 @@ async def _announce_closed_proposals(
 
 
 def _journal_closed_proposals(proposals: list[Proposal], *, actor: dict[str, Any] | None = None) -> None:
-    """In the step that closed them (round 8 of PR #114), each tagged with
+    """In the step that closed them (PR #114), each tagged with
     the project it was made in."""
     for proposal in proposals:
         kind = f"proposal.{proposal.status}"
@@ -11002,17 +10992,16 @@ async def _sweep_proposals() -> None:
 
 def _proposal_live_names(proposal: Proposal) -> dict[str, str]:
     """The names, on the canvas now, of the existing nodes an open proposal
-    touches, the far ends of the connections it removes among them (GM - Design,
-    PR #216 r4 4: names follow renames live; review 3 LOW-2). None for
-    a closed one, or one for a project that isn't open: its ids name nodes
-    there, not here."""
+    touches, the far ends of the connections it removes among them (design, PR
+    #216: names follow renames live). None for a closed one, or one for a
+    project that isn't open: its ids name nodes there, not here."""
     if not proposal.is_open or proposal.project_id != _workspace_context()["activeProjectId"]:
         return {}
     return {node_id: _node_label(node_id) for node_id in sorted(proposal.touched) if node_id in cli_graph.nodes}
 
 
 def _proposal_view(proposal: Proposal) -> dict[str, Any]:
-    # Priced with the keys set now (GM, PR #203 r15 item 1): who bills a
+    # Priced with the keys set now (design, PR #203): who bills a
     # node, and whether Idol is "free" or "may cost", follow them.
     view = canvas_proposals.view(proposal, registry=node_registry, live=_proposal_live_names(proposal),
                                  api_keys=load_settings().get("apiKeys", {}) or {})
@@ -11049,7 +11038,7 @@ _proposal_names_sent: dict[str, dict[str, str]] = {}
 async def _follow_renamed_proposals() -> None:
     """After a canvas edit, re-send each open proposal whose nodes were
     renamed to the person's canvases, so the card and plan line read the new
-    names (GM - Design, PR #216 r4 4)."""
+    names (design, PR #216)."""
     for proposal in canvas_proposals.open_list():
         live = _proposal_live_names(proposal)
         shown = _proposal_names_sent.get(proposal.id) or {
@@ -11160,10 +11149,10 @@ def _model_set(graph: CLIGraph, node_id: str) -> bool:
 
 class PortsUnread(HTTPException):
     """_refuse_orphaned_wires's refusal for a canvas proposal (``drops``)
-    whose new model's ports can't be read right now (review 2, wire-drop
-    LOW-4): an agent (create, a reopen) reads the same `unwire` words as
-    before, while Accept tells the person in theirs and keeps the proposal
-    open, so it accepts once the read works again."""
+    whose new model's ports can't be read right now: an agent (create, a
+    reopen) reads the same `unwire` words as before, while Accept tells
+    the person in theirs and keeps the proposal open, so it accepts once
+    the read works again."""
 
     def __init__(self, graph: CLIGraph, node_id: str, reason: str) -> None:
         try:
@@ -11181,10 +11170,10 @@ class PortsUnread(HTTPException):
 
 
 def _ports_unread_line(exc: PortsUnread) -> str:
-    """The person's line when Accept can't read a new model's ports (review 2
-    LOW-4; error copy's style: what happened, then what to do, and never the
-    agents' `unwire`). The proposal stays open: Accept again works once the
-    read does."""
+    """The person's line when Accept can't read a new model's ports (error
+    copy's style: what happened, then what to do, and never the agents'
+    `unwire`). The proposal stays open: Accept again works once the read
+    does."""
     name = card_name(exc.node_name) or exc.node_name
     if exc.missing_key:
         return (f"Nebula can't read which inputs {exc.model} takes until your {exc.provider} key is set, so it "
@@ -11256,13 +11245,12 @@ def _stage_proposal(
     {node id: reason} for those nodes.
 
     `drops`, when given (a canvas proposal: the person sees each one before
-    Accept, GM - Design, PR #216 r3), takes the wires already on the canvas
-    that a model change leaves on ports the new model doesn't have: they are
-    removed from the candidate, as the picker removes them for the person,
-    and listed there. Only when the new model's ports are known; a wire this
-    proposal makes, or ports that can't be read, are still refused. Direct
-    edits never pass it: they stay all or nothing (`unwire`).
-    """
+    Accept, design, PR #216), takes the wires already on the canvas that a model
+    change leaves on ports the new model doesn't have: they are removed from the
+    candidate, as the picker removes them for the person, and listed there. Only
+    when the new model's ports are known; a wire this proposal makes, or ports
+    that can't be read, are still refused. Direct edits never pass it: they stay
+    all or nothing (`unwire`). """
     candidate = base if base is not None else cli_graph.clone()
     for node_id in sorted(spec.references):
         if node_id not in candidate.nodes:
@@ -11286,7 +11274,7 @@ def _stage_proposal(
             candidate.set_params(change.node_id, full)
             configured[change.node_id] = reason or ""
         else:
-            # GM r46 Q2 on #222: the preview and name follow a file param
+            # Design (PR #222): the preview and name follow a file param
             # an agent sets (services/file_param_preview.py); an Image Input's
             # preview size follows too (#226, _preview_follows_file).
             before = copy.deepcopy(node.get("params") or {})
@@ -11345,9 +11333,9 @@ def _stage_proposal(
         if drops is not None:
             made = set(edge_ids)
             for node_id, reason in configured.items():
-                # Only a swap to a model whose ports are known (GM - Design, PR
-                # #216 r4 8): a cleared model, or ports that can't be read,
-                # still refuse with the agents' `unwire`.
+                # Only a swap to a model whose ports are known (design, PR
+                # #216): a cleared model, or ports that can't be read, still
+                # refuse with the agents' `unwire`.
                 if reason or node_id in new_ids or not _model_set(candidate, node_id):
                     continue
                 drops.extend(_drop_orphaned_wires(candidate, node_id, keep=made))
@@ -11434,7 +11422,7 @@ def _proposal_run_scope(
     person's direct run, so it skips them (main._skip_placeholders) and
     nothing is spent on them: they are left out of ``chosen`` and ``scope``,
     so the cost the person sees before Accept and run prices only what runs
-    (GM - Design, 2026-10-25)."""
+    (design, 2026-10-25)."""
     graph_nodes, graph_edges = candidate.to_execute_format()
     nodes = [GraphNode.model_validate(node) for node in graph_nodes]
     edges = [GraphEdge.model_validate(edge) for edge in graph_edges]
@@ -11528,7 +11516,7 @@ def _proposal_cost(candidate: CLIGraph, id_map: dict[str, str], run_ids: list[st
                      if str(edge.get("target")) == node_id and edge.get("targetHandle")}
             params = candidate.nodes[node_id].get("params") or {}
             # The class the run's estimate gave it (model_pricing.cost_class,
-            # which knows its price: a sourced $0 is free; GM, PR #203 r18).
+            # which knows its price: a sourced $0 is free; design, PR #203).
             entry = cost_for(definition, params, definitions, api_keys, wired=wired,
                              cost_class=(estimate or {}).get("classes", {}).get(node_id))
             entries.append({
@@ -11548,8 +11536,8 @@ def _proposal_cost(candidate: CLIGraph, id_map: dict[str, str], run_ids: list[st
             })
             # Why this node leaves the total open, or that it runs on the
             # Krea plan, in the Run chip's kinds (model_pricing.estimate_run
-            # reasons), so the Accept chip writes the same reason lines (GM,
-            # PR #203 r17 item 4, r19 item 1).
+            # reasons), so the Accept chip writes the same reason lines
+            # (design, PR #203).
             reason = (estimate or {}).get("reasons", {}).get(node_id)
             if reason and entries[-1].get("kind") in ("paid", "plan"):
                 entries[-1]["reason"] = reason
@@ -11574,7 +11562,7 @@ def _proposal_cost(candidate: CLIGraph, id_map: dict[str, str], run_ids: list[st
         skipped = pending_nodes.skip_summary(skips)
         if skipped is not None:
             # Agents' placeholders (and what needs them) the run will skip,
-            # left out of the cost above (Q125 item 3).
+            # left out of the cost above.
             cost["pendingSkipped"] = skipped
         cost[KEY_PARAMS] = key_params
         return cost
@@ -11584,7 +11572,7 @@ def _proposal_cost(candidate: CLIGraph, id_map: dict[str, str], run_ids: list[st
 def _model_reread(change: Any, models: Mapping[tuple[str, str], Any]) -> dict[str, str] | None:
     """{key, name} when a change sets a universal node's model to the model it
     already has: its ports are read again, so the card's model line reads
-    "Krea 2 · inputs updated", never "X → X" (GM - Design, PR #216 r4 8)."""
+    "Krea 2 · inputs updated", never "X → X" (design, PR #216)."""
     node = cli_graph.nodes.get(change.node_id) or {}
     definition_id = str(node.get("definitionId") or "")
     key = universal_ports.MODEL_PARAM.get(definition_id)
@@ -11641,7 +11629,7 @@ def _not_ready_nodes(
             })
             # The reason for one node and for several (person_line
             # NOT_READY_PREDICATES), so the bar merges nodes by it, never by
-            # the words (review 14 of PR #203, copy LOW-1). None for a
+            # the words (PR #203). None for a
             # route's own line, which stays a line per node.
             reason = node_readiness.instance_missing_reason(
                 definition, node.get("params") or {}, keys, krea_signed_in, definitions, wired.get(node_id, {}))
@@ -11653,7 +11641,7 @@ def _not_ready_nodes(
 
 def _wire_words(ends: Mapping[str, Any], graph: CLIGraph, id_map: Mapping[str, str]) -> dict[str, str]:
     """A wire as the card's panel names it: “Prompt” → “Second take” ·
-    Prompt (GM - Design, PR #216 r3): both nodes by name and the target's
+    Prompt (design, PR #216): both nodes by name and the target's
     port by its label, read on ``graph`` (the staged one for a wire the
     proposal makes, with its new nodes under ``id_map``; the live one for a
     wire it removes, whose port the new model drops)."""
@@ -11683,19 +11671,19 @@ def _refuse_changed_drops(proposal: Proposal, dropped: list[dict[str, str]]) -> 
 
 def _card_quoted(name: str) -> str:
     """A node's name on the proposal card, quoted once by the plan line's rule
-    (canvas_proposals.plan_name; review 2 L4: “Hero” never reads ““Hero””)."""
+    (canvas_proposals.plan_name; “Hero” never reads ““Hero””)."""
     return f"“{card_name(name) or name}”"
 
 
 def _quoted_name_line(line: str, name: str, definition: Mapping[str, Any]) -> str:
-    """The card names nodes in curly quotes (GM - Design, PR #216 r1):
+    """The card names nodes in curly quotes (design, PR #216):
     "“Hero shot” needs your Krea plan. Sign in to Krea in Settings." A route's
     line (node_route.route_unavailable_line) starts with the model's name;
     it gets the node's, quoted, the same way."""
     if line.startswith("“"):
         return line
     # Only the model's own names: a line that starts with neither isn't about
-    # the node by name, so nothing is quoted (review 1 L2).
+    # the node by name, so nothing is quoted.
     for lead in (str(definition.get("displayName") or ""), node_route.canvas_title(definition)):
         if lead and line.startswith(f"{lead} "):
             return f"{_card_quoted(name)}{line[len(lead):]}"
@@ -11791,7 +11779,7 @@ async def _open_canvas_proposal(
             # The person's words for it (the card names nodes, never ids).
             "title": _node_label(node_id),
             # The model it runs after Accept: a universal node's chosen model by
-            # name ("GPT-4o"), never its provider (GM - Design, PR #216 r5).
+            # name ("GPT-4o"), never its provider (design, PR #216).
             "model": model_label(node_registry.get(str((candidate.nodes.get(node_id) or {}).get("definitionId") or ""))
                                  or {}, (candidate.nodes.get(node_id) or {}).get("params") or {}, models)
             or _node_model(node_id),
@@ -11821,18 +11809,18 @@ async def _open_canvas_proposal(
         # numbers, in the step that made it, so every view and its Update
         # carry them.
         proposal.wait = wait
-    # The card's words for its wires, and the wires Accept removes (GM - Design, PR #216 r3).
+    # The card's words for its wires, and the wires Accept removes (design, PR #216).
     proposal.wires = [_wire_words(edge.as_dict(), candidate, id_map) for edge in spec.edges]
     proposal.removed_edges = [{**ends, **_wire_words(ends, cli_graph, {})} for ends in dropped]
-    # The canvas it was made on, in the step that made it (review 20 L-3).
+    # The canvas it was made on, in the step that made it.
     proposal.canvas_revision = _canvas_revision()
     # Which of the agent's cursors proposed it, for the "Accepted" click on
     # the person's tabs only (_accepted_person_form; never in a view).
     proposal.presence_session = presence_session(headers)
-    # Which node it reads under each id, so only a delete of that very node tags it (second review).
+    # Which node it reads under each id, so only a delete of that very node tags it.
     proposal.lineage = {node_id: node_removals.lineage(proposal.project_id, node_id) for node_id in spec.references}
     first_reference = next(iter(sorted(proposal.references, key=_node_order)), None)
-    _journal(  # in the step that made it, before any await (round 8 of PR #114)
+    _journal(  # in the step that made it, before any await (PR #114)
         "proposal.created",
         node_id=first_reference,
         data={
@@ -11841,21 +11829,21 @@ async def _open_canvas_proposal(
             "adds": len(spec.nodes),
             "wires": len(spec.edges),
             "sets": len(spec.params),
-            # The wires its model change removes on Accept (review 2 N1): the
+            # The wires its model change removes on Accept: the
             # same count as the Update's (canvas_proposals.change_count).
             "removes": len(proposal.removed_edges),
             "runs": len(spec.run),
             "paidRuns": cost["paidRuns"],
-            # Each class on its own, as the cost line counts them (review 10, MEDIUM-1).
+            # Each class on its own, as the cost line counts them.
             "mayCostRuns": cost["mayCostRuns"],
             "planRuns": cost["planRuns"],
             **({"waiting": wait} if wait is not None else {}),
         },
         summary=f'proposed {proposal.id}: "{spec.note}"',
     )
-    await _post_canvas_update(proposal)  # Q112 a: the person hears of it on every screen
+    await _post_canvas_update(proposal)  # The person hears of it on every screen
     view = _proposal_view(proposal)
-    # The agent's other open proposals here that can't run: Justin (Q109)
+    # The agent's other open proposals here that can't run: Justin
     # keeps them, and the agent is told to withdraw one this replaces.
     still_open = [{"id": p.id, "note": p.spec.note} for p in canvas_proposals.open_unrunnable(proposal)]
     if not proposal.is_open:
@@ -11888,7 +11876,7 @@ async def _open_canvas_proposal(
     if target is not None:
         # A held run's cursor has no say of its own: the default line
         # ("Waiting for your OK") shows until the node's header says it
-        # (GM - Design, PR #212 round 2, item 8); the reason is on the bar and
+        # (design, PR #212); the reason is on the bar and
         # the Updates card.
         await _show_agent(target, action="click", shows="propose",
                           say="" if wait else spec.note,
@@ -11924,7 +11912,7 @@ async def create_canvas_proposal(body: dict[str, Any]) -> dict[str, Any]:
     if spec.run and not (spec.nodes or spec.edges or spec.params or spec.rename):
         # A run-only proposal of what a run of the caller's already waits on
         # (a run over the daily total was sent as a proposal for it): that
-        # proposal, not a second card (review 1 of PR #212, LOW-3).
+        # proposal, not a second card (PR #212).
         waiting = _open_waiting_proposal(identity, list(dict.fromkeys(spec.run)),
                                          _workspace_context()["activeProjectId"])
         if waiting is not None:
@@ -11956,7 +11944,7 @@ async def list_canvas_proposals() -> dict[str, Any]:
 
 def _gone_proposal_detail(proposal_id: str) -> str:
     """A proposal Nebula no longer has: decided ones go after 30 minutes, and
-    open ones live in memory, so a restart closes them (Q108 a)."""
+    open ones live in memory, so a restart closes them."""
     return (f"No proposal {proposal_id[:20]} (decided proposals are kept for 30 minutes, and a restart of "
             "Nebula closes open ones: propose again if you still want it)")
 
@@ -11969,7 +11957,7 @@ async def get_canvas_proposal(proposal_id: str, request: Request) -> dict[str, A
     await _sweep_proposals()
     proposal = canvas_proposals.get(proposal_id)
     if proposal is None and asset_proposals.get(proposal_id) is not None:
-        return await _get_asset_proposal(proposal_id, wait, request)  # a project's or a board's (U16)
+        return await _get_asset_proposal(proposal_id, wait, request)  # a project's or a board's
     if proposal is None:
         raise refusal_copy.not_found(_gone_proposal_detail(proposal_id), "proposal", "proposals")
     loop = asyncio.get_running_loop()
@@ -12001,7 +11989,7 @@ async def withdraw_canvas_proposal(proposal_id: str) -> dict[str, Any]:
     await _sweep_proposals()
     proposal = canvas_proposals.get(proposal_id)
     if proposal is None and asset_proposals.get(proposal_id) is not None:
-        return await _withdraw_asset_proposal(proposal_id, identity)  # a project's or a board's (U16)
+        return await _withdraw_asset_proposal(proposal_id, identity)  # a project's or a board's
     if proposal is None:
         raise refusal_copy.not_found(f"No proposal {proposal_id[:20]}", "proposal", "proposals")
     if proposal.agent.id != identity.id:
@@ -12065,7 +12053,7 @@ def _refuse_changed_runs(proposal: Proposal, candidate: CLIGraph, id_map: dict[s
             f"what it runs changed after it was proposed ({_listed(sorted(changed, key=_node_order), 4)})"))
 
 
-# GM - Design, round 22 (4b): the person reads "Couldn't accept this
+# Design: the person reads "Couldn't accept this
 # proposal. The canvas was cleared or replaced after it was made. Ask the
 # agent for a new one." (the canvas reads the code, never these words);
 # agents and logs read the detail, which says the same.
@@ -12100,7 +12088,7 @@ def _ensure_still_decidable(proposal: Proposal, *, reject: bool = False) -> None
     if not reject and proposal.canvas_revision is not None and proposal.canvas_revision != _canvas_revision():
         # A clear or an import landed since it was made (they close open
         # proposals only after their awaits): its node ids may name other
-        # nodes now (round 21 of PR #195, review 20 L-3).
+        # nodes now (PR #195).
         raise ProposalCanvasReplaced()
 
 
@@ -12160,7 +12148,7 @@ async def accept_canvas_proposal(proposal_id: str, request: Request) -> dict[str
             _refuse_changed_runs(proposal, candidate, id_map, run_ids)
         except PortsUnread as exc:
             # The provider can't be read right now: nothing changed, and the
-            # proposal stays open to accept again (review 2 LOW-4).
+            # proposal stays open to accept again.
             unread = exc
         except HTTPException as exc:
             # cli_graph is only replaced at commit, so nothing changed.
@@ -12169,13 +12157,12 @@ async def accept_canvas_proposal(proposal_id: str, request: Request) -> dict[str
             # The canvas may have changed since the agent proposed (its
             # measure passed then): the Accept would leave it past Save's
             # shape limits. Refused on the click, nothing changed, and the
-            # proposal stays open (GM PR #205 r16 item 2; review 7 limits
-            # MEDIUM-1). Measured on every Accept: with the canvas unchanged
-            # the measure is the one the proposal passed, so only a change
-            # since can refuse it.
+            # proposal stays open (design, PR #205). Measured on every
+            # Accept: with the canvas unchanged the measure is the one the
+            # proposal passed, so only a change since can refuse it.
             candidate_export = _graph_canvas_export(candidate)
             # Past the node or connection count a project can save, as apply
-            # and every agent write count it (PR #205 final review): refused
+            # and every agent write count it (PR #205): refused
             # the same way, naming the count that is over.
             count_detail = _oversized_graph_detail(candidate, cli_graph)
             count_kind = _oversized_graph_kind(candidate, cli_graph)
@@ -12185,8 +12172,8 @@ async def accept_canvas_proposal(proposal_id: str, request: Request) -> dict[str
             if too_complex is None:
                 too_complex = _shape_past_save_limit(candidate_export)
             if too_complex is None:
-                # And past the project's size limit (review 8 of PR #205,
-                # limits MEDIUM-1): refused the same way, with the size limit.
+                # And past the project's size limit (PR #205): refused the
+                # same way, with the size limit.
                 too_large = _size_past_save_limit(candidate, candidate_export)
                 if too_large is not None:
                     too_complex = (409, too_large[1], {"kind": "size", "max": MAX_PROJECT_BYTES})
@@ -12238,7 +12225,7 @@ async def accept_canvas_proposal(proposal_id: str, request: Request) -> dict[str
         fingerprint=approvals.fingerprint(cli_graph.nodes, cli_graph.edges, run_ids),
         shape=_approval_shape(cli_graph, run_ids),
     ) if run_ids else None
-    # Journaled here, before any await (round 8 of PR #114): each event names
+    # Journaled here, before any await (PR #114): each event names
     # the project the accept changed and reads the canvas as it left it.
     person = dict(_PERSON_ACTOR)
     _journal(
@@ -12254,7 +12241,7 @@ async def accept_canvas_proposal(proposal_id: str, request: Request) -> dict[str
     # Each names the proposal in data: nebula-mcp --channel leaves these out
     # of the person's edits by that field, never by the summary's note.
     _journal_cluster(list(id_map.values()), edge_ids, actor=person, note=note, proposal_id=proposal.id)
-    # The wires its model changes dropped, as the card listed them (GM - Design, PR #216 r3).
+    # The wires its model changes dropped, as the card listed them (design, PR #216).
     for ends in dropped:
         _journal_edge("edge.removed", dict(ends), actor=person, note=note, proposal_id=proposal.id)
     for change in proposal.spec.params:
@@ -12326,7 +12313,7 @@ async def release_run_approval(approval_id: str) -> dict[str, Any]:
     return {"status": "released" if run_approvals.drop(approval_id) else "not_found"}
 
 
-# ---------- Questions: agents ask, the person answers (Q125 item 1) ----------
+# ---------- Questions: agents ask, the person answers ----------
 #
 # Justin, 2026-10-24: "Yes, all four, in that order"; then "go with your
 # suggestions". Modelled on the canvas proposals above: open caps, the same
@@ -12367,7 +12354,7 @@ async def _send_questions_sync(websocket: WebSocket) -> None:
 
 
 def _journal_question(question_set: QuestionSet, *, actor: dict[str, Any] | None = None) -> None:
-    # Tagged with the project the set is kept on (round 8 of PR #114).
+    # Tagged with the project the set is kept on (PR #114).
     """One journal event per step. Never the questions' text nor the
     answers: every agent on the canvas reads the journal."""
     kind = "asked" if question_set.is_open else question_set.status
@@ -12425,7 +12412,7 @@ async def _post_question_update(question_set: QuestionSet) -> bool:
         return False
     note = result["note"]
     # Saved by a worker thread: tagged with the project it went to, journaled
-    # before the broadcast's await (round 8 of PR #114).
+    # before the broadcast's await (PR #114).
     _journal_note(note, "canvas", project_id=result["projectId"])
     _journal_question(question_set)  # asked: with its Update, before the broadcast's await
     await _broadcast_raw_quietly(_notes_message("canvas", "added", project_id=result["projectId"], note=note,
@@ -12459,7 +12446,7 @@ async def _follow_question_updates(sets: list[QuestionSet]) -> None:
 
 
 async def _thread_question_outcome(question_set: QuestionSet) -> None:
-    """GM r79.5: the thread's question row keeps how the set closed (and the
+    """Design: the thread's question row keeps how the set closed (and the
     person's answers), so "You chose …" survives any reload. Person form
     only: agents never read ``outcome`` (person_thread.agent_view), as no
     agent route reads the set's answers but the asker's. Decoration: never
@@ -12480,7 +12467,7 @@ async def _thread_question_outcome(question_set: QuestionSet) -> None:
 async def _announce_closed_questions(sets: list[QuestionSet], *, actor: dict[str, Any] | None = None) -> None:
     """Journal each, tell the person's sockets (only theirs: the message
     carries their answers back to them), then settle each one's Update.
-    Every event first, before any await (round 8 of PR #114)."""
+    Every event first, before any await (PR #114)."""
     for question_set in sets:
         _journal_question(question_set, actor=actor)
     for question_set in sets:
@@ -12643,7 +12630,7 @@ async def dismiss_agent_questions(set_id: str) -> dict[str, Any]:
     return {"status": "dismissed", "questionId": question_set.id}
 
 
-# ---------- Asset proposals: changes outside the graph (U16) ----------
+# ---------- Asset proposals: changes outside the graph ----------
 #
 # The canvas proposals' life cycle and accept gate for a project's cover and
 # a board's “Moodboard notes to generators” (services/asset_proposals.py). Accept applies the
@@ -12683,7 +12670,7 @@ def _asset_journal_data(proposal: AssetProposal) -> dict[str, Any]:
 async def _announce_closed_asset_proposals(proposals: list[AssetProposal], *,
                                            actor: dict[str, Any] | None = None) -> None:
     """Journal and broadcast asset proposals that just closed: every event
-    first, before any await (round 8 of PR #114)."""
+    first, before any await (PR #114)."""
     for proposal in proposals:
         reason = f": {proposal.reason}" if proposal.reason and proposal.kind != "commons" else ""
         _journal(
@@ -12700,7 +12687,7 @@ async def _announce_closed_asset_proposals(proposals: list[AssetProposal], *,
     await _follow_asset_updates(proposals)
 
 
-# ---- the Update each asset proposal posts (Justin's Q92 a, 2026-10-21) ----
+# ---- the Update each asset proposal posts (Justin's call, 2026-10-21) ----
 #
 # "Keep the wording, and each proposal also posts an Update ("Claude Code asks
 # to change the cover of X", with Review)." Posted on the open project's
@@ -12729,11 +12716,11 @@ async def _post_asset_update(proposal: AssetProposal) -> None:
             other.update = dict(ref)
     proposal.update = dict(ref)
     # Saved by a worker thread: tagged with the project it went to, journaled
-    # before the broadcast's await (round 8 of PR #114).
+    # before the broadcast's await (PR #114).
     _journal_note(note, "canvas", project_id=result["projectId"])
     await _broadcast_raw_quietly(_notes_message("canvas", "added", project_id=result["projectId"], note=note,
                                                 unread=result["unread"], removed=result["removed"]))
-    # PR #204 round 4 (review 2 LOW-1): an ask that closed after the write counted it, but before
+    # PR #204: an ask that closed after the write counted it, but before
     # it joined this Update, had its follow land on the Update this one replaced. Count again now
     # that every sharer points here; the Update stays on this ask (no write when the count holds).
     if proposal.is_open:
@@ -12761,7 +12748,7 @@ def _open_sharers(proposal: AssetProposal, ref: Mapping[str, Any] | None = None)
 
 
 def _asset_share_detail(sharers: list[AssetProposal]) -> dict[str, Any]:
-    """PR #204 review 1 MEDIUM-1 (GM, 2026-10-30): what a shared asset Update stands for, so a
+    """PR #204 (design, 2026-10-30): what a shared asset Update stands for, so a
     tab not connected as the person counts and orders it as the connected tab does and nothing
     moves on the promote: ``asks``, how many open asks share it, and ``firstSince``, the oldest
     one's createdAt (ms). Kept current wherever an ask joins or leaves it (post, the follow's
@@ -12772,8 +12759,8 @@ def _asset_share_detail(sharers: list[AssetProposal]) -> dict[str, Any]:
 
 
 def _share_reader(proposal: AssetProposal | None, ref: Mapping[str, Any] | None):
-    """The share fields as they are when the notes write runs, not when the caller looked (PR #204
-    round 3: a follow that closed an ask in between already wrote the smaller count). Given no
+    """The share fields as they are when the notes write runs, not when the caller looked (PR
+    #204: a follow that closed an ask in between already wrote the smaller count). Given no
     ``proposal``, every open ask under ``ref``."""
     def read() -> dict[str, Any]:
         if proposal is None:
@@ -12789,7 +12776,7 @@ def _ref_key(ref: Mapping[str, Any]) -> tuple[str, str]:
 
 async def _refresh_asset_update(ref: Mapping[str, Any]) -> None:
     """The Update reviews the newest of the open asks under it, and its ref says how many share it
-    and the oldest one's time (MEDIUM-1). No write when it already does (retarget_proposal)."""
+    and the oldest one's time. No write when it already does (retarget_proposal)."""
     sharers = [p for p in asset_proposals.open_list()
                if isinstance(p, AssetProposal) and p.is_open and p.update == ref]
     if not sharers:
@@ -12839,7 +12826,7 @@ async def _follow_asset_updates(proposals: list[AssetProposal]) -> None:
         if result["projectId"] == _open_project_id():
             await _broadcast_raw_quietly(_notes_message("canvas", op, project_id=result["projectId"],
                                                         ids=[ref["id"]], note=result["note"], **extra))
-        # PR #202 review 4 LOW-1: the ask the Update moved to can close while
+        # PR #202: the ask the Update moved to can close while
         # the move is written (the agent withdrawing both at once, the
         # person's accept or reject, expiry). Its own follow ran first and its
         # resolve found the Update still on this one (resolve_proposal's
@@ -12876,7 +12863,7 @@ def _cover_proposal_misfit(proposal: AssetProposal, project: Mapping[str, Any],
     now), refreshing what its view shows: a lost pin and the automatic cover."""
     if _cover_state(project) != proposal.before:
         return "the project's cover changed since it was proposed"
-    # The pin it was proposed against may have lost its image, or got it back (Q90 a).
+    # The pin it was proposed against may have lost its image, or got it back.
     proposal.lost_pin = _lost_pin(project, images)
     proposal.auto_cover = _automatic_cover(images)
     url = proposal.change.get("cover")
@@ -12918,7 +12905,7 @@ async def _sweep_asset_proposals() -> None:
     await _announce_closed_asset_proposals(expired + misfits, actor=dict(_SYSTEM_ACTOR))
 
 
-# ---- on time, not on the next read (review of Q92 a) ----
+# ---- on time, not on the next read ----
 #
 # The sweep above runs when something reads proposals. An agent that proposes
 # and stops, with the person on the canvas, reads nothing: without a timer the
@@ -12932,7 +12919,7 @@ def _call_later(delay: float, callback: Callable[..., Any], *args: Any) -> None:
     loop.call_later would copy the request's (its _canvas_edit_link, the
     caller's headers), and an expiry armed inside an undo then journaled
     proposal.expired under that undo's edit tag, for every proposal its sweep
-    closed (review 9 of PR #114). The task it starts inherits the fresh one."""
+    closed (PR #114). The task it starts inherits the fresh one."""
     asyncio.get_running_loop().call_later(delay, callback, *args, context=Context())
 
 
@@ -12964,8 +12951,8 @@ _ASSET_UPDATE_KINDS = ("project", "moodboard", "commons")
 async def _settle_proposal_updates() -> None:
     """Before the open project's Updates are listed: sweep, then resolve any
     proposal Update (an asset proposal's, or a canvas proposal's since
-    Justin's Q112 a) whose proposal can no longer be decided. Proposals live
-    in memory and Updates on the project, so after a restart an Update can
+    Justin's call) whose proposal can no longer be decided. Proposals live in
+    memory and Updates on the project, so after a restart an Update can
     outlive its proposal; its Review would lead nowhere. Runs on list_notes,
     on a tab's socket connect and on a project switch."""
     await _sweep_asset_proposals()
@@ -12977,7 +12964,7 @@ async def _settle_proposal_updates() -> None:
     project_id = listing.get("projectId")
     for note in listing.get("notes") or []:
         if note.get("about") == "question":
-            # A question set's Update (Q125 item 1): the same rule, with GM's line for a restart.
+            # A question set's Update: the same rule, with the design's line for a restart.
             await _settle_question_update(project_id, note)
             continue
         ref = note.get("proposal")
@@ -12995,21 +12982,21 @@ async def _settle_proposal_updates() -> None:
             continue
         if known and proposal.is_open:
             continue
-        # PR #202 review 3 LOW-2: a closed asset proposal whose Update another
+        # PR #202: a closed asset proposal whose Update another
         # open proposal still shares (the same agent's other ask on that
         # target) is the close handling's to retarget (_follow_asset_updates);
         # resolving it here, while that follow is under way, left the open ask
         # under "Withdrawn".
         if known and kind in _ASSET_UPDATE_KINDS and _shares_update(project_id, note["id"]):
             continue
-        # Not in memory: Nebula restarted while it was open (Q108 a).
+        # Not in memory: Nebula restarted while it was open.
         if not known:
             outcome = RESTART_OUTCOME
         else:
             outcome = asset_outcome_line(proposal) if kind in _ASSET_UPDATE_KINDS else canvas_outcome_line(proposal)
         try:
             # Given the id, the resolve leaves an Update an undo's reopen took
-            # over meanwhile (reopen_proposal; PR #202 review 3 LOW-2).
+            # over meanwhile (reopen_proposal; PR #202).
             result = await asyncio.to_thread(agent_notes.resolve_proposal, project_id, note["id"],
                                              outcome=outcome, by={"kind": "system"},
                                              proposal_id=str(ref.get("id") or ""), closed=_proposal_closed)
@@ -13030,10 +13017,10 @@ def _shares_update(project_id: str | None, note_id: str) -> bool:
 async def _settle_question_update(project_id: str | None, note: Mapping[str, Any]) -> None:
     """A question set's Update whose set can't be answered any more: closed
     (its outcome); closed and since pruned before this Update heard ("Closed.",
-    GM's PR #193 review); or not there at all ("Closed when Nebula
-    restarted.", GM's line for questions). Sets are kept with the project, so
-    a restart alone never gets there; a set whose record couldn't be read
-    back does (damaged, or from a build that didn't keep sets)."""
+    the design's review of PR #193); or not there at all ("Closed when Nebula
+    restarted.", the design's line for questions). Sets are kept with the
+    project, so a restart alone never gets there; a set whose record couldn't
+    be read back does (damaged, or from a build that didn't keep sets)."""
     ref = note.get("questions")
     if note.get("source") != "nebula" or note.get("resolvedAt") or not isinstance(ref, Mapping):
         return
@@ -13043,7 +13030,7 @@ async def _settle_question_update(project_id: str | None, note: Mapping[str, Any
     if isinstance(question_set, QuestionSet):
         outcome = question_outcome_line(question_set)
     elif agent_questions.closed_before(project_id, str(note.get("id") or "")):
-        # Closed, then pruned before its Update heard (GM's review, item 6).
+        # Closed, then pruned before its Update heard (design).
         outcome = QUESTIONS_CLOSED_OUTCOME
     else:
         outcome = QUESTIONS_RESTART_OUTCOME
@@ -13059,7 +13046,7 @@ async def _settle_question_update(project_id: str | None, note: Mapping[str, Any
                                                     note=result["note"], unread=result["unread"]))
 
 
-# ---- the Update each canvas proposal posts (Justin's Q112 a, 2026-10-21) ----
+# ---- the Update each canvas proposal posts (Justin's call, 2026-10-21) ----
 #
 # "a) Yes, every one: "Claude Code proposes 3 changes on the canvas", with
 # Review taking you to the canvas and its bar. It settles like the others
@@ -13076,14 +13063,14 @@ async def _post_canvas_update(proposal: Proposal) -> None:
             agent_notes.post_proposal, author={"kind": "agent", **proposal.agent.as_dict()},
             text=canvas_update_text(proposal), project_id=proposal.project_id,
             proposal={"id": proposal.id, "kind": "canvas", "targetId": proposal.project_id,
-                      # When it was asked (the view's createdAt), as asset refs say (GM 2026-10-29).
+                      # When it was asked (the view's createdAt), as asset refs say (design 2026-10-29).
                       "since": int(proposal.created_at * 1000)})
     except (NoteError, ProjectStoreError):
         return
     note = result["note"]
     proposal.update = {"id": note["id"], "projectId": result["projectId"]}
     # Saved by a worker thread: tagged with the project it went to, journaled
-    # before the broadcast's await (round 8 of PR #114).
+    # before the broadcast's await (PR #114).
     _journal_note(note, "canvas", project_id=result["projectId"])
     await _broadcast_raw_quietly(_notes_message("canvas", "added", project_id=result["projectId"], note=note,
                                                 unread=result["unread"], removed=result["removed"]))
@@ -13181,8 +13168,8 @@ async def _follow_cover_proposals(exported: dict[str, Any]) -> None:
         project = _cached_open_project_record(active)
         if project is _NOT_CACHED:
             # On the loop for every execution event: never the catalog lock,
-            # which a restore in a worker thread holds for seconds (review 3
-            # of PR #199, L-7). A worker thread reads it (and waits, if it must).
+            # which a restore in a worker thread holds for seconds (PR #199). A
+            # worker thread reads it (and waits, if it must).
             project = await asyncio.to_thread(_open_project_record, active)
         if project is None:
             return  # the sweep on the next read says "deleted"
@@ -13196,7 +13183,7 @@ async def _follow_cover_proposals(exported: dict[str, Any]) -> None:
                 # A node delete took its image: that delete's undo may reopen
                 # it. Its records name it too, so an undo after a restart
                 # (asset proposals live in memory) still counts it as lost.
-                # Only deletes in its own project tag it (second review).
+                # Only deletes in its own project tag it.
                 records = [record for record in _removals_ctx.get() or []
                            if record.get("projectId") == proposal.project_id]
                 proposal.closed_by = {str(record["id"]): str(record["nodeId"]) for record in records}
@@ -13326,11 +13313,11 @@ async def create_asset_proposal(body: dict[str, Any]) -> dict[str, Any]:
     proposal.lost_pin = lost
     proposal.auto_cover = auto
     said = asset_proposal_summary(proposal)
-    # In the step that made it, before any await (round 8 of PR #114).
+    # In the step that made it, before any await (PR #114).
     _journal("proposal.created", data={**_asset_journal_data(proposal), "change": sorted(spec.change)},
              summary=(f"proposed {proposal.id} ({said})" if spec.kind == "commons"
                       else f'proposed {proposal.id}: "{spec.note}" ({said})'))
-    # The Update in the corner (Q92 a), before the view so the answer names it.
+    # The Update in the corner, before the view so the answer names it.
     await _post_asset_update(proposal)
     _schedule_asset_expiry(proposal)
     view = _asset_proposal_view(proposal)
@@ -13396,7 +13383,7 @@ async def _withdraw_asset_proposal(proposal_id: str, identity: Any) -> dict[str,
     except ProposalError as exc:
         raise _proposal_http_error(exc) from exc
     await _announce_closed_asset_proposals([proposal])
-    # GM, PR #202 r2: the Agent log mirrors the ask's own line ("Asks to X"),
+    # Design (PR #202): the Agent log mirrors the ask's own line ("Asks to X"),
     # with the same X from the same helper, under the agent's name.
     await _say_agent_action(f"Withdrew its request to {asset_proposal_summary(proposal)}")
     return {"proposal": _asset_proposal_view(proposal)}
@@ -13521,7 +13508,7 @@ async def reject_asset_proposal(proposal_id: str, request: Request) -> dict[str,
     return {"status": "rejected", "proposalId": proposal.id}
 
 
-# ---------- Commons curation as asset proposals (Justin's Q63 b, U13) ----------
+# ---------- Commons curation as asset proposals (Justin's call) ----------
 #
 # Curating the Commons (corrections, regions, a reference's role, why or
 # inbox place) stays the person's: agents propose it with kind "commons"
@@ -13773,17 +13760,17 @@ async def get_settings() -> dict:
         settings = None
     if not isinstance(settings, dict):
         # Cut short, hand-edited or not an object: Settings says the file
-        # can't be read, never a 500 (review 12 of PR #203, LOW-3).
+        # can't be read, never a 500 (PR #203).
         raise CodedRefusal(409, _unreadable_on_read(), {"code": SETTINGS_UNREADABLE_CODE})
     masked = dict(settings)
     if "apiKeys" in masked:
-        # Justin, Q55 a: "Only the app (your person token) gets the endings.
+        # Justin: "Only the app (your person token) gets the endings.
         # Everything else learns which providers are set, and nothing more."
         # An agent's curl or `nebula keys` sees a bare "***" for a set key.
         person = _is_person_request()
         # load_settings has read every key through node_route.key_text, the
         # one key-state function: one that is empty once trimmed isn't in it,
-        # so the canvas reads it as unset, as the gate does (review 8, LOW-1).
+        # so the canvas reads it as unset, as the gate does.
         masked["apiKeys"] = {
             k: (("***" + v[-4:] if len(v) > 4 else "***") if person else "***") if v else ""
             for k, v in masked["apiKeys"].items()
@@ -13826,10 +13813,10 @@ async def update_settings(body: dict[str, Any]) -> dict:
                 raise HTTPException(400, refusal)
     # Do not mutate a loaded/shared object until the complete request is valid.
     # The file as saved, not as read: a save writes back every entry it wasn't
-    # asked to change exactly as it was (review 9 of PR #203, keys NIT-1).
+    # asked to change exactly as it was (PR #203).
     # The read, the change and the save hold the save's lock together, so a
-    # save from another Nebula or request in between is never lost (review 17
-    # of PR #203, settings LOW-3): nothing in it awaits.
+    # save from another Nebula or request in between is never lost (PR #203):
+    # nothing in it awaits.
     with _settings_write():
         current = _saved_settings_or_409()
         before = dict(load_settings().get("apiKeys") or {})
@@ -13837,15 +13824,15 @@ async def update_settings(body: dict[str, Any]) -> dict:
             node_route.key_text(v) and not v.startswith("***") for v in body["apiKeys"].values())
         if writes_keys and not saved_keys_writable(current):
             # Keys Nebula can't read stay as saved: a key added to them would be
-            # a guess at what they were (review 10 of PR #203, NIT-6). A value
+            # a guess at what they were (PR #203). A value
             # that holds nothing (null, [], "", false, 0) has no key to keep, so
-            # the save replaces it (GM, PR #203 r23; review 11, LOW-3).
+            # the save replaces it (design, PR #203).
             raise _settings_refusal(KEYS_UNREADABLE, KEYS_UNREADABLE_CODE)
         if writes_keys:
             current_keys = current.get("apiKeys") if isinstance(current.get("apiKeys"), dict) else {}
             for k, v in body["apiKeys"].items():
                 # A pasted key's spaces, line breaks and invisible marks at its
-                # ends go (GM, PR #203 r2; node_route.key_text, as Settings trims).
+                # ends go (design, PR #203; node_route.key_text, as Settings trims).
                 v = node_route.key_text(v)
                 if v and not v.startswith("***"):
                     current_keys[k] = v
@@ -13886,9 +13873,8 @@ def _writing_tab() -> str | None:
     every write, as `_graph_edit_origin` reads it for a graphSync. The signal
     carries it back as `origin`, so that tab knows its own write's echo by
     name, whenever it arrives, and a change made anywhere else during its
-    write is still a change made elsewhere (review 11 of PR #203, copy
-    MEDIUM-1). Anything that isn't such an id, or doesn't come from the
-    person, is no origin at all."""
+    write is still a change made elsewhere (PR #203). Anything that isn't
+    such an id, or doesn't come from the person, is no origin at all."""
     headers = current_request_headers() or {}
     tab = next((value for key, value in headers.items() if str(key).lower() == "x-nebula-tab"), None)
     return tab if _is_person_request() and isinstance(tab, str) and _TAB_ID_RE.fullmatch(tab) else None
@@ -13899,17 +13885,16 @@ async def _broadcast_settings_changed(keys: Iterable[str] = (), origin: str | No
     again (GET /api/settings, masked as ever), so a key added or removed in
     another window, another tab, the desktop app or a script calling the API
     reaches every cost class, chip, ghost card and lock on the canvas, and an
-    open Settings panel, without a reload (review 8 of PR #203, NIT-3 and
-    copy LOW-2). ``keys`` names the keys that changed (their names, never a
-    value or an ending), so a tab clears only those connection checks (GM,
-    PR #203 r19 item 7). Only the person's tabs (broadcast_browser): agents
-    re-read keys on every call, and the signal would tell them a key was
-    replaced (review 9, keys LOW-1). ``origin`` is the writing tab's own id
-    (_writing_tab), when it sent one."""
+    open Settings panel, without a reload (PR #203). ``keys`` names the keys
+    that changed (their names, never a value or an ending), so a tab clears
+    only those connection checks (design, PR #203). Only the person's tabs
+    (broadcast_browser): agents re-read keys on every call, and the signal
+    would tell them a key was replaced. ``origin`` is the writing tab's own
+    id (_writing_tab), when it sent one."""
     await manager.broadcast_browser({"type": "settingsChanged", "keys": sorted(set(keys)),
                                      **({"origin": origin} if origin else {})})
     # Each open proposal's cost classes and plan line follow the keys set now
-    # (GM, PR #203 r15 item 2): a token added or removed after it was made
+    # (design, PR #203): a token added or removed after it was made
     # turns "free" into "may cost" and back, so the card's plan line, which
     # the backend writes (canvas_proposals.plan_line), is sent again.
     await _resend_open_proposals()
@@ -13932,14 +13917,14 @@ async def remove_settings_api_key(provider: str) -> dict:
         raise HTTPException(400, "Unknown credential provider")
     if is_injected_mode():
         raise HTTPException(409, "Injected credentials must be removed through the credential bridge")
-    # The file as saved: only this key goes (review 9 of PR #203, keys NIT-1).
+    # The file as saved: only this key goes (PR #203).
     # One lock from the read to the save (settings_transaction), as PUT holds it.
     with _settings_write():
         current = _saved_settings_or_409()
         before = dict(load_settings().get("apiKeys") or {})
         if not saved_keys_writable(current):
-            # Nothing Nebula reads is set, and the file keeps what it has (NIT-6).
-            # A value that holds nothing is replaced with no keys (LOW-3).
+            # Nothing Nebula reads is set, and the file keeps what it has.
+            # A value that holds nothing is replaced with no keys.
             raise _settings_refusal(KEYS_UNREADABLE, KEYS_UNREADABLE_CODE)
         current_keys = current.get("apiKeys") if isinstance(current.get("apiKeys"), dict) else {}
         current_keys.pop(provider, None)
@@ -13961,9 +13946,7 @@ async def credentials_update(body: dict[str, Any]) -> dict:
     With ``"check": true`` it refuses or accepts exactly as the write would
     and changes nothing: the panel asks it before the Keychain write, so a
     key the backend would refuse (a settings file it can't read) lands in
-    neither the Keychain nor the running backend (review 12 of PR #203,
-    LOW-3).
-    """
+    neither the Keychain nor the running backend (PR #203). """
     require_person(current_request_headers())
     provider = body.get("provider")
     key = body.get("key")
@@ -14008,15 +13991,15 @@ async def credentials_update(body: dict[str, Any]) -> dict:
 
 # A settings.json whose `apiKeys` isn't an object, or that isn't an object at
 # all: Nebula reads no keys from it (services/settings.load_settings) and a
-# write never replaces what it holds with a guess (review 10 of PR #203,
-# NIT-6). GM's wording (PR #203 r22 item 3): each names the file by its full
-# path, the one this backend reads (NEBULA_SETTINGS_PATH when it is set).
+# write never replaces what it holds with a guess (PR #203). The design's
+# wording (PR #203): each names the file by its full path, the one this
+# backend reads (NEBULA_SETTINGS_PATH when it is set).
 KEYS_UNREADABLE = ("Nothing was saved because Nebula can’t read the keys saved in {path}. "
                    "Fix “apiKeys” in that file, then try again.")
 SETTINGS_UNREADABLE = "Nothing was saved because Nebula can’t read {path}. Fix the file, then try again."
-# A file Nebula can read but isn't allowed to change (GM, PR #203 r28 item
-# 4), by who asked, as SETTINGS_UNREADABLE_ON_READ: the agents' line says
-# the person must check it. Every settings write today is the person's
+# A file Nebula can read but isn't allowed to change (design, PR #203), by
+# who asked, as SETTINGS_UNREADABLE_ON_READ: the agents' line says the
+# person must check it. Every settings write today is the person's
 # (require_person comes first), so no agent meets its line yet; it is here
 # so that one never reads the person's.
 SETTINGS_UNWRITABLE = {
@@ -14027,7 +14010,7 @@ SETTINGS_UNWRITABLE = {
 }
 # The folder that holds the file takes no new file, and the file can't be
 # written where it is (it isn't there yet, or it is read-only too): the line
-# names the real folder (GM, PR #203 r31 item 1). The agents' form follows
+# names the real folder (design, PR #203). The agents' form follows
 # SETTINGS_UNWRITABLE's.
 SETTINGS_FOLDER_UNWRITABLE = {
     "person": "Nothing was saved because Nebula isn’t allowed to change {folder}. "
@@ -14035,9 +14018,9 @@ SETTINGS_FOLDER_UNWRITABLE = {
     "agent": "Nothing was saved because Nebula isn’t allowed to change {folder}. "
              "Ask the person to check the folder’s permissions.",
 }
-# Nebula's own folder takes no copy for an in-place save (GM, PR #203 r36
-# item B6a): the line says why that folder matters to the settings. It names
-# the folder that refuses, as the person sees it (~/.nebula, or the desktop
+# Nebula's own folder takes no copy for an in-place save (design, PR #203
+# item): the line says why that folder matters to the settings. It names the
+# folder that refuses, as the person sees it (~/.nebula, or the desktop
 # app's state folder).
 SETTINGS_COPY_FOLDER_UNWRITABLE = {
     "person": "Nothing was saved because Nebula isn’t allowed to change {folder}, where it keeps a copy while it "
@@ -14046,10 +14029,10 @@ SETTINGS_COPY_FOLDER_UNWRITABLE = {
              "saves. Ask the person to check the folder’s permissions.",
 }
 # A folder above Nebula's state folder refuses, so the state folder can't be
-# made (GM, PR #203 r38 item 4, verbatim: "Nothing was saved because Nebula
-# isn’t allowed to change ~/ro, so it can’t make ~/ro/deeper/state, where it
-# keeps a copy while it saves. Check the permissions of ~/ro, then try
-# again."). When the folder that refuses is the state folder or inside it,
+# made (design, PR #203, verbatim: "Nothing was saved because Nebula isn’t
+# allowed to change ~/ro, so it can’t make ~/ro/deeper/state, where it keeps
+# a copy while it saves. Check the permissions of ~/ro, then try again.").
+# When the folder that refuses is the state folder or inside it,
 # SETTINGS_COPY_FOLDER_UNWRITABLE stands.
 SETTINGS_COPY_FOLDER_PARENT_UNWRITABLE = {
     "person": "Nothing was saved because Nebula isn’t allowed to change {folder}, so it can’t make {creates}, where "
@@ -14057,15 +14040,15 @@ SETTINGS_COPY_FOLDER_PARENT_UNWRITABLE = {
     "agent": "Nothing was saved because Nebula isn’t allowed to change {folder}, so it can’t make {creates}, where "
              "it keeps a copy while it saves. Ask the person to check the permissions of {folder}.",
 }
-# Another Nebula's save holds the settings file past the wait (GM, PR #203
-# r38 item 3, verbatim; neutral: nothing was lost). The same for agents:
-# trying again is theirs to do too.
+# Another Nebula's save holds the settings file past the wait (design, PR
+# #203, verbatim; neutral: nothing was lost). The same for agents: trying
+# again is theirs to do too.
 SETTINGS_BUSY = "Nothing was saved because another Nebula is saving your settings. Try again in a moment."
 SETTINGS_BUSY_CODE = "settings_busy"
 SETTINGS_BUSY_FIX = {"person": "Try again in a moment.", "agent": "Try again in a moment."}
-# GM, PR #203 r39 item 2, as drafted: a folder at one of the save's fixed file names
-# (the temp file beside settings.json, the copy or its temp; review 18 of PR
-# #203, settings NIT-1), named by its path.
+# Design (PR #203), as drafted: a folder at one of the save's fixed file names
+# (the temp file beside settings.json, the copy or its temp; PR #203), named by its
+# path.
 SETTINGS_IN_THE_WAY = {
     "person": "Nothing was saved because {folder} is a folder, and Nebula needs to put a file there. "
               "Move or rename that folder, then try again.",
@@ -14073,7 +14056,7 @@ SETTINGS_IN_THE_WAY = {
              "Ask the person to move or rename that folder.",
 }
 # The private temp folder beside the settings file can't be read or checked,
-# or is on another disk (GM, PR #203 r26 item 2, verbatim). The folder's name
+# or is on another disk (design, PR #203, verbatim). The folder's name
 # comes from settings.TEMP_FOLDER, in curly quotes.
 SETTINGS_TEMP_FOLDER_UNUSABLE = {
     "person": "Nebula couldn’t save your settings because it can’t use the folder “{temp_folder}” next to them. "
@@ -14091,7 +14074,7 @@ SETTINGS_TEMP_FOLDER_FIX = {"person": "Check that folder’s permissions, then t
                             "agent": "Ask the person to check that folder’s permissions."}
 SETTINGS_TEMP_DISK_FIX = {"person": "Remove that folder, then try again.",
                           "agent": "Ask the person to remove that folder."}
-# A folder on the way to the file is a file (GM, PR #203 r31 item 2), named
+# A folder on the way to the file is a file (design, PR #203), named
 # by its real path.
 SETTINGS_NOT_A_FOLDER = {
     "person": "Nothing was saved because {folder} is a file, and Nebula needs a folder there. "
@@ -14100,8 +14083,8 @@ SETTINGS_NOT_A_FOLDER = {
              "Ask the person to move or rename that file.",
 }
 # Each settings refusal's fix sentence on its own, by code and reader, naming
-# the file (GM, PR #203 r29 item 6: "… Fix “apiKeys” in ~/…/settings.json,
-# then try again.").
+# the file (design, PR #203: "… Fix “apiKeys” in ~/…/settings.json, then try
+# again.").
 SETTINGS_FIX = {
     "settings_unreadable": {"person": "Fix {path}, then try again.",
                             "agent": "Ask the person to fix {path}."},
@@ -14121,9 +14104,9 @@ SETTINGS_UNREADABLE_CODE = "settings_unreadable"
 KEYS_UNREADABLE_CODE = "keys_unreadable"
 SETTINGS_UNWRITABLE_CODE = "settings_unwritable"
 SETTINGS_NOT_A_FOLDER_CODE = "settings_not_a_folder"
-# A read (GET /api/settings, start_here), where nothing was being saved: GM's
+# A read (GET /api/settings, start_here), where nothing was being saved: the design's
 # line without its first clause, by who is reading. Agents can't read or fix
-# that file, so theirs says the person must (GM, PR #203 r27 item 2): MCP
+# that file, so theirs says the person must (design, PR #203): MCP
 # get_settings, `nebula keys` and start_here's note read the agent's line.
 SETTINGS_UNREADABLE_ON_READ = {
     "person": "Nebula can’t read {path}. Fix the file, then try again.",
@@ -14147,8 +14130,7 @@ def _settings_audience() -> str:
     or without this launch's person token (a tab whose token predates a
     restart is still the person reading their own Settings), "agent" for an
     agent caller. refusal_copy.person_reads decides, the one place that
-    picks words and never authority (GM, PR #203 r29 item 5; review 14,
-    settings-gate LOW-1 and copy NIT-2)."""
+    picks words and never authority (design, PR #203)."""
     return "person" if refusal_copy.person_reads() else "agent"
 
 
@@ -14160,14 +14142,13 @@ def _unreadable_on_read() -> str:
 def _saved_settings_or_409(*, writes_file: bool = True) -> dict[str, Any]:
     """The settings file as saved (load_saved_settings), copied for a write
     to change; the 409 SETTINGS_UNREADABLE when it isn't JSON Nebula can
-    read or isn't an object (review 12 of PR #203, LOW-3: never a 500), and,
+    read or isn't an object (PR #203: never a 500), and,
     for a write that saves the file (``writes_file``), the 409 for what
-    stops the save (_unwritable_refusal; GM, PR #203 r28 item 4, r31 items 1
-    and 2). PUT and DELETE settings ask both. The desktop's
-    credentials/update asks only the read check: it writes the Keychain and
-    the backend's memory, never the file, so a read-only settings.json
-    doesn't stop a key save that never touches it (review 15,
-    settings-keychain MEDIUM-2)."""
+    stops the save (_unwritable_refusal; design, PR #203). PUT and DELETE
+    settings ask both. The desktop's credentials/update asks only the read
+    check: it writes the Keychain and the backend's memory, never the file,
+    so a read-only settings.json doesn't stop a key save that never touches
+    it. """
     try:
         current = load_saved_settings()
     except SettingsUnreadable:
@@ -14202,8 +14183,8 @@ def _busy_refusal() -> CodedRefusal:
 @contextmanager
 def _settings_write() -> Iterator[None]:
     """settings_transaction for PUT /api/settings and the key DELETE, with
-    the 409 when another Nebula's save holds the file past the wait (review
-    18 of PR #203, copy-ui LOW-3: a bare 500 before)."""
+    the 409 when another Nebula's save holds the file past the wait (PR
+    #203, a bare 500 before)."""
     try:
         with settings_transaction():
             yield
@@ -14243,8 +14224,8 @@ def _settings_refusal(line: str | Mapping[str, str], code: str, *, fix: Mapping[
     for each reader keyed "person" / "agent"), with ``code`` beside it, so a
     client picks its line by the cause and never by the words, and ``fix``,
     the line's fix sentence on its own (SETTINGS_FIX, or the one given),
-    which the desktop's Keychain line ends with when it still stands (GM,
-    PR #203 r29 item 6). ``names`` fill the line's other slots ({folder})."""
+    which the desktop's Keychain line ends with when it still stands (design,
+    PR #203). ``names`` fill the line's other slots ({folder})."""
     audience = _settings_audience()
     if not isinstance(line, str):
         line = line[audience]
@@ -14254,16 +14235,16 @@ def _settings_refusal(line: str | Mapping[str, str], code: str, *, fix: Mapping[
 
 def _unreadable(line: str, **names: str) -> str:
     """``line`` naming the settings file this backend reads, resolved, with
-    the home folder as "~" (settings_file_shown; GM, PR #203 r24 item 7),
+    the home folder as "~" (settings_file_shown; design, PR #203),
     and any other path it names (``names``, shown the same way)."""
     return line.format(path=settings_file_shown(), **names)
 
 
 # A key with something in it that is empty once trimmed: no key at all, so
-# it is refused rather than stored (GM, PR #203 r17 item 1), as the Settings
+# it is refused rather than stored (design, PR #203), as the Settings
 # field refuses it (frontend settingsWrites: Save stays off).
 # The reader of PUT /api/settings and /api/credentials/update is a request,
-# so "paste it here" doesn't apply (GM, PR #203 r18 item 3, verbatim).
+# so "paste it here" doesn't apply (design, PR #203, verbatim).
 KEY_ONLY_INVISIBLE = "Nothing was saved because the key is empty once spaces and invisible characters are removed."
 
 
@@ -14293,7 +14274,7 @@ async def _finalize_cancelled_execution(
 ) -> None:
     """Sync late live-run params, preserve replay canvas params, then emit Stop.
     run.cancelled is journaled first, before any await, with the run's own
-    project (_run_project; round 8 of PR #114)."""
+    project (_run_project; PR #114)."""
     synced = not preserve_graph_params and _sync_params_to_cli_graph(nodes, submitted=submitted, run_id=run_id)
     stopped_by, started_by = _run_cancelled_actor(run_id)
     _journal(
@@ -14368,7 +14349,7 @@ def _validate_cinema_base_models(nodes: list[GraphNode]) -> None:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
-# A start refused because a Stop was recorded for its run id (review 17 L4):
+# A start refused because a Stop was recorded for its run id:
 # worded by what this process knows about the id, never more. The registry
 # and the durable guard know only that a Stop was recorded.
 RUN_ID_STOPPED = "run {id} was already stopped, so this id can’t start again. Start a new run with a new id."
@@ -14433,7 +14414,7 @@ def _claim_fresh_paid_worldlabs_starts(
                     list(cli_graph.nodes.values()), source="bootstrap-retry",
                     project_id=cli_graph.owner,
                 )
-                # Round 15 (review 14, M4): a re-seed with no IDs to seed
+                # A re-seed with no IDs to seed
                 # writes nothing, so prove the journal takes a real write
                 # before the error clears.
                 provider_recovery_store.verify_writable()
@@ -14474,10 +14455,10 @@ def _claim_fresh_paid_worldlabs_starts(
             claimed_node_ids & (recovered_node_ids | canonical_recovery_node_ids)
         )
         if stale_nodes:
-            # The person's line names what clears it (round 3b): Run history's
+            # The person's line names what clears it: Run history's
             # forget for a record, else the node's own ID fields.
             journaled = any(node_id in recovered_node_ids for node_id in stale_nodes)
-            # The node GM's line names (its card title): the first with a
+            # The node the design's line names (its card title): the first with a
             # record when any has one, else the first with an ID in params.
             held_node = next((node_id for node_id in stale_nodes if node_id in recovered_node_ids), stale_nodes[0])
             raise ProviderStartConflictError(
@@ -14614,14 +14595,14 @@ async def _skip_placeholders(
     run_id: str, nodes: list[GraphNode], edges: list[GraphEdge], *, direct: str | None = None,
     announce: bool = True,
 ) -> tuple[list[GraphNode], list[GraphEdge], dict[str, dict[str, Any]], list[str]]:
-    """Every way to run skips agents' placeholders (Q125 item 3, GM - Design:
-    "Run skips pending nodes, along with any node downstream that needs their
-    output"), before validation and before anything is priced, so nothing is
-    spent on them. Not skipped, though, are the placeholders this run makes
-    normal (the fourth value, ``ready``): the owning agent's own in the run,
-    and, when the person runs a node directly (``direct``, not an accepted
+    """Every way to run skips agents' placeholders (design: "Run skips
+    pending nodes, along with any node downstream that needs their output"),
+    before validation and before anything is priced, so nothing is spent on
+    them. Not skipped, though, are the placeholders this run makes normal
+    (the fourth value, ``ready``): the owning agent's own in the run, and,
+    when the person runs a node directly (``direct``, not an accepted
     proposal's run), every placeholder in that run: the node and what feeds
-    it, since running it runs them (GM: "counts as their edit: it turns
+    it, since running it runs them (design: "counts as their edit: it turns
     normal and runs"). Nothing changes here: the caller turns ``ready``
     normal with _make_ready only once the run has passed every check, so a
     refused run leaves the placeholders as they were. Each skipped node gets
@@ -14651,10 +14632,10 @@ def _paid_placeholders(nodes: list[GraphNode], ready: Iterable[str], api_keys: M
     """The placeholders among ``ready`` that call a paid model with the params
     this run sends (model_pricing.is_local; an unknown type counts as paid).
     A key-billing node is read with the keys set (model_pricing.cost_class,
-    the class every cost surface reads; GM, PR #203 r15 item 2): "free" (Idol
-    with no token) is not paid, and "may cost" (with one) still asks. A run on
-    the Krea plan still asks (it spends the plan's credits), and so does any
-    other provider call: the gate reads no prices, so a sourced $0 asks too
+    the class every cost surface reads; design, PR #203): "free" (Idol with no
+    token) is not paid, and "may cost" (with one) still asks. A run on the
+    Krea plan still asks (it spends the plan's credits), and so does any other
+    provider call: the gate reads no prices, so a sourced $0 asks too
     (lib/placeholderRunConfirm.ts isPaid is the twin)."""
     by_id = {node.id: node for node in nodes}
     paid = []
@@ -14671,8 +14652,8 @@ def _paid_placeholders(nodes: list[GraphNode], ready: Iterable[str], api_keys: M
 
 
 def _six_places(amount: float) -> float:
-    """USD read at 6 places, the canvas's arithmetic (review 4, L1), except
-    that an amount above zero never reads as nothing (review 7, L4): under
+    """USD read at 6 places, the canvas's arithmetic, except
+    that an amount above zero never reads as nothing: under
     half a millionth it is one millionth, so a confirmed 0 can't pass a run
     that costs something (the canvas shows and sends $0.01 for it)."""
     rounded = round(amount, 6)
@@ -14687,10 +14668,10 @@ def _run_estimate(nodes: list[GraphNode], edges: list[GraphEdge], *, passes: int
     fan-out, a Cinema scene's shots, routes from the keys set, a price read
     from an input's size at ``sizes``, measured by the caller). What the
     person's confirmation of placeholders is held to, and what its refusal
-    carries so the canvas can ask again with these numbers (review 4, M1).
+    carries so the canvas can ask again with these numbers.
 
     ``low``/``high`` are the whole run's, multiplied by ``passes`` and then
-    rounded to 6 places, the canvas's arithmetic (review 4, L1); ``nodes``
+    rounded to 6 places, the canvas's arithmetic; ``nodes``
     maps each priced node to its {low, high} for the run; ``unpriced``,
     ``plan``, ``awaitingInput`` list node ids, ``unavailable`` maps a node id
     to why its route can't run, ``plus`` the costs not included. ``high`` is
@@ -14715,8 +14696,8 @@ def _run_estimate(nodes: list[GraphNode], edges: list[GraphEdge], *, passes: int
         "nodes": lines,
         "unpriced": list(estimate.get("unpriced") or []),
         "plan": list(estimate.get("plan") or []),
-        # The sourced $0 nodes: free, by their own price (GM, PR #203 r18
-        # item 1), so the dialog's row says so (review 10, NIT-3).
+        # The sourced $0 nodes: free, by their own price (design, PR
+        # #203), so the dialog's row says so.
         "free": list(estimate.get("free") or []),
         "plus": list(estimate.get("plus") or []),
         "unavailable": dict(estimate.get("unavailable") or {}),
@@ -14736,19 +14717,19 @@ def _run_estimate_high(nodes: list[GraphNode], edges: list[GraphEdge], *, passes
 def _placeholder_confirm_refusal(run_id: str, paid: list[str], estimate: Mapping[str, Any] | None = None, *,
                                  shot: bool = False, may_cost: Iterable[str] = ()) -> HTTPException:
     """409 for the person's direct run of agents' paid placeholders without
-    their confirmation (or at a higher cost than they confirmed): GM - Design's
-    round-4 words, 2026-10-25, verbatim, which the node shows as its run error
+    their confirmation (or at a higher cost than they confirmed): the design's
+    words, 2026-10-25, verbatim, which the node shows as its run error
     in a tab too old to ask again itself. A shot's ends with the shot panel's
-    words (GM, round 5): "Generate again to review it."
+    words (design): "Generate again to review it."
 
-    It carries what the canvas needs to ask again at once (review 4, M1; GM
-    round 5: the canvas re-opens its dialog with "This run changed since you
-    last reviewed it." and never shows this message): the paid placeholders,
-    each one's agent (``agents``, for a tab that hasn't heard of the flag yet)
-    and Nebula's own ``estimate`` of the run (_run_estimate), which a
-    confirmation of its ``high`` passes. ``may_cost``: those of ``paid``
-    whose class is "may cost" (node_route.key_billing; Idol with a token),
-    which the message counts as such, never as paid (GM, PR #203 r17 item 2)."""
+    It carries what the canvas needs to ask again at once (design: the canvas
+    re-opens its dialog with "This run changed since you last reviewed it." and
+    never shows this message): the paid placeholders, each one's agent
+    (``agents``, for a tab that hasn't heard of the flag yet) and Nebula's own
+    ``estimate`` of the run (_run_estimate), which a confirmation of its
+    ``high`` passes. ``may_cost``: those of ``paid`` whose class is "may cost"
+    (node_route.key_billing; Idol with a token), which the message counts as
+    such, never as paid (design, PR #203)."""
     canvas_events.forget_run(run_id)
     owners: list[str] = []
     agents: dict[str, Any] = {}
@@ -14759,7 +14740,7 @@ def _placeholder_confirm_refusal(run_id: str, paid: list[str], estimate: Mapping
         name = who.get("name")
         if name and name not in owners:
             owners.append(name)
-    # GM - Design, round 12, item 1: "the agents" ("nodes agents" read like a stumble).
+    # Design: "the agents" ("nodes agents" read like a stumble).
     who = f"{personal_agents.in_sentence(owners[0])} is" if len(owners) == 1 else "the agents are"
     one = len(paid) == 1
     again = ("Generate again to review it." if shot
@@ -14777,8 +14758,8 @@ def _placeholder_confirm_refusal(run_id: str, paid: list[str], estimate: Mapping
                    f"before running those. {again}")
     else:
         # No placeholder left (their agents finished them while the dialog
-        # was open), but the run now costs more than the person confirmed
-        # (review 5, H1): GM's words from the dialog and the refusal.
+        # was open), but the run now costs more than the person confirmed:
+        # the design's words from the dialog and the refusal.
         again = "Generate again to review it." if shot else "Click “Run” again to review it."
         message = f"Nothing ran. This run changed since you last reviewed it. {again}"
     return HTTPException(status_code=409, detail={
@@ -14795,15 +14776,15 @@ async def _require_placeholder_confirmation(
     confirmed_cost: float | None = None, *, passes: int = 1, api_keys: Mapping[str, Any] | None = None,
     shot: bool = False,
 ) -> None:
-    """Q133 (Justin, 2026-10-25): the person's direct run that would make an
+    """Justin, 2026-10-25: the person's direct run that would make an
     agent's paid placeholder normal runs only with the person's confirmation
     for exactly those placeholders (the canvas's dialog sends them,
     components/PlaceholderRunDialog.tsx), so a missed dialog, a stale tab or
     another client can't skip it, and at no more than the total they
     confirmed (``confirmed_cost``, USD): Nebula's own estimate of what runs
     (``passes`` times: a shot's variations), with every price read from an
-    input's size measured first (review 4, H1). The total is required
-    whenever Nebula can price the run (review 4, M4). 409 before anything is
+    input's size measured first. The total is required
+    whenever Nebula can price the run. 409 before anything is
     priced or changes, carrying the estimate so the canvas asks again with
     it. Every route that runs the person's direct run calls this:
     /api/execute-node and /api/cinema/generate-shot. Agents' runs of their
@@ -14813,7 +14794,7 @@ async def _require_placeholder_confirmation(
     Once the dialog showed (the run carries ``confirmed_cost``), that total
     holds even when no placeholder is left: their agents may have finished
     them while it was open, and a pricier model must not run at a total
-    nobody saw (review 5, H1). The ids confirmed then don't matter, since
+    nobody saw. The ids confirmed then don't matter, since
     nothing is a placeholder any more."""
     if identify_agent(current_request_headers()) is not None or not _is_person_request():
         return
@@ -14833,7 +14814,7 @@ async def _require_placeholder_confirmation(
     high = None if estimate is None else estimate["high"]
     if high is None:
         return  # nothing in it has a list price: the person confirmed the rows
-    # No slack (review 6, L-e; GM - Design's answer): the canvas sends the
+    # No slack (design): the canvas sends the
     # amount it showed, in cents rounded up (lib/placeholderRunConfirm.ts
     # roundUpToCent), so a run Nebula prices even a millionth higher than that
     # is refused and asked again at Nebula's numbers.
@@ -14873,13 +14854,13 @@ def _admit_registered_run(run_id: str, ready: Iterable[str], nodes: list[GraphNo
                           canvas: tuple[str | None, int]) -> bool:
     """A run that just registered (_register_run, after the last
     _refuse_if_graph_moved and _run_canvas_now with no await between, PR
-    #114's round 11): the placeholders it runs turn normal and an agent's run
-    is kept (its marks and done card). Synchronous, so the run's task hasn't
-    had a turn yet; a run refused before this leaves the placeholders and
-    the agent-run record as they were (round 21, the #114 merge). True when a
-    placeholder changed: the caller then broadcasts the graph.
+    #114): the placeholders it runs turn normal and an agent's run is kept
+    (its marks and done card). Synchronous, so the run's task hasn't had a
+    turn yet; a run refused before this leaves the placeholders and the
+    agent-run record as they were (PR #114). True when a placeholder
+    changed: the caller then broadcasts the graph.
 
-    Round 22 (review 21, L-e): nothing here reads storage. The project is
+    Nothing here reads storage. The project is
     the one the run registered on (``canvas``, read by _run_canvas_now), and
     what can fail comes before the one write: the plan (who asked, which
     nodes) is read first, then the placeholders are made normal (saved
@@ -14893,7 +14874,7 @@ def _admit_registered_run(run_id: str, ready: Iterable[str], nodes: list[GraphNo
     return cleared
 
 
-# Round 23 (review 22, L-4): once a run is admitted (_admit_registered_run
+# Once a run is admitted (_admit_registered_run
 # returned) it has started, and may be spending. Nothing after that point may
 # turn the answer into an error: an agent that reads a 507 as "didn't start"
 # would start the paid run again (/api/graph/run has no client run id to
@@ -14997,7 +14978,7 @@ async def execute(request: ExecuteRequest) -> dict:
     _assert_execution_admissible(run_id)
     if execution_runs.get(run_id) is not None:
         raise HTTPException(status_code=409, detail=f"run {run_id} already exists")
-    # This process saw the start begin (round 17, review 16 L1): a Stop that
+    # This process saw the start begin: a Stop that
     # finds no record of it may say it never started.
     execution_runs.note_start_begun(run_id)
     _note_run(run_id)
@@ -15038,7 +15019,7 @@ async def execute(request: ExecuteRequest) -> dict:
     # The approval matches what the person accepted; only what runs is priced.
     # The placeholders it runs turn normal, and an agent's run is kept, only
     # once it registered (_admit_registered_run): a run refused at the last
-    # fence leaves both as they were (round 21, the #114 merge).
+    # fence leaves both as they were (PR #114).
     try:
         await _require_run_spend_approval(run_id, nodes, edges, approval_id=request.approval_id,
                                           approval_scope=(requested_nodes, requested_edges),
@@ -15054,19 +15035,19 @@ async def execute(request: ExecuteRequest) -> dict:
         # The run's outputs land by node id on the live graph: start it only
         # on the canvas it was asked on. Checked after the measure too (in
         # _require_run_spend_approval); again here, the last check before it
-        # registers, with no await between (round 11).
+        # registers, with no await between.
         _refuse_if_graph_moved(fence)
-        # A Stop that arrived while this start awaited (round 16, M2: the tab
-        # stops a run whose status check answered 404) refuses it here.
+        # A Stop that arrived while this start awaited (the tab stops a run
+        # whose status check answered 404) refuses it here.
         _assert_execution_admissible(run_id)
-        # The canvas the run registers on, read now (round 17, review 16 L5):
+        # The canvas the run registers on, read now:
         # a project-store read that fails after the task exists could leave
         # a started run behind a 507 that says nothing was started.
         run_canvas = _run_canvas_now()
         _claim_fresh_paid_worldlabs_starts(run_id=run_id, nodes=nodes)
     except BaseException:
         _return_hold(run_id)
-        canvas_events.forget_run(run_id)  # its proposal mark too (review 2)
+        canvas_events.forget_run(run_id)  # its proposal mark too
         raise
 
     async def _run() -> None:
@@ -15131,7 +15112,7 @@ async def execute(request: ExecuteRequest) -> dict:
             await asyncio.gather(task, return_exceptions=True)
         await _release_paid_worldlabs_starts(run_id)
         _return_hold(run_id)
-        canvas_events.forget_run(run_id)  # its proposal mark too (review 2)
+        canvas_events.forget_run(run_id)  # its proposal mark too
         raise HTTPException(status_code=409, detail=_stopped_id_refusal(run_id)) from exc
     except ExecutionCancellationCapacityError as exc:
         if task is None:
@@ -15140,7 +15121,7 @@ async def execute(request: ExecuteRequest) -> dict:
             await asyncio.gather(task, return_exceptions=True)
         await _release_paid_worldlabs_starts(run_id)
         _return_hold(run_id)
-        canvas_events.forget_run(run_id)  # its proposal mark too (review 2)
+        canvas_events.forget_run(run_id)  # its proposal mark too
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except ValueError as exc:
         if task is None:
@@ -15150,7 +15131,7 @@ async def execute(request: ExecuteRequest) -> dict:
             await asyncio.gather(task, return_exceptions=True)
         await _release_paid_worldlabs_starts(run_id)
         _return_hold(run_id)
-        canvas_events.forget_run(run_id)  # its proposal mark too (review 2)
+        canvas_events.forget_run(run_id)  # its proposal mark too
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except Exception:
         if task is None:
@@ -15159,8 +15140,8 @@ async def execute(request: ExecuteRequest) -> dict:
             task.cancel()
             await asyncio.gather(task, return_exceptions=True)
         await _release_paid_worldlabs_starts(run_id)
-        _return_hold(run_id)  # it never had a turn (round 17, review 16 L5)
-        canvas_events.forget_run(run_id)  # its proposal mark too (review 2)
+        _return_hold(run_id)  # it never had a turn
+        canvas_events.forget_run(run_id)  # its proposal mark too
         raise
 
     synced = await _broadcast_admitted_run(run_id, placeholders_changed)
@@ -15179,7 +15160,7 @@ async def execute_node(request: ExecuteNodeRequest) -> dict:
     _assert_execution_admissible(run_id)
     if execution_runs.get(run_id) is not None:
         raise HTTPException(status_code=409, detail=f"run {run_id} already exists")
-    # This process saw the start begin (round 17, review 16 L1): a Stop that
+    # This process saw the start begin: a Stop that
     # finds no record of it may say it never started.
     execution_runs.note_start_begun(run_id)
     _note_run(run_id)
@@ -15254,7 +15235,7 @@ async def execute_node(request: ExecuteNodeRequest) -> dict:
         _claim_fresh_paid_worldlabs_starts(run_id=run_id, nodes=sub_nodes)
     except BaseException:
         _return_hold(run_id)
-        canvas_events.forget_run(run_id)  # its proposal mark too (review 2)
+        canvas_events.forget_run(run_id)  # its proposal mark too
         raise
 
     async def _run() -> None:
@@ -15299,36 +15280,36 @@ async def execute_node(request: ExecuteNodeRequest) -> dict:
         await asyncio.gather(task, return_exceptions=True)
         await _release_paid_worldlabs_starts(run_id)
         _return_hold(run_id)
-        canvas_events.forget_run(run_id)  # its proposal mark too (review 2)
+        canvas_events.forget_run(run_id)  # its proposal mark too
         raise HTTPException(status_code=409, detail=_stopped_id_refusal(run_id)) from exc
     except ExecutionCancellationCapacityError as exc:
         await asyncio.gather(task, return_exceptions=True)
         await _release_paid_worldlabs_starts(run_id)
         _return_hold(run_id)
-        canvas_events.forget_run(run_id)  # its proposal mark too (review 2)
+        canvas_events.forget_run(run_id)  # its proposal mark too
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except ValueError as exc:
         task.cancel()
         await asyncio.gather(task, return_exceptions=True)
         await _release_paid_worldlabs_starts(run_id)
         _return_hold(run_id)
-        canvas_events.forget_run(run_id)  # its proposal mark too (review 2)
+        canvas_events.forget_run(run_id)  # its proposal mark too
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except Exception:
         # The task never had a turn (nothing awaited since it was made): it
-        # never starts, so its hold goes back (round 17, review 16 L5).
+        # never starts, so its hold goes back.
         task.cancel()
         await asyncio.gather(task, return_exceptions=True)
         await _release_paid_worldlabs_starts(run_id)
         _return_hold(run_id)
-        canvas_events.forget_run(run_id)  # its proposal mark too (review 2)
+        canvas_events.forget_run(run_id)  # its proposal mark too
         raise
 
     synced = await _broadcast_admitted_run(run_id, placeholders_changed)
     return {"status": "started", "nodeCount": len(sub_nodes), "runId": run_id, **_skip_reply(skips), **synced}
 
 
-# -- who may stop a run (Justin, 2026-10-20, MCP parity Q61 a) --------------------
+# -- who may stop a run (Justin, 2026-10-20, MCP parity) --------------------
 # Agents stop only runs an agent started; the person stops anything. The rule
 # is services/execution_runs.py stop_refusal; here is who the caller is.
 
@@ -15381,7 +15362,7 @@ def _tombstoned_answer(run_id: str) -> dict[str, Any]:
     """A Stop's answer for a run id with no record here: cancelled, and the id
     can't start here from now on (``pendingAdmission``, which the canvas
     settles by). ``noRecord`` when this process never saw that run's start
-    begin (round 17 of PR #114, review 16 L1): it may have run before a
+    begin (PR #114): it may have run before a
     restart, been pruned, or never arrived, so nobody may say it never ran."""
     answer: dict[str, Any] = {"runId": run_id, "status": "cancelled", "pendingAdmission": True}
     if not execution_runs.start_seen(run_id):
@@ -15393,7 +15374,7 @@ def _tombstoned_answer(run_id: str) -> dict[str, Any]:
 async def get_execution_status(run_id: str) -> dict:
     record = execution_runs.get(run_id)
     if record is None:
-        # A Stop arrived before this run did (round 16 of PR #114, M2): the id
+        # A Stop arrived before this run did (PR #114): the id
         # is tombstoned and can't start here, so it reads as cancelled.
         if execution_runs.tombstoned(run_id):
             return _tombstoned_answer(run_id)
@@ -15530,12 +15511,12 @@ async def _merge_shot_result(
     after an upstream failure. Returns the merged shot output dict, or None.
 
     ``terminal_fields`` are what the Cinema panel reads the failure with, as
-    a node card does (error copy round 3c-2): ``errorCategory``,
+    a node card does (error copy): ``errorCategory``,
     ``errorFriendly``, ``errorPerson`` and ``errorRaw`` (_shot_failure_fields).
     ``error`` stays the text agents read, word for word.
 
     ``run_id``: the shot's run. Nothing is merged if the canvas it registered
-    on was cleared or replaced since (_run_canvas_moved, round 11).
+    on was cleared or replaced since (_run_canvas_moved).
     """
     new_output: dict[str, Any] | None = None
     if terminal_error is None and executed_node is not None:
@@ -15585,8 +15566,8 @@ async def _merge_shot_result(
             node["outputs"] = existing
 
         # The shot's result (or failure) landed on the node now: the stamp a
-        # tab's older handoff is judged against after a restart (PR #199
-        # round 23, review 21 reopen-tabs NIT-4), as every other run result.
+        # tab's older handoff is judged against after a restart (PR #199),
+        # as every other run result.
         if run_id:
             _stamp_result_landed(node_id, run_id, persist=False)
         cli_graph._maybe_persist()
@@ -15598,7 +15579,7 @@ class _ShotPassError(RuntimeError):
     """Expected per-shot pass failure already expressed as user-facing text.
 
     ``failure`` is the node run error behind it, as the card reads one:
-    category, friendly, person and the raw text (round 3c-2)."""
+    category, friendly, person and the raw text."""
 
     def __init__(self, message: str, failure: dict[str, Any] | None = None) -> None:
         super().__init__(message)
@@ -15622,7 +15603,7 @@ def _shot_failure_fields(exc: Exception) -> dict[str, Any]:
     run error (lib/nodeErrorCopy.ts): the handler's person line, the
     classifier's category and line, and the full raw text for Details. A
     shot that ended for a reason Nebula wrote itself carries none and shows
-    as it is; an unexpected exception reads GM's general line."""
+    as it is; an unexpected exception reads the design's general line."""
     if isinstance(exc, _ShotPassError):
         failure = exc.failure or {}
         fields = {"errorCategory": failure.get("category"), "errorFriendly": failure.get("friendly"),
@@ -15836,7 +15817,7 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
     _assert_execution_admissible(run_id)
     if execution_runs.get(run_id) is not None:
         raise HTTPException(status_code=409, detail=f"run {run_id} already exists")
-    # This process saw the start begin (round 17, review 16 L1): a Stop that
+    # This process saw the start begin: a Stop that
     # finds no record of it may say it never started.
     execution_runs.note_start_begun(run_id)
     _note_run(run_id)
@@ -15874,7 +15855,7 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
     if not sub_nodes:
         raise _node_gone(request.node_id, f"Node {request.node_id} not found in graph")
     _note_run_nodes(run_id, sub_nodes)
-    # A shot is the person's direct run of the scene (Q133, as /api/execute-node):
+    # A shot is the person's direct run of the scene (as /api/execute-node):
     # the placeholders feeding it run and turn normal, a paid one only with the
     # person's confirmation; an agent's shot skips other agents' placeholders.
     # Before anything is priced, so nothing is spent on a skipped one.
@@ -15906,7 +15887,7 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
     errors = validate_graph(sub_nodes, sub_edges, api_keys, name_of=_run_names(sub_nodes))
     if errors:
         await _announce_validation_errors(errors, run_id)
-        # With each error (error copy round 3e), so the shot panel can say
+        # With each error (error copy), so the shot panel can say
         # the scene's own line rather than a general one.
         return {**_validation_response(errors), "runId": run_id}
 
@@ -16029,7 +16010,7 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
                         run_id=run_id,
                     )
                 # The shot's merge is this run's own write-back into the
-                # scene's params: run output, not anyone's edit (review 17 L2).
+                # scene's params: run output, not anyone's edit.
                 await _broadcast_graph_sync(run_params=run_id)
             finally:
                 await _release_paid_worldlabs_starts(run_id)
@@ -16047,7 +16028,7 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
         _register_run(run_id, task, run_canvas)
         _watch_for_cross_process_stop(run_id, task)
         # Admitted: the placeholders it runs turn normal, in this step (no
-        # await since the last fence; round 21, the #114 merge).
+        # await since the last fence, PR #114).
         placeholders_changed = bool(_clear_pending(ready))
     except ExecutionCancelledBeforeStartError as exc:
         if task is None:
@@ -16081,7 +16062,7 @@ async def generate_cinema_shot(request: GenerateShotRequest) -> dict:
             task.cancel()
             await asyncio.gather(task, return_exceptions=True)
         await _release_paid_worldlabs_starts(run_id)
-        _return_hold(run_id)  # it never had a turn (round 17, review 16 L5)
+        _return_hold(run_id)  # it never had a turn
         raise
 
     synced = await _broadcast_admitted_run(run_id, placeholders_changed)
@@ -16123,7 +16104,7 @@ async def get_input_sizes(body: dict[str, Any]) -> dict:
     check agree; an outside URL or any other path is null, never fetched or
     opened. An inline data: image is measured as the run's checks measure it
     (its pixels are in the run's params), so the canvas prices it as the
-    confirmation does (review 5, L4)."""
+    confirmation does."""
     refs = body.get("refs") if isinstance(body, dict) else None
     if not isinstance(refs, list) or len(refs) > MAX_SIZE_REFS:
         raise HTTPException(status_code=400, detail=f"refs must be a list of at most {MAX_SIZE_REFS} {{ref, kind}}")
@@ -16266,7 +16247,7 @@ def _graph_edit_origin() -> dict[str, Any]:
     return origin
 
 
-# PR #205 review 8 (held undo): every graphSync carries ``syncSeq``, a number
+# Held undo (PR #205): every graphSync carries ``syncSeq``, a number
 # that grows with each sync, in the order each read the graph. Started at this
 # process's start in microseconds (BACKEND_BOOT_STARTED_AT), so a backend
 # started later numbers its syncs above an earlier one's. An answer to a
@@ -16337,16 +16318,16 @@ async def _broadcast_graph_sync(
     """Push the current CLI graph to all connected frontends via WebSocket.
 
     `proposals_kept` (a replacement only): a reopen of the project that was
-    already open and already the live canvas (the person's or an agent's
-    open of it; GM r29 of PR #199, 3). Its nodes keep their ids (only
-    tab-local nodes get new ones, past every id ever used), so nothing an
-    open proposal was made against changed: proposals, approved runs that
-    haven't started and the removal tags a delete's undo reopens them by
-    all stay (_proposals_after_reopen). The graphSync says so
-    (``proposalsKept``), and so does ``canvas.replaced``.
+    already open and already the live canvas (the person's or an agent's open
+    of it; design, PR #199). Its nodes keep their ids (only tab-local nodes
+    get new ones, past every id ever used), so nothing an open proposal was
+    made against changed: proposals, approved runs that haven't started and
+    the removal tags a delete's undo reopens them by all stay
+    (_proposals_after_reopen). The graphSync says so (``proposalsKept``), and
+    so does ``canvas.replaced``.
 
-    `renumbered` ({old: new}; a replacement only: an open that gave
-    tab-local node ids Nebula's, PR #199 round 17) rides on the graphSync as
+    `renumbered`
+    ({old: new}; a replacement only: an open that gave tab-local node ids Nebula's, PR #199) rides on the graphSync as
     ``renumbered``, so a tab showing those nodes adopts the new ids (its
     selection, open panels), and on the ``canvas.replaced`` event.
 
@@ -16358,11 +16339,11 @@ async def _broadcast_graph_sync(
     video-edit; a Cinema shot's merge into its scene; a World Labs recovery
     checkpoint or start ambiguity). It carries ``runParams`` and no
     ``edit``: the canvas treats those values as run output, not anyone's
-    edit (round 17 of PR #114, review 16 L3; review 17 L2).
+    edit (PR #114).
 
     `cleared` marks the sync of a Clear (DELETE /api/graph): node ids start
     again at n1 in the same project, so a canvas treats it as a replacement
-    for its runs (round 12 of PR #114) while keeping its own frontend-only
+    for its runs (PR #114) while keeping its own frontend-only
     work and the clear's undo step.
 
     `reason` (import, project-open, project-create) only matters when the
@@ -16385,7 +16366,7 @@ async def _broadcast_graph_sync(
     positions into the undo step that added those nodes.
     """
     if graph_replaced:
-        # The boot's renumbering is the canvas before this one's (NIT-3).
+        # The boot's renumbering is the canvas before this one's.
         _end_boot_replacement()
         # Node ids restart with another project; no open arrange can apply to
         # it. Node errors are kept per project (export points them at the one
@@ -16397,7 +16378,7 @@ async def _broadcast_graph_sync(
             # (import_graph moved the id epoch itself).
             node_errors.forget_canvas()
         # Journaled here, in the step that replaced the canvas (a switch's
-        # commit, an import's), before any await (round 8 of PR #114): the
+        # commit, an import's), before any await (PR #114): the
         # event names the project it opened or loaded into, and lands before
         # a switch that follows. Late, it named whatever project was open
         # then, and the --channel listener dropped that project's pins.
@@ -16413,7 +16394,7 @@ async def _broadcast_graph_sync(
                 summary += f" (was “{project_switch['previousProjectName']}”)"
         if dropped_ports:
             # Shot outputs no shot of the saved scene owns, and their wires,
-            # left out (PR #198 review 5, L3).
+            # left out (PR #198).
             data["droppedPorts"] = [dict(record) for record in dropped_ports[:20]]
             summary += f"; left out {len(dropped_ports)} shot output{'' if len(dropped_ports) == 1 else 's'} no shot owns"
         if renumbered and safe_reason != "import":
@@ -16448,8 +16429,8 @@ async def _broadcast_graph_sync(
             # project's: none of them still fit.
             closed = canvas_proposals.invalidate_all("the canvas was replaced")
         _journal_closed_proposals(closed)
-    # One sync at a time, from the graph read to the last socket (PR #205
-    # review 8, held undo): each socket gets them in syncSeq order.
+    # One sync at a time, from the graph read to the last socket (PR
+    # #205, held undo): each socket gets them in syncSeq order.
     async with _graph_sync_order():
         export = await export_graph_for_frontend()
         # Numbered as read, before any await (_next_graph_sync_seq).
@@ -16476,7 +16457,7 @@ async def _broadcast_graph_sync(
                 **({"runParams": run_params} if run_params and not graph_replaced else {}),
                 **({"edit": _graph_edit_origin()}
                    if edit and (not graph_replaced or reason == "import") else {})}
-        # The records' places go to the person's canvas only (PR #199 round 23):
+        # The records' places go to the person's canvas only (PR #199):
         # every other socket gets the sync as it always was. With no stamped
         # record there is nothing to add, and the sync goes out as it always did
         # (the tab keeps the places it has when a frame carries none).
@@ -16490,7 +16471,7 @@ async def _broadcast_graph_sync(
     global _graph_sync_owed
     _graph_sync_owed = False
     # Every node move goes out in a sync, whichever route made it: the one
-    # place session cursors are carried (#219 review 1, MEDIUM-1).
+    # place session cursors are carried (PR #219).
     await _carry_cursors()
     if not graph_replaced:
         await _follow_renamed_proposals()
@@ -16516,7 +16497,7 @@ async def _broadcast_graph_sync(
 
 
 def _proposals_after_reopen() -> list[Proposal]:
-    """A reopen of the open project (GM r29 of PR #199, 3), right after its
+    """A reopen of the open project (design, PR #199), right after its
     commit: its open proposals stay open with the same ids, as after any
     edit. Their targets keep their ids; a value the save before the open (or
     the stored copy the open loaded) changed is checked at Accept, exactly
@@ -16652,7 +16633,7 @@ async def _emit_and_sync(event: ExecutionEvent) -> None:
         if not _run_canvas_moved(run_id, "start-ambiguity event"):
             await manager.broadcast(event)
         if run_id is not None:
-            # The run's own write-back (review 17 L2), as below.
+            # The run's own write-back, as below.
             await _broadcast_graph_sync(run_params=run_id)
         return
 
@@ -16672,14 +16653,14 @@ async def _emit_and_sync(event: ExecutionEvent) -> None:
                                actor=canvas_events.run_actor(event.run_id or execution_run_id.get()))
         # The checkpoint above is kept (run and node); the canvas puts the
         # event on its node by id, so not from a run whose canvas was cleared
-        # or replaced since (round 11; unreachable while Clear, import and a
-        # switch wait for runs).
+        # or replaced since (unreachable while Clear, import and a switch
+        # wait for runs).
         if not _run_canvas_moved(event.run_id or execution_run_id.get(), "recovery event"):
             await manager.broadcast(event)
         if changed or safety_hold_changed:
             # The checkpoint is the run's own write-back into the node's
             # params (resume_operation_id, existing_world_id): run output,
-            # not anyone's edit (review 17 L2).
+            # not anyone's edit.
             await _broadcast_graph_sync(run_params=event.run_id or execution_run_id.get())
         return
 
@@ -16689,7 +16670,7 @@ async def _emit_and_sync(event: ExecutionEvent) -> None:
     if record is not None and record.status in {"cancelling", "cancelled"}:
         return
     # A node's event from a run whose canvas was cleared or replaced since
-    # names a node id that is now another node (round 11): it writes nothing
+    # names a node id that is now another node: it writes nothing
     # there (outputs, error, the canvas's card, the journal). The run's own
     # record and its report (get_run) still get it.
     moved = isinstance(getattr(event, "node_id", None), str) and _run_canvas_moved(run_id, "node events")
@@ -16717,7 +16698,7 @@ async def _emit_and_sync(event: ExecutionEvent) -> None:
                 for snapshot in event.batch_outputs
             ]
         event = event.model_copy(update=updates)
-    # A scene the engine is done with is free again (review 3, L2).
+    # A scene the engine is done with is free again.
     _scene_event_done(event, run_id)
     # What get_run reports for the run (services/run_reports.py).
     _run_reports().observe(event, run_id)
@@ -16728,21 +16709,21 @@ async def _emit_and_sync(event: ExecutionEvent) -> None:
     await _observe_agent_run(event, run_id)
 
 
-# ---------- Agents' runs: the mark on the node, the done card (Q125 item 3) ----------
+# ---------- Agents' runs: the mark on the node, the done card ----------
 #
-# Justin, 2026-10-24, merge-oks Q125, item 3: "The agent's mark stays on its
+# Justin, 2026-10-24: "The agent's mark stays on its
 # node with a status line ... A finished run posts a card with a thumbnail
 # and Show on canvas, without the agent having to remember to." Runs an
 # identified agent starts, on any route, are kept in agent_runs while they
 # go (services/run_done_cards.py); the person's runs get neither.
 
-# The params that pick the model a node runs (review 8, L-a), the same on the
+# The params that pick the model a node runs, the same on the
 # canvas (lib/placeholderRunConfirm.ts MODEL_SELECT_KEYS / MODEL_TEXT_KEYS):
 # a select labelled Model names its chosen option; a free-text one names the
 # model id typed or picked, as the node card shows it.
 _MODEL_SELECT_KEYS = ("model", "model_id", "ai_model")
 _MODEL_TEXT_KEYS = ("model", "model_id", "endpoint_id")
-# Params by those names that pick no model the node runs (review 9, nit c):
+# Params by those names that pick no model the node runs:
 # Krea Style Search's free-text ``model`` is a search filter. The canvas
 # skips the same (lib/placeholderRunConfirm.ts NOT_A_MODEL).
 _NOT_A_MODEL: dict[str, frozenset[str]] = {"krea-style-search": frozenset({"model"})}
@@ -16752,10 +16733,10 @@ def _run_model_name(node: GraphNode) -> str:
     """The model a running node shows on its mark, in the provider's own
     spelling ("FLUX.2 [pro]"): the label of the node's chosen model option,
     the model id a free-text model param names (a universal node's model,
-    fal's endpoint, Krea Agent's model), else the node's name, quoted (GM -
-    Design, 2026-10-25: "A node name in the run pill is quoted: Running “Text
-    Input” · 0:00 ... Provider model names stay unquoted"). The person's
-    paid-placeholder dialog names a row's model the same way."""
+    fal's endpoint, Krea Agent's model), else the node's name, quoted
+    (design, 2026-10-25: "A node name in the run pill is quoted: Running
+    “Text Input” · 0:00 ... Provider model names stay unquoted"). The
+    person's paid-placeholder dialog names a row's model the same way."""
     definition = node_registry.get(node.definition_id) or {}
     params = node.params or {}
     skipped = _NOT_A_MODEL.get(node.definition_id, frozenset())
@@ -16782,9 +16763,9 @@ def _run_model_name(node: GraphNode) -> str:
 
 
 def _agent_run_plan(nodes: list[GraphNode], edges: list[GraphEdge]) -> tuple[Any, list[str], dict[str, str]] | None:
-    """What keeping this run needs, read before anything changes (round 22,
-    review 21 L-e): the identified agent that started it, its nodes in run
-    order and the model each shows. None when no identified agent asked."""
+    """What keeping this run needs, read before anything changes: the
+    identified agent that started it, its nodes in run order and the model
+    each shows. None when no identified agent asked."""
     identity = identify_agent(current_request_headers())
     if identity is None or not nodes:
         return None
@@ -16818,7 +16799,7 @@ async def _observe_agent_run(event: ExecutionEvent, run_id: str | None) -> None:
 
 async def _finish_agent_run(run_id: str, *, cancelled: bool = False, run_row_follows: bool = False) -> None:
     """The run ended: its marks go, and unless it was stopped, the agent's
-    done card goes on the run's project's Updates (GM - Design, 2026-10-25).
+    done card goes on the run's project's Updates (design, 2026-10-25).
     One per run; never fails the run.
 
     ``run_row_follows``: the run's own Agent log row ("Ran 4 nodes in 12 s.
@@ -16843,7 +16824,7 @@ async def _finish_agent_run(run_id: str, *, cancelled: bool = False, run_row_fol
 async def _post_run_done(run: Any, succeeded: list[str], failed: list[str], *, log_echo: bool = True) -> None:
     labels = {node_id: _node_label(node_id) for node_id in run.planned}
     # The card sits under the agent's header in Updates, and the Agent log row has its own: the line
-    # doesn't repeat the name (design r211).
+    # doesn't repeat the name (design).
     text, outcome = done_text(run.agent.name, labels, run.planned, succeeded=succeeded, failed=failed,
                               stopped=run.stopped, named=False)
     last = run.planned[-1]
@@ -16865,12 +16846,12 @@ async def _post_run_done(run: Any, succeeded: list[str], failed: list[str], *, l
                                                     unread=result["unread"], removed=result["removed"]))
         _journal_note(note, "canvas", actor=actor_for_identity(run.agent))
     if outcome != "success" and log_echo:
-        # GM: "A failed run gets a card, plus the Agent log line." Not when the
+        # Design: "A failed run gets a card, plus the Agent log line." Not when the
         # run has its own row (a CLI run): that row names the failed nodes.
         try:
             # A stop for a proposal: the Agent log keeps the whole line, the
-            # bubble its whole sentences that fit, never a cut word (GM, PR
-            # #203 r39 item 5; review 19, LOW-2).
+            # bubble its whole sentences that fit, never a cut word (design,
+            # PR #203).
             whole = {"log": text, "log_whole": True} if run.stopped else {"log": text}
             await manager.broadcast_raw(_point(run.agent, target=None, action="click", say=_whole_sentences(text),
                                                **whole))
@@ -16886,7 +16867,7 @@ def _sync_provider_recovery_to_cli_graph(
     durability_warning: str | None = None
     safety_hold_changed = False
     if run_id is not None:
-        # The stamp (PR #199 round 23): the project the run registered on,
+        # The stamp (PR #199): the project the run registered on,
         # and the node's type from the live node while that canvas is open.
         run_canvas = getattr(execution_runs.get(run_id), "canvas", None)
         stamp_project = run_canvas[0] if isinstance(run_canvas, tuple) and run_canvas else None
@@ -16935,7 +16916,7 @@ def _sync_provider_recovery_to_cli_graph(
     if current is None:
         return False, durability_warning, safety_hold_changed
     # The checkpoint above is kept by run and node (the paid-state record);
-    # the node's params only on the canvas the run started on (round 11).
+    # the node's params only on the canvas the run started on.
     if _run_canvas_moved(run_id, "recovery params"):
         return False, durability_warning, safety_hold_changed
 
@@ -17207,14 +17188,13 @@ def _coerce_params(definition_id: str, params: dict[str, Any], *, strict_scenes:
     """Coerce param values to the types declared in the node definition.
 
     A cinema-scene's ``scene`` is filled in here too (services/
-    cinema_scene_spec.py, PR #198 review 2 M2): every write path coerces,
-    so a scene without ``base`` never reaches the graph. ``strict_scenes``
-    only for an agent-authored write (_scene_writes_strict): what can't be
-    filled is refused with the field named (400). Every other path (a
-    saved project, an import, the person's own edits and undo) passes
-    False, and the scene is converted instead, never refused (review 3, H1).
-    ``reserved_shot_ids``: ids a converted shot must not be given (the
-    ``shot_<id>`` ports the node's outputs still hold; review 4, L1).
+    cinema_scene_spec.py, PR #198): every write path coerces, so a scene without
+    ``base`` never reaches the graph. ``strict_scenes`` only for an
+    agent-authored write (_scene_writes_strict): what can't be filled is refused
+    with the field named (400). Every other path (a saved project, an import,
+    the person's own edits and undo) passes False, and the scene is converted
+    instead, never refused. ``reserved_shot_ids``: ids a converted shot must not
+    be given (the ``shot_<id>`` ports the node's outputs still hold).
 
     The CLI sends every `--param k=v` as a string, and some providers (Meshy,
     for one) reject string values where booleans or ints are expected. Normalise
@@ -17423,7 +17403,7 @@ async def create_graph_node(body: dict[str, Any]) -> dict:
             source="create",
         )
     # Journaled before any await, so it names the project the node went to
-    # (round 8 of PR #114); the reply is the node as it was made.
+    # (PR #114); the reply is the node as it was made.
     _journal_node_added(short_id)
     created = copy.deepcopy(cli_graph.nodes[short_id])
     await _broadcast_graph_sync(edit=True)
@@ -17436,13 +17416,13 @@ async def create_graph_node(body: dict[str, Any]) -> dict:
 @graph_write
 async def connect_graph_nodes(body: dict[str, Any]) -> dict:
     _check_workspace_revision()
-    # Fix round 9, L-3: a wire the canvas puts back (Keep mine's shot) into
+    # A wire the canvas puts back (Keep mine's shot) into
     # an input that takes one connection says so: when anything else is
     # connected there now, nothing is added (409 ``input_taken``), so a
     # put-back never adds a second connection to a single input or replaces
     # one someone made since.
     target_node = cli_graph.nodes.get(body.get("target")) if isinstance(body.get("target"), str) else None
-    # Fix round 10, N-1: only an input that takes one connection is "taken";
+    # Only an input that takes one connection is "taken";
     # one that takes several is held to its maxConnections as any connect is.
     if body.get("onlyIfFree") is True and target_node is not None and input_takes_one(
             str(target_node.get("definitionId") or ""), body.get("targetHandle"), target_node.get("params"),
@@ -17474,9 +17454,9 @@ async def connect_graph_nodes(body: dict[str, Any]) -> dict:
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    # The person wiring a placeholder edits it: it turns normal (Q125 item 3).
+    # The person wiring a placeholder edits it: it turns normal.
     _person_touched([edge["source"], edge["target"]])
-    _journal_edge("edge.added", edge)  # before any await (round 8 of PR #114)
+    _journal_edge("edge.added", edge)  # before any await (PR #114)
     await _broadcast_graph_sync(edit=True)
     await _show_agent(
         {"nodeId": edge["target"], "handle": edge["targetHandle"]},
@@ -17597,7 +17577,7 @@ async def create_node_and_connect(body: dict[str, Any]) -> dict:
     response = {**copy.deepcopy(candidate.nodes[short_id]), "connected": edge is not None, "edge": rf_edge}
     if edge is not None:
         _person_touched([src, dst])
-    # Before any await (round 8 of PR #114).
+    # Before any await (PR #114).
     _journal_node_added(short_id)
     if edge is not None:
         _journal_edge("edge.added", edge)
@@ -17751,7 +17731,7 @@ async def send_cinema_shot_to_motion(body: dict[str, Any]) -> dict:
 @app.get("/api/graph")
 async def get_graph() -> dict:
     state = cli_graph.get_state()
-    # Fix round 8, H2: each Cinema scene's key, which a write sends back as
+    # Each Cinema scene's key, which a write sends back as
     # ifSceneKey; an agent's read is noted (services/scene_keys.py).
     keys = scene_keys.keys_of(cli_graph.nodes)
     scope = _scene_scope()
@@ -17772,10 +17752,10 @@ _SHOT_FIELD_DEFAULTS: dict[str, Any] = {"prompt": "", "refImageUrls": [], "overr
 
 
 def _authoring_value(value: Any) -> Any:
-    """A value as the fingerprint compares it (review 10 LOW-2, GM r12 answer
-    4): an integral float is that int, so 1.0 matches 1 exactly (no epsilon,
-    and 1.5 never matches 1); a null, {} or [] inside an object is the same as
-    the key missing; key order never counts. A bool stays a bool (true is not 1)."""
+    """A value as the fingerprint compares it (design): an integral float is that
+    int, so 1.0 matches 1 exactly (no epsilon, and 1.5 never matches 1); a null, {}
+    or [] inside an object is the same as the key missing; key order never counts. A
+    bool stays a bool (true is not 1)."""
     if isinstance(value, bool) or value is None:
         return value
     if isinstance(value, float) and value.is_integer():
@@ -17796,9 +17776,9 @@ def _authoring_value(value: Any) -> Any:
 def _shot_authoring(shot: dict[str, Any]) -> str:
     """A shot's prompt and settings (everything but its run media), as one
     comparable string: a returning shot gets its media back only when this
-    matches what was taken out (PR #200 fix round 10, review 9 LOW-1, GM r16
-    answer 4). Compared by value (fix round 11): see _authoring_value, and a
-    top-level field at its default (_SHOT_FIELD_DEFAULTS) is the same as missing."""
+    matches what was taken out (PR #200, design). Compared by value: see
+    _authoring_value, and a top-level field at its default (_SHOT_FIELD_DEFAULTS) is
+    the same as missing."""
     fields = {key: value for key, value in shot.items() if key not in _SHOT_MEDIA_FIELDS}
     canon = _authoring_value(fields)
     for key, default in _SHOT_FIELD_DEFAULTS.items():
@@ -17827,14 +17807,14 @@ def _author_cinema_scene(graph: CLIGraph, node_id: str, node: dict[str, Any], pa
     (the person's restore, or an inverse the server kept). A shot the scene
     doesn't have now comes back with the media it carries, and its port, so
     undoing a delete (an accepted proposal's, say) never drops an image a run
-    made (PR #198 review 1, M1). Anyone else's returning shot starts idle.
-    Review 2, M1: only a finished shot (``done`` or ``error``) keeps what it
+    made (PR #198). Anyone else's returning shot starts idle.
+    Only a finished shot (``done`` or ``error``) keeps what it
     carries; one the undo caught rendering comes back idle, never stuck on
     "Generating…". Its ``shot_<id>`` port is never overwritten: a port still
     there holds a newer result (a run that landed after the shot was removed),
     and the shot takes that image as its own.
 
-    A shot that is rendering can't be removed (GM, PR #198 r2: "block it"):
+    A shot that is rendering can't be removed (design, PR #198: "block it"):
     the write is refused (409) so nobody's edit orphans a paid run. ``action``:
     the undo or redo this write is, for the person's line."""
     if node.get("definitionId") != "cinema-scene" or "scene" not in params:
@@ -17862,8 +17842,8 @@ def _author_cinema_scene(graph: CLIGraph, node_id: str, node: dict[str, Any], pa
     incoming_ids = {shot["id"] for shot in authored_scene["shots"]}
     outputs_before = node.get("outputs") or {}
     # A shot this write takes out keeps its run media on the server, so the
-    # Undo that brings it back brings its images too (fix round 9 of PR #200:
-    # a shot's × is neutral because Undo puts the shot back whole, GM r13).
+    # Undo that brings it back brings its images too (PR #200: a shot's × is
+    # neutral because Undo puts the shot back whole, design).
     for shot_id, canonical in current_shots.items():
         if shot_id in incoming_ids:
             continue
@@ -18009,13 +17989,13 @@ async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]
         params = {} if raw_params is None else raw_params
         if not isinstance(params, dict):
             raise HTTPException(status_code=400, detail="params must be an object")
-        # Fix round 8, H2: a scene write built on a scene that changed since
+        # A scene write built on a scene that changed since
         # is refused (services/scene_keys.py): the writer's own ifSceneKey,
         # else (an agent) the scene it last read.
         scene_key_before = scene_keys.node_scene_key(node)
         writing_agent = _reader_agent()
         # A write whose scene is the one Nebula has changes nothing there,
-        # so it is never refused (fix round 9, L-2).
+        # so it is never refused.
         if scene_key_before is not None and "scene" in params and scene_keys.scene_key(params.get("scene")) != scene_key_before:
             if_key = body.get("ifSceneKey")
             expected = if_key if isinstance(if_key, str) and if_key else scene_keys.last_read(_scene_scope(), _writer_chain(), node_id)
@@ -18032,7 +18012,7 @@ async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]
         _check_asset_refs(str(node.get("definitionId") or ""), params, node_id, before=params_before)
         _refuse_agent_billing_change([(node_id, str(node.get("definitionId") or ""), params_before,
                                             {**params_before, **params})])
-        # GM r46 Q2 on #222: a file param set without its preview fields
+        # Design (PR #222): a file param set without its preview fields
         # (an agent's `nebula set`, a script) takes the new file's preview
         # and name, or clears them (services/file_param_preview.py).
         params, dropped = _follow_file_params(str(node.get("definitionId") or ""), params_before, params)
@@ -18072,10 +18052,10 @@ async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]
                     raise _scene_write_gone(node_id)
             _preview_follows_file(cli_graph, node_id, params_before, params)
     # Journaled before any await, so it names the project the change was made
-    # in (round 8 of PR #114); the reply is the node as the change left it.
+    # in (PR #114); the reply is the node as the change left it.
     changes = param_changes(params_before, (cli_graph.nodes.get(node_id) or {}).get("params") or {})
     if changes:
-        # The person changing a placeholder's settings edits it: it turns normal (Q125 item 3).
+        # The person changing a placeholder's settings edits it: it turns normal.
         _person_touched([node_id])
     if changes:
         _journal(
@@ -18087,22 +18067,22 @@ async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]
     updated = copy.deepcopy(cli_graph.nodes[node_id])
     scene_key_after = scene_keys.node_scene_key(updated)
     if scene_key_after is not None:
-        # The key the writer builds its next save on (H2), and who changed it.
+        # The key the writer builds its next save on, and who changed it.
         updated["sceneKey"] = scene_key_after
-        # Fix round 9, H-1: its revision, above every scene before it.
+        # Its revision, above every scene before it.
         updated["sceneRev"] = scene_keys.revision(_scene_scope(), node_id, scene_key_after)
         scene_keys.note_write(_scene_scope(), node_id, _canvas_change_actor() if scene_key_after != scene_key_before else None,
                               scene_key_after, writing_agent)
     await _broadcast_graph_sync(edit=True)
-    # What changed, as the card names it (GM - Design, round 16 of PR #195):
+    # What changed, as the card names it (design, PR #195):
     # never the raw keys. The fields the agent sent that changed, when any
     # did, not ones a default filled in after.
     sent = [str(key) for key in params]
     keys = [key for key in sent if key in set((changes or {}).get("keys") or [])] or sent
-    # The bubble's words are worked out inside _show_agent's guard (PR #198
-    # review 1 N2): a failure there never turns this saved PUT into a 500.
-    # An empty change says nothing and logs nothing: the cursor only moves
-    # there (PR #198 review 2, N4: "Updated “<node>”" is gone for good).
+    # The bubble's words are worked out inside _show_agent's guard (PR
+    # #198): a failure there never turns this saved PUT into a 500. An
+    # empty change says nothing and logs nothing: the cursor only moves
+    # there (PR #198: "Updated “<node>”" is gone for good).
     await _show_agent({"nodeId": node_id}, shows="type" if keys else None,
                       words=(lambda: _set_params_bubble(node_id, keys)) if keys else None,
                       did=_did("Changed", node_id) if keys else None, nodes=[node_id] if keys else None)
@@ -18110,7 +18090,7 @@ async def update_graph_node(request: Request, node_id: str, body: dict[str, Any]
 
 
 def _names_and(names: Sequence[str]) -> str:
-    """“A”, “A” and “B”, “A”, “B” and “C” (GM r83: no serial comma)."""
+    """“A”, “A” and “B”, “A”, “B” and “C” (design: no serial comma)."""
     names = list(names)
     return names[0] if len(names) == 1 else f"{', '.join(names[:-1])} and {names[-1]}"
 
@@ -18120,7 +18100,7 @@ def _plain_edit_line(*, connected: Sequence[tuple[tuple[str, str], tuple[str, st
                      removed: Sequence[tuple[str, str]], readied: Sequence[tuple[str, str]]) -> tuple[str, list[str]]:
     """The Agent log row (and the nodes it touched, for the zoom manifest) of
     an apply that adds, changes, renames and moves nothing: it only connects,
-    disconnects, removes or makes placeholders ready (design r211 item 4).
+    disconnects, removes or makes placeholders ready (design).
     Nodes are (id, name), wires ((id, name), (id, name)) from the source to
     the target. One kind says its own words ("Connected “A” to “B”",
     "Disconnected “A” from “B”", "Removed “A” and “B”", "Removed 4 nodes",
@@ -18160,27 +18140,26 @@ def _plain_edit_line(*, connected: Sequence[tuple[tuple[str, str], tuple[str, st
 def _edit_log_line(verb: str, node_id: str, keys: Sequence[str],
                    others: Sequence[tuple[str, str]] = (), renamed_from: str | None = None) -> str:
     """An edit_canvas with no note, as the Agent log and the Message box's
-    working line word it (GM r83.1; never the bubble's terse "changed 1",
-    never an "and N more" hybrid). ``others`` are the edit's other nodes, as
-    (verb, name). One node names its settings: "Changed “Prompt” on “Hero
-    shot”", "Changed “Prompt” and “Seed” on “Hero shot”", "Changed
-    “Prompt”, “Seed” and “Size” on “Hero shot”", from 4 "Changed 4 settings
-    on “Hero shot”"; else the verb and the node ("Moved “Hero shot”").
-    Several nodes name the nodes and drop the settings: "Changed “Hero
-    shot” and “Sky”", "Changed “Hero shot”, “Sky” and “Prompt”", from 4
-    "Changed 4 nodes". Their verb is the one they all share, else
-    "Changed". Nodes with the same name are counted ("Added 2 “Combine Text”
-    nodes"), the names rule of node_names.node_name_list (design r211). One
-    rename says from what: "Renamed “Combine Text” to “Prefix”" (``renamed_from``
-    is the old name); two or more renames are a count, "Renamed 2 nodes"
-    (design r212). A mix says "Changed" only when the verbs differ: nodes
-    that were only added say "Added …", only removed "Removed …"."""
+    working line word it (design; never the bubble's terse "changed 1", never an
+    "and N more" hybrid). ``others`` are the edit's other nodes, as (verb, name).
+    One node names its settings: "Changed “Prompt” on “Hero shot”", "Changed
+    “Prompt” and “Seed” on “Hero shot”", "Changed “Prompt”, “Seed” and “Size” on
+    “Hero shot”", from 4 "Changed 4 settings on “Hero shot”"; else the verb and
+    the node ("Moved “Hero shot”"). Several nodes name the nodes and drop the
+    settings: "Changed “Hero shot” and “Sky”", "Changed “Hero shot”, “Sky” and
+    “Prompt”", from 4 "Changed 4 nodes". Their verb is the one they all share,
+    else "Changed". Nodes with the same name are counted ("Added 2 “Combine Text”
+    nodes"), the names rule of node_names.node_name_list (design). One rename
+    says from what: "Renamed “Combine Text” to “Prefix”" (``renamed_from`` is the
+    old name); two or more renames are a count, "Renamed 2 nodes" (design). A mix
+    says "Changed" only when the verbs differ: nodes that were only added say
+    "Added …", only removed "Removed …"."""
     node = _quoted(_node_label(node_id))
     if others:
         verbs = {verb, *(other_verb for other_verb, _ in others)}
         word = verb if len(verbs) == 1 else "Changed"
         if word == "Renamed":
-            # Two or more renames count; one names both ends (design r212 item 2).
+            # Two or more renames count; one names both ends (design).
             return f"Renamed {len(others) + 1} nodes"
         return f"{word} {node_names.node_name_list([_node_label(node_id), *(name for _, name in others)])}"
     if verb == "Renamed" and renamed_from and renamed_from != _node_label(node_id):
@@ -18202,7 +18181,7 @@ def _set_params_bubble(node_id: str, keys: Iterable[str]) -> tuple[str, str]:
     OpenRouter's, Nous's extra params: no Inspector control shows them) is
     never named by its key; when the change is only those, the bubble says
     nothing and the log counts them on the node: "Changed a setting on
-    “<node>”", "Changed 3 settings on “<node>”" (GM, PR #198 r1 item 7)."""
+    “<node>”", "Changed 3 settings on “<node>”" (design, PR #198)."""
     keys = [str(key) for key in keys]
     node = cli_graph.nodes.get(node_id) or {}
     definition_id = str(node.get("definitionId") or "")
@@ -18227,9 +18206,9 @@ def _card_label(definition: Mapping[str, Any] | None, node: Mapping[str, Any] | 
     Inspector draws from), else a configured model's own field (a universal
     node's ``dynamicParams``), else for a Replicate node a setting its picker
     read, by its key in sentence case as the Inspector shows it
-    (universal_ports.setting_label; GM, PR #198 r1 item 7: "Set “Guidance
-    scale”"). None for a field the card never shows (a hidden one, or one no
-    definition names)."""
+    (universal_ports.setting_label; design, PR #198: "Set “Guidance scale”").
+    None for a field the card never shows (a hidden one, or one no definition
+    names)."""
     for param in [*node_route.all_param_definitions(definition or {}),
                   *((node or {}).get("dynamicParams") or [])]:
         if not isinstance(param, Mapping) or param.get("key") != key:
@@ -18242,18 +18221,17 @@ def _card_label(definition: Mapping[str, Any] | None, node: Mapping[str, Any] | 
 
 
 def _set_words(node_id: str, keys: list[str]) -> tuple[str, str]:
-    """The cursor's words for an agent setting fields (GM - Design, round 16,
-    verbatim): the card's labels in curly quotes, "Set “Aspect ratio”", "Set
-    “Aspect ratio” and “Seed”"; three or more "Changed 3 settings" (GM,
-    round 18: "Changed N settings" (was "Set N settings")). A field
-    with no card label is left out of the list and the count; with none
-    labelled the bubble says nothing ("") and the cursor still moves. The
-    Agent log keeps the change: it names an unlabelled field by its key,
-    labelled fields first in the card's order, then the raw keys (GM, round
-    17: "Set “Aspect ratio”, “Seed” and seed_mode"; four names, then "and N
-    more"). The card's order is its definition's fields, then a configured
-    model's own (``dynamicParams``, review 17: a universal node's fields were
-    listed in key order). Returns (say, log)."""
+    """The cursor's words for an agent setting fields (design, verbatim): the
+    card's labels in curly quotes, "Set “Aspect ratio”", "Set “Aspect ratio”
+    and “Seed”"; three or more "Changed 3 settings" (design, "Changed N settings"
+    (was "Set N settings")). A field with no card label is left out of the
+    list and the count; with none labelled the bubble says nothing ("") and
+    the cursor still moves. The Agent log keeps the change: it names an
+    unlabelled field by its key, labelled fields first in the card's order,
+    then the raw keys (design: "Set “Aspect ratio”, “Seed” and seed_mode";
+    four names, then "and N more"). The card's order is its definition's
+    fields, then a configured model's own (``dynamicParams``; universal
+    nodes' fields used to be listed in key order). Returns (say, log)."""
     node = cli_graph.nodes.get(node_id) or {}
     definition = node_registry.get(str(node.get("definitionId") or ""))
     order: dict[str, int] = {}
@@ -18270,9 +18248,9 @@ def _set_words(node_id: str, keys: list[str]) -> tuple[str, str]:
 
 
 def _set_list(items: list[str], cap: int | None = None) -> str:
-    """"“A”", "“A” and “B”", three or more "3 settings" (GM, round 16; the
-    bubble says "Changed N settings" for those itself, round 18). With a
-    ``cap`` (the Agent log), up to that many named: "A, B, C and D", then "and N more"."""
+    """"“A”", "“A” and “B”", three or more "3 settings" (design; the bubble says "Changed
+    N settings" for those itself). With a ``cap`` (the Agent log), up to that many named:
+    "A, B, C and D", then "and N more"."""
     if cap is None:
         return items[0] if len(items) == 1 else " and ".join(items) if len(items) == 2 else f"{len(items)} settings"
     if len(items) > cap:
@@ -18293,10 +18271,10 @@ def _universal_request(body: Any, definition_id: str | None = None) -> tuple[str
     return definition_id, model.strip()
 
 
-# Review 12, L-4: the canvas's model picker says "Couldn't load the model
+# The canvas's model picker says "Couldn't load the model
 # settings for “X”." only when reading the provider's settings is what failed
-# (GM - Design, round 13); this header marks that answer (CORS exposes it).
-# Review 13, L-5: a missing key is marked as one ("missing-key": the canvas
+# (design); this header marks that answer (CORS exposes it).
+# A missing key is marked as one ("missing-key": the canvas
 # names the key to add); a malformed model id carries no header.
 MODEL_SETTINGS_FAILURE_HEADER = "X-Nebula-Failure"
 
@@ -18375,9 +18353,9 @@ async def configure_universal_node(node_id: str, body: dict[str, Any]) -> dict[s
         candidate.set_params(node_id, configured.params)
         _commit_graph_candidate_with_recoveries(candidate, [candidate.nodes[node_id]], source="update")
     # The person picking a placeholder's model edits it, even to the same
-    # model: it turns normal (Q125 item 3, GM: "on any edit by the person").
+    # model: it turns normal (design: "on any edit by the person").
     # Before the sync, so the canvas gets the node without the flag; and
-    # before any await (round 8 of PR #114).
+    # before any await (PR #114).
     _person_touched([node_id])
     changes = param_changes(params_before, (cli_graph.nodes.get(node_id) or {}).get("params") or {})
     if changes:
@@ -18421,10 +18399,10 @@ async def rename_graph_node(node_id: str, body: dict[str, Any]) -> dict:
     cli_graph.set_label(node_id, label)
     current = _node_label(node_id)
     if current != previous:
-        # The person renaming a placeholder edits it: it turns normal (Q125 item 3).
+        # The person renaming a placeholder edits it: it turns normal.
         _person_touched([node_id])
     if current != previous:
-        _journal(  # before any await (round 8 of PR #114)
+        _journal(  # before any await (PR #114)
             "node.renamed",
             node_id=node_id,
             data={"from": previous, "to": current},
@@ -18433,7 +18411,7 @@ async def rename_graph_node(node_id: str, body: dict[str, Any]) -> dict:
     await _broadcast_graph_sync(edit=True)
     if current != previous:
         # An agent's rename is an action like any edit (the Agents panel's
-        # line, Q125 item 2); a no-op for the person's own.
+        # line); a no-op for the person's own.
         await _show_agent({"nodeId": node_id}, say=f"Renamed {_quoted(previous)} to {_quoted(current)}",
                           did=_did("Renamed", node_id), nodes=[node_id])
     return {"id": node_id, "label": current}
@@ -18508,13 +18486,13 @@ async def update_graph_layout(body: dict[str, Any]) -> dict:
         raise HTTPException(status_code=404, detail=str(exc))
     if arrange is None:
         canvas_arrange.forget_nodes(normalized)
-        # The person moving a placeholder edits it: it turns normal (Q125
-        # item 3). Not a write that leaves it where it was drawn, nor the
-        # canvas finishing an agent's arrange.
+        # The person moving a placeholder edits it: it turns normal. Not
+        # a write that leaves it where it was drawn, nor the canvas
+        # finishing an agent's arrange.
         _person_touched([node_id for node_id, position in normalized.items()
                          if _moved_far_enough(previous.get(node_id), position)])
     # This route is the authoritative move signal (drag end, auto-layout,
-    # paste). Journaled before any await (round 8 of PR #114).
+    # paste). Journaled before any await (PR #114).
     moved = [
         node_id
         for node_id, position in normalized.items()
@@ -18544,9 +18522,9 @@ async def update_graph_layout(body: dict[str, Any]) -> dict:
     if moved:
         if arrange is None:
             # An agent's move (`nebula move`) is an action too (the Agents
-            # panel's line, Q125 item 2); a no-op for the person's drags. It
-            # names every node that moved (design): "Moved “A” and “B”",
-            # from 4 "Moved 4 nodes". The cursor goes to the first.
+            # panel's line); a no-op for the person's drags. It names every
+            # node that moved (design): "Moved “A” and “B”", from 4 "Moved 4
+            # nodes". The cursor goes to the first.
             await _show_agent({"nodeId": moved[0]}, action="move", say=f"Moved {_named_nodes(moved)}",
                               did=_did("Moved", moved[0]))
     if arrange is not None:
@@ -18575,7 +18553,7 @@ async def _carry_cursors() -> None:
     """The session cursors on nodes a graph sync moved (a drag, an arrange,
     `nebula move`, an apply or edit_canvas move, an undo or redo): one
     whose target chain the move changed arrives now
-    (agent_presence.carry_nodes, GM - Design, #219 r24 Q2), and the
+    (agent_presence.carry_nodes, design, PR #219), and the
     person's tabs get its new arrival so they, and a reload, stack it the
     same way. Called from _broadcast_graph_sync, so no route that moves
     nodes can miss it. The positions are read now, in one step with no
@@ -18589,7 +18567,7 @@ async def _carry_cursors() -> None:
         positions = _display_positions(nodes)
         # Nodes with no stored position keep their last box: their computed
         # spot shifts with their siblings, and an open canvas doesn't move
-        # them for it (#219 review 2, LOW-3).
+        # them for it (PR #219).
         placed = {n["id"] for n in nodes if isinstance(n.get("position"), dict)}
         updates = agent_presence.carry_nodes(positions, placed)
         if updates:
@@ -18600,7 +18578,7 @@ async def _carry_cursors() -> None:
 
 def _require_clear_intent(force: bool) -> None:
     """Clearing a project that has nodes needs an explicit ``force``, from
-    every caller (Justin's D3, 2026-10-18). This is a check of intent, not of
+    every caller (Justin, 2026-10-18). This is a check of intent, not of
     who is asking: agents may clear too, because an open canvas makes the
     clear one undo step (the graphSync carries ``edit``; Undo sends the nodes,
     wires, names and outputs back through POST /api/graph/restore). The
@@ -18627,22 +18605,21 @@ async def clear_graph(force: bool = False) -> dict:
     # a node with the same identity could silently duplicate provider spend.
     _check_workspace_revision()
     _require_clear_intent(force)
-    # A canvas waiting to be saved as a project (review 5 of PR #199, M-3):
+    # A canvas waiting to be saved as a project (PR #199):
     # refused at the limit, held aside first below it.
     await _refuse_a_waiting_canvas_change("clear")
     with _paid_graph_mutation("clear the canvas"):
-        # As a switch, an import and a delete of the open project (round 11 of
-        # PR #114): a registered run writes back by node id, and ids start
-        # again after a clear. Its paid-start fence and the run fence.
+        # As a switch, an import and a delete of the open project (PR #114): a
+        # registered run writes back by node id, and ids start again after a
+        # clear. Its paid-start fence and the run fence.
         _project_replacement_guard("clear the canvas", person=CLEAR_DURING_RUN_PERSON)
         hold = _guard_waiting_canvas("clear")
         # With the clear, before any await: a tab's write made for the old
-        # canvas is refused from now on (_canvas_revision, round 19 of PR
-        # #195), and so is a write an agent fenced before it (_graph_fence,
-        # review 10's F6 of PR #114). Before the canvas changes, and on disk
-        # first (round 20, M2): a crash in between leaves a moved revision
-        # over the old canvas, never the cleared canvas under the old
-        # revision. The epoch moves once per clear.
+        # canvas is refused from now on (_canvas_revision, PR #195), and so
+        # is a write an agent fenced before it (_graph_fence, PR #114).
+        # Before the canvas changes, and on disk first: a crash in between
+        # leaves a moved revision over the old canvas, never the cleared
+        # canvas under the old revision. The epoch moves once per clear.
         try:
             _forget_canvas_undo("the canvas was cleared since")
             cli_graph.clear()
@@ -18653,7 +18630,7 @@ async def clear_graph(force: bool = False) -> dict:
         run_approvals.clear()
         # Ids start again at n1: no node now is one a restore brought back.
         node_removals.forget_project(_workspace_context()["activeProjectId"])
-    # In the step that cleared it, before any await (round 8 of PR #114): the
+    # In the step that cleared it, before any await (PR #114): the
     # pins that lost their nodes are this project's (after an await another
     # project may be open, and its pins would be detached instead), and every
     # event names the project cleared.
@@ -18694,7 +18671,7 @@ async def delete_provider_recovery(
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         if active:
             # Run history's "Forget ID": the same "still
-            # waiting" line as the node's own refusal (round 3 review).
+            # waiting" line as the node's own refusal.
             raise refusal_copy.refusal(
                 409,
                 "Cannot delete a World Labs recovery checkpoint while that "
@@ -18775,7 +18752,7 @@ async def acknowledge_provider_start_ambiguity(
             run_id=run_id,
         )
     except ProviderStartConflictError as exc:
-        # The status bar's "I’ve checked Marble" (round 3b): the person reads the line for
+        # The status bar's "I’ve checked Marble": the person reads the line for
         # why it can't unlock yet; agents keep the exact text.
         raise _start_refusal(exc, own_node=True) from exc
     except ValueError as exc:
@@ -18796,12 +18773,12 @@ async def acknowledge_provider_start_ambiguity(
     }
 
 
-# What the person's canvas reads when a node can't go (error-copy review, GM:
-# never ids in what the person reads; "People get the written line and agents
-# keep the specific detail"). Round 3: _paid_state_person, by the record that
-# holds the node; an ID in its params names that node's own fields by their
-# labels (round 3 review: a World export node has only "Resume Export
-# Operation ID"). Agents keep the detail with the id, unchanged.
+# What the person's canvas reads when a node can't go (error copy,
+# design: never ids in what the person reads; "People get the written line
+# and agents keep the specific detail"). _paid_state_person, by the record
+# that holds the node; an ID in its params names that node's own fields by
+# their labels (a World export node has only "Resume Export Operation
+# ID"). Agents keep the detail with the id, unchanged.
 NODE_GONE_PERSON = "That node isn’t on the canvas anymore."
 
 
@@ -18809,20 +18786,20 @@ def _node_refusal(status: int, specific: str, person: str) -> HTTPException:
     return refusal_copy.refusal(status, specific, person, route="canvas")
 
 
-# What an agent reads after a node id it holds isn't on the canvas (PR #199
-# round 17): ids can move at an open, so the answer says to read again.
+# What an agent reads after a node id it holds isn't on the canvas (PR
+# #199): ids can move at an open, so the answer says to read again.
 NODE_GONE_READ_AGAIN = ("Node ids can change when a project is opened again (a node made by Duplicate or Paste "
                         "gets Nebula's id then): read the canvas again for the current ids.")
 
 
 def _node_gone(node_id: str, specific: str | None = None) -> HTTPException:
-    """404 for a node that isn't on the canvas: GM's line for the person
-    (approved round 3), the id for agents, and what to do next."""
+    """404 for a node that isn't on the canvas: the design's line for the person
+    (approved), the id for agents, and what to do next."""
     return _node_refusal(404, f"{specific or f'Node {node_id} not found'}. {NODE_GONE_READ_AGAIN}", NODE_GONE_PERSON)
 
 
 def _scene_write_gone(node_id: str) -> CodedRefusal:
-    """PR #198 fix round 12 (GM r20 answer 3): a node write to a node that
+    """PR #198 (design): a node write to a node that
     isn't on the canvas, coded ``node_gone`` with ``deletedBy``: who deleted
     it when Nebula saw the delete (``{kind, name}``, as ``changedBy``), else
     null. The person's canvas names them once and stops saving it."""
@@ -18867,7 +18844,7 @@ def _note_scene_deletes(removed: Sequence[Mapping[str, Any]]) -> None:
 
 def _ensure_node_deletable(node_id: str, node: dict[str, Any], *, action: str | None = None) -> None:
     """Refuse (409) to delete a node that still carries World Labs paid state,
-    or a Cinema scene one of whose shots is rendering (GM, PR #198 r3).
+    or a Cinema scene one of whose shots is rendering (design, PR #198).
 
     Call inside _paid_graph_mutation so no paid start can land in between.
     The person reads _paid_state_person for the record that holds it; an
@@ -18910,7 +18887,7 @@ def _ensure_node_deletable(node_id: str, node: dict[str, Any], *, action: str | 
 
 def _recovery_record_holds_node(record: Mapping[str, Any], node: Mapping[str, Any]) -> bool:
     """Whether a World Labs recovery record with this node's id holds the
-    node from deletion (Justin, 2026-10-31, on PR #199; review 21 LOW-1):
+    node from deletion (Justin, 2026-10-31, on PR #199):
     node ids repeat across projects, so a record holds the node unless the
     stamp Nebula wrote with it, when the run wrote it, names another
     project that still exists (in the catalog or Recently deleted). Run
@@ -18945,7 +18922,7 @@ def _recovery_record_holds_node(record: Mapping[str, Any], node: Mapping[str, An
 
 
 def _record_may_be_open_projects(catalog: Mapping[str, Any], record: Mapping[str, Any], open_id: str) -> bool:
-    """The signs that only add a hold (PR #199 round 23): the record's run
+    """The signs that only add a hold (PR #199): the record's run
     is registered on the open project in this process, is in the open
     project's stored run history, or the open project's stored node with
     the record's node id holds one of its IDs."""
@@ -18970,15 +18947,15 @@ def _record_may_be_open_projects(catalog: Mapping[str, Any], record: Mapping[str
 def _shared_id_delete_person(node_id: str, holding: Sequence[Mapping[str, Any]]) -> str | None:
     """The person's line when a delete is refused only by recovery records
     Nebula can't identify as the open project's; the node holds none of
-    their IDs. Two lines (GM on PR #199):
-    - a record whose project Nebula can't identify (GM r36 item 2): its
+    their IDs. Two lines (design, PR #199):
+    - a record whose project Nebula can't identify (design): its
       stamp names a project deleted for good, or it is unstamped and its run
       is only in other projects' run histories (a duplicate copies them,
       Recently deleted counts) or another project's node holds its ID:
       "Nebula couldn’t delete “Delta brief” because it shares the ID n1 with
       a World Labs run from a project Nebula can’t identify. Check that run
       in Marble before you forget its ID in Run history, then try again.";
-    - a record nothing names (r35, 2, in addendum 2's shape), which wins:
+    - a record nothing names (design), which wins:
       "Nebula couldn’t delete “Delta brief” because it has a saved World
       Labs recovery ID. Check the run in Marble, then forget that ID in Run
       History."
@@ -19091,7 +19068,7 @@ def _billing_choice(definition_id: str, params: Mapping[str, Any]) -> tuple[str,
 
 # The billing refusals, each worded for its reader where it is raised
 # (agent_words.worded: {propose} is propose_change for MCP, `nebula propose`
-# for the CLI; review 9 of PR #203, keys MEDIUM-1).
+# for the CLI; PR #203).
 KREA_BILLING_REFUSAL = (
     "Changing how a Krea node is billed (_kreaAuth: the API key connection's balance or the signed-in Krea "
     "plan) is the person's call, so it needs their OK. Leave _kreaAuth as it is, and propose the "
@@ -19280,7 +19257,7 @@ async def apply_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
     the validators single edits use, then committed at once. Never runs
     anything; runs go through /api/graph/run and its spending limits.
 
-    No per-edit caps (decision C1): the staged graph must stay within what a
+    No per-edit caps: the staged graph must stay within what a
     project can save (RESTORE_MAX_GRAPH_NODES / _EDGES), as on restore.
 
     `arrange` (true, or {direction: right|down, gap}) asks the canvas to lay
@@ -19381,7 +19358,7 @@ async def apply_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
             raise HTTPException(status_code=404, detail=f"{missing[0]} is not on the canvas")
         if moves:
             candidate.update_positions(moves)
-        # Placeholders (Q125 item 3): `pending: false` makes the agent's own
+        # Placeholders: `pending: false` makes the agent's own
         # ready (all or nothing: another's refuses the edit); `pending: true`
         # marks only the nodes this edit adds.
         made_pending: list[str] = []
@@ -19416,9 +19393,9 @@ async def apply_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
         arrange = canvas_arrange.add(id_map.values(), direction=spec.arrange.direction, gap=spec.arrange.gap,
                                      actor=actor_for_headers(headers))
     entries = _remove_side_effects(removed, lambda gone: f"{gone['name']} ({gone['id']}) was deleted")
-    # Every event of the edit is journaled here, before any await (round 8
-    # of PR #114): it names the project the edit was made in and reads the
-    # canvas as the edit left it, and it lands before any switch that follows.
+    # Every event of the edit is journaled here, before any await (PR #114):
+    # it names the project the edit was made in and reads the canvas as the
+    # edit left it, and it lands before any switch that follows.
     note = f" ({additions.note})" if additions.note != "edit" else ""
     for edge in spec.unwire:
         _journal_edge("edge.removed", edge.as_dict())
@@ -19502,17 +19479,17 @@ async def apply_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
     if focus is not None and focus in cli_graph.nodes:
         verb = ("Added" if focus in added else "Changed" if focus in (changed or ())
                 else "Renamed" if focus in renamed else "Moved")
-        # A param value change is typing, as through PUT (GM - Design, PR
-        # #211 r2): the person's tabs show `type`; agents still read `click`.
-        # The edit's other nodes, each with its own verb, for the log line
-        # (GM r83.1: several nodes are named, never "and N more").
+        # A param value change is typing, as through PUT (design, PR #211):
+        # the person's tabs show `type`; agents still read `click`. The
+        # edit's other nodes, each with its own verb, for the log line
+        # (design: several nodes are named, never "and N more").
         others = [("Added" if key in added else "Changed" if key in (changed or ()) else "Renamed"
                    if key in renamed else "Moved", _node_label(key))
                   for key in dict.fromkeys([*added, *changed, *renamed, *moves]) if key != focus]
         others += [("Removed", str(gone["name"])) for gone in removed if gone["id"] != focus]
         # With no note the bubble keeps the terse summary ("changed 1"); the
         # Agent log and the Message box's working line get the person's
-        # words (GM r79.2: "Changed “Prompt” on “Hero shot”").
+        # words (design: "Changed “Prompt” on “Hero shot”").
         await _show_agent({"nodeId": focus}, say=additions.note if note else summary, did=_did(verb, focus),
                           log=None if note else _edit_log_line(verb, focus, changed_keys.get(focus, []), others,
                                                                renamed_from=labels_before.get(focus)),
@@ -19521,7 +19498,7 @@ async def apply_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
     else:
         # No node was added, changed, renamed or moved: a connect, a disconnect,
         # a remove or a placeholder made ready is still the agent's action and
-        # has its row (design r211 item 4).
+        # has its row (design).
         plain, plain_ids = _plain_edit_line(
             connected=[((wire["source"], _node_label(wire["source"])), (wire["target"], _node_label(wire["target"])))
                        for wire in wired_rows],
@@ -19690,7 +19667,7 @@ async def restore_graph_state(body: dict[str, Any]) -> dict[str, Any]:
         _canvas_edit_link.reset(token)
         if closed:
             # The proposals it reopened are journaled after its edit.undone
-            # (their fit check awaits): the link lists them too (review 8).
+            # (their fit check awaits): the link lists them too.
             _note_link_events(link["id"])
     return result
 
@@ -19699,9 +19676,9 @@ def _note_link_events(link_id: str) -> None:
     """Every event journaled under an undo's (or redo's) link but its own
     closing edit.undone / edit.redone, kept with the link: what a later
     edit.undone of that undo lists as its ``events``. Taken again once the
-    restore returns, since proposal.reopened can follow edit.undone (review
-    8 of PR #114); merged with what was taken before, in case those events
-    have left the journal's buffer since."""
+    restore returns, since proposal.reopened can follow edit.undone (PR
+    #114); merged with what was taken before, in case those events have
+    left the journal's buffer since."""
     link = canvas_undo_book.link_of(link_id)
     if link is None:
         return
@@ -19726,11 +19703,11 @@ async def _restore_graph(
     ``journal_done`` journals the caller's own closing event (edit.undone,
     edit.redone) with what changed ({added, removed, changed, renamed, moved,
     wired, unwired}), right after the restore's own events and before any
-    await, so it too names the project the restore was made in (round 8 of
-    PR #114). The pins put back (pin.reattached) come before it; the
-    proposals reopened (proposal.reopened) can follow it, since their fit
-    check awaits, so a caller with a link takes its events again once this
-    returns (_note_link_events, review 8)."""
+    await, so it too names the project the restore was made in (PR #114). The
+    pins put back (pin.reattached) come before it; the proposals reopened
+    (proposal.reopened) can follow it, since their fit check awaits, so a
+    caller with a link takes its events again once this returns
+    (_note_link_events)."""
     _check_workspace_revision()
     _validate_graph_ingress_complexity(body)
     action = body.get("action", "undo")
@@ -19789,10 +19766,10 @@ async def _restore_graph(
             node_id = raw["id"]
             current = candidate.nodes.get(node_id)
             # An undo puts back what the canvas held: a scene is converted,
-            # never refused (PR #198 review 3, H1).
+            # never refused (PR #198).
             # A scene put back keeps a removed shot's late image (its port
             # with no shot), as the live node had it, so undoing the shot's
-            # removal next takes that image (_adopt_late_image; review 5, L3).
+            # removal next takes that image (_adopt_late_image).
             definition_id, params, position, outputs, label = _validated_ingress_node(
                 raw, index, include_outputs=current is None, strict_scenes=False,
                 reserved_shot_ids=cinema_scene_spec.shot_port_ids((current or {}).get("outputs")),
@@ -19849,7 +19826,7 @@ async def _restore_graph(
                     moved.append(node_id)
         person = _is_person_request()
         # The person's undo and redo put a placeholder flag back as the step
-        # had it (an object, or null for none; Q125 item 3), and so does an
+        # had it (an object, or null for none), and so does an
         # agent's undo of its own edit, from the inverse the server kept
         # (``trusted``). Anyone else's restore never sets or clears one.
         made_pending: list[str] = []
@@ -19894,7 +19871,7 @@ async def _restore_graph(
         except CycleError as exc:
             raise HTTPException(status_code=400, detail=f"graph contains a cycle: {exc}") from exc
         _refuse_agent_change_to_approved_runs(candidate)
-        # An agent's undo or restore is an edit like any other (Q118 review):
+        # An agent's undo or restore is an edit like any other:
         # it can't put the open project back over the save limit. The
         # person's Cmd+Z never is refused (the check skips the person).
         _refuse_agent_growth_past_save_limit(candidate)
@@ -19906,7 +19883,7 @@ async def _restore_graph(
             source="restore",
         )
         _note_scene_deletes(removed)
-        # Review 11, L-1: a restore authors the scenes it puts back or sets
+        # A restore authors the scenes it puts back or sets
         # like any write: a refusal after it names the restoring actor
         # (changedBy), never the writer from before it.
         _note_restored_scenes(touched, scene_keys_before)
@@ -19955,8 +19932,8 @@ async def _restore_graph(
     for edge in wired:
         _journal_edge("edge.added", edge, note=note)
     # The nodes it brought back: their pins on them again, in this step, so
-    # pin.reattached comes before the caller's edit.undone (review 8 of PR
-    # #114). The proposals their deletes closed reopen after the sync
+    # pin.reattached comes before the caller's edit.undone (PR #114). The
+    # proposals their deletes closed reopen after the sync
     # (_reopen_removed_proposals). A swapped id (in ``remove`` too) holds
     # another node now, not the one deleted.
     swapped = {gone["id"] for gone in removed}
@@ -19976,7 +19953,7 @@ async def _restore_graph(
         _removals_ctx.reset(removals_token)
     _renew_kept_removals(removals)
     await _announce_removed_nodes(entries)
-    # The proposals their deletes closed open again where they still fit (GM, 2026-10-23).
+    # The proposals their deletes closed open again where they still fit (design, 2026-10-23).
     undone = await _reopen_removed_proposals(putting_back, project_id)
     return {
         "status": "restored",
@@ -19993,7 +19970,7 @@ async def _restore_graph(
         **undone,
         "removals": removals,
         # The graphSync that sent it: a canvas reads any lower one as older
-        # than this restore (PR #205 review 8, held undo).
+        # than this restore (PR #205, held undo).
         **_synced_seq(synced),
     }
 
@@ -20006,11 +19983,10 @@ async def _restore_graph(
 # (event ``edit``), for that undo and for the person's Cmd+Z of the edit.
 
 # Its per-project id epochs are the canvas revision (_canvas_revision), kept in
-# the state dir so a restart doesn't start them again at 0 (round 20 of PR
-# #195, review 19 M2); no state dir, memory only, as the other stores.
-# Round 21: revisions that can't be restored start above any a tab from
-# before this boot can hold (milliseconds since 1970: every epoch before was
-# a count of clears from this same base or from 0).
+# the state dir so a restart doesn't start them again at 0 (PR #195); no state
+# dir, memory only, as the other stores. Revisions that can't be restored start
+# above any a tab from before this boot can hold (milliseconds since 1970:
+# every epoch before was a count of clears from this same base or from 0).
 canvas_undo_book = CanvasUndoBook(
     persist_path=_STATE_DIR / "canvas-revisions.json" if _STATE_PATH is not None else None,
     unrestored_base=int(_time_module.time() * 1000), prior_state=_STATE_EXISTED_AT_BOOT,
@@ -20260,7 +20236,7 @@ async def undo_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
     name or position it changed, a node or wire it removed) goes back only
     if the canvas still has it as the edit left it; a part someone changed
     since stays and is listed in ``skipped``. A node someone ran since the
-    edit counts as changed (Q82): the person, another agent or an unnamed
+    edit counts as changed: the person, another agent or an unnamed
     client; only this agent's own runs don't. That node stays whole (not
     removed, params, name and position not put back, no wire into it taken
     away or put back) as one skipped item, reason "ran since", with
@@ -20326,7 +20302,7 @@ async def undo_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
     said: dict[str, Any] = {}
 
     def journal_undone(changed: dict[str, list[Any]]) -> None:
-        # With the restore's own events, before any await (round 8 of PR #114).
+        # With the restore's own events, before any await (PR #114).
         skipped = plan.skipped + [{
             "part": "wire", "nodeId": wire["target"], "reason": "can't be wired now",
             "name": _quoted(_node_label(wire["target"]))[1:-1],
@@ -20371,7 +20347,7 @@ async def undo_graph_edit(body: dict[str, Any]) -> dict[str, Any]:
         _canvas_edit_link.reset(context)
         if said:
             # The proposals it reopened are journaled after its edit.undone
-            # (their fit check awaits): the link lists them too (review 8).
+            # (their fit check awaits): the link lists them too.
             _note_link_events(undo_id)
     # The agent's own row, so its words leave out the name (design).
     await _say_agent_action(activity_line(None, skipped, _node_label))
@@ -20628,9 +20604,9 @@ async def delete_graph_edge(body: dict[str, Any]) -> dict:
         body.get("targetHandle", ""),
     )
     if removed:
-        # The person unwiring a placeholder edits it: it turns normal (Q125 item 3).
+        # The person unwiring a placeholder edits it: it turns normal.
         _person_touched([str(body.get("source") or ""), str(body.get("target") or "")])
-        _journal_edge("edge.removed", body)  # before any await (round 8 of PR #114)
+        _journal_edge("edge.removed", body)  # before any await (PR #114)
         await _broadcast_graph_sync(edit=True)
         if body.get("target") in cli_graph.nodes:
             await _show_agent(
@@ -20776,7 +20752,7 @@ def _refuse_unknown_definition(definition_id: Any) -> None:
     can't change when names do; the refusal names the node the text is the
     name of ("did you mean nebula-moodboard (Moodboard)?")."""
     if not isinstance(definition_id, str) or node_registry.get(definition_id) is None:
-        # GM #198 r23 answer 3: no value (missing, null, empty) is GM's own
+        # Design (PR #198): no value (missing, null, empty) is the design's own
         # line for the person ("No node definition was given."); an agent's
         # detail keeps the raw value (`unknown node definition ""`), and the
         # answer the code and the raw value.
@@ -20802,10 +20778,10 @@ def _validated_ingress_node(
 
     Shared by imports, clusters (_stage_graph_nodes) and POST /api/graph/restore.
     A shot id made up for a scene's shot is never one a ``shot_<id>`` port
-    names: the node's own outputs, or ``reserved_shot_ids`` (the live node's,
-    for a restore; review 4, L1).
+    names: the node's own outputs, or ``reserved_shot_ids`` (the live node's, for a
+    restore).
 
-    A scene read leniently with outputs (PR #198 review 5, L3): a port a
+    A scene read leniently with outputs (PR #198): a port a
     renumbered shot owned (its image is the port's value) moves to that
     shot's new id (cinema_scene_spec.claim_stray_ports); ``port_report``
     gets ``rekeyed`` ({old handle: new}) so the caller re-points its wires,
@@ -20868,11 +20844,11 @@ def _validated_ingress_node(
             )
         late_ports: dict[str, Any] = {}
         if not strict_scenes and definition_id == "cinema-scene":
-            # Saved data is converted, never refused (review 3, H1): a port
+            # Saved data is converted, never refused: a port
             # no shot of the scene owns any more (a removed shot's late
             # image) is left out instead of failing the whole graph, and no
-            # converted shot took it over (reserved above; review 4, L1).
-            # A renumbered shot's own port moves to its new id first (L3).
+            # converted shot took it over (reserved above).
+            # A renumbered shot's own port moves to its new id first.
             claimed = cinema_scene_spec.claim_stray_ports(raw.get("params"), params, raw_outputs)
             raw_outputs = cinema_scene_spec.rekeyed_outputs(raw_outputs, claimed)
             owned = {f"shot_{shot_id}" for shot_id in cinema_scene_spec.scene_shot_ids(params)}
@@ -20916,7 +20892,7 @@ def _stage_graph_nodes(
     """Validate and add ingress nodes to a persistence-free candidate graph.
     ``strict_scenes`` only for an agent-authored write (a proposal, edit_canvas,
     an agent's cluster); saved data (a project, a graph file, an import) is
-    converted instead (services/cinema_scene_spec.py, PR #198 review 3 H1).
+    converted instead (services/cinema_scene_spec.py, PR #198).
     ``port_reports`` gets, by new node id, each scene's re-keyed and dropped
     shot ports (_validated_ingress_node) and its name, for
     _stage_graph_edges and _stray_port_report."""
@@ -20976,8 +20952,8 @@ def _is_late_image_port(port: Any) -> bool:
             and isinstance(port.get("value"), str) and bool(port["value"]))
 
 
-# What loading a file or opening a project dropped (PR #198 review 5, L3), in
-# GM's words (pr198 r8, verbatim): "Removed the connection to shot port <port>
+# What loading a file or opening a project dropped (PR #198), in
+# the design's words (PR #198, verbatim): "Removed the connection to shot port <port>
 # on “Scene”, node n4. That shot no longer exists." and its plural; opening a
 # project (the load case) adds "while loading the project" before the period.
 # One line per node. They go in the answer's ``warnings`` (the canvas shows
@@ -20993,7 +20969,7 @@ STRAY_SHOT_LOADING = " while loading the project"
 
 
 def stray_shot_line(node: str, node_id: str, ports: list[str], connections: int, *, loading: bool = False) -> str | None:
-    """GM's line for one node's connections from ``shot_<id>`` ports no shot
+    """The design's line for one node's connections from ``shot_<id>`` ports no shot
     owns (``ports``, by handle; the line names the shot's id). None when no
     connection was removed: a port with nothing connected changes nothing the
     person sees, and stays in ``droppedPorts`` for agents."""
@@ -21010,7 +20986,7 @@ def stray_shot_line(node: str, node_id: str, ports: list[str], connections: int,
 
 
 def quoted_overflow(names: list[str], cap: int = 3) -> str:
-    """GM's Agent log overflow (pr198 r8): "“A”, “B”, “C” and 4 more", with no
+    """The design's Agent log overflow (PR #198): "“A”, “B”, “C” and 4 more", with no
     serial comma; up to ``cap`` names, all of them named."""
     quoted = [f"\u201c{name}\u201d" for name in names]
     if len(quoted) > cap:
@@ -21045,7 +21021,7 @@ def _stray_port_report(port_reports: Mapping[str, Mapping[str, Any]], *, loading
                        ) -> tuple[list[str], list[dict[str, Any]]]:
     """(warning lines, journal records {nodeId, handle, port, connections}):
     every ``shot_<id>`` port, and every wire from one, a lenient read left
-    out (L3). A line per node that lost a connection (GM, pr198 r8); a record
+    out. A line per node that lost a connection (design, PR #198); a record
     per port or wire."""
     lines: list[str] = []
     records: list[dict[str, Any]] = []
@@ -21064,7 +21040,7 @@ _STRAY_PORT_LOG_LINES = 5
 
 def _stray_log_lines(port_reports: Mapping[str, Mapping[str, Any]], *, loading: bool = False) -> list[str]:
     """The Agent log's lines for what a load or open dropped: a node's line
-    each, up to five, then one line for the rest that names them in GM's
+    each, up to five, then one line for the rest that names them in the design's
     overflow form ("on “A”, “B”, “C” and 4 more")."""
     nodes = [(node_id, name, [handle for handle, _port, connections in parts if connections > 0],
               sum(connections for _h, _p, connections in parts))
@@ -21091,9 +21067,9 @@ async def _say_stray_ports(lines: list[str]) -> None:
 
 def _orphaned_shot_wire(graph: CLIGraph, source: str, source_handle: str) -> bool:
     """A saved wire from a Cinema scene's ``shot_<id>`` port that no shot of
-    the scene owns (a removed shot's): saved data is converted, never refused
-    (review 3, H1), so it is left out with the port (review 4, L1), and said
-    (_note_stray_wire; review 5, L3). A renumbered shot's port was re-keyed
+    the scene owns (a removed shot's): saved data is converted, never refused,
+    so it is left out with the port, and said
+    (_note_stray_wire). A renumbered shot's port was re-keyed
     before this is asked, so its wires aren't."""
     node = graph.nodes.get(source) or {}
     if node.get("definitionId") != "cinema-scene" or not source_handle.startswith("shot_"):
@@ -21158,8 +21134,8 @@ def _stage_graph_edges(
             )
         except HTTPException as exc:
             # A connection to a port this version's node doesn't have (or
-            # takes differently): coded for the person's Load line (GM PR #205
-            # r16 item 3); agents read the words.
+            # takes differently): coded for the person's Load line (design, PR
+            # #205); agents read the words.
             raise _coded(exc, "graph_unknown_port") from exc
         try:
             edge_ids.append(
@@ -21180,12 +21156,12 @@ def _stage_graph_edges(
 
 
 def _import_stage_refusal(exc: HTTPException) -> HTTPException:
-    """An import's staging refusal, coded for the person's Load line (GM PR
-    #205 r16 item 3): kept as it is when it has a code (``unknown_definition``,
-    ``graph_unknown_port``, ``graph_cycle``, a person
-    gate's), and ``graph_invalid`` for any other 400 there (the file's own
-    shape: a node without its fields, a connection to no node). Agents read the
-    words, which don't change."""
+    """An import's staging refusal, coded for the person's Load line (design,
+    PR #205): kept as it is when it has a code (``unknown_definition``,
+    ``graph_unknown_port``, ``graph_cycle``, a person gate's), and
+    ``graph_invalid`` for any other 400 there (the file's own shape: a node
+    without its fields, a connection to no node). Agents read the words, which
+    don't change."""
     if isinstance(exc, (CodedRefusal, PersonGateError)) or exc.status_code != 400:
         return exc
     return _coded(exc, "graph_invalid")
@@ -21223,7 +21199,7 @@ async def import_graph(body: dict[str, Any]) -> dict:
     if version is not None:
         upgrade_flat_nodes(raw_nodes, version)
     # A graph file is saved data: its scenes are converted, never refused
-    # (PR #198 review 3, H1).
+    # (PR #198).
     port_reports: dict[str, dict[str, Any]] = {}
     try:
         id_map = _stage_graph_nodes(
@@ -21240,8 +21216,8 @@ async def import_graph(body: dict[str, Any]) -> dict:
         (node_id, str(candidate.nodes[node_id].get("definitionId") or ""), _folded_billing_baseline(ref, folded),
          candidate.nodes[node_id].get("params") or {}) for ref, node_id in id_map.items())
     # Every node gets a fresh backend id (the live graph never holds another:
-    # PR #199 round 17); a node's references to another (a Remotion
-    # manifest's timeline items) move with them.
+    # PR #199); a node's references to another (a Remotion manifest's
+    # timeline items) move with them.
     renumbered = {ref: node_id for ref, node_id in id_map.items() if ref != node_id}
     for node in candidate.nodes.values():
         node["params"] = _moved_node_references(node.get("params") or {}, renumbered)
@@ -21249,33 +21225,32 @@ async def import_graph(body: dict[str, Any]) -> dict:
         _stage_graph_edges(candidate, raw_edges, id_map, saved=True, port_reports=port_reports)
     except HTTPException as exc:
         raise _import_stage_refusal(exc) from exc
-    # What the scenes' lenient read left out (PR #198 review 5, L3): said in
+    # What the scenes' lenient read left out (PR #198): said in
     # the warnings, the canvas.replaced event and the Agent log.
     stray_lines, stray_ports = _stray_port_report(port_reports)
     warnings = [*warnings, *stray_lines]
     if body.get("refuseOverSaveLimit") is True:
         _refuse_graph_over_save_limit_on_its_own(candidate)
-    # The person's Load graph opens a file of any size (Q118); anyone else's
+    # The person's Load graph opens a file of any size; anyone else's
     # import can't leave the project over the save limit, except a graph file
-    # an agent opens in the empty project it just made for it (Q123 a, Justin:
-    # "A big one opens as a new project."; graph_file_client.py). Saving that
-    # project pauses on the canvas, as after the person's own Load graph.
+    # an agent opens in the empty project it just made for it (Justin: "A big
+    # one opens as a new project."; graph_file_client.py). Saving that project
+    # pauses on the canvas, as after the person's own Load graph.
     if body.get("newProjectForFile") is True:
         _require_empty_canvas_for_a_new_project_file()
         # Only the size check is waived here: an agent's file still can't
-        # put the canvas past Save's shape limits (review 7 of PR #205,
-        # limits MEDIUM-1).
+        # put the canvas past Save's shape limits (PR #205).
         if not _is_person_request():
             _refuse_agent_shape_past_save_limit(_graph_canvas_export(candidate))
     else:
         _refuse_agent_growth_past_save_limit(candidate)
-    # A canvas waiting to be saved as a project (review 5 of PR #199, M-3):
+    # A canvas waiting to be saved as a project (PR #199):
     # refused at the limit, held aside first below it.
     await _refuse_a_waiting_canvas_change("replace")
     with _paid_graph_mutation("replace the graph"):
         _reject_graph_replacement_during_paid_start("replace the graph", fenced=True)
         if execution_runs.has_active():
-            # The person reads the line Clear has (review 4, N2); agents keep
+            # The person reads the line Clear has; agents keep
             # the specific one.
             raise refusal_copy.refusal(409, (
                 "Cannot replace the graph while a run is active. "
@@ -21284,9 +21259,9 @@ async def import_graph(body: dict[str, Any]) -> dict:
         hold = _guard_waiting_canvas("replace")
         # Check and commit are synchronous on this event loop. No other graph
         # or Cinema task can be admitted between this fence and replacement.
-        # The canvas revision moves first, on disk too (round 20, M2: a crash
-        # between leaves a moved revision over the old graph, never the new
-        # graph under the old revision), and back if the commit fails.
+        # The canvas revision moves first, on disk too (a crash between
+        # leaves a moved revision over the old graph, never the new graph
+        # under the old revision), and back if the commit fails.
         importing_into = _workspace_context()["activeProjectId"]
         previous_revision = canvas_undo_book.advance_epoch(importing_into)
         try:
@@ -21412,7 +21387,7 @@ async def add_graph_cluster(body: dict[str, Any]) -> dict:
             [candidate.nodes[node_id] for node_id in id_map.values()],
             source="cluster",
         )
-    _journal_cluster(list(id_map.values()), created_edge_ids)  # before any await (round 8 of PR #114)
+    _journal_cluster(list(id_map.values()), created_edge_ids)  # before any await (PR #114)
     created = _rf_created(list(id_map.values()), created_edge_ids)
     await _broadcast_graph_sync(edit=True)
     await _say_agent_action(f"Grouped {_named_nodes(list(id_map.values()))}")
@@ -21503,7 +21478,7 @@ def _cli_node_to_rf(n: dict[str, Any], position: dict[str, float], all_defs: dic
         params = _normalize_image_input_params(params)
 
     data: dict[str, Any] = {
-        # GM - Design, round 18: an unnamed node reads its canvas title.
+        # Design: an unnamed node reads its canvas title.
         "label": n.get("label") or (node_route.canvas_title(defn) if defn else "") or definition_id,
         "definitionId": definition_id,
         "params": params,
@@ -21516,9 +21491,9 @@ def _cli_node_to_rf(n: dict[str, Any], position: dict[str, float], all_defs: dic
     if failed:
         data.update(failed)
     if _landing_stamp(n.get(RESULT_LANDED_KEY)) is not None:
-        # When its run result landed (PR #199 round 21): the stored copy keeps it.
+        # When its run result landed (PR #199): the stored copy keeps it.
         data[RESULT_LANDED_KEY] = n[RESULT_LANDED_KEY]
-    # An agent's placeholder (Q125 item 3): its owner, for the dashed outline.
+    # An agent's placeholder: its owner, for the dashed outline.
     flag = pending_nodes.clean(n.get(pending_nodes.PENDING_KEY))
     if flag is not None:
         data["pending"] = flag
@@ -21649,11 +21624,11 @@ def _port_facts(graph: CLIGraph, node_id: str, handle: str, port_key: str) -> tu
 
 
 def _dropped_wire(edge_id: str, endpoints: Sequence[str], kind: str, detail: str, graph: CLIGraph) -> dict[str, Any]:
-    """One connection the recover route left out (PR #199 round 17, GM r23
-    2): the tab writes the person's line from these fields, and ``detail``
-    is the agents' sentence (never a person's line such as "Remove the
-    extra one…": nothing was drawn to remove). ``kind`` is one of the
-    shared kinds (port_contracts.DROPPED_CONNECTION_KINDS: loop, duplicate,
+    """One connection the recover route left out (PR #199, design): the tab
+    writes the person's line from these fields, and ``detail`` is the
+    agents' sentence (never a person's line such as "Remove the extra
+    one…": nothing was drawn to remove). ``kind`` is one of the shared
+    kinds (port_contracts.DROPPED_CONNECTION_KINDS: loop, duplicate,
     missing, port, type, limit). An end whose node isn't in the copy is
     null, its tab id in ``sourceWas`` / ``targetWas``; names and port
     labels are null when absent. recover_project_copy moves the ends to the
@@ -21704,12 +21679,12 @@ def _wire_closes_loop(edges: Iterable[Mapping[str, Any]], source: str, target: s
     return False
 
 
-# A Nebula node id (PR #199 round 17, review 15 NIT-1): "n" and ASCII digits
+# A Nebula node id (PR #199): "n" and ASCII digits
 # only, as the tab's CLI_ID_RE (/^n\d+$/: ASCII in JavaScript) and CLIGraph's
 # SHORT_ID_RE, never Python's Unicode \d ("n٣" is not one).
 _BACKEND_NODE_ID = cli_graph_module.BACKEND_NODE_ID
 # The keys inside a node's data that name another node, and their move
-# (PR #199 round 17, review 15 NIT-2): services/cli_graph.py, which a load of
+# (PR #199): services/cli_graph.py, which a load of
 # state.json renumbers with too.
 _NODE_REFERENCE_KEYS = cli_graph_module.NODE_REFERENCE_KEYS
 _NODE_REFERENCE_LIST_KEYS = cli_graph_module.NODE_REFERENCE_LIST_KEYS
@@ -21725,8 +21700,8 @@ _MAX_ID_DIGITS = 9
 def _highest_backend_id(*values: Any) -> int:
     """The highest ``n[0-9]+`` (of at most _MAX_ID_DIGITS digits) among
     ``values``: every string that is exactly one, and every dict key, at any
-    depth (review 15 LOW-1: a deleted node's run records keep its id, in
-    ``targetNodeId``, the recipe's nodes and the ``resultOutputs`` keys)."""
+    depth (a deleted node's run records keep its id, in ``targetNodeId``,
+    the recipe's nodes and the ``resultOutputs`` keys)."""
     highest = 0
     stack: list[Any] = list(values)
     while stack:
@@ -21775,19 +21750,19 @@ def _node_references_in(value: Any) -> list[str]:
 
 def _renumber_tab_local_nodes(snapshot: dict[str, Any], counter: int) -> tuple[dict[str, str], int]:
     """Give every node whose id isn't a backend id (``nN``) a fresh one, in
-    place (PR #199 round 16, review 14 HIGH-1; round 17, review 15 HIGH-1).
+    place (PR #199).
     Duplicate, Paste and the nodes a kept tab adds make tab-local ids, and
     the tab pushes a node's typing only for ``nN`` ids, so a node that kept
     a local id inside Nebula's live graph lost later edits to the first read
     of the open project. Numbered on past ``counter`` and every id the
     snapshot has ever used (_ids_ever_used: its run history keeps deleted
-    nodes' ids, review 15 LOW-1), in node order. Every reference moves with
-    it: the edges' ends; in the run history every value or key that is
-    exactly an old id (a record's target, its outputs by node, its graph
-    snapshot); and in every node's data the keys that name a node
-    (_NODE_REFERENCE_KEYS: a Remotion manifest's timeline items, a gate's
-    skip; review 15 NIT-2). The Creator draft and the viewport hold no node
-    ids. Returns ({old: new}, the highest number used or seen)."""
+    nodes' ids), in node order. Every reference moves with it: the edges'
+    ends; in the run history every value or key that is exactly an old id (a
+    record's target, its outputs by node, its graph snapshot); and in every
+    node's data the keys that name a node (_NODE_REFERENCE_KEYS: a Remotion
+    manifest's timeline items, a gate's skip). The Creator draft and the
+    viewport hold no node ids. Returns ({old: new}, the highest number used
+    or seen)."""
     counter = max(counter, _ids_ever_used(snapshot))
     mapping: dict[str, str] = {}
     for node in snapshot.get("nodes") or []:
@@ -21868,16 +21843,15 @@ def _renumber_project_records(project: dict[str, Any], mapping: Mapping[str, str
 
 def _renumber_node_records(project_id: str | None, mapping: Mapping[str, str]) -> None:
     """After a renumber's commit (an open, the boot): the records kept
-    outside the project by node id follow the nodes too (review 18
-    handoff-reopen LOW-2). World Labs recovery checkpoints and paid-start
-    holds ((runId, nodeId), one write each: Run history's Recover and the
-    node's guards find them by the new id, and its moved run record still
-    matches), the node's last-run error (the card and agents' look), and
-    which run's result landed on it (node_result_runs). Proposals, run
-    approvals and pins never name a tab-local id (agents never see one; pins
-    move with the project), and an agent's undo notes only runs, which an
-    open waits for. Best effort: a journal that can't be written keeps the
-    old id (printed), as before this round."""
+    outside the project by node id follow the nodes too. World Labs recovery
+    checkpoints and paid-start holds ((runId, nodeId), one write each: Run
+    history's Recover and the node's guards find them by the new id, and its
+    moved run record still matches), the node's last-run error (the card and
+    agents' look), and which run's result landed on it (node_result_runs).
+    Proposals, run approvals and pins never name a tab-local id (agents
+    never see one; pins move with the project), and an agent's undo notes
+    only runs, which an open waits for. Best effort: a journal that can't be
+    written keeps the old id (printed), as it did before."""
     if not mapping:
         return
     for name, store in (("World Labs recovery checkpoints", provider_recovery_store),
@@ -21891,14 +21865,13 @@ def _renumber_node_records(project_id: str | None, mapping: Mapping[str, str]) -
 
 
 def _renumber_staged_project(project: dict[str, Any], candidate: CLIGraph) -> dict[str, str]:
-    """Before a stored project becomes Nebula's live graph (an open; PR #199
-    round 17, review 15 HIGH-1): every node with a tab-local id gets a
-    backend id, in the stored project (snapshot, run history, records) and
-    in the staged graph, so the live graph never holds one
-    (_require_backend_node_ids at the commit). Numbered past the project's
-    counter and every id it has ever used, and the counter is stored with
-    it. Returns {old: new} ({} when every id was already Nebula's, and then
-    nothing changes)."""
+    """Before a stored project becomes Nebula's live graph (an open; PR
+    #199): every node with a tab-local id gets a backend id, in the stored
+    project (snapshot, run history, records) and in the staged graph, so the
+    live graph never holds one (_require_backend_node_ids at the commit).
+    Numbered past the project's counter and every id it has ever used, and
+    the counter is stored with it. Returns {old: new} ({} when every id was
+    already Nebula's, and then nothing changes)."""
     floor = max(candidate._counter, int(project.get("_nodeCounter", 0) or 0))
     mapping, counter = _renumber_tab_local_nodes(project["snapshot"], floor)
     if mapping:
@@ -21910,14 +21883,14 @@ def _renumber_staged_project(project: dict[str, Any], candidate: CLIGraph) -> di
 
 
 def _require_backend_node_ids(snapshot: Mapping[str, Any]) -> None:
-    """The invariant (PR #199 rounds 16 and 17): Nebula's live graph, and a
+    """The invariant (PR #199): Nebula's live graph, and a
     copy the recover route writes, hold only backend node ids (``nN``), so
     every node's typing reaches the server. Checked just before each commit
     (recover, and every switch: _commit_project_workspace): a change that
     let a local id through fails loudly (500, nothing written) instead of
     losing the person's later edits."""
-    # One rule with the live graph's own check (CLIGraph's require_backend_ids,
-    # review 16 renumber-everywhere NIT-1).
+    # One rule with the live graph's own check (CLIGraph's
+    # require_backend_ids).
     require_backend_ids([node.get("id") if isinstance(node, Mapping) else node
                          for node in snapshot.get("nodes") or []])
 
@@ -21926,25 +21899,25 @@ def _require_backend_node_ids(snapshot: Mapping[str, Any]) -> None:
 # ({old: new}; CLIGraph.renumbered_on_load), and, when the canvas is a
 # project's, the replacement that reloads it in a tab from before this boot
 # (_boot_first_sync). Both ride on each socket's first graphSync only until
-# the next canvas replacement or the person's first read of that project
-# (review 16 renumber-everywhere NIT-3): a tab loaded after that holds the
+# the next canvas replacement or the person's first read of that project:
+# a tab loaded after that holds the
 # new ids and the new revision already.
 _boot_renumbered: dict[str, str] = {}
 _boot_replacement: dict[str, Any] = {}
 
 
 def _boot_first_sync() -> dict[str, Any]:
-    """What a socket's first graphSync adds after a boot renumber (PR #199
-    round 18, review 16 MEDIUM-1). For a project's canvas: ``graphReplaced``,
-    ``projectSwitch`` (Nebula's own, ``actor`` {"kind": "system"}, from and
-    to the open project, ``previousRevision`` the revision before this boot)
-    and ``renumbered``, the shape of an agent's reopen of the open project,
-    under the new ``workspaceRevision``: a tab from before the boot follows
-    it, hands off what it hadn't saved (the handoff learns the ids) and
-    loads the project again. Without a project, ``renumbered`` alone."""
+    """What a socket's first graphSync adds after a boot renumber (PR #199).
+    For a project's canvas: ``graphReplaced``, ``projectSwitch`` (Nebula's
+    own, ``actor`` {"kind": "system"}, from and to the open project,
+    ``previousRevision`` the revision before this boot) and ``renumbered``,
+    the shape of an agent's reopen of the open project, under the new
+    ``workspaceRevision``: a tab from before the boot follows it, hands off
+    what it hadn't saved (the handoff learns the ids) and loads the project
+    again. Without a project, ``renumbered`` alone."""
     if _boot_replacement:
-        # A reopen of the open project like the others (GM r29 of PR #199,
-        # 3): the boot closes no proposal (a restart's own closing is said by
+        # A reopen of the open project like the others (design, PR #199): the
+        # boot closes no proposal (a restart's own closing is said by
         # proposalSync on the person's hello and the Updates' "Closed: Nebula
         # restarted").
         return {"graphReplaced": True, "projectSwitch": copy.deepcopy(_boot_replacement["projectSwitch"]),
@@ -21964,13 +21937,13 @@ def _end_boot_replacement(project_id: str | None = None) -> None:
 
 @app.on_event("startup")
 async def _renumber_live_canvas_at_boot() -> None:
-    """A state.json from before the live graph refused tab-local ids (PR #199
-    round 17, review 15 HIGH-1): CLIGraph.load gave those nodes Nebula's
-    ids. The canvas's own project gets the same ids (its snapshot, run
-    history and records), so the next read of it still lays the live graph
-    over the same nodes, and state.json is written with them.
+    """A state.json from before the live graph refused tab-local ids (PR
+    #199): CLIGraph.load gave those nodes Nebula's ids. The canvas's own
+    project gets the same ids (its snapshot, run history and records), so the
+    next read of it still lays the live graph over the same nodes, and
+    state.json is written with them.
 
-    Round 18 (review 16 MEDIUM-1): the project's copy of each such node is
+    The project's copy of each such node is
     the newer one (the tab autosaved its typing there and never pushed it),
     so its settings, name and place go onto the live graph before anything
     reads it; the new ids are numbered past every id the project ever used
@@ -22008,8 +21981,8 @@ async def _renumber_live_canvas_at_boot() -> None:
                 while len(handoffs) > _MAX_SWITCH_HANDOFFS:
                     handoffs.pop(next(iter(handoffs)))
                 catalog["handoffs"] = handoffs
-                # The baseline is the project's copy, the values just taken
-                # (review 17 MEDIUM-1): the tab's last autosave of each node.
+                # The baseline is the project's copy, the values just taken:
+                # the tab's last autosave of each node.
                 project[_HANDOFF_RENUMBERED] = {"revision": before, "map": dict(mapping),
                                                 "base": _renumbered_base(project, mapping)}
                 cli_graph._maybe_persist()
@@ -22031,9 +22004,9 @@ async def _renumber_live_canvas_at_boot() -> None:
 
 def _boot_ids_past_the_project(project: Mapping[str, Any], mapping: Mapping[str, str]) -> dict[str, str]:
     """The boot's {old: new} with every new id past each id the project has
-    ever used (its counter, nodes, run history and references; review 16
-    MEDIUM-1): load() could number only past state.json's. The live graph
-    moves with it (_rekey_candidate)."""
+    ever used (its counter, nodes, run history and references): load()
+    could number only past state.json's. The live graph moves with it
+    (_rekey_candidate)."""
     used = max(int(project.get("_nodeCounter", 0) or 0), _ids_ever_used(project["snapshot"]))
     given = [int(new[1:]) for new in mapping.values() if _BACKEND_NODE_ID.fullmatch(new)]
     if not given or min(given) > used:
@@ -22094,22 +22067,20 @@ def _stage_project_snapshot(snapshot: Any, *, historical: dict[str, str] | None 
     ``size_checked``: refuse a snapshot over the save limit (every save).
     Opening a stored project doesn't: one can be stored over it (a switch
     keeps the live canvas in the project it leaves), and it opens, so the
-    canvas can pause saving it until the person trims it (Q118), instead of
+    canvas can pause saving it until the person trims it, instead of
     the project never opening again.
     A scene's shot port a renumbered shot owned moves to its new id, with its
     wires; a ``shot_<id>`` port no shot owns, and its wires, are left out,
-    each said in ``warnings`` and listed in ``dropped_ports`` (PR #198 review
-    5, L3; _stray_port_report), in GM's load-case line ("…while loading the
+    each said in ``warnings`` and listed in ``dropped_ports`` (PR #198;
+    _stray_port_report), in the design's load-case line ("…while loading the
     project."); ``stray_log`` gets the Agent log's lines (_stray_log_lines).
-    ``dropped_wires`` (the recover route only: a kept tab's wires, PR #199
-    round 16): a connection the server's rules refuse (a missing node or
+    ``dropped_wires`` (the recover route only: a kept tab's wires, PR #199): a connection the server's rules refuse (a missing node or
     port, a type the input can't take, an input past its connection limit, a
     duplicate, a loop) is left out and listed there (_dropped_wire, by the
     shared kinds), instead of refusing the whole snapshot with a 400;
     without it, it refuses. With it, every connection gets the live connect
     route's check, one touching a node whose definition was removed too,
-    and a stray shot connection is listed as well (round 17, review 15
-    NIT-4).
+    and a stray shot connection is listed as well.
     """
     if not isinstance(snapshot, dict):
         raise HTTPException(status_code=400, detail="Project snapshot must be an object")
@@ -22199,7 +22170,7 @@ def _stage_project_snapshot(snapshot: Any, *, historical: dict[str, str] | None 
         else:
             raise HTTPException(status_code=400, detail=retired_message(definition_id) or f"Unknown node definition {definition_id}")
         staged_node["id"] = node_id
-        # An agent's placeholder (Q125 item 3) stays one across a save and a
+        # An agent's placeholder stays one across a save and a
         # reopen; a malformed flag loads as a normal node. Saves of the live
         # canvas take the flag from the live graph, never from the tab
         # (_live_pending_flags).
@@ -22210,7 +22181,7 @@ def _stage_project_snapshot(snapshot: Any, *, historical: dict[str, str] | None 
         else:
             result["nodes"][index]["data"].pop(pending_nodes.PENDING_KEY, None)
         # Its landing stamp (RESULT_LANDED_KEY) loads with it, as the flag
-        # does (PR #199 round 22, review 20 LOW-1): an open no longer drops
+        # does (PR #199): an open no longer drops
         # it from the live node, so the next save keeps it. Saves of the live
         # canvas take it from the live graph (_live_result_stamps), and a
         # handoff never takes the tab's.
@@ -22254,7 +22225,7 @@ def _stage_project_snapshot(snapshot: Any, *, historical: dict[str, str] | None 
             raise HTTPException(status_code=400, detail=f"edges[{index}] references a missing node")
         rekeyed = (port_reports.get(source) or {}).get("rekeyed", {}).get(source_handle)
         if rekeyed:
-            # The renumbered shot's port moved: its wire follows (L3).
+            # The renumbered shot's port moved: its wire follows.
             source_handle = rekeyed
             result["edges"][index]["sourceHandle"] = rekeyed
         signature = (source, source_handle, target, target_handle)
@@ -22273,7 +22244,7 @@ def _stage_project_snapshot(snapshot: Any, *, historical: dict[str, str] | None 
                              _ingress_node_name(str(candidate.nodes[source].get("definitionId") or ""),
                                                 candidate.nodes[source].get("label")))
             if dropped_wires is not None:
-                # Never left out silently (review 15 NIT-4): a port absent.
+                # Never left out silently: a port absent.
                 dropped_wires.append(_dropped_wire(edge_id, signature, "port",
                                                    f"Shot port {source_handle} on {source} has no shot that owns it",
                                                    candidate))
@@ -22281,7 +22252,7 @@ def _stage_project_snapshot(snapshot: Any, *, historical: dict[str, str] | None 
         if dropped_wires is not None:
             # The live connect route's check, for every connection: one that
             # touches a node whose definition was removed is checked too, and
-            # left out (review 15 NIT-4), as connecting it now is refused.
+            # left out, as connecting it now is refused.
             if issue := _connect_issue(source, source_handle, target, target_handle, graph=candidate, saved=True):
                 dropped_edges.add(index)
                 kind = issue.cause if issue.cause in DROPPED_CONNECTION_KINDS else "port"
@@ -22346,8 +22317,9 @@ def _refuse_agent_billing_in_project(candidate: CLIGraph, *before: Mapping[str, 
     # because it isn't connected as the person (no person token, or one from
     # an earlier launch): the refusal says person_required
     # (_person_only_refusal), so the canvas shows its reconnect banner and
-    # keeps Try again instead of treating the copy as refused for good (Q116 a
-    # review). The detail stays word for word; an agent's refusal is unchanged.
+    # keeps Try again instead of treating the copy as refused for good.
+    # The detail stays word for word; an agent's refusal is
+    # unchanged.
     _refuse_agent_billing_change(changes)
 
 
@@ -22379,11 +22351,10 @@ def _overlay_live_project(project: dict[str, Any], exported: dict[str, Any]) -> 
     """Overlay CLI changes while retaining frontend-only data and run recipes.
 
     Only onto the project the live canvas is: never one project's canvas
-    into another's (review 1 of PR #199, H1: a restore opened another
-    project and the next listing saved the canvas into it). A canvas that
-    doesn't record its project (OWNER_UNKNOWN) is the open one's, and
-    callers pass the open project. Returns False, changing nothing, for any
-    other project."""
+    into another's (PR #199: a restore opened another project and the next
+    listing saved the canvas into it). A canvas that doesn't record its
+    project (OWNER_UNKNOWN) is the open one's, and callers pass the open
+    project. Returns False, changing nothing, for any other project."""
     owner = cli_graph.owner
     if owner is not OWNER_UNKNOWN and owner != project.get("id"):
         return False
@@ -22435,7 +22406,7 @@ def _set_canvas_owner(owner: Any, copy_note: Mapping[str, Any] | None = None) ->
     (strictly: a failed write raises, before any catalog commit, so the two
     files never disagree about a project that was committed). ``copy_note``
     ({name, agent}): the canvas is the copy an agent's change was made on,
-    saved with it (CLIGraph.copy_note; review 10 of PR #199, L-1)."""
+    saved with it (CLIGraph.copy_note; PR #199)."""
     note = {"of": owner, "name": copy_note.get("name"), "agent": copy_note.get("agent")} if copy_note else None
     if cli_graph.owner == owner and cli_graph.owner is not OWNER_UNKNOWN and note is None:
         return
@@ -22469,9 +22440,9 @@ def _file_live_canvas(catalog: dict[str, Any], exported: dict[str, Any], *, migr
 
 
 def _filed_canvas_name(catalog: dict[str, Any], owner: Any) -> str:
-    """What the live canvas is filed as (GM r3 of PR #199): the project's
-    own name when it is free, else "Recovered <project>" (GM r23 a; then
-    " copy", " copy 2": GM r29, 2, project_store.lost_row_name) when which
+    """What the live canvas is filed as (design, PR #199): the project's
+    own name when it is free, else "Recovered <project>" (design; then
+    " copy", " copy 2": project_store.lost_row_name) when which
     project it was is known and that project's name can be read (in
     Recently deleted, or in the restore that couldn't bring it back); else
     "Recovered canvas", then "Recovered canvas 2"."""
@@ -22479,7 +22450,7 @@ def _filed_canvas_name(catalog: dict[str, Any], owner: Any) -> str:
     copy = _copy_records(catalog).get(owner) if isinstance(owner, str) else None
     copy_name = copy["name"] if copy else None
     if copy_name:
-        # A copy an agent's change was made on (GM's rule (a)): its own name.
+        # A copy an agent's change was made on (the design's rule): its own name.
         return copy_name
     if isinstance(owner, str):
         trashed = (catalog.get("trash") or {}).get(owner)
@@ -22490,10 +22461,10 @@ def _filed_canvas_name(catalog: dict[str, Any], owner: Any) -> str:
             if latest.get("openProjectMissing") == owner:
                 name = latest.get("openProjectName")
     if not isinstance(name, str) or not name.strip():
-        # "Recovered canvas", then "Recovered canvas 2" and on (GM r5).
+        # "Recovered canvas", then "Recovered canvas 2" and on (design).
         return project_store_module.recovered_canvas_name(catalog)
-    # GM r14, 4: the lost row's own name when it is free again, else a
-    # recovered copy's name (GM r29, 2: never "Recovered Recovered canvas").
+    # Design: the lost row's own name when it is free again, else a
+    # recovered copy's name (design: never "Recovered Recovered canvas").
     return project_store_module.lost_row_name(name, catalog)
 
 
@@ -22501,7 +22472,7 @@ def _filing_room(catalog: dict[str, Any], exported: dict[str, Any]) -> str | Non
     """Which limit filing the live canvas as a new project would pass
     ("projects" or "storage"), or None when there is room. Checked before
     anything is written (state.json included), so a full list never makes
-    the listing fail or the canvas change owner (review 2 of PR #199, L4);
+    the listing fail or the canvas change owner (PR #199);
     prepare checks it exactly at the commit."""
     if len(catalog["projects"]) >= project_store_module.MAX_PROJECTS:
         return "projects"
@@ -22517,12 +22488,12 @@ def _filing_room(catalog: dict[str, Any], exported: dict[str, Any]) -> str | Non
 
 
 # The live canvas couldn't be filed as its own project because the list is
-# at a limit (review 2 of PR #199, L4): {reason, from, since, journaled}. It
+# at a limit (PR #199): {reason, from, since, journaled}. It
 # is still state.json's canvas and no project is open, so nothing replaces or
-# overlays it (the person can't see it until it is saved: GM r6); making a project is refused until there is room and opening one holds it aside first (canvas-held/),
+# overlays it (the person can't see it until it is saved: design); making a project is refused until there is room and opening one holds it aside first (canvas-held/),
 # and the next listing with room files it. Kept beside the catalog
 # (ProjectStore.canvas_waiting), so `since` and the one journal event hold
-# across restarts (review 3, L-5); this is only its cache in this process.
+# across restarts; this is only its cache in this process.
 # After a waiting canvas is filed, the record says so instead ({saved: {id,
 # name, at}}) for CANVAS_SAVED_SECONDS, for the person's "saved" toast.
 # (the store it was read from, the record): read again for another store.
@@ -22538,14 +22509,14 @@ def _forget_canvas_waiting_cache() -> None:
     _canvas_held_cache = None
 
 
-# GM's rule (a) for PR #199 (review 8, HIGH-1): while the person's canvas
+# The design's rule for PR #199: while the person's canvas
 # waits, every agent write first files it untouched, never opened, and the
 # write goes on a new canvas (a clear or a load) or a copy of it (any other).
 # What protects it lives in the catalog (project_store.canvas_pending_of),
-# written in the same commit as the filing (review 9, M-1): ``fresh``, the
+# written in the same commit as the filing: ``fresh``, the
 # project filed from the waiting canvas and that canvas's digest (an agent's
 # write closes it first while it is open, unchanged, and no tab of the
-# person's has been on it: GM r11, 2); ``copies``, the canvases an agent's
+# person's has been on it: design); ``copies``, the canvases an agent's
 # change was made on, by the id each is filed under.
 
 
@@ -22571,7 +22542,7 @@ def _mark_fresh_filing(catalog: dict[str, Any], project_id: str | None) -> None:
 def _fresh_filing_open(catalog: Mapping[str, Any]) -> dict[str, Any] | None:
     """The project filed from the person's waiting canvas (or protected again
     after a restore), when it is open and the live canvas; else None. Only
-    the person's own act ends it (GM r13, 1: their own open of it, or their
+    the person's own act ends it (design: their own open of it, or their
     first own edit there; _end_protection): a change to the canvas doesn't,
     as a tab's sync echo is one too (the protect saves the live canvas into
     the project before it closes it, so nothing on it is lost)."""
@@ -22589,7 +22560,7 @@ def _copy_records(catalog: Mapping[str, Any] | None = None) -> dict[str, dict[st
     """Every copy an agent's change was made on, by the id it is filed under:
     the catalog's records (canvasPending.copies), and the note each copy
     carries itself (state.json's for the live canvas, a held copy's own), for
-    one whose catalog record the damage took (review 10 of PR #199, L-1):
+    one whose catalog record the damage took (PR #199):
     never filed as "Recovered canvas N" or said as the person's."""
     copies = dict(_canvas_pending(catalog)["copies"])
     notes = [cli_graph_module.copy_note_of(cli_graph.copy_note, cli_graph.owner)]
@@ -22610,7 +22581,7 @@ def _set_canvas_copies(catalog: dict[str, Any], *, add: tuple[str, dict[str, Any
                        drop: Iterable[Any] = (), prune: bool = False) -> None:
     """In the caller's transaction: add a copy's record, drop the copies
     filed, and (``prune``) the ones that no longer exist (an emptied copy is
-    never filed: review 9, nit 3)."""
+    never filed)."""
     pending = project_store_module.canvas_pending_of(catalog)
     copies = dict(pending["copies"])
     for copy_id in drop:
@@ -22625,7 +22596,7 @@ def _set_canvas_copies(catalog: dict[str, Any], *, add: tuple[str, dict[str, Any
 
 def _canvas_copy_name(source_name: str, catalog: Mapping[str, Any]) -> str:
     """The name the copy an agent's change was made on takes: Nebula's
-    duplicate naming (GM r10, 1; project_store.duplicate_name), counting the
+    duplicate naming (design; project_store.duplicate_name), counting the
     names promised to copies that still exist (an emptied copy is never
     filed, so it takes no number)."""
     alive = _alive_copy_ids()
@@ -22635,8 +22606,8 @@ def _canvas_copy_name(source_name: str, catalog: Mapping[str, Any]) -> str:
 
 # The last project switch (an open or a create) and who made it: "person"
 # (the person's own, from their tab) or "agent" (an agent, the CLI, a script:
-# _switch_actor). In memory: a new process has made none (review 10 of PR
-# #199, HIGH-2: a tab that follows an agent's switch never ends the protection).
+# _switch_actor). In memory: a new process has made none (PR #199: a tab that
+# follows an agent's switch never ends the protection).
 _last_project_switch: dict[str, Any] = {}
 
 
@@ -22652,11 +22623,10 @@ async def _person_tab_viewing(project_id: Any, opened_by: Any = None) -> None:
     "person"``, sent only on a socket its hello promoted, and only for a
     screen the person reached by their own open: never one the tab reached
     by following an agent's switch). That is one of the two person acts that
-    end the protection of the project filed from their waiting canvas (GM
-    r13, 1). Refused when the last switch to the project was an agent's
-    (review 10 of PR #199, HIGH-2), whatever the tab says. Nothing an agent
-    sends reaches this: an agent's socket is never promoted, and no HTTP
-    route ends it."""
+    end the protection of the project filed from their waiting canvas
+    (design). Refused when the last switch to the project was an agent's (PR
+    #199), whatever the tab says. Nothing an agent sends reaches this: an
+    agent's socket is never promoted, and no HTTP route ends it."""
     if not isinstance(project_id, str) or opened_by != "person":
         return
     if _last_project_switch.get("by") == "agent" and _last_project_switch.get("projectId") == project_id:
@@ -22668,7 +22638,7 @@ async def _person_tab_viewing(project_id: Any, opened_by: Any = None) -> None:
 async def _person_tab_open(project_id: Any) -> None:
     """The person opened ``project_id``, the project their tab already had
     loaded, so no open request went out (its socket's `personOpen` frame):
-    their own open (GM r13, 1), after an agent's switch to it too. It is the
+    their own open (design), after an agent's switch to it too. It is the
     open project's last switch from now on."""
     if not isinstance(project_id, str) or project_id != _open_project_id():
         return
@@ -22680,7 +22650,7 @@ async def _person_tab_input(project_id: Any) -> None:
     """The person's own first edit in ``project_id`` (its socket's
     `personInput` frame: a real input event on their verified tab, never a
     sync, an agent's write or viewing alone): the other person act that ends
-    the protection (GM r13, 1), wherever the tab came from, a followed
+    the protection (design), wherever the tab came from, a followed
     switch included."""
     if isinstance(project_id, str):
         await _end_protection(project_id, "the person edited it")
@@ -22712,30 +22682,28 @@ async def _end_protection(project_id: str, why: str) -> None:
 _copy_filings: dict[str, dict[str, Any]] = {}
 
 
-# The waiting canvases held aside (review 5 of PR #199, M-3; GM's held
-# model, 2026-10-28): before an open, a create, or (below the limit) an
-# agent's clear or graph load replaces a waiting live canvas, it is kept
-# whole in its own file, projects/canvas-held/<projectId>.json (and its .bak), fsynced with its folder,
-# and only that copy is ever filed as the person's canvas (_file_held_canvases,
-# on the next listing with room), each on its own. (the store, the list).
+# The waiting canvases held aside (PR #199; the design's held model, 2026-10-28): before an open, a
+# create, or (below the limit) an agent's clear or graph load replaces a waiting live canvas, it is
+# kept whole in its own file, projects/canvas-held/<projectId>.json (and its .bak), fsynced with its
+# folder, and only that copy is ever filed as the person's canvas (_file_held_canvases, on the next
+# listing with room), each on its own.
 _canvas_held_cache: tuple[Any, list[dict[str, Any]]] | None = None
 
-# GM (b) of the held model, verbatim: an agent's clear or graph load while
-# the canvas waits at the project limit (409, code canvas_waiting), so no
-# second canvas with no project is left that couldn't be saved either.
+# Design, verbatim: an agent's clear or graph load while the canvas waits at the project limit
+# (409, code canvas_waiting), so no second canvas with no project is left that couldn't be saved
+# either.
 CANVAS_WAITING_REFUSAL = ("The project limit is reached, so a new canvas can't be saved. "
                           "Open an existing project to work in, or ask the person to delete a project.")
-# The size limit's, GM's round 5 review (b) line, verbatim.
+# The size limit's line (design, verbatim).
 CANVAS_WAITING_REFUSAL_STORAGE = ("Nebula's project list is full, so a new canvas can't be saved. "
                                   "Open an existing project to work in, or ask the person to permanently delete a "
                                   "project in Recently deleted.")
-# Every other agent write to the waiting canvas at the limit (review 6 of PR
-# #199, M-1; GM's answer 1 to review 6, verbatim): an add, a delete, an
-# apply, a restore, a run.
+# Every other agent write to the waiting canvas at the limit (PR #199;
+# design, verbatim): an add, a delete, an apply, a restore, a run.
 CANVAS_CHANGE_REFUSAL = ("The open canvas isn't saved as a project yet because the project limit is reached, so it "
                          "can't be changed. Open an existing project to work in, or ask the person to delete a project.")
-# GM: "Same shape for 'the project list is full'". Its way out is the size
-# cap's own, from GM's (b) line above: only a delete for good frees it.
+# Design: "Same shape for 'the project list is full'". Its way out is the size
+# cap's own, from the size limit's line above (CANVAS_WAITING_REFUSAL_STORAGE): only a delete for good frees it.
 CANVAS_CHANGE_REFUSAL_STORAGE = ("The open canvas isn't saved as a project yet because Nebula's project list is full, "
                                  "so it can't be changed. Open an existing project to work in, or ask the person to "
                                  "permanently delete a project in Recently deleted.")
@@ -22754,7 +22722,7 @@ class CanvasWaitingRefusal(HTTPException):
     canvas too (``reason``: projects | storage; ``action``: what the write
     does, CANVAS_ACTIONS). The lines are the agents': the person's tab never
     reaches this (a waiting canvas has no project open, so the tab is on
-    Projects home, where clear and load aren't offered; GM r11 #3 dropped
+    Projects home, where clear and load aren't offered; the design dropped
     the person's own lines as unreachable copy)."""
 
     def __init__(self, reason: str, action: str = "replace") -> None:
@@ -22773,8 +22741,8 @@ async def canvas_waiting_refusal(request, exc: CanvasWaitingRefusal):
     return JSONResponse(status_code=409, content=_canvas_waiting_body(exc))
 
 
-# GM r16 on PR #199 (MCP): while the person's tab keeps edits Nebula
-# couldn't save after it restored its project list (kept mode, GM r15),
+# Design (PR #199, MCP): while the person's tab keeps edits Nebula
+# couldn't save after it restored its project list (kept mode, design),
 # the tab neither sends nor shows any canvas change. An agent's write or
 # project switch would land on a canvas the person can't see, and the
 # person's [Save as a project] then opens their edits over it, so both
@@ -22784,7 +22752,7 @@ async def canvas_waiting_refusal(request, exc: CanvasWaitingRefusal):
 # KEPT_BOOT_SLACK_SECONDS from the new backend's start). Renaming a project, trashing one that
 # isn't open and restoring from Recently deleted still pass.
 CANVAS_KEPT_CODE = "canvas_kept_in_tab"
-# Curly ’ (GM r17 on PR #199, the limit wording): agents relay it to the person.
+# Curly ’ (design, PR #199, the limit wording): agents relay it to the person.
 CANVAS_KEPT_IN_TAB_DETAIL = (
     "The person’s tab is keeping edits Nebula couldn’t save before it restored its project list, so the canvas "
     "can’t be changed, nothing can be run and projects can’t be switched until they save those edits as a project "
@@ -22830,9 +22798,9 @@ def _held_canvases() -> list[dict[str, Any]]:
 def _held_distinct() -> list[dict[str, Any]]:
     """The held canvases that aren't the live canvas itself (a copy held by
     an open whose rollback failed: memory is that canvas, state.json the
-    other project's; review 7 of PR #199, L-1), for every count that also
-    counts the live canvas: one canvas holds one place, is named once, and
-    is filed once."""
+    other project's; PR #199), for every count that also counts the live
+    canvas: one canvas holds one place, is named once, and is filed
+    once."""
     held = _held_canvases()
     if not held or not (cli_graph.nodes or cli_graph.edges):
         return held
@@ -22842,7 +22810,7 @@ def _held_distinct() -> list[dict[str, Any]]:
 
 def _journal_held_unreadable() -> None:
     """A held canvas couldn't be read (or saved) and may be lost
-    (review 6 of PR #199, L-1): journaled once (`project.canvasHeldUnreadable`),
+    (PR #199): journaled once (`project.canvasHeldUnreadable`),
     so agents watching see it; the listing tells the person
     (`canvasHeldUnreadable`). Never fails the caller."""
     try:
@@ -22867,13 +22835,13 @@ def _held_unreadable_view() -> dict[str, Any] | None:
         return None
 
 
-# No shared cap on the held canvases (review 7 of PR #199, L-3: one refused
-# the person's every open once it filled). Each held canvas is capped like
-# a project, MAX_PROJECT_BYTES measured as a project's snapshot, and only
-# for agents: the person's open, create, clear and load always hold it
-# (GM: a canvas over the save limit is filed with saving paused, as a
-# project stored over it opens). An agent's write that would hold a canvas
-# past it is refused (409 canvas_held_full) with GM's line, verbatim.
+# No shared cap on the held canvases (PR #199: one refused the person's
+# every open once it filled). Each held canvas is capped like a project,
+# MAX_PROJECT_BYTES measured as a project's snapshot, and only for agents:
+# the person's open, create, clear and load always hold it (design: a
+# canvas over the save limit is filed with saving paused, as a project
+# stored over it opens). An agent's write that would hold a canvas past it
+# is refused (409 canvas_held_full) with the design's line, verbatim.
 CANVAS_HELD_TOO_BIG_DETAIL = ("This canvas is too big for Nebula to keep aside, so nothing was changed. Work in an "
                               "existing project, or make the canvas smaller first.")
 CANVAS_HELD_FULL_CODE = "canvas_held_full"
@@ -22929,11 +22897,10 @@ def _hold_live_canvas(exported: dict[str, Any], *, capped: bool = False) -> dict
     anything replaces it, in its own file. Its project id is chosen now, so
     a crash after the filing's commit never files it twice. A canvas held
     already (the same digest: an open whose rollback failed, then tried
-    again; review 7 of PR #199, L-1) isn't held twice: that hold is it.
-    ``capped`` (an agent's write): refused past MAX_PROJECT_BYTES
-    (CanvasHeldFull); the person's own act is never refused for its size.
-    Raises ProjectStoreError when it can't be kept on disk: nothing
-    replaces the canvas then."""
+    again; PR #199) isn't held twice: that hold is it. ``capped`` (an agent's
+    write): refused past MAX_PROJECT_BYTES (CanvasHeldFull); the person's own
+    act is never refused for its size. Raises ProjectStoreError when it can't
+    be kept on disk: nothing replaces the canvas then."""
     digest = _canvas_digest(cli_graph)
     if same := next((entry for entry in _held_canvases() if entry.get("digest") == digest), None):
         print("[projects] the waiting canvas is held aside already: not held twice", flush=True)
@@ -22945,7 +22912,7 @@ def _hold_live_canvas(exported: dict[str, Any], *, capped: bool = False) -> dict
              "since": waiting.get("since") or project_now(), "heldAt": project_now(),
              "digest": digest, "counter": int(cli_graph._counter),
              "nodes": copy.deepcopy(exported["nodes"]), "edges": copy.deepcopy(exported["edges"])}
-    # Its content's own digest (review 8 of PR #199, L-1): checked before a
+    # Its content's own digest (PR #199): checked before a
     # salvaged copy is filed, and again at the filing.
     entry["itemsDigest"] = project_store_module.held_items_digest(entry["nodes"], entry["edges"])
     # An agent's copy held aside keeps its own name and agent (design): filed
@@ -22990,11 +22957,11 @@ def _disk_canvas_digest() -> str | None:
 def _drop_held_copies_of_live() -> None:
     """A held copy that is the live canvas itself (a crash came between its
     hold and the replacement, or the replacement failed: a hold is never
-    taken back, review 6 of PR #199, L-2): the live canvas is the one that
-    counts, so the copy goes and the canvas is filed or held once. Only when
-    state.json holds that canvas too: after a failed open whose rollback
-    failed as well (507), memory is the waiting canvas and state.json the
-    other project's, and the held copy is the only one on disk."""
+    taken back, PR #199): the live canvas is the one that counts, so the
+    copy goes and the canvas is filed or held once. Only when state.json
+    holds that canvas too: after a failed open whose rollback failed as well
+    (507), memory is the waiting canvas and state.json the other project's,
+    and the held copy is the only one on disk."""
     held = _held_canvases()
     if not held:
         return
@@ -23018,10 +22985,10 @@ def _drop_held_copies_of_live() -> None:
 def _hold_if_waiting(settled: tuple[str, Any] | None, exported: dict[str, Any]) -> dict[str, Any] | None:
     """An open or a create replaces the live canvas. While it waits to be
     saved as its own project (the list at a limit), it is held aside first
-    (GM's held model: refusing every open locked the person out of every
-    project until they deleted one). Returns the hold, for _held_settled
-    once the replacement landed. A failed replacement keeps it (review 6 of
-    PR #199, L-2): the next settle drops it by its digest
+    (the design's held model: refusing every open locked the person out of
+    every project until they deleted one). Returns the hold, for
+    _held_settled once the replacement landed. A failed replacement keeps
+    it (PR #199): the next settle drops it by its digest
     (_drop_held_copies_of_live) when the live canvas is still that one."""
     if settled and settled[0] == "waiting":
         return _hold_live_canvas(exported, capped=not _is_person_request())
@@ -23030,7 +22997,7 @@ def _hold_if_waiting(settled: tuple[str, Any] | None, exported: dict[str, Any]) 
 
 def _live_canvas_unsettled(catalog: dict[str, Any]) -> bool:
     """Whether the live canvas waits by the facts, whatever any record says
-    (review 7 of PR #199, M-1): it holds something, and its owner (a
+    (PR #199): it holds something, and its owner (a
     project id, or unproven) is neither the open project nor in the list,
     so the next settle would file it as its own project. A catalog restore
     leaves it so until something settles it, and the waiting record only a
@@ -23040,14 +23007,14 @@ def _live_canvas_unsettled(catalog: dict[str, Any]) -> bool:
 
 def _settle_in_step() -> tuple[str, Any] | None:
     """Settle the live canvas now, in the caller's step, as a listing would
-    (review 7 of PR #199, M-1): filed as its own project when there is
+    (PR #199): filed as its own project when there is
     room, else marked waiting with no project open, committed either way.
     So no request ever acts on a restored catalog with the live canvas
     unsettled: an agent's write right after a restore finds it saved (and
     goes on, on that project, as after a listing) or waiting (and refused
     at the limit). Inside a held catalog transaction (a nested one would
     lose a commit) it refuses with the busy line (507), never a false
-    limit (review 8 of PR #199, N-2); no guard call runs inside one today.
+    limit (PR #199); no guard call runs inside one today.
     The filing's broadcast is the fence's, after the route
     (_canvas_guard_note's ``filed``)."""
     if getattr(project_store._local, "depth", 0):
@@ -23089,12 +23056,12 @@ def _waiting_canvas_plan() -> tuple[str, Any] | None:
     """What a write that changes the canvas must do first while the live
     canvas waits to be saved as its own project: None (it doesn't wait),
     ("refuse", the limit) when the list has no room for one more canvas
-    with no project either (GM (b) of the held model: that new canvas
+    with no project either (design: that new canvas
     couldn't be saved, and a second one waiting would be filed as the
     person's), or ("hold", the canvas as a project stores it).
 
     Whether it waits is read from the canvas itself, not only the record a
-    settle writes (review 7 of PR #199, M-1): a canvas left unsettled by a
+    settle writes (PR #199): a canvas left unsettled by a
     restore is settled here first (_settle_in_step). Synchronous: the
     route's step holds."""
     if not (cli_graph.nodes or cli_graph.edges):
@@ -23131,7 +23098,7 @@ def _canvas_agent_name() -> str | None:
 def _canvas_agent() -> dict[str, Any]:
     """Who the person's Agent log line is about: {agent: name or None} and,
     when the request names an agent, its row's {agentId, color} (the cursor's,
-    agent_presence.identify), so the row is the agent's (GM r7: filtering the
+    agent_presence.identify), so the row is the agent's (design: filtering the
     log to Codex shows what Codex tried)."""
     found: dict[str, Any] = {"agent": _canvas_agent_name()}
     try:
@@ -23167,7 +23134,7 @@ CANVAS_SAVED_FOR_AGENT = {
 }
 
 
-# GM r15: when the canvas already was that project (a listing filed
+# Design: when the canvas already was that project (a listing filed
 # it, or a restore protected the person's project again), it is kept, not
 # saved: the "saved as its own project" forms stay for a canvas that wasn't
 # a project yet.
@@ -23179,8 +23146,8 @@ CANVAS_KEPT_FOR_AGENT = {
 
 
 def canvas_saved_for_agent(action: str, name: str, file_name: str | None = None, kept: bool = False) -> str:
-    """GM's agent reply when its write saved or kept the person's canvas
-    first (rule (a); "kept" when it already was that project, GM r15); a load
+    """The design's agent reply when its write saved or kept the person's canvas
+    first ("kept" when it already was that project); a load
     names its file when the caller knows it (graph_file_client)."""
     if action == "replace" and file_name:
         if kept:
@@ -23199,7 +23166,7 @@ _persons_canvas_saved: dict[str, Any] = {}
 
 def _protect_persons_canvas(action: str) -> dict[str, Any] | None:
     """An agent's write while the live canvas is the person's canvas waiting
-    to be saved as a project (GM's rule (a), review 8 of PR #199, HIGH-1):
+    to be saved as a project (the design's rule, PR #199):
     the waiting canvas (its record, or a restore that left it unsettled) or
     the project a settle filed and opened from it, unchanged since. The
     person's canvas is filed untouched as its own project and never opened
@@ -23215,7 +23182,7 @@ def _protect_persons_canvas(action: str) -> dict[str, Any] | None:
     hold path then holds it aside) or at the projects limit (the caller's
     plan marks it waiting and refuses). Past a project's size it refuses
     (CanvasHeldFull). Synchronous: no await from the check to the
-    write; never inside a catalog transaction (ProjectStoreError: N-2)."""
+    write; never inside a catalog transaction (ProjectStoreError)."""
     if not (cli_graph.nodes or cli_graph.edges):
         return None
     owner = cli_graph.owner
@@ -23234,7 +23201,7 @@ def _protect_persons_canvas(action: str) -> dict[str, Any] | None:
         raise ProjectStoreError("The project list is busy, so nothing was changed. Try again.")
     exported = _graph_canvas_export(cli_graph)
     copy_id = None if action in ("clear", "replace") else uuid4().hex
-    # The per-canvas cap, agents only (review 7, L-3): a canvas bigger than
+    # The per-canvas cap, agents only: a canvas bigger than
     # a project can be saved is never filed or copied for an agent's write;
     # a clear or load of the project already filed closes it, copying nothing.
     if (copy_id or fresh is None) and (size := _held_snapshot_bytes(exported)) > MAX_PROJECT_BYTES:
@@ -23247,10 +23214,10 @@ def _protect_persons_canvas(action: str) -> dict[str, Any] | None:
         if _fresh_filing_open(catalog) is None:
             # The person's canvas isn't a project yet (it waits, or a restore
             # left it unsettled): filed, opened and protected in a commit of
-            # its own first, as a listing files it (review 11 of PR #199,
-            # MEDIUM-1). The agent's write below is the next commit, so the
-            # catalog.json.bak it rotates holds the filing: a second damage
-            # right after it restores a list with the person's canvas in it.
+            # its own first, as a listing files it (PR #199). The agent's
+            # write below is the next commit, so the catalog.json.bak it
+            # rotates holds the filing: a second damage right after it
+            # restores a list with the person's canvas in it.
             if not (_canvas_not_filed_now() is not None or _live_canvas_unsettled(catalog)):
                 return None
             if len(catalog["projects"]) + len(_held_distinct()) + 1 > project_store_module.MAX_PROJECTS:
@@ -23282,7 +23249,7 @@ def _protect_persons_canvas(action: str) -> dict[str, Any] | None:
         # Made from the person's waiting canvas in this protection (this
         # write's own filing, or a listing's just before): "saved as its own
         # project". A project protected again after a restore already was
-        # one: "kept" (GM r15 on PR #199).
+        # one: "kept" (design, PR #199).
         was_filed = filed is not None or bool((project_store_module.canvas_pending_of(catalog)["fresh"] or {}).get("filed"))
         # Closed in this commit; its protection stays with it (design): if
         # the owner write below fails, the next settle opens it
@@ -23290,7 +23257,7 @@ def _protect_persons_canvas(action: str) -> dict[str, Any] | None:
         project = fresh
         # The live canvas is this project's: saved into it first, so a
         # change no person act ended the protection for (a tab's sync echo)
-        # is kept in it (GM r13, 1).
+        # is kept in it (design).
         _overlay_live_project(project, exported)
         catalog["activeProjectId"] = None
         catalog["workspaceRevision"] = uuid4().hex
@@ -23308,13 +23275,13 @@ def _protect_persons_canvas(action: str) -> dict[str, Any] | None:
     # The project is committed, closed and still protected; the live canvas
     # becomes the new canvas or the copy. If state.json can't say so, the
     # write stops here (507), and the next settle opens the project again,
-    # protected as it was (M-1). The copy carries its own name and agent in
-    # state.json too (L-1 of review 10): a catalog the damage took them from
+    # protected as it was. The copy carries its own name and agent in
+    # state.json too: a catalog the damage took them from
     # still names it as the agent's.
     _set_canvas_owner(copy_id, copy_note)
     # The open project closed under any tab showing it (one that followed an
     # agent there): each sync says so, and what the agent did, so that tab
-    # goes to Projects home with GM's line (GM r14, 3).
+    # goes to Projects home with the design's line (design).
     _persons_canvas_saved.clear()
     _persons_canvas_saved.update({"id": uuid4().hex, "projectId": project["id"], "name": project["name"],
                                   "action": action if action in ("clear", "replace") else "change",
@@ -23328,7 +23295,7 @@ def _protect_persons_canvas(action: str) -> dict[str, Any] | None:
           f"{'kept as' if kept else 'saved as'} \"{project['name']}\" {project['id']} first (not opened), and the "
           f"{action} goes on {'a copy, ' + repr(copy_name) if copy_id else 'a new canvas'}", flush=True)
     # `kept`: the canvas was already that project before this protection (a
-    # project a restore protected again), so the replies say "kept" (GM r15).
+    # project a restore protected again), so the replies say "kept" (design).
     return {"saved": {"id": project["id"], "name": project["name"]}, "copy": copy_name, "kept": kept}
 
 
@@ -23338,11 +23305,11 @@ def _guard_waiting_canvas(action: str) -> dict[str, Any] | None:
     live canvas's (owner None, so the canvas the write leaves is the ordinary
     unfiled one, never filed as the person's), or refused at the limit.
     Returns the hold, for _undo_waiting_canvas_guard on failure. A hold is
-    never taken back (review 6 of PR #199, L-2): if the write fails, the
+    never taken back (PR #199): if the write fails, the
     copy equal to the live canvas goes at the next settle, by its digest.
 
-    An agent's write first files the person's canvas untouched (GM's rule
-    (a): _protect_persons_canvas); only a canvas that can't be filed for its
+    An agent's write first files the person's canvas untouched (the design's rule:
+    _protect_persons_canvas); only a canvas that can't be filed for its
     size is held aside, as before."""
     if not _is_person_request():
         note = _canvas_guard_note.get()
@@ -23361,7 +23328,7 @@ def _guard_waiting_canvas(action: str) -> dict[str, Any] | None:
     hold = dict(_hold_live_canvas(plan[1], capped=not _is_person_request()))
     previous = cli_graph.owner
     # A failed owner write leaves the canvas waiting, its copy held: the
-    # next settle drops the copy by its digest (L-2: never released here).
+    # next settle drops the copy by its digest (never released here).
     _set_canvas_owner(None)
     hold["_previousOwner"] = previous
     return hold
@@ -23371,7 +23338,7 @@ def _undo_waiting_canvas_guard(hold: dict[str, Any] | None) -> None:
     """The clear or load failed before the canvas changed: the live canvas
     is the waiting one again (its owner back). The hold stays: the next
     settle drops it by its digest when the live canvas is still that canvas,
-    on disk too (L-2)."""
+    on disk too."""
     if hold is None:
         return
     try:
@@ -23383,20 +23350,19 @@ def _undo_waiting_canvas_guard(hold: dict[str, Any] | None) -> None:
 
 def _fence_waiting_canvas(action: str) -> None:
     """The one guard every agent graph write passes while the live canvas
-    waits to be saved as a project (review 6 of PR #199, M-1): the fence
+    waits to be saved as a project (PR #199): the fence
     runs it before the route (project_workspace_fence), an in-route route in
     its write step (_refuse_tab_write_without_revision), and every route
-    that awaits runs it again right before it writes (_refuse_if_graph_moved;
-    review 7, N-4: a restore that lands between the fence and the write).
-    Whether the canvas waits is read from the canvas itself (review 7, M-1;
-    _waiting_canvas_plan). At the limit the write is refused (409
-    canvas_waiting); below it the canvas is held aside first and the write
-    goes on, on a canvas that has no project. The person's own writes pass:
-    the person can't reach a waiting canvas (GM r6), a tab's write is
-    refused by its revision, and the person's clear or load keeps its own
-    guard in the route. Records what it did for the person's Agent log line
-    (_tell_canvas_guarded). Synchronous: no await between the check and the
-    hold."""
+    that awaits runs it again right before it writes (_refuse_if_graph_moved:
+    a restore that lands between the fence and the write). Whether the canvas
+    waits is read from the canvas itself (_waiting_canvas_plan). At the limit
+    the write is refused (409 canvas_waiting); below it the canvas is held
+    aside first and the write goes on, on a canvas that has no project. The
+    person's own writes pass: the person can't reach a waiting canvas
+    (design), a tab's write is refused by its revision, and the person's
+    clear or load keeps its own guard in the route. Records what it did for
+    the person's Agent log line (_tell_canvas_guarded). Synchronous: no await
+    between the check and the hold."""
     note = _canvas_guard_note.get()
     if note is None or note.get("held") or note.get("refused") or note.get("saved"):
         return
@@ -23435,7 +23401,7 @@ _HELD_PAST = {"clear": "cleared", "replace": "replaced", "change": "changed"}
 
 
 async def _tell_canvas_guarded(note: dict[str, Any]) -> None:
-    """The person's Agent log line for what _fence_waiting_canvas did (GM):
+    """The person's Agent log line for what _fence_waiting_canvas did (design):
     "Codex tried to change the canvas you had open. Nebula stopped it …"
     (canvasHoldRefused) or "Codex changed the canvas. The one you had open is
     kept …" (canvasHeld), as the agent's row. No toast."""
@@ -23445,7 +23411,7 @@ async def _tell_canvas_guarded(note: dict[str, Any]) -> None:
     action = note.get("action") or "change"
     who = {key: note[key] for key in ("agent", "agentId", "color") if key in note}
     if note.get("saved"):
-        # GM's rule (a): the person's canvas was saved first, untouched.
+        # The design's rule: the person's canvas was saved first, untouched.
         await _broadcast_projects_changed("canvasHeld", None, canvasHeld={
             "action": _HELD_PAST.get(action, action), "savedAs": note["saved"]["name"],
             **({"copy": True} if note.get("copy") else {}), **({"kept": True} if note.get("kept") else {}), **who})
@@ -23458,7 +23424,7 @@ async def _tell_canvas_guarded(note: dict[str, Any]) -> None:
 async def _note_waiting_canvas_guarded(hold: dict[str, Any] | None, action: str) -> bool:
     """After the clear or load landed: the live wait's record goes (its held
     copy waits instead), and an agent's change is one line in the person's
-    Agent log (GM). Whether a canvas was held, here or at the fence."""
+    Agent log (design). Whether a canvas was held, here or at the fence."""
     fenced = bool((_canvas_guard_note.get() or {}).get("held"))
     if hold is None:
         return fenced
@@ -23486,7 +23452,7 @@ def _held_room(catalog: dict[str, Any], entry: dict[str, Any], adding_bytes: int
 def _live_canvas_is_saved_project(catalog: dict[str, Any]) -> bool:
     """Whether the live canvas is the open project's, on disk too (its
     filing's state.json write landed): a held copy with its digest is then
-    that project already (review 7 of PR #199, L-1)."""
+    that project already (PR #199)."""
     active = catalog.get("activeProjectId")
     return (active is not None and cli_graph.owner == active and active in catalog["projects"]
             and _disk_canvas_digest() == _canvas_digest(cli_graph))
@@ -23500,12 +23466,12 @@ def _file_held_canvases(catalog: dict[str, Any], *, copies: bool | None = None, 
     opened: the live canvas is another. A held canvas whose project id the
     catalog already has (or deleted for good) was filed by a commit that
     landed before its hold could go, and one that is the live canvas now
-    saved as a project (the same digest: review 7 of PR #199, L-1) is that
+    saved as a project (the same digest: PR #199) is that
     project already: (None, entry), dropped after, never filed twice. Each
-    is filed in its own try (review 7, M-2): one that can't be is set aside
+    is filed in its own try: one that can't be is set aside
     (``.unfileable-…``) and said, never failing the listing. The caller
     commits, then calls _note_held_filed. The person's canvases go before
-    the agents' copies (GM r12, 2); ``copies`` False files only the person's,
+    the agents' copies (design); ``copies`` False files only the person's,
     True only the copies; ``adding``, the bytes filed in this step already."""
     filed: list[tuple[dict[str, Any] | None, dict[str, Any]]] = []
     purged = catalog.get("purged") or {}
@@ -23532,7 +23498,7 @@ def _file_held_canvases(catalog: dict[str, Any], *, copies: bool | None = None, 
         if _held_room(catalog, entry, adding) is not None:
             break
         if project_store_module.held_items_intact(entry) is False:
-            # Its content isn't what was held (review 8, L-1): kept aside and said.
+            # Its content isn't what was held: kept aside and said.
             print(f"[projects] the held canvas {project_id} doesn't match what was held: kept aside, not saved",
                   flush=True)
             _set_aside_unfileable(project_id)
@@ -23566,7 +23532,7 @@ def _file_held_canvases(catalog: dict[str, Any], *, copies: bool | None = None, 
 
 def _set_aside_unfileable(project_id: str) -> None:
     """A held canvas that can't be saved as a project leaves the held list,
-    its files kept aside and said (canvasHeldUnreadable; review 7, M-2)."""
+    its files kept aside and said (canvasHeldUnreadable)."""
     global _canvas_held_cache
     try:
         project_store.set_aside_unfileable_held(project_id)
@@ -23615,7 +23581,7 @@ def _note_held_filed(filed: list[tuple[dict[str, Any] | None, dict[str, Any]]]) 
 
 
 def _note_on_restore_notice(project: dict[str, Any], owner: Any) -> bool:
-    """GM's answer 1 to review 8 (one saved line): while the restore notice
+    """One saved line (design): while the restore notice
     shows (not dismissed), it names every canvas filed, and no toast does.
     The restore's own canvas is its ``recoveredCanvas``; any other canvas
     filed while it shows joins ``alsoFiled``. False when no notice shows:
@@ -23625,7 +23591,7 @@ def _note_on_restore_notice(project: dict[str, Any], owner: Any) -> bool:
         return False
     row = _saved_row(project)
     if row.get("agentCopy"):
-        # An agent's copy has its own line (GM r11, 4), never the person's.
+        # An agent's copy has its own line (design), never the person's.
         copies = [dict(item) for item in notice.get("agentCopies") or [] if isinstance(item, dict)]
         if not any(item.get("id") == row["id"] for item in copies):
             project_store.note_restore(notice["id"], agentCopies=[*copies, row])
@@ -23641,7 +23607,7 @@ def _note_on_restore_notice(project: dict[str, Any], owner: Any) -> bool:
 
 
 # Filings this close together are one listing's (the live canvas, then the
-# held ones): one toast names them all (review 6 of PR #199, N-2).
+# held ones): one toast names them all (PR #199).
 CANVAS_SAVED_TOGETHER_SECONDS = 5
 
 
@@ -23666,7 +23632,7 @@ def _note_canvases_saved(projects: list[dict[str, Any]]) -> None:
     filed += [_saved_row(project) for project in projects if project["id"] not in seen]
     last = projects[-1]
     # A filing after a restore notice named the canvas it saved: "Another
-    # canvas you had open…" (GM's answer 1 to review 8).
+    # canvas you had open…" (design).
     latest = project_store.latest_restore() or {}
     another = bool(latest.get("recoveredCanvas") or latest.get("alsoFiled"))
     _write_canvas_waiting({"saved": {**_saved_row(last), "at": project_now(), "filed": filed,
@@ -23675,17 +23641,17 @@ def _note_canvases_saved(projects: list[dict[str, Any]]) -> None:
 
 def _saved_row(project: dict[str, Any]) -> dict[str, Any]:
     """A filed canvas as the person's saved line names it: {id, name}, and
-    ``overSaveLimit`` when the project is over the save limit (GM: its line
-    says new changes won't save until it's smaller; a held canvas the
+    ``overSaveLimit`` when the project is over the save limit (design: its
+    line says new changes won't save until it's smaller; a held canvas the
     person's act held is never refused for its size)."""
     row: dict[str, Any] = {"id": project["id"], "name": project["name"]}
     # When it was saved: the person's lines name canvases in that order,
-    # which is also their number order (GM r10).
+    # which is also their number order (design).
     if isinstance(project.get("createdAt"), str):
         row["filedAt"] = project["createdAt"]
     copied = _copy_filings.get(project["id"])
     if copied is not None:
-        # An agent's copy (GM r11, 4): named as the agent's, never as "a
+        # An agent's copy (design): named as the agent's, never as "a
         # canvas you had open". ``agent`` None: "An agent’s".
         row["agentCopy"] = {"agent": copied.get("agent")}
     try:
@@ -23741,15 +23707,15 @@ def _canvas_saved_now() -> dict[str, Any] | None:
 def _canvas_not_filed_note(reason: str, *, room_now: bool = False, live: bool = True, held: int = 0,
                            deletes: int | None = None, projects: int | None = None) -> str:
     """The agents' line for a canvas waiting to be saved as a project (the
-    person's is GM's waiting line, frontend catalogRestoreCopy.ts): the live
-    one (``live``), and ``held`` more held aside (GM's held model). Never
-    says the person can reach it: the Projects home can't show a canvas that
-    isn't a project (GM r6; review 4, M-1). ``room_now``: the list has room
-    again (an agent's delete, and no listing since: review 4, N-2).
-    ``deletes``: how many projects must go before every waiting canvas is
-    saved; more than one (the list past its limit, as after an Undo that
-    passed it, or several canvases waiting) is said with the number and
-    ``projects``, the list's count (GM r17 on PR #199)."""
+    person's is the design's waiting line, frontend catalogRestoreCopy.ts):
+    the live one (``live``), and ``held`` more held aside (the design's held
+    model). Never says the person can reach it: the Projects home can't show
+    a canvas that isn't a project (design). ``room_now``: the list has room
+    again (an agent's delete, and no listing since). ``deletes``: how many
+    projects must go before every waiting canvas is saved; more than one
+    (the list past its limit, as after an Undo that passed it, or several
+    canvases waiting) is said with the number and ``projects``, the list's
+    count (design, PR #199)."""
     if live and held:
         which = (f"The canvas the person had open isn't a saved project, and {held} earlier "
                  f"{'canvas is' if held == 1 else 'canvases are'} held aside the same way")
@@ -23760,13 +23726,13 @@ def _canvas_not_filed_note(reason: str, *, room_now: bool = False, live: bool = 
                  f"{'is' if held == 1 else 'are'} held aside, not saved as {'a project' if held == 1 else 'projects'} "
                  "yet,")
     if room_now:
-        # Only a listing files them (_file_held_canvases; review 6, N-1).
+        # Only a listing files them (_file_held_canvases).
         return (f"{which}, but the project list has room now: the next listing (the person's Projects home, "
                 "`nebula projects`, list_projects) saves each as its own project. Nothing in them is lost. The "
                 "person can't see or open them until then.")
     limit = project_store_module.MAX_PROJECTS
     if reason == "projects" and deletes is not None and deletes > 1:
-        # GM r18 on PR #199, verbatim: "The project list has 4 projects,
+        # Design (PR #199), verbatim: "The project list has 4 projects,
         # over the limit of 3. Move 2 to Recently deleted to make room." At
         # the limit itself (several canvases waiting), the same pattern.
         if projects is not None and projects > limit:
@@ -23810,14 +23776,13 @@ def _canvas_not_filed_view(room_now: bool = False, catalog: dict[str, Any] | Non
     first = waiting or held[0]
     unreadable = _held_unreadable_view()
     copies = _copy_records(catalog)
-    # Each canvas that waits, in the order they are saved (GM r12, 2): the
+    # Each canvas that waits, in the order they are saved (design): the
     # person's first (held ones oldest first, then the live one), then the
     # agents' copies. The name of the project it was, when that is known (the
-    # person's line names up to 3: review 6, N-2); an agent's copy is marked
-    # `agentCopy` (GM r11, 4): the person's line never calls it "the canvas
-    # you had open". At the project limit each says how many projects the
-    # person deletes before it is saved (`deletes`), so each line has its
-    # own true count.
+    # person's line names up to 3); an agent's copy is marked `agentCopy`
+    # (design): the person's line never calls it "the canvas you had open".
+    # At the project limit each says how many projects the person deletes
+    # before it is saved (`deletes`), so each line has its own true count.
     rows = [_waiting_canvas_row(entry.get("from"), catalog, copies) for entry in held] \
         + ([_waiting_canvas_row(waiting.get("from"), catalog, copies)] if waiting is not None else [])
     rows = [row for row in rows if not row.get("agentCopy")] + [row for row in rows if row.get("agentCopy")]
@@ -23833,7 +23798,7 @@ def _canvas_not_filed_view(room_now: bool = False, catalog: dict[str, Any] | Non
             **({"heldUnreadable": unreadable} if unreadable else {}),
             **({"roomNow": True} if room_now else {}),
             # How many projects the person deletes before every canvas that
-            # waits is saved (GM's answer 3: the plural line's real number).
+            # waits is saved (the design's: the plural line's real number).
             **({"deletes": total_deletes} if total_deletes is not None else {}),
             "note": _canvas_not_filed_note(first["reason"], room_now=room_now, live=waiting is not None,
                                            held=len(held), deletes=total_deletes,
@@ -23866,7 +23831,7 @@ async def _canvas_has_room_now(catalog: dict[str, Any]) -> bool:
     """Whether a waiting canvas would be saved by the next listing: the list
     has room for it again (an agent deleted a project, and nothing listed
     since). start_here reads, never settles, so it says so instead of the
-    refusal that no longer holds (review 4, N-2)."""
+    refusal that no longer holds."""
     if _canvas_not_filed_now() is None:
         held = _held_canvases()
         return bool(held) and _held_room(catalog, held[0], 0) is None
@@ -23906,10 +23871,10 @@ def _canvas_settled_off_waiting(project: dict[str, Any] | None = None) -> None:
 
 def _settle_live_canvas(catalog: dict[str, Any], exported: dict[str, Any]) -> tuple[str, Any] | None:
     """Make the catalog's open project the one the live canvas is, before
-    anything saves the canvas into a project or replaces it (review 1 of PR
-    #199, H1). The two disagree after a restore, or a crash between the two
-    files of a switch, a create or a delete. Returns None when they agree,
-    else (what it did, more):
+    anything saves the canvas into a project or replaces it (PR #199). The two
+    disagree after a restore, or a crash between the two files of a switch, a
+    create or a delete. Returns None when they agree, else (what it did,
+    more):
     - "opened": the canvas's own project (still in the list);
     - "filed": the canvas as its own project (its project isn't in the list,
       or which it is can't be known); more is (the project, the owner before);
@@ -23971,7 +23936,7 @@ def _restore_of(notice: Mapping[str, Any] | None, owner: Any) -> bool:
     ``owner`` is the doing of the restore ``notice`` records: it opened no
     project, and the canvas is the project it couldn't bring back, or was
     unproven when it ran. A later filing (a crash window weeks on) is not
-    (review 2 of PR #199, L5 i)."""
+    (PR #199)."""
     if not notice or notice.get("openFrom") != "none" or notice.get("recoveredCanvas"):
         return False
     if isinstance(owner, str):
@@ -23981,12 +23946,11 @@ def _restore_of(notice: Mapping[str, Any] | None, owner: Any) -> bool:
 
 def _note_canvas_settled(settled: tuple[str, Any] | None) -> None:
     """After the commit that settled the live canvas (every route that
-    settles it: the listing, create, open and delete; review 2 of PR #199,
-    L5): a filing goes in the restore record it came from (the notice and
-    the agents' note say so) and is journaled (`project.canvasFiled`); a
-    canvas that couldn't be filed is journaled once
-    (`project.canvasNotFiled`) and noted on its restore. Never fails the
-    route."""
+    settles it: the listing, create, open and delete; PR #199): a filing
+    goes in the restore record it came from (the notice and the agents'
+    note say so) and is journaled (`project.canvasFiled`); a canvas that
+    couldn't be filed is journaled once (`project.canvasNotFiled`) and
+    noted on its restore. Never fails the route."""
     if not settled or settled[0] not in ("filed", "waiting"):
         return
     try:
@@ -23998,12 +23962,12 @@ def _note_canvas_settled(settled: tuple[str, Any] | None) -> None:
             if copy and cli_graph.owner == project["id"]:
                 # The agent's edits on the copy were made with no project
                 # open: their undo goes with the copy into its project, only
-                # those made since the copy (review 9, nit 4).
+                # those made since the copy.
                 since = copied.get("mark") if copied.get("boot") == BACKEND_BOOT_ID else None
                 canvas_undo_book.rehome(None, project["id"], project["name"], since=since)
             restore_id = notice["id"] if _restore_of(notice, owner) and not copy else None
             # After its commit landed: the restore notice names it while it
-            # shows (GM's answer 1 to review 8), else a waiting canvas
+            # shows (design), else a waiting canvas
             # leaves {saved} for the toast.
             if _note_on_restore_notice(project, owner):
                 _canvas_settled_off_waiting()
@@ -24045,14 +24009,14 @@ def _settle_would_file(catalog: dict[str, Any]) -> bool:
 def _refuse_a_create_past_the_limit(catalog: dict[str, Any]) -> None:
     """A create adds its own project, and first files the live canvas when
     that isn't a project: both must fit, checked before anything is filed
-    or written (review 3 of PR #199, L-4: one below the limit filed the
-    canvas, then refused the create, and left state.json owning a project
-    that never existed). Refused with the limit's 413; nothing changes, and
-    the next listing files the canvas (there is room for it alone)."""
+    or written (PR #199: one below the limit filed the canvas, then refused
+    the create, and left state.json owning a project that never existed).
+    Refused with the limit's 413; nothing changes, and the next listing
+    files the canvas (there is room for it alone)."""
     adding = 1 + (1 if _settle_would_file(catalog) else 0) + len(_held_distinct())
     if len(catalog["projects"]) + adding > project_store_module.MAX_PROJECTS:
         refused = ProjectLimitError("Project limit reached", "projects")
-        # The tab's line names both numbers and how many to delete (GM r35 on PR #199).
+        # The tab's line names both numbers and how many to delete (design, PR #199).
         refused.project_count = len(catalog["projects"])
         refused.deletes = len(catalog["projects"]) + adding - project_store_module.MAX_PROJECTS
         raise refused
@@ -24061,7 +24025,7 @@ def _refuse_a_create_past_the_limit(catalog: dict[str, Any]) -> None:
 def _undo_canvas_filing(settled: tuple[str, Any] | None) -> None:
     """A route filed the live canvas, then failed before its commit landed:
     the canvas is its earlier project's again (state.json too), so state.json
-    never owns a project that doesn't exist (review 3 of PR #199, L-4)."""
+    never owns a project that doesn't exist (PR #199)."""
     if not settled or settled[0] != "filed":
         return
     _project, previous_owner = settled[1]
@@ -24104,7 +24068,7 @@ def _open_project_with(graph: CLIGraph) -> tuple[dict[str, Any], dict[str, Any]]
 
 def _require_empty_canvas_for_a_new_project_file() -> None:
     """``newProjectForFile`` loads a graph file only into an empty canvas: the
-    project an agent just made for a file over the save limit (Q123 a). It
+    project an agent just made for a file over the save limit. It
     never replaces nodes."""
     if cli_graph.nodes or cli_graph.edges:
         raise HTTPException(status_code=409, detail=(
@@ -24115,7 +24079,7 @@ def _require_empty_canvas_for_a_new_project_file() -> None:
 def _refuse_graph_over_save_limit_on_its_own(candidate: CLIGraph) -> None:
     """Refuse, before anything changes, a graph that would be over the save
     limit as a project of its own, measured as the save check measures a
-    project (Q120). The person's Load graph asks for this (the body's
+    project. The person's Load graph asks for this (the body's
     ``refuseOverSaveLimit``): on the 413 it opens the file as a new project
     instead of replacing the open one, since Justin chose "Files over the
     limit open as a new project named after the file. The open project is
@@ -24129,7 +24093,7 @@ def _refuse_graph_over_save_limit_on_its_own(candidate: CLIGraph) -> None:
     detail = (f"This graph would be {size:,} bytes as a project of its own, over Nebula's save limit of {limit}. "
               "Nothing changed (refuseOverSaveLimit).")
     # A canvas tab with a person token from before Nebula restarted gets the
-    # person gate's refusal (GM's reconnect line), as its unflagged import
+    # person gate's refusal (the design's reconnect line), as its unflagged import
     # would, so it doesn't make a new project it can't then load into.
     if not _is_person_request():
         refusal = _person_only_refusal(detail)
@@ -24153,7 +24117,7 @@ def _canvas_save_file_view(export: dict[str, list[dict[str, Any]]]) -> dict[str,
         outputs = data.get("outputs")
         # serializeGraph always writes ``outputs`` (undefined when there are
         # none), and Save's walk counts every own key: so does this view
-        # (review 7 of PR #205, limits MEDIUM-3).
+        # (PR #205).
         file_data: dict[str, Any] = {"label": data.get("label"), "definitionId": data.get("definitionId"),
                                      "params": data.get("params", {}), "outputs": outputs or None,
                                      "state": "complete" if outputs else "idle"}
@@ -24175,7 +24139,7 @@ def _graph_shape_measure(value: Any) -> tuple[int, int]:
     depth 0, every value counted once. Never stops early: "no worse" compares
     the canvas before and after an edit, and a measure capped one past a
     limit reads the same for any edit to a canvas already past it, or cuts
-    the other measure short (review 7 of PR #205, limits MEDIUM-2). The walk
+    the other measure short (PR #205). The walk
     is linear in a canvas the size limit already bounds, and its depth is
     bounded by the ingress check (_check_graph_ingress_values)."""
     deepest, count, _past = _graph_shape_measure_past(value)
@@ -24186,10 +24150,11 @@ def _graph_shape_measure_past(value: Any) -> tuple[int, int, int]:
     """_graph_shape_measure, and how many values sit deeper than Save's depth
     limit (RESTORE_MAX_GRAPH_DEPTH): "no worse" for depth compares that count,
     not the deepest depth, so an agent can't add a second value as deep as
-    one already there (review 8 of PR #205, limits LOW-1). Walked a level at
+    one already there (PR #205). Walked a level at
     a time, with no per-value tuple: the walk runs on every agent write that
-    leaves a canvas past a limit, and never stops early (review 8, NIT-1;
-    test_agent_canvas_limits_r9 times it on the largest canvas Save allows)."""
+    leaves a canvas past a limit, and never stops early
+    (test_agent_canvas_limits_r9 times it on the largest canvas Save
+    allows)."""
     level: list[Any] = [value]
     depth = 0
     count = 0
@@ -24226,14 +24191,13 @@ def _project_snapshot_count(export: dict[str, list[dict[str, Any]]]) -> int:
 def _refuse_agent_shape_past_save_limit(after_export: dict[str, list[dict[str, Any]]]) -> None:
     """Refuse an edit from anyone but the person that would leave the canvas
     past Save's own shape limits, measured as Save measures them: depth from
-    the file's root, values over the whole canvas (review 6 of PR #205,
-    lines-limits MEDIUM-1). Each write's own body is within the ingress
-    limits (_check_graph_ingress_values), but a value nested 62 levels below a
-    param is 67 deep in the file, and several writes add up; the person's
-    Save, Download and the project's own save would then refuse a canvas the
-    person never made. As the size limit (_refuse_agent_growth_past_save_limit):
-    an edit that leaves a canvas already past a limit no worse goes through.
-    The agent reads these words exactly."""
+    the file's root, values over the whole canvas (PR #205). Each write's own
+    body is within the ingress limits (_check_graph_ingress_values), but a value
+    nested 62 levels below a param is 67 deep in the file, and several writes
+    add up; the person's Save, Download and the project's own save would then
+    refuse a canvas the person never made. As the size limit
+    (_refuse_agent_growth_past_save_limit): an edit that leaves a canvas already
+    past a limit no worse goes through. The agent reads these words exactly."""
     found = _shape_past_save_limit(after_export)
     if found is None:
         return
@@ -24250,7 +24214,7 @@ def _shape_past_save_limit(after_export: dict[str, list[dict[str, Any]]]) -> tup
     worse than it is now; None when it wouldn't
     (_refuse_agent_shape_past_save_limit). On a canvas already too deep,
     "worse" is any more values past the depth limit: an edit may only take
-    depth away (review 8 of PR #205, limits LOW-1)."""
+    depth away (PR #205)."""
     depth, count, past = _graph_shape_measure_past(_canvas_save_file_view(after_export))
     # The project's own save checks its whole snapshot (the canvas and its
     # run history) from the snapshot's root, where the canvas's values sit
@@ -24288,8 +24252,8 @@ def _shape_past_save_limit(after_export: dict[str, list[dict[str, Any]]]) -> tup
 
 def _refuse_agent_growth_past_save_limit(candidate: CLIGraph) -> None:
     """Refuse an edit from anyone but the person (an agent, the CLI) that
-    would leave the open project over the save limit and larger than it is
-    (Q118). The person's canvas can't save such a project, so its saving
+    would leave the open project over the save limit and larger than it is.
+    The person's canvas can't save such a project, so its saving
     would stop, unseen by the agent. An edit that makes a project already
     over the limit smaller (a removal, a shorter param) goes through: that is
     how agents help trim it, with their existing tools. The person's own
@@ -24300,7 +24264,7 @@ def _refuse_agent_growth_past_save_limit(candidate: CLIGraph) -> None:
         return
     # The node and connection counts, by the predicate /api/graph/apply uses
     # (_refuse_oversized_graph), so every agent write stops at the same limit
-    # as apply and the person's Save, one call at a time too (PR #205 final review).
+    # as apply and the person's Save, one call at a time too (PR #205).
     count_detail = _oversized_graph_detail(candidate, cli_graph)
     if count_detail is not None:
         refusal = _person_only_refusal(count_detail)
@@ -24315,8 +24279,9 @@ def _refuse_agent_growth_past_save_limit(candidate: CLIGraph) -> None:
     after, detail = found
     # No agent marker: most likely the person's canvas tab with a token from
     # before Nebula restarted, whose Load graph is never refused for size once
-    # it reconnects. The person gate's refusal tells it so (GM's reconnect line,
-    # this text behind Details), not a pause or the agents' text as its reason.
+    # it reconnects. The person gate's refusal tells it so (the design's
+    # reconnect line, this text behind Details), not a pause or the agents' text
+    # as its reason.
     refusal = _person_only_refusal(detail)
     if isinstance(refusal, PersonGateError):
         raise refusal
@@ -24329,7 +24294,7 @@ def _size_past_save_limit(candidate: CLIGraph, after_export: dict[str, list[dict
     leave the open project over the save limit and larger than it is now;
     None when it wouldn't. Whoever asks: _refuse_agent_growth_past_save_limit
     for an agent's edit, and the person's Accept of a proposal that has grown
-    past the limit since it was made (review 8 of PR #205, limits MEDIUM-1)."""
+    past the limit since it was made (PR #205)."""
     if after_export is None:
         after_export = _graph_canvas_export(candidate)
     try:
@@ -24376,8 +24341,8 @@ async def _projects_live_export() -> dict[str, Any]:
 def _project_replacement_guard(action: str = "switch projects", *, person: str | None = None,
                                catalog: Mapping[str, Any] | None = None, fenced: bool = True) -> None:
     """409 while a paid start settles or a run is registered. ``person``: the
-    person's own line for the run refusal (refusal_copy), where GM wrote one
-    (Clear, round 11); agents keep the specific text either way. ``catalog``
+    person's own line for the run refusal (refusal_copy), where the design wrote one
+    (Clear); agents keep the specific text either way. ``catalog``
     and ``fenced``: as _reject_graph_replacement_during_paid_start's (every
     caller but the open's ahead-of-time check holds the fence)."""
     _reject_graph_replacement_during_paid_start(action, catalog=catalog, fenced=fenced)
@@ -24389,7 +24354,7 @@ def _project_replacement_guard(action: str = "switch projects", *, person: str |
         raise refusal_copy.refusal(409, specific, person, route="canvas")
 
 
-# GM (round 11 of PR #114), under the canvas's "Couldn't clear the canvas."
+# Design (PR #114), under the canvas's "Couldn't clear the canvas."
 # heading: "Couldn't clear the canvas. A run is still going. Wait for it to
 # finish or stop it first." The reason replaces "Nothing was removed.", which
 # stays for refusals that give no reason.
@@ -24398,7 +24363,7 @@ CLEAR_DURING_RUN_PERSON = "A run is still going. Wait for it to finish or stop i
 
 def _commit_project_workspace(catalog: dict[str, Any], candidate: CLIGraph) -> None:
     """Prepare both disk writes before adopting any new live graph in memory.
-    The ratchet (PR #199 round 17, review 15 HIGH-1): the live graph never
+    The ratchet (PR #199): the live graph never
     holds a node id that isn't Nebula's, so this fails loudly (500, nothing
     written) on one; open_saved_project renumbers before it gets here."""
     _require_backend_node_ids({"nodes": [{**node, "id": node_id} for node_id, node in candidate.nodes.items()]})
@@ -24432,8 +24397,8 @@ def _commit_project_workspace(catalog: dict[str, Any], candidate: CLIGraph) -> N
     cli_graph.adopt(candidate)
     # The incoming project's nodes' last run errors, kept while it was closed.
     node_errors.use_project(catalog["activeProjectId"])
-    # The selection the person's tab published was the other project's
-    # (review 15 kept-wires-ui LOW-1): agents read none until it publishes again.
+    # The selection the person's tab published was the other project's:
+    # agents read none until it publishes again.
     selection_context.clear()
 
 
@@ -24445,14 +24410,14 @@ async def list_projects() -> dict[str, Any]:
         revision_read = catalog["workspaceRevision"]
         adopted: str | None = None
         filed_from: tuple[str, int] | None = None
-        # The person's canvases are saved before an agent's copy (GM r12, 2:
+        # The person's canvases are saved before an agent's copy (design:
         # so each waiting line's count stays true): when the live canvas is
         # an agent's copy, the person's canvases held aside go first.
         live_copy = isinstance(cli_graph.owner, str) and cli_graph.owner not in catalog["projects"] \
             and cli_graph.owner in _copy_records(catalog)
         persons_first = _file_held_canvases(catalog, copies=False) if live_copy else []
         # The open project is the one the live canvas is, or the canvas is
-        # filed as its own (review 1 of PR #199, H1).
+        # filed as its own (PR #199).
         settled = _settle_live_canvas(catalog, exported)
         changed = settled is not None and (settled[0] != "waiting" or catalog["workspaceRevision"] != revision_read)
         if not catalog["projects"] and cli_graph.nodes:
@@ -24469,7 +24434,7 @@ async def list_projects() -> dict[str, Any]:
                 changed = True
         expired = purge_expired_trash(catalog)
         changed = expired or changed
-        # The canvases held aside while they waited (GM's held model), each
+        # The canvases held aside while they waited (the design's held model), each
         # its own project once there is room.
         done = {entry["projectId"] for _project, entry in persons_first}
         added = sum(len(json.dumps(project, ensure_ascii=False, separators=(",", ":"), default=str).encode("utf-8"))
@@ -24487,7 +24452,7 @@ async def list_projects() -> dict[str, Any]:
                 # The room check let it through but the commit is past a
                 # limit: held canvases filed now stay held, and a filed live
                 # canvas is undone (state.json too) and stays live and
-                # unfiled; the listing goes on without them (L4's backstop).
+                # unfiled; the listing goes on without them.
                 for project, _entry in held_filed:
                     if project is not None:
                         catalog["projects"].pop(project["id"], None)
@@ -24530,20 +24495,20 @@ async def list_projects() -> dict[str, Any]:
         }
         if waiting := _canvas_not_filed_view(catalog=catalog):
             # The live canvas isn't a project and couldn't be filed: the list
-            # is at a limit (review 2 of PR #199, L4). No project is open.
-            # With the agents' note (review 3, L-5): the person's waiting
+            # is at a limit (PR #199). No project is open.
+            # With the agents' note: the person's waiting
             # line shows whether or not a restore notice is open.
             listing["canvasNotFiled"] = waiting
         elif saved := _canvas_saved_now():
-            # A waiting canvas was filed (GM r5: the person's "saved" toast).
+            # A waiting canvas was filed (design: the person's "saved" toast).
             listing["canvasSaved"] = dict(saved)
         if unreadable := _held_unreadable_view():
             # A held canvas couldn't be read or saved and may be lost
-            # (review 6 of PR #199, L-1): the person's line, for a week.
+            # (PR #199): the person's line, for a week.
             listing["canvasHeldUnreadable"] = unreadable
         kept = set(catalog["projects"]) | set(catalog.get("trash") or {})
     # A restore of a damaged catalog the person hasn't closed the notice of
-    # (ProjectStore.restore_notice): the Projects home shows GM's line,
+    # (ProjectStore.restore_notice): the Projects home shows the design's line,
     # agents read `note` and where the damaged file is kept.
     if restore := _catalog_restore_view(project_store.restore_notice(), catalog):
         listing["catalogRestore"] = restore
@@ -24577,7 +24542,7 @@ async def dismiss_catalog_restore(body: dict[str, Any]) -> dict[str, Any]:
 @app.post("/api/projects/canvas-held-unreadable/dismiss")
 async def dismiss_canvas_held_unreadable(body: dict[str, Any]) -> dict[str, Any]:
     """The person closed the notice that canvases held aside couldn't be
-    read (×, GM r9: a one-time report). The person's only, like the restore
+    read (×, design: a one-time report). The person's only, like the restore
     notice's ×. ``at`` is the listing's ``canvasHeldUnreadable.at``;
     ``dismissed`` is false when it isn't the note shown."""
     if not _is_person_request():
@@ -24629,11 +24594,11 @@ async def get_saved_project(project_id: str, view: str | None = None) -> dict[st
 @app.get("/api/projects/{project_id}/size")
 async def get_project_size(project_id: str) -> dict[str, Any]:
     """A project's size and what is large, for agents (MCP project_size,
-    `nebula project size`; Q118). Read-only. The size is what a save measures
+    `nebula project size`). Read-only. The size is what a save measures
     (services/project_size.py); for the open project, its stored snapshot
     with the live canvas overlaid, as a switch would store it (the person's
-    tab may hold newer run history it hasn't saved). `savingPaused`: the
-    open project is over the limit, so the person's canvas can't save it.
+    tab may hold newer run history it hasn't saved). `savingPaused`: the open
+    project is over the limit, so the person's canvas can't save it.
     `largest` holds the largest rows of 0.1 MiB and up, at most ten, with
     node ids (the person's panel shows the same rows without them), `smaller`
     the rest."""
@@ -24707,7 +24672,7 @@ async def recover_project_copy(body: dict[str, Any]) -> dict[str, Any]:
     # The tab's whole snapshot: checked in a worker thread, refused (if it
     # is) below where the check ran before (_IngressVerdict). From the
     # snapshot's root, as the project's save and the canvas's Save measure it
-    # (review 6 of PR #205, lines-limits MEDIUM-1): from the body's, a canvas
+    # (PR #205): from the body's, a canvas
     # every other save accepts was one level too deep here.
     snapshot_in = body.get("snapshot")
     _check_graph_ingress_values({key: value for key, value in body.items() if key != "snapshot"})
@@ -24721,14 +24686,14 @@ async def recover_project_copy(body: dict[str, Any]) -> dict[str, Any]:
         # The source may have been deleted in another window while this tab
         # held unsaved edits to it. Those edits still deserve a copy.
         # A restore while the tab held them can take the source's row too
-        # (review 11 of PR #199, HIGH-1): the tab says the name it showed.
+        # (PR #199): the tab says the name it showed.
         shown = body.get("sourceName")
         # Cut to a project name's length (NAME_LIMIT code points); the copy's
         # own name is fitted by recovered_name.
         shown = shown.strip()[:project_store_module.NAME_LIMIT] if isinstance(shown, str) and shown.strip() else None
         held = catalog["projects"].get(source_id) or (catalog.get("trash") or {}).get(source_id)
         source = held or {"id": source_id, "snapshot": empty_snapshot(), "name": shown or "Deleted project"}
-        # What the copy was made from (GM r29 of PR #199, 2): the source's
+        # What the copy was made from (design, PR #199): the source's
         # name as Nebula held it, or the name the tab showed when the row is
         # gone, else none. The tab's reload line names this, never a source
         # read from the copy's name.
@@ -24748,7 +24713,7 @@ async def recover_project_copy(body: dict[str, Any]) -> dict[str, Any]:
                     "sourceName": _recovered_source_name(existing)}
         historical = {node["id"]: node.get("data", {}).get("definitionId") for node in source["snapshot"]["nodes"]}
         # The check covered its snapshot; staging doesn't walk it twice.
-        # A kept tab's wires arrive only here (GM r21 on PR #199, 3): one the
+        # A kept tab's wires arrive only here (design, PR #199): one the
         # server's rules refuse is left out and reported, never the whole save.
         dropped_wires: list[dict[str, Any]] = []
         snapshot, candidate = _stage_project_snapshot(snapshot_in, historical=historical, ingress=verdict,
@@ -24758,13 +24723,13 @@ async def recover_project_copy(body: dict[str, Any]) -> dict[str, Any]:
         _refuse_agent_billing_in_project(
             candidate, *([cli_graph.nodes] if catalog["activeProjectId"] == source["id"] else []),
             _snapshot_nodes(source["snapshot"]))
-        # The nodes a kept tab added or duplicated get backend ids (review 14
-        # HIGH-1 of PR #199): numbered on past the source's counter, so the
-        # copy's later nodes never take one of them. The tab adopts them from
-        # `renumbered`; agents only ever see the copy's nN ids.
-        # Past every id the copy, its run history and the source's records
-        # have ever used, even with the source gone (review 15 LOW-1): a
-        # renumbered node never takes a deleted node's id and its run records.
+        # The nodes a kept tab added or duplicated get backend ids (PR #199):
+        # numbered on past the source's counter, so the copy's later nodes
+        # never take one of them. The tab adopts them from `renumbered`;
+        # agents only ever see the copy's nN ids. Past every id the copy, its
+        # run history and the source's records have ever used, even with the
+        # source gone: a renumbered node never takes a deleted node's id and
+        # its run records.
         renumbered, counter = _renumber_tab_local_nodes(
             snapshot, max(candidate._counter, int(source.get("_nodeCounter", 0) or 0),
                           _ids_ever_used(source["snapshot"]),
@@ -24803,7 +24768,7 @@ async def recover_project_copy(body: dict[str, Any]) -> dict[str, Any]:
         try:
             project_store.commit(catalog, kept_save=kept_save)
         except ProjectLimitError as exc:
-            # The tab's line names the limit and how many there are (GM r22 on PR #199).
+            # The tab's line names the limit and how many there are (design, PR #199).
             if exc.limit == "projects":
                 exc.project_count = len(catalog["projects"]) - 1
                 exc.deletes = len(catalog["projects"]) - project_store_module.MAX_PROJECTS
@@ -24814,7 +24779,7 @@ async def recover_project_copy(body: dict[str, Any]) -> dict[str, Any]:
         recovered = _recovered_source(project, catalog)
     _journal_project_change("project.created", result["project"],
                             dropped_wires=result["droppedWires"],
-                            recovered=recovered)  # before any await (round 8 of PR #114)
+                            recovered=recovered)  # before any await (PR #114)
     await _broadcast_projects_changed("created", recovery_id)
     return result
 
@@ -24822,7 +24787,7 @@ async def recover_project_copy(body: dict[str, Any]) -> dict[str, Any]:
 def _recovered_source_name(project: Mapping[str, Any]) -> str | None:
     """The name of the project a recovered copy was made from, as its record
     keeps it (``recoveredFrom``), or None when it isn't known (a copy from
-    before GM r29 of PR #199, or a source whose name nobody had): the line
+    before PR #199, or a source whose name nobody had): the line
     then says only what is true. Never read from the copy's own name."""
     found = project.get("recoveredFrom")
     name = found.get("name") if isinstance(found, Mapping) else None
@@ -24830,13 +24795,13 @@ def _recovered_source_name(project: Mapping[str, Any]) -> str | None:
 
 
 def _recovered_source(project: Mapping[str, Any], catalog: Mapping[str, Any]) -> dict[str, Any] | None:
-    """A recovered copy's source as agents read it (PR #199 round 21, review
-    19 agents-docs LOW-2), never from the copy's name: ``sourceName`` the
-    source's name as the copy's record keeps it (``recoveredFrom``; null
-    when unknown, and null while the source is neither in the list nor in
-    Recently deleted: agents can't read a project gone for good, so they
-    aren't told its name), ``sourceProjectId`` its id while it is still in
-    the list, else null. None for a project that isn't a recovered copy."""
+    """A recovered copy's source as agents read it (PR #199), never from the
+    copy's name: ``sourceName`` the source's name as the copy's record keeps
+    it (``recoveredFrom``; null when unknown, and null while the source is
+    neither in the list nor in Recently deleted: agents can't read a project
+    gone for good, so they aren't told its name), ``sourceProjectId`` its id
+    while it is still in the list, else null. None for a project that isn't
+    a recovered copy."""
     found = project.get("recoveredFrom")
     source_id = found.get("id") if isinstance(found, Mapping) else project.get("_recoverySourceId")
     if not isinstance(source_id, str) or not source_id:
@@ -24857,13 +24822,13 @@ def _listed_project(project: Mapping[str, Any], catalog: Mapping[str, Any]) -> d
 
 
 def _recovered_copy_name(source_name: str, catalog: Mapping[str, Any]) -> str:
-    """A new recovered copy's name (GM - Design, round 21 of PR #195, G5; GM
-    r29 2 of PR #199; project_store.recovered_name): "Recovered <project>"
-    when it is free, else that plus " copy", then " copy 2", the lowest
-    free. No number in the project's name is read: "Shot" gives "Recovered
-    Shot" beside "Recovered Shot 7". A recovered copy of "Recovered Alpha"
-    is "Recovered Alpha copy". A copy filed earlier is in the list, so a
-    second recovery right after the first gets its own name."""
+    """A new recovered copy's name (design, PR #195 and PR #199;
+    project_store.recovered_name): "Recovered <project>" when it is free,
+    else that plus " copy", then " copy 2", the lowest free. No number in
+    the project's name is read: "Shot" gives "Recovered Shot" beside
+    "Recovered Shot 7". A recovered copy of "Recovered Alpha" is "Recovered
+    Alpha copy". A copy filed earlier is in the list, so a second recovery
+    right after the first gets its own name."""
     return project_store_module.recovered_name(source_name, catalog)
 
 
@@ -24881,14 +24846,14 @@ def _switch_actor() -> dict[str, Any] | None:
 
 
 # How many projects an agent's switches left that a tab may still save into
-# (round 17 of PR #114, review 16 M1). A tab follows a switch within moments
+# (PR #114). A tab follows a switch within moments
 # online; offline it waits, and an agent may switch again (or back) meanwhile.
 _MAX_SWITCH_HANDOFFS = 32
 
 
 def _switch_handoffs(catalog: dict[str, Any]) -> dict[str, str]:
     """{projectId: the workspace revision the canvas had when an agent's
-    switch left that project}. A catalog written before round 17 kept one
+    switch left that project}. A catalog written by an older build kept one
     ``handoff`` ({projectId, revision}); it reads as one of these."""
     handoffs = {key: value for key, value in (catalog.get("handoffs") or {}).items()
                 if isinstance(key, str) and isinstance(value, str)} if isinstance(catalog.get("handoffs"), dict) else {}
@@ -24899,12 +24864,11 @@ def _switch_handoffs(catalog: dict[str, Any]) -> dict[str, str]:
 
 
 # On a project an open renumbered while a handoff is kept for it (a reopen in
-# place; review 16 HIGH-1 of PR #199): {"revision": the handoff's, "map":
-# {old: new}, "base": {new: {params, label, position}}}. It lasts as long as
-# that handoff and ends with it. ``base`` (round 19, review 17 MEDIUM-1) is
-# each renamed node as the open (or the boot) loaded it: the tab's last
-# autosave of it, which the handoff compares the tab's copy with, so only
-# what the person changed since counts as unsent.
+# place; PR #199): {"revision": the handoff's, "map": {old: new}, "base":
+# {new: {params, label, position}}}. It lasts as long as that handoff and
+# ends with it. ``base`` is each renamed node as the open (or the boot)
+# loaded it: the tab's last autosave of it, which the handoff compares the
+# tab's copy with, so only what the person changed since counts as unsent.
 _HANDOFF_RENUMBERED = "_handoffRenumbered"
 
 
@@ -24912,8 +24876,7 @@ def _renumbered_base(project: Mapping[str, Any], mapping: Mapping[str, str]) -> 
     """Each renamed node's settings, name and place in the project's stored
     copy (already under the new ids): the handoff's baseline. With its run
     result (``result``, _run_result) and the result landings Nebula had seen
-    then (``resultSeq``, node_result_runs.seq; review 18 handoff-reopen
-    MEDIUM-3)."""
+    then (``resultSeq``, node_result_runs.seq)."""
     wanted = set(mapping.values())
     base: dict[str, dict[str, Any]] = {}
     for node in (project.get("snapshot") or {}).get("nodes") or []:
@@ -24926,7 +24889,7 @@ def _renumbered_base(project: Mapping[str, Any], mapping: Mapping[str, str]) -> 
     return base
 
 
-# A node's run result (review 18 handoff-reopen MEDIUM-3): what a run wrote on
+# A node's run result: what a run wrote on
 # it, one unit. These keys, and every key starting "error" (the failure's
 # text, line, category, provider) or "batch" (an iterator's previews and
 # their run). Progress, the run's start time and streaming previews are the
@@ -24970,9 +24933,9 @@ def _tab_result_run(snapshot: Mapping[str, Any], node_id: str) -> dict[str, Any]
         started = timed or 0
         took = record.get("durationSec") if isinstance(record.get("durationSec"), (int, float)) \
             and not isinstance(record.get("durationSec"), bool) and math.isfinite(record["durationSec"]) else 0
-        # When this node's own result landed in the tab (PR #199 round 22,
-        # review 20 NIT-2): a long run's early result isn't dated by the
-        # run's end. Else the run's end, as before.
+        # When this node's own result landed in the tab (PR #199): a long
+        # run's early result isn't dated by the run's end. Else the run's
+        # end, as before.
         landings = record.get("nodeLandedAt") if isinstance(record.get("nodeLandedAt"), dict) else {}
         node_landed = _landing_stamp(landings.get(node_id))
         if best is None or started >= best["startedAt"]:
@@ -24992,7 +24955,7 @@ def _has_run_result(result: Mapping[str, Any]) -> bool:
 def _tab_result_is_newer(project_id: str, node_id: str, tab_run: Mapping[str, Any] | None, *,
                          stamp: float | None = None, stored_has_result: bool = True) -> bool:
     """Whether the tab's result for ``node_id`` came from a newer run than
-    Nebula's result on it (PR #199 round 21, review 19 LOW-3).
+    Nebula's result on it (PR #199).
 
     - No run record behind the tab's result: Nebula's stands.
     - Nebula saw the tab's run land in this process (node_result_runs) and
@@ -25082,11 +25045,11 @@ def _begin_switch(catalog: dict[str, Any], actor: dict[str, Any] | None,
     record) for the project it was showing: a handoff lets that tab save them
     into it (save_project), with the revision it had.
 
-    One handoff per project an agent's switches left (round 17 of PR #114,
-    review 16 M1): a tab that was offline through two switches (A to B to C)
-    still saves into A. A project's handoff ends when that project is opened
-    again (``opening``; reopening the open project takes a fresh one, as
-    before) and every one ends at the person's own switch."""
+    One handoff per project an agent's switches left (PR #114): a tab that
+    was offline through two switches (A to B to C) still saves into A. A
+    project's handoff ends when that project is opened again (``opening``;
+    reopening the open project takes a fresh one, as before) and every one
+    ends at the person's own switch."""
     previous_id = catalog.get("activeProjectId")
     previous = catalog["projects"].get(previous_id) if previous_id else None
     handoffs = _switch_handoffs(catalog)
@@ -25198,8 +25161,8 @@ def _enter_replacement_fence(fences: ExitStack, catalog: Mapping[str, Any]) -> N
     """Take the paid lifecycle fence for an open or a create. Its refusal
     while a paid start settles (409 ``code: "paid_start"``) carries the
     verdict as ``hold``, as the guards' refusals do, and both say "switch
-    projects", the hold's own action (PR #199 round 22, review 20
-    agents-docs LOW-1: one action word, so ``detail`` equals ``hold.detail``)."""
+    projects", the hold's own action (PR #199, one action word, so ``detail``
+    equals ``hold.detail``)."""
     try:
         fences.enter_context(_paid_graph_mutation("switch projects"))
     except HTTPException as exc:
@@ -25215,8 +25178,8 @@ async def create_saved_project(body: dict[str, Any] | None = None) -> dict[str, 
     actor = _switch_actor()
     with project_store.transaction() as catalog, ExitStack() as fences:
         # The fence's own refusal (a paid start settling) and the guard's
-        # carry the hold too (PR #199 round 22, review 20 agents-docs LOW-1
-        # and NIT-2), worded "switch projects" as the hold's detail is.
+        # carry the hold too (PR #199), worded "switch projects" as the
+        # hold's detail is.
         _enter_replacement_fence(fences, catalog)
         _project_revision(body, catalog)
         try:
@@ -25230,14 +25193,14 @@ async def create_saved_project(body: dict[str, Any] | None = None) -> dict[str, 
         # API callers need not visit the menu first. Never erase a legacy
         # live canvas merely because no catalog migration request preceded it.
         # Never replace a canvas that isn't the open project's without
-        # keeping it (review 1 of PR #199, H1): its own project, or filed,
+        # keeping it (PR #199): its own project, or filed,
         # or held aside while it can't be filed (the list is at a limit).
         _refuse_a_create_past_the_limit(catalog)
         settled = _settle_live_canvas(catalog, exported)
         hold = None
         try:
             # A waiting canvas is held aside, whole and on disk, before the
-            # replacement (GM's held model; review 5 of PR #199, M-3).
+            # replacement (the design's held model; PR #199).
             hold = _hold_if_waiting(settled, exported)
             if not catalog["projects"] and cli_graph.nodes:
                 recovered = _file_live_canvas(catalog, exported, migrated=True)
@@ -25260,7 +25223,7 @@ async def create_saved_project(body: dict[str, Any] | None = None) -> dict[str, 
         except BaseException:
             # The hold stays, even when the rollback failed too (507): the
             # next settle drops it by its digest only while the live canvas,
-            # on disk too, is that canvas (review 6 of PR #199, L-2).
+            # on disk too, is that canvas (PR #199).
             _undo_canvas_filing(settled)
             raise
         revision = catalog["workspaceRevision"]
@@ -25268,7 +25231,7 @@ async def create_saved_project(body: dict[str, Any] | None = None) -> dict[str, 
         _note_canvas_settled(settled)
         _held_settled(hold)
         _note_project_switch(project["id"], actor)
-    # In the step that made it, before any await (round 8 of PR #114); its
+    # In the step that made it, before any await (PR #114); its
     # canvas.replaced follows (_broadcast_graph_sync journals it first thing).
     _journal_project_change("project.created", project)
     await _broadcast_graph_sync(graph_replaced=True, reason="project-create",
@@ -25341,7 +25304,7 @@ async def open_saved_project(project_id: str, body: dict[str, Any] | None = None
     actor = _switch_actor()
     with project_store.transaction() as catalog, ExitStack() as fences:
         # A paid start settling refuses at the fence's entry: with the hold
-        # too (PR #199 round 22, review 20 agents-docs LOW-1).
+        # too (PR #199).
         _enter_replacement_fence(fences, catalog)
         _project_revision(body or {}, catalog)
         try:
@@ -25353,22 +25316,22 @@ async def open_saved_project(project_id: str, body: dict[str, Any] | None = None
         except HTTPException as exc:
             if exc.status_code != 409:
                 raise
-            # The verdict at refusal time (PR #199 round 21): the tab shows
+            # The verdict at refusal time (PR #199): the tab shows
             # the state's line from it, never from the words.
             raise _with_hold(exc, _hold_or_none(catalog)) from exc
         project = _project_id_or_404(project_id, catalog)
-        # The canvas this open replaces is kept: its own project, or filed
-        # (H1), or held aside while it can't be filed (the list is at a limit).
+        # The canvas this open replaces is kept: its own project, or filed,
+        # or held aside while it can't be filed (the list is at a limit).
         settled = _settle_live_canvas(catalog, exported)
         # A reopen of the project already open, whose canvas is the live one
         # (settled: the catalog and the canvas agree), by the person's
         # Projects > Open or an agent's open of it: its open proposals stay
-        # (GM r29 of PR #199, 3; _proposals_after_reopen).
+        # (design, PR #199; _proposals_after_reopen).
         reopen_in_place = settled is None and catalog["activeProjectId"] == project_id
         hold = None
         try:
             # A waiting canvas is held aside, whole and on disk, before the
-            # replacement (GM's held model; review 5 of PR #199, M-3).
+            # replacement (the design's held model; PR #199).
             hold = _hold_if_waiting(settled, exported)
             if active := catalog["activeProjectId"]:
                 _overlay_live_project(catalog["projects"][active], exported)
@@ -25381,30 +25344,30 @@ async def open_saved_project(project_id: str, body: dict[str, Any] | None = None
                                                                      size_checked=False, dropped_ports=dropped_ports,
                                                                      stray_log=stray_log)
             candidate._counter = max(candidate._counter, project.get("_nodeCounter", 0))
-            # The live graph never holds a tab-local id (review 15 HIGH-1 of
-            # PR #199): a node Duplicate, Paste or a kept tab made gets a
-            # backend id now, in the stored project too, and the tab adopts
-            # it from `renumbered` (the answer, and the graphSync for a tab
-            # that follows someone else's open).
+            # The live graph never holds a tab-local id (PR #199): a node
+            # Duplicate, Paste or a kept tab made gets a backend id now, in
+            # the stored project too, and the tab adopts it from
+            # `renumbered` (the answer, and the graphSync for a tab that
+            # follows someone else's open).
             renumbered = _renumber_staged_project(project, candidate)
             project["lastOpenedAt"] = project_now()
             previous_revision = catalog["workspaceRevision"]
             start = _begin_switch(catalog, actor, opening=project_id)
             if actor is None and reopen_in_place:
-                # The person's reopen of the project they show (review 18
-                # handoff-reopen LOW-1): their other windows on it follow, as
-                # after an agent's reopen. Each keeps a handoff at the
-                # revision before (one for this project; the person's open
-                # still ends every other), so a window's unsaved edits land
-                # in the project under the same rules (the baseline, explicit
-                # deletes), and the sync names the opener's window.
+                # The person's reopen of the project they show: their other
+                # windows on it follow, as after an agent's reopen. Each
+                # keeps a handoff at the revision before (one for this
+                # project; the person's open still ends every other), so a
+                # window's unsaved edits land in the project under the same
+                # rules (the baseline, explicit deletes), and the sync names
+                # the opener's window.
                 catalog["handoffs"] = {project_id: previous_revision}
                 tab = _persons_tab_id()
                 start = {"actor": {"kind": "person", **({"tab": tab} if tab else {})},
                          "previousProjectId": project_id, "previousProjectName": project["name"],
                          "previousRevision": previous_revision}
             # Every node of the opened project is on the live graph now, the
-            # renumbered ones too (review 16 HIGH-1 and NIT-2): a handoff, and
+            # renumbered ones too: a handoff, and
             # the next overlay, read this list for which nodes Nebula holds.
             project["_backendNodeIds"] = sorted(candidate.nodes)
             project["_backendEdgeIds"] = sorted({str(edge.get("id")) for edge in candidate.edges if edge.get("id")})
@@ -25418,7 +25381,7 @@ async def open_saved_project(project_id: str, body: dict[str, Any] | None = None
         except BaseException:
             # The hold stays, even when the rollback failed too (507): the
             # next settle drops it by its digest only while the live canvas,
-            # on disk too, is that canvas (review 6 of PR #199, L-2).
+            # on disk too, is that canvas (PR #199).
             _undo_canvas_filing(settled)
             raise
         revision = catalog["workspaceRevision"]
@@ -25463,14 +25426,14 @@ async def save_project(project_id: str, body: dict[str, Any]) -> dict[str, Any]:
     removed = result.pop("_removed", None)
     if result.pop("_liveChanged", False):
         # An agent reopened the project the tab showed: the handoff's typing
-        # went onto the live graph too (review 20 M-1). The tab's own echo.
+        # went onto the live graph too. The tab's own echo.
         await _broadcast_graph_sync(edit=True)
     if removed:
-        # A renumbered node the person deleted before the handoff (review 17
-        # reopen LOW-2): its pins and proposals, as for any delete.
+        # A renumbered node the person deleted before the handoff: its pins
+        # and proposals, as for any delete.
         await _announce_removed_nodes(removed)
     if "previousName" in result and result["previousName"] != result["project"]["name"]:
-        # Before any await (round 8 of PR #114).
+        # Before any await (PR #114).
         _journal_project_change("project.renamed", result["project"], previous_name=result["previousName"])
     # A save moves the card up and can change its picture and node count.
     await _broadcast_projects_changed("renamed" if "name" in body else "saved", project_id)
@@ -25505,15 +25468,15 @@ def _save_project(project_id: str, body: dict[str, Any], *, ingress: _IngressVer
             return {"project": public_project(project), "workspaceRevision": catalog["workspaceRevision"],
                     "handoff": True, **({"_liveChanged": True} if live else {}),
                     **({"_removed": removed} if removed else {}),
-                    # Deletes it ignored and kept (review 19 reopen LOW-4): the
+                    # Deletes it ignored and kept: the
                     # tab shows a line for them.
                     **({"deletesKept": landed.kept_deletes} if landed.kept_deletes else {}),
-                    # Deletes a guard refused (review 21 NIT-2), each with its line.
+                    # Deletes a guard refused, each with its line.
                     **({"deletesHeld": landed.held_deletes} if landed.held_deletes else {})}
         _project_revision(body, catalog, required="snapshot" in body)
         if "snapshot" in body:
             if catalog["activeProjectId"] != project_id or not _canvas_is(project_id, catalog["activeProjectId"]):
-                # The backend's canvas isn't this project (H1): the tab reloads.
+                # The backend's canvas isn't this project: the tab reloads.
                 raise HTTPException(status_code=409, detail="Only the currently open project can autosave its canvas")
             historical = {node["id"]: node.get("data", {}).get("definitionId") for node in project["snapshot"]["nodes"]}
             historical.update({node_id: node["definitionId"] for node_id, node in cli_graph.nodes.items()})
@@ -25523,9 +25486,8 @@ def _save_project(project_id: str, body: dict[str, Any], *, ingress: _IngressVer
             _live_pending_flags(staged["nodes"], cli_graph.nodes)
             _live_result_stamps(staged["nodes"], cli_graph.nodes, project["snapshot"].get("nodes"))
             project["snapshot"] = staged
-            # Which window saved each tab-local node (review 18 handoff-reopen
-            # MEDIUM-1). This save's own rule is unchanged: the last window's
-            # autosave is the project.
+            # Which window saved each tab-local node. This save's own rule is
+            # unchanged: the last window's autosave is the project.
             _note_tab_local_writers(project, _persons_tab_id())
             project["_backendNodeIds"] = sorted(set(cli_graph.nodes) & {node["id"] for node in project["snapshot"]["nodes"]})
             project["_backendEdgeIds"] = sorted({edge["id"] for edge in cli_graph.edges} & {edge["id"] for edge in project["snapshot"]["edges"]})
@@ -25548,8 +25510,8 @@ def _save_project(project_id: str, body: dict[str, Any], *, ingress: _IngressVer
 
 
 def _live_pending_flags(nodes: list[dict[str, Any]], live: Mapping[str, Mapping[str, Any]]) -> None:
-    """A save keeps each node's placeholder flag as the live graph has it
-    (Q125 item 3): only agents' edits and the backend's rules change one, so
+    """A save keeps each node's placeholder flag as the live graph has it:
+    only agents' edits and the backend's rules change one, so
     a tab that lost the flag, or made one up, never changes it."""
     for node in nodes:
         data = node.get("data") if isinstance(node, dict) else None
@@ -25568,9 +25530,9 @@ def _live_result_stamps(nodes: list[dict[str, Any]], live: Mapping[str, Mapping[
     graph has it, as it keeps the placeholder flag: only a result landing
     sets one, so a tab that lost it, or holds an old one, never changes it.
     ``stored``: the project's stored nodes. A live node with no stamp keeps
-    the stored copy's while its result is the one stored (PR #199 round 22,
-    review 20 LOW-1): a save never drops a stamp a result landing didn't
-    replace. Without it (a handoff), every stamp the tab sent goes."""
+    the stored copy's while its result is the one stored (PR #199): a save
+    never drops a stamp a result landing didn't replace. Without it (a
+    handoff), every stamp the tab sent goes."""
     kept = {node.get("id"): node.get("data") for node in stored or []
             if isinstance(node, dict) and isinstance(node.get("data"), dict)}
     for node in nodes:
@@ -25624,7 +25586,7 @@ def _keep_person_viewport(staged: dict[str, Any], stored: dict[str, Any]) -> Non
         staged["viewport"] = copy.deepcopy(stored.get("viewport"))
 
 
-# GM - Design, round 21 (G4): agents and logs read it; the person sees the
+# Design: agents and logs read it; the person sees the
 # copy line instead. ``why`` is one of HANDOFF_WHY's forms.
 HANDOFF_MERGE_REFUSED = "Nebula couldn't keep this save's unsent changes in the project because {why}, so nothing was saved."
 HANDOFF_WHY = {
@@ -25644,11 +25606,10 @@ def _handoff_key_refused(key: str) -> HTTPException:
 
 
 def _refuse_handoff_pending_not_from_the_tab(pending_params: Any, pending_labels: Any) -> None:
-    """Only the person's own canvas tab sends the unsent changes (round 21 of
-    PR #195, review 20 L-6): the person's token and X-Nebula-Tab. Anyone else
-    holding the old revision (the agent that switched, a script) could
-    otherwise rewrite saved settings in the project left with no journal
-    entry or undo."""
+    """Only the person's own canvas tab sends the unsent changes (PR #195):
+    the person's token and X-Nebula-Tab. Anyone else holding the old revision
+    (the agent that switched, a script) could otherwise rewrite saved
+    settings in the project left with no journal entry or undo."""
     if not pending_params and not pending_labels:
         return
     if not _from_persons_tab():
@@ -25670,7 +25631,7 @@ def _persons_tab_id() -> str | None:
 
 
 # Which of the person's windows saved each tab-local node of a project
-# ({nodeId: X-Nebula-Tab}; review 18 handoff-reopen MEDIUM-1). A tab-local
+# ({nodeId: X-Nebula-Tab}). A tab-local
 # node (Duplicate, Paste) exists only in the window that made it: no other
 # window ever receives it, so only that window can say it was deleted
 # (_save_handoff's ``deletedNodeIds``). Written by the person's tab's
@@ -25710,7 +25671,7 @@ def _tab_local_writer(project: Mapping[str, Any], node_id: str) -> str | None:
 
 def _handoff_pending(pending_params: Any, pending_labels: Any) -> tuple[dict[str, list[str]], set[str]]:
     """The handoff's unsent keys per node and the nodes with an unsent name,
-    or a 409 for a malformed list (round 20, H1). Only names are read here:
+    or a 409 for a malformed list. Only names are read here:
     every value comes from the staged snapshot."""
     params: dict[str, list[str]] = {}
     if pending_params is not None:
@@ -25740,7 +25701,7 @@ def _merge_handoff_node(stored: dict[str, Any], staged: dict[str, Any], staged_l
     staged_params = (staged.get("data") or {}).get("params") or {}
     for key in keys:
         # A key the staged node lacks (staging dropped it: not a setting of
-        # that node) refuses the save (GM's G4 form), so the tab keeps it
+        # that node) refuses the save (the design's form), so the tab keeps it
         # as a copy rather than losing it silently.
         if key not in staged_params:
             raise _handoff_key_refused(key)
@@ -25756,7 +25717,7 @@ def _merge_handoff_node(stored: dict[str, Any], staged: dict[str, Any], staged_l
 class _HandoffLanded(NamedTuple):
     """What a handoff's save merged ({nodeId: (keys, name merged, moved)}),
     the renumbered nodes the person deleted before it (their new ids), and
-    the nodes whose run result the tab's copy gave (review 18 MEDIUM-3)."""
+    the nodes whose run result the tab's copy gave."""
     merged: dict[str, tuple[list[str], bool, bool]]
     deleted: list[str]
     results: list[str] = []
@@ -25766,8 +25727,8 @@ class _HandoffLanded(NamedTuple):
     # window sending it isn't the one that saved the node last.
     kept_deletes: list[str] = []
     # The listed deletes a guard refused (a World Labs record or paid start,
-    # a rendering Cinema scene; PR #199 round 23, review 21 NIT-2), with the
-    # person's line for each: {nodeId, line}. The node stays, said.
+    # a rendering Cinema scene; PR #199), with the person's line for each:
+    # {nodeId, line}. The node stays, said.
     held_deletes: list[dict[str, str]] = []
 
 
@@ -25781,24 +25742,23 @@ def _save_handoff(project: dict[str, Any], raw: Any, *, ingress: _IngressVerdict
     The switch already merged the live canvas into this project
     (_overlay_live_project), so nodes and wires the backend had stay as
     saved. The tab adds what only it holds: nodes and wires it never sent to
-    the backend, its viewport, run history and Create draft, and (round 20 of
-    PR #195, review 19 H1) the settings and names it hadn't sent for nodes
-    the backend had: ``pending_params`` ({nodeId: {key: value}}) and
-    ``pending_labels`` ({nodeId: name | null}) name them, and each value is
-    taken from the staged snapshot node (checked like every save), merged
-    per top-level key onto the stored copy. Everything else keeps the stored
-    copy, so an undo the tab dropped is still not folded in. A merge that
-    can't be made (a node not in the save, another definition, a malformed
-    list, a key that isn't a setting of the node, or the lists sent by
-    anyone but the person's tab) refuses the whole save with 409, so the tab
-    keeps it as a copy.
+    the backend, its viewport, run history and Create draft, and (PR #195)
+    the settings and names it hadn't sent for nodes the backend had:
+    ``pending_params`` ({nodeId: {key: value}}) and ``pending_labels``
+    ({nodeId: name | null}) name them, and each value is taken from the
+    staged snapshot node (checked like every save), merged per top-level key
+    onto the stored copy. Everything else keeps the stored copy, so an undo
+    the tab dropped is still not folded in. A merge that can't be made (a
+    node not in the save, another definition, a malformed list, a key that
+    isn't a setting of the node, or the lists sent by anyone but the person's
+    tab) refuses the whole save with 409, so the tab keeps it as a copy.
 
     Answers the merged nodes ({nodeId: (keys, name merged, moved)}) and the
     deleted ones, so a project that is the open one again (an agent reopened
-    it) gets them onto the live graph too (_apply_handoff_live, round 21,
-    review 20 M-1).
+    it) gets them onto the live graph too
+    (_apply_handoff_live).
 
-    ``renumbered`` ({old: new}; PR #199 round 18, review 16 HIGH-1): the ids
+    ``renumbered`` ({old: new}; PR #199): the ids
     the open that kept this handoff gave the project's tab-local nodes (a
     reopen in place). The tab's snapshot was taken before it, so it may
     still hold the old ids: it is moved first (_apply_node_renumbering: ids,
@@ -25808,8 +25768,7 @@ def _save_handoff(project: dict[str, Any], raw: Any, *, ingress: _IngressVerdict
 
     The tab never sent such a node's values (its id wasn't Nebula's), so
     from the person's tab its unsent values are what differs from ``base``
-    ({new: {params, label, position}}, the node as the open or the boot
-    loaded it; round 19, review 17 MEDIUM-1): each setting whose value
+    ({new: {params, label, position}}, the node as the open or the boot loaded it): each setting whose value
     differs, its name if it differs, its place if it differs, plus anything
     the unsent lists name. Everything else keeps the stored copy, and the
     live graph keeps what an agent wrote to the new id after the open, as
@@ -25817,8 +25776,8 @@ def _save_handoff(project: dict[str, Any], raw: Any, *, ingress: _IngressVerdict
     an agent's change on any other key stands. ``base`` moves on to what
     landed, so a later handoff counts only newer changes.
 
-    A delete is said, never read from an omission (review 18 handoff-reopen
-    MEDIUM-1): ``deleted_ids`` (the body's ``deletedNodeIds``) lists the
+    A delete is said, never read from an omission:
+    ``deleted_ids`` (the body's ``deletedNodeIds``) lists the
     tab-local nodes the tab deleted, by the id it had (the old one) or the
     new one. A renumbered node is deleted (from the stored copy, and by
     _apply_handoff_live from the live graph, as the person's delete) only
@@ -25830,7 +25789,7 @@ def _save_handoff(project: dict[str, Any], raw: Any, *, ingress: _IngressVerdict
     saved stays when this one leaves it out. A node an agent added after the
     open is in no map, so it stays.
 
-    Run results (review 18 handoff-reopen MEDIUM-3): each node's run result
+    Run results: each node's run result
     (_run_result: outputs, state, notes, error, batch previews) moves as one
     unit, as the product of a run, from the person's tab only. For a
     renumbered node: the tab's unit when it differs from ``base`` and no
@@ -25999,12 +25958,12 @@ def _save_handoff(project: dict[str, Any], raw: Any, *, ingress: _IngressVerdict
 
 
 def _journal_handoff_results(project: Mapping[str, Any], result_runs: Mapping[str, str | None]) -> None:
-    """A handoff's newer tab result replaced a node's result (PR #199 round
-    21, review 19 agents-docs NIT-2): journaled as the person's
-    (``node.result``: the node, the project, and the run the result came
-    from), so agents reading the journal know their result was replaced. No
-    Agent log line: the Agent log is agents' actions, this one is the
-    person's own (GM r32). Never fails the save."""
+    """A handoff's newer tab result replaced a node's result (PR #199):
+    journaled as the person's (``node.result``: the node, the project, and
+    the run the result came from), so agents reading the journal know their
+    result was replaced. No Agent log line: the Agent log is agents'
+    actions, this one is the person's own (design). Never fails the
+    save."""
     stored = {node.get("id"): node for node in (project.get("snapshot") or {}).get("nodes") or []
               if isinstance(node, dict)}
     for node_id, run_id in result_runs.items():
@@ -26041,23 +26000,23 @@ def _apply_handoff_live(project: Mapping[str, Any], merged: Mapping[str, tuple[l
                         deleted: Sequence[str] = (), removed: list[dict[str, Any]] | None = None,
                         results: Sequence[str] = ()) -> bool:
     """The handoff's merged keys and names onto the live graph, for a project
-    that is the open one again (round 21 of PR #195, review 20 M-1): an
+    that is the open one again (PR #195): an
     agent's reopen of the project the tab showed reloaded the live graph from
     what was saved, and every read of the open project lays the live graph
     over the stored copy, so the typing kept only in the stored copy was lost
     at the next read. Same step as the save (no await). Answers whether the
     live graph changed (the route then broadcasts a graphSync).
 
-    Only what the person changed is written and journaled as theirs (round
-    19, review 17 MEDIUM-1): ``merged`` holds only those keys, names and
-    places. ``deleted``: renumbered nodes the person deleted before the
-    handoff (review 17 reopen LOW-2), removed from the live graph and
-    journaled as the person's delete (``node.removed``); their removal
-    entries go into ``removed`` for the route to announce. One that can't be
-    deleted (a paid start holds it) stays, and the next read keeps it.
+    Only what the person changed is written and journaled as theirs:
+    ``merged`` holds only those keys, names and places. ``deleted``:
+    renumbered nodes the person deleted before the handoff, removed from the
+    live graph and journaled as the person's delete (``node.removed``); their
+    removal entries go into ``removed`` for the route to announce. One that
+    can't be deleted (a paid start holds it) stays, and the next read keeps
+    it.
 
-    ``results``: nodes whose run result the tab's copy gave (review 18
-    handoff-reopen MEDIUM-3). Its outputs go onto the live node and its
+    ``results``: nodes whose run result the tab's copy gave.
+    Its outputs go onto the live node and its
     failure onto the node's error record (the card's and agents' read), or
     the error is forgotten when the tab's result has none: every read lays
     the live node over the stored copy, so a result kept only there was lost
@@ -26166,20 +26125,20 @@ async def pin_project_cover(project_id: str, body: dict[str, Any]) -> dict[str, 
     The person may always. Anyone else (an agent, a script) may while the
     person hasn't pinned one; a cover the person pinned changes only through
     a proposal they accept on the Projects screen (``POST
-    /api/asset-proposals``, Justin's Q60 a, 2026-10-20). A pin whose image
-    left the project (its node deleted) no longer counts (Q90 a): the card is
-    automatic, so anyone may set it, and the person's next pin counts again.
-    Who set the pin is saved as ``coverBy``. The answer's ``previous``
-    ({"cover": url or null}, the cover the card showed) put back through this
-    route undoes the change."""
+    /api/asset-proposals``, Justin's call, 2026-10-20). A pin whose image left the
+    project (its node deleted) no longer counts: the card is automatic, so
+    anyone may set it, and the person's next pin counts again. Who set the
+    pin is saved as ``coverBy``. The answer's ``previous`` ({"cover": url or
+    null}, the cover the card showed) put back through this route undoes the
+    change."""
     return await _set_project_cover(project_id, body.get("url"))
 
 
 def _cover_owner(project: Mapping[str, Any], images: Mapping[str, Any]) -> dict[str, str] | None:
     """Who pinned the project's cover, or None for the automatic one: no pin,
     or a pin whose image is no longer one of the project's (``images``: its
-    snapshot as it is now; Justin's Q90 a). A pin saved before ``coverBy``
-    existed is the person's: only they could pin."""
+    snapshot as it is now; Justin's call). A pin saved before ``coverBy`` existed
+    is the person's: only they could pin."""
     if not project_cover.pin_counts(dict(images), project.get("coverPin")):
         return None
     return recorded_cover_owner(dict(project))
@@ -26290,7 +26249,7 @@ async def delete_saved_project(project_id: str, body: dict[str, Any] | None = No
             _project_replacement_guard("delete the open project")
             # The canvas a delete empties is kept: in the project when it is
             # that one (so Recently deleted has its latest), or its own, or
-            # filed (H1). Settling may change what is open.
+            # filed. Settling may change what is open.
             settled = _settle_live_canvas(catalog, exported)
             if settled is not None:
                 deleting_active = catalog["activeProjectId"] == project_id
@@ -26304,8 +26263,8 @@ async def delete_saved_project(project_id: str, body: dict[str, Any] | None = No
                 catalog["workspaceRevision"] = uuid4().hex
                 # The canvas becomes the unfiled one, empty, its ids starting
                 # again at n1, so the unfiled canvas's id epoch moves, in this
-                # step (round 11 of PR #114). Before the commit, on disk first,
-                # and back if the commit fails (round 20 of PR #195, M2): a
+                # step (PR #114). Before the commit, on disk first,
+                # and back if the commit fails (PR #195): a
                 # crash in between leaves a moved revision over the old canvas,
                 # never the new canvas under an old revision.
                 previous_epoch = canvas_undo_book.advance_epoch(None)
@@ -26331,7 +26290,7 @@ async def delete_saved_project(project_id: str, body: dict[str, Any] | None = No
             "activeProjectId": catalog["activeProjectId"],
             "workspaceRevision": catalog["workspaceRevision"],
         }
-    # Before any await (round 8 of PR #114).
+    # Before any await (PR #114).
     _journal_project_change("project.deleted", result["trashedProject"], was_open=deleting_active)
     if deleting_active:
         await _broadcast_graph_sync(graph_replaced=True, reason="project-delete")
@@ -26420,8 +26379,8 @@ async def restore_saved_project(project_id: str) -> dict[str, Any]:
     if _canvas_not_filed_now() is not None or _held_distinct():
         # A canvas waits to be saved: it takes any place a delete freed
         # first, as the listing the person's tab makes after a delete does
-        # (review 8 of PR #199, L-2: a restore never takes the place a
-        # waiting canvas waits on). The restore then may pass the limit.
+        # (PR #199: a restore never takes the place a waiting canvas waits
+        # on). The restore then may pass the limit.
         await list_projects()
     with project_store.transaction() as catalog:
         expired = purge_expired_trash(catalog)
@@ -26436,7 +26395,7 @@ async def restore_saved_project(project_id: str) -> dict[str, Any]:
     if expired:
         agent_questions.keep_projects(kept)
     await _broadcast_assets_gone(assets_gone)
-    _journal_project_change("project.restored", result["project"])  # before any await (round 8 of PR #114)
+    _journal_project_change("project.restored", result["project"])  # before any await (PR #114)
     await _broadcast_projects_changed("restored", project_id)
     return result
 
@@ -26538,11 +26497,11 @@ def _display_positions(
 @app.get("/api/graph/export")
 async def get_graph_export() -> dict:
     """The canvas as the frontend draws it. An agent that reads it has read
-    its Cinema scenes (fix round 8, H2; services/scene_keys.py)."""
+    its Cinema scenes (services/scene_keys.py)."""
     export = await export_graph_for_frontend()
     scene_keys.note_read(_scene_scope(), _reader_agent(), export.get("sceneKeys") or {})
     if _is_person_request():
-        # The person's own read only (PR #199 round 23): never an agent's.
+        # The person's own read only (PR #199): never an agent's.
         return {**export, "providerRecoveryPlaces": _person_recovery_places()}
     return export
 
@@ -26574,21 +26533,21 @@ async def export_graph_for_frontend() -> dict:
     # rewritten. Idempotent — does no work when no migration is needed.
     _normalize_cli_graph_output_refs()
     state = cli_graph.get_state()
-    # Which canvas this is too (round 19): a tab sends it back on its writes.
+    # Which canvas this is too: a tab sends it back on its writes.
     workspace = {**_workspace_context(), "canvasRevision": _canvas_revision()}
-    # Round 21: the revisions didn't survive the restart (the file was lost
+    # The revisions didn't survive the restart (the file was lost
     # or unreadable, or nothing is kept): a tab's older revision says nothing
-    # about this canvas, and it adopts this one (review 20, L-4/L-5).
+    # about this canvas, and it adopts this one.
     if not canvas_undo_book.restored:
         workspace["canvasRevisionRestored"] = False
-    # The restore notice showing now (GM r11, 5): a tab whose revision moved
+    # The restore notice showing now (design): a tab whose revision moved
     # because Nebula restored its project list says so, not "another window".
     notice = project_store.restore_notice()
     if notice is not None and isinstance(notice.get("id"), str):
         workspace["catalogRestore"] = notice["id"]
     # The open project an agent's write closed to keep the person's canvas in
     # it: a tab that showed it goes to Projects home, with no "another window"
-    # line (review 10's HIGH-2 follow-up).
+    # line.
     if _persons_canvas_saved:
         workspace["personsCanvasSaved"] = dict(_persons_canvas_saved)
     # The open project's nodes' last errors (ids restart in each project).
@@ -26651,9 +26610,8 @@ async def export_graph_for_frontend() -> dict:
         "nodes": rf_nodes,
         "edges": rf_edges,
         "empty": False,
-        # Fix round 8, H2: each Cinema scene's key, which its next save sends
-        # back as ifSceneKey, and (round 9, H-1) its revision, so a canvas
-        # can tell a late sync from a newer one (services/scene_keys.py);
+        # Each Cinema scene's key, which its next save sends back as ifSceneKey, and its
+        # revision, so a canvas can tell a late sync from a newer one (services/scene_keys.py);
         # none without a scene.
         **({"sceneKeys": keys, "sceneRevs": scene_keys.revisions_of(_scene_scope(), keys)}
            if (keys := scene_keys.keys_of(cli_graph.nodes)) else {}),
@@ -26722,11 +26680,11 @@ async def run_graph(request: Request, body: dict[str, Any] | None = None) -> dic
         raise HTTPException(status_code=400, detail="wait must be a number of seconds")
 
     run_id = str(uuid4())
-    # Agents' placeholders and what needs them are skipped (Q125 item 3); the
+    # Agents' placeholders and what needs them are skipped; the
     # caller's own turn normal and run. Announced once the run is noted.
     sub_nodes, sub_edges, pending_skips, ready = await _skip_placeholders(run_id, sub_nodes, sub_edges,
                                                                           announce=False)
-    # Protected from here (PR #198 review 3, L1), through the spending check:
+    # Protected from here (PR #198), through the spending check:
     # the scenes that run, not the placeholders skipped.
     _note_scene_renders(run_id, sub_nodes)
     _validate_cinema_base_models(sub_nodes)
@@ -26755,7 +26713,7 @@ async def run_graph(request: Request, body: dict[str, Any] | None = None) -> dic
     _note_run(run_id)
     _note_run_nodes(run_id, sub_nodes)
     try:
-        # Right before it registers, with no await between (round 11): the
+        # Right before it registers, with no await between: the
         # run notes this canvas as the one its write-backs go to.
         _refuse_if_graph_moved(fence)
         run_canvas = _run_canvas_now()  # as in execute
@@ -26783,8 +26741,8 @@ async def run_graph(request: Request, body: dict[str, Any] | None = None) -> dic
     _cli_runs.start(run_id, task, target, outcome)
     # Registered, with no await since the last fence: the caller's own
     # placeholders turn normal and its run is kept (_admit_registered_run).
-    # Only now, so a run refused above leaves both as they were (round 21,
-    # the #114 merge: these used to await before the fence).
+    # Only now, so a run refused above leaves both as they were (PR #114:
+    # these used to await before the fence).
     try:
         placeholders_changed = _admit_registered_run(run_id, ready, sub_nodes, sub_edges, run_canvas)
     except BaseException:
@@ -26793,14 +26751,14 @@ async def run_graph(request: Request, body: dict[str, Any] | None = None) -> dic
         await _release_paid_worldlabs_starts(run_id)
         _return_hold(run_id)
         raise
-    # Admitted: the run has started. Every step from here is best effort
-    # (round 23, review 22 L-4): none of them may answer as if it didn't.
+    # Admitted: the run has started. Every step from here is best effort:
+    # none of them may answer as if it didn't.
     synced = await _broadcast_admitted_run(run_id, placeholders_changed)
     await _after_admission(run_id, "the skip notes", lambda: _announce_skips(run_id, pending_skips))
 
     async def announce() -> None:
         # The canvas says "Running X" / "Ran X" only for a run that started
-        # (review 10's F3: one its fence refused still said it ran).
+        # (a run its fence refused used to say it ran).
         if target:
             await _show_agent({"nodeId": target}, shows="run", say=f"Running {_quoted(_node_label(target))}",
                               did=_did("Ran", target), nodes=[target])
@@ -26816,37 +26774,37 @@ async def run_graph(request: Request, body: dict[str, Any] | None = None) -> dic
 
 
 # The Agent Log's heading for a run its pre-call check stopped: the card's
-# (GM, PR #203 r29 item 3).
+# (design, PR #203).
 REFUSED_RUN_HEADING = "Nebula couldn’t start the run."
 
 
 def _refused_run_log_line(errors: list[ValidationErrorDetail]) -> str:
-    """The Agent Log's line for a run the pre-call check stopped (GM, PR #203
-    r29 item 3): the card's heading, then each stop once, its nodes by
-    quoted name and merged by the r28 rule (person_line.merged_not_ready,
-    the bar's table), each action sentence ending ", then run the node
-    again" ("the nodes" for several; ". Then run the node again." after a
-    comma clause): "Nebula couldn’t start the run. 2 “GPT Image 2” nodes need
-    your OpenAI API key. Add it in Settings, then run the nodes again."
+    """The Agent Log's line for a run the pre-call check stopped (design, PR
+    #203): the card's heading, then each stop once, its nodes by quoted name
+    and merged by the rule in person_line.merged_not_ready (the bar's
+    table), each action sentence ending ", then run the node again" ("the
+    nodes" for several; ". Then run the node again." after a comma clause):
+    "Nebula couldn’t start the run. 2 “GPT Image 2” nodes need your OpenAI
+    API key. Add it in Settings, then run the nodes again."
 
     - The not-ready reasons first (a key, a route, a Krea plan), then the
-      inputs with no wire, merged the same way from one table (GM r33 item
-      1, person_line.INPUT_NEED_PREDICATES): "2 “GPT Image 2” nodes need a
+      inputs with no wire, merged the same way from one table
+      (design, person_line.INPUT_NEED_PREDICATES): "2 “GPT Image 2” nodes need a
       prompt. Connect a prompt to each, then run the nodes again.". A node
-      with several says them as one need, in its input order (GM r34 item
-      1): "“FLUX Kontext” needs a prompt and an image. Connect both, then
+      with several says them as one need, in its input order
+      (design): "“FLUX Kontext” needs a prompt and an image. Connect both, then
       run the node again."; nodes with the same set merge, different sets
       are separate sentences. A node with a reason and another stop keeps
-      both (review 16, L1).
+      both.
     - Any other stop says its card line after the node's name.
     - Nodes that share a reason or a set of needs count from 4 inside their
-      own sentence, as the bar's list does (GM r35 item 1): "4 nodes need a
+      own sentence, as the bar's list does (design): "4 nodes need a
       prompt and an image. Connect both to each, then run the nodes
       again."; each other reason or set is its own sentence. The bar's
-      summary line above the list keeps r24's "N nodes can’t run here yet.".
+      summary line above the list keeps its own "N nodes can’t run here yet.".
       Only a line longer than the log's room (agent_presence.MAX_LOG_CHARS)
       says that count instead, so it stays whole and true; one node's line
-      has no shorter form and is said whole (GM r33 item 2). The line is
+      has no shorter form and is said whole (design). The line is
       never cut.
 
     Agents' text keeps ids (`error`, `errors`)."""
@@ -26878,8 +26836,8 @@ def _refused_run_log_line(errors: list[ValidationErrorDetail]) -> str:
                 continue
             rest.append(error.person)
         if unwired:
-            # One need per node, its inputs in the node's input order (GM,
-            # PR #203 r34 item 1), so the same node always reads the same and
+            # One need per node, its inputs in the node's input order
+            # (design, PR #203), so the same node always reads the same and
             # nodes with the same set merge.
             order = _input_order(node_id)
             unwired.sort(key=lambda error: order.get(error.port_id, len(order)))
@@ -26890,8 +26848,8 @@ def _refused_run_log_line(errors: list[ValidationErrorDetail]) -> str:
             line = joined_lines(rest)
             others.append(f"{_quoted(label)} can’t run." + (f" {line}" if line else ""))
     # Each line's Agent Log form: its action sentence ends in the run-again
-    # ending, built in its end slot (person_line.NOT_READY_PREDICATES; GM, PR
-    # #203 r31 item 3), never appended to the last sentence.
+    # ending, built in its end slot (person_line.NOT_READY_PREDICATES;
+    # design, PR #203), never appended to the last sentence.
     told = [line for line, _count in merged_not_ready(reasons, again=True)]
     told += [line for line, _count in merged_not_ready(needs, again=True)] + others
     if not told and by_node.get(""):
@@ -26949,10 +26907,10 @@ async def _refused_cli_run(run_id: str, target: str | None, errors: list[Validat
         await _announce_skips(run_id, pending_skips)
     # The Agent log and the cursor speak on the person's canvas: the card's
     # lines, not the keys and ids agents read in `error` and `errors` (error
-    # copy round 3e). The agent's cursor carries the merged line; a line no
-    # cursor carried (a graph-wide refusal alone, such as a cycle, or a caller
-    # with no agent name) goes to an in-app chat turn's log, so it is listed
-    # once either way (GM, PR #203 r30 item 1).
+    # copy). The agent's cursor carries the merged line; a line no cursor
+    # carried (a graph-wide refusal alone, such as a cycle, or a caller with
+    # no agent name) goes to an in-app chat turn's log, so it is listed once
+    # either way (design, PR #203).
     unlogged = await _announce_validation_errors(errors, run_id)
     if unlogged is not None:
         publish_action(unlogged)
@@ -27061,11 +27019,11 @@ async def _execute_cli_run(
     # Sync outputs to frontend canvas
     await _broadcast_graph_sync(run_params=run_id)
 
-    # Agents' placeholders the run skipped, in GM's skip line (Q125 item 3).
+    # Agents' placeholders the run skipped, in the design's skip line.
     pending_note = pending_nodes.skip_line(pending_summary)
     # The agent's own row; a run with no agent name (no marker) shows none.
     # The bubble keeps the whole sentences that fit; the Agent log the whole row (a stop for the
-    # person's OK is a sentence of its own that must never be cut: GM r39).
+    # person's OK is a sentence of its own that must never be cut: design).
     row = _cli_run_line(results, errors, gated, duration, pending_note,
                         stopped=outcome.get("stopped") or (), names=node_names_at_start)
     await _say_agent_action(_whole_sentences(row), log=row, nodes=list(errors) or None, agent=run_agent)
@@ -27077,7 +27035,7 @@ async def _execute_cli_run(
         # Per node, what each run said beside its outputs (the size a maker made).
         **({"notes": outcome["notes"]} if outcome.get("notes") else {}),
         # A node stopped at a call only the person may make, marked so an
-        # agent reads it as "propose", not a failure (review 19, NIT-4).
+        # agent reads it as "propose", not a failure.
         **({"stopped": outcome["stopped"]} if outcome.get("stopped") else {}),
         "duration": round(duration, 2),
         "nodesExecuted": len(results) + len(errors),
@@ -27160,9 +27118,9 @@ async def get_graph_run(run_id: str, wait: float = 0) -> dict[str, Any]:
     reports = _run_reports()
     if (_cli_runs.get(run_id) is None and execution_runs.get(run_id) is None and not reports.known(run_id)
             and execution_runs.tombstoned(run_id)):
-        # A Stop beat this run's start (round 16 of PR #114, M2): the id can't
+        # A Stop beat this run's start (PR #114): the id can't
         # start here, so nothing ran and nothing was spent. Only when this
-        # process saw that start begin (round 17, review 16 L1); otherwise it
+        # process saw that start begin; otherwise it
         # has no record of the run, which may have run before a restart.
         if not execution_runs.start_seen(run_id):
             return {"runId": run_id, "status": "unknown", "source": "canvas", "noRecord": True}
@@ -27388,8 +27346,8 @@ async def quick_execute(body: dict[str, Any]) -> dict:
     Its nodes are temporary (``_quick_*``), never on the canvas, and its
     events go to this request's own dicts, so nothing is written back by node
     id: a quick run in flight doesn't hold up a Clear, a project switch, an
-    import or a delete of the open project (round 12 of PR #114; it did
-    through _track_synchronous_project_run, now gone)."""
+    import or a delete of the open project (PR #114; it did through
+    _track_synchronous_project_run, now gone)."""
     _check_workspace_revision()
     _capture_execution_workspace()
     definition_id = body.get("definitionId", "")
@@ -27505,13 +27463,12 @@ async def quick_execute(body: dict[str, Any]) -> dict:
         params=params,
         outputs={},
     ))
-    # Review 12, L-3: a required field with nothing chosen (Krea 2's Aspect
+    # A required field with nothing chosen (Krea 2's Aspect
     # ratio, Topaz Standard's Width) is refused here as on every other run
     # path (services/model_choice.py), before the spend check and before
-    # anything runs, on the route the run takes (review 13, M-1, B9: a maker
-    # key that takes the run without the field is no refusal; with no key
-    # that can run it, nothing here). The node has no canvas name: its type's
-    # name stands in.
+    # anything runs, on the route the run takes (a maker key that takes the
+    # run without the field is no refusal; with no key that can run it,
+    # nothing here). The node has no canvas name: its type's name stands in.
     unchosen = unchosen_model_errors([temp_nodes[-1]], temp_edges, api_keys)
     if unchosen:
         raise HTTPException(status_code=400, detail=f"Nothing ran, so nothing was spent. {unchosen[0].message}")
@@ -28323,7 +28280,7 @@ def _journal_board_change(before: dict, after: dict, changes: dict, *, say: str 
     """The journal events for a board write (plan section 5.2): an edit
     batch or a PUT. One ``board.*`` event for its images, cards and frames,
     and one ``board.fields`` event naming the board fields it changed
-    (Justin's Q91). Every board write goes through here (the Studio, MCP,
+    (Justin's call). Every board write goes through here (the Studio, MCP,
     the CLI, an undo's ``restore``, an accepted proposal's PUT), so none is
     missed. Tagged with the open canvas project; the board's own scope is in
     ``data`` (a Global board is in every project). Never any note text, and
@@ -28675,13 +28632,13 @@ def _reader_plan(moodboard_id: str, body: MoodboardReadRequest) -> tuple[dict, d
 
 def _reader_spend_hold(source: Any, estimate: dict, settings: Mapping[str, Any], board_ref: str) -> _SpendHold | None:
     """Refuse a read that isn't the person's when it breaks a spending limit,
-    and count it at its high estimate when it doesn't (Q11: as one Gemini
-    chat run, so the chat model's own limits in Settings apply). The hold is
-    split per request, so requests that never start are given back.
-    The person's reads pass: the Studio asks them itself (PR10). A source
-    Nebula doesn't pay for (``source.priced`` false) has nothing to gate or
-    hold; an Argon entry with no list price is still priced, and refused
-    under any USD limit."""
+    and count it at its high estimate when it doesn't (as one Gemini chat
+    run, so the chat model's own limits in Settings apply). The hold is split
+    per request, so requests that never start are given back. The person's
+    reads pass: the Studio asks them itself (PR10). A source Nebula doesn't
+    pay for (``source.priced`` false) has nothing to gate or hold; an Argon
+    entry with no list price is still priced, and refused under any USD
+    limit."""
     from services import moodboard_reader as reader
 
     if _is_person_request():
@@ -28727,7 +28684,7 @@ def _settle_reader_hold(hold: _SpendHold | None, sent: Iterable[str] | None) -> 
 
 @app.post("/api/moodboards/{moodboard_id}/read/estimate")
 async def estimate_moodboard_read(moodboard_id: str, body: MoodboardReadRequest) -> dict:
-    """What reading these references would cost (C10, Q16), sending nothing:
+    """What reading these references would cost, sending nothing:
     ``{count, batches, low, high, unconfirmed, sources}`` and the parts behind
     them. ``available`` says whether the reader's key is set."""
     # Off the event loop: which references are too transparent to send can
@@ -28949,7 +28906,7 @@ async def move_character(char_id: str, body: AssetMoveBody) -> dict:
 
 TRASH_KINDS = ("moodboard", "character", "style", "project")
 # The kinds kept in a store's own .trash folder (services/asset_trash.py);
-# projects keep theirs in the catalog. Styles joined 2026-10-20 (Q53 a).
+# projects keep theirs in the catalog. Styles joined 2026-10-20.
 _ASSET_TRASH_KINDS = ("moodboard", "character", "style")
 _RESTORE_HINT = ("Deleting for good can't be undone, so only the person can. You can restore it instead: "
                  "nebula trash restore <kind> <id>, the restore_from_trash tool, or "
@@ -28975,7 +28932,7 @@ def _asset_noun(kind: str) -> str:
 
 
 def _person_noun(kind: str) -> str:
-    """The thing as the person's UI names it (GM's 404 pattern, error-copy round 3)."""
+    """The thing as the person's UI names it (the design's 404 pattern, error-copy)."""
     return {"style": "style", "moodboard": "board"}.get(kind, "character")
 
 
@@ -28987,8 +28944,8 @@ def _stored_asset_gone(kind: str, specific: str) -> HTTPException:
 def _asset_not_found(kind: str, asset_id: str) -> JSONResponse:
     """404 for a board or character that isn't live. When it is in Recently
     deleted the body says so (code "in_trash", with the trash record), so a
-    card can offer Restore instead of "not found". The person reads GM's
-    lines (error-copy round 3); agents keep the id and the restore command."""
+    card can offer Restore instead of "not found". The person reads the design's
+    lines (error-copy); agents keep the id and the restore command."""
     record = _trashed_asset(kind, asset_id)
     noun = _person_noun(kind)
     if record is None:
@@ -29110,7 +29067,7 @@ async def purge_trashed(kind: str, item_id: str) -> dict[str, Any]:
         raise refusal_copy.refusal(404, f"{_asset_noun(kind)} {item_id} isn't in Recently deleted", refusal_copy.gone_from_trash(_person_noun(kind)))
     # A card that showed it "in Recently deleted" now says it's gone.
     if kind == "style":
-        _journal_style("purged", record, style_id=item_id)  # before any await (round 8 of PR #114)
+        _journal_style("purged", record, style_id=item_id)  # before any await (PR #114)
     await _broadcast_stored_asset(kind, None, item_id, deleted=True)
     return {"purged": kind, "id": item_id}
 
