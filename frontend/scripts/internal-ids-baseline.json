@@ -477,7 +477,6 @@
   "frontend/src/hooks/useTextCut.test.tsx": 4,
   "frontend/src/hooks/useTextCut.ts": 4,
   "frontend/src/lib/api.ts": 37,
-  "frontend/src/lib/assetSaveFailure.test.ts": 2,
   "frontend/src/lib/chatCancellation.ts": 6,
   "frontend/src/lib/commonsApi.ts": 32,
   "frontend/src/lib/errorCopy.ts": 196,
