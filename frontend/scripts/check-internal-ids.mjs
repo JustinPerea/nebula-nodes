@@ -90,9 +90,9 @@ export const KINDS = ['gm', 'round', 'question', 'review', 'lane'];
 const GM_RE = /\bGM\b/g;
 // "lane" is how the studio organises its own work, not a Nebula word; agents and people read
 // "session". Counted as a whole word in any case, only inside the text people and agents read (a
-// JS/TS string or template literal, JSX text, a test title, a Python string). Never in a comment,
-// where "the scrollbar lane" is ordinary English, and never in code, where an identifier, a CSS
-// class or a grid-area may be named lane.
+// JS/TS string or template literal, JSX text, a test title, a Python string, a CSS content string).
+// Never in a comment, where "the scrollbar lane" is ordinary English, and never in code, where an
+// identifier, a CSS class or a grid-area may be named lane.
 const LANE_RE = /\blanes?\b/gi;
 const ROUND_RE = /\br\d{1,3}[a-z]?\b|\bround\s+\d{1,3}[a-z]?\b/gi;
 const ROUND_BEFORE = /(?:\b(?:design|review|since|per)|PR\s*#\d+|#\d+)[,\s]*$/i;
@@ -494,14 +494,30 @@ function joinPieces(pieces) {
   return { body, map };
 }
 
+/** The quoted strings of a stylesheet's `content:` declarations, outside comments: the only CSS text
+ * a person reads. Class names, grid areas, url() and font names are not text. */
+function cssContentSpans(text, commentSpans) {
+  const out = [];
+  for (const m of text.matchAll(/\bcontent\s*:([^;}]*)/g)) {
+    if (commentSpans.some((c) => m.index >= c.start && m.index < c.end)) continue;
+    const valueStart = m.index + m[0].length - m[1].length;
+    for (const q of m[1].matchAll(/(["'])(?:\\.|(?!\1)[^\\])*\1/g)) {
+      out.push({ start: valueStart + q.index, end: valueStart + q.index + q[0].length, kind: 'string' });
+    }
+  }
+  return out;
+}
+
 /** Every match in one file: [{line, text, kind: 'gm'|'round'|'question'|'review'|'lane', match}]. */
 export function scanSource(path, text) {
   const allSpans = findSpans(path, text);
   const spans = allSpans.filter((s) => s.kind !== 'string');
-  // Text people and agents read: every Python string, and the strings and JSX text the TypeScript
-  // parser finds. Stylesheets and shell scripts hold none.
+  // Text people and agents read: every Python string, the strings and JSX text the TypeScript
+  // parser finds, and a stylesheet's `content:` strings (drawn on screen). Shell scripts hold none.
   const ext = path.slice(path.lastIndexOf('.') + 1);
-  const readable = ext === 'py' ? allSpans.filter((s) => s.kind === 'string') : readableSpansJs(path, text);
+  const readable = ext === 'py' ? allSpans.filter((s) => s.kind === 'string')
+    : ext === 'css' ? cssContentSpans(text, spans)
+      : readableSpansJs(path, text);
   const lineStarts = [0];
   for (let k = 0; k < text.length; k++) if (text[k] === '\n') lineStarts.push(k + 1);
   const lineOf = (offset) => {

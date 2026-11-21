@@ -208,6 +208,11 @@ describe('check-internal-ids: what counts', () => {
     expect(count("a.tsx", "const z = a<b && c>lane;")).toBe(0);
     // a CSS class and grid area -> 0
     expect(count("a.css", ".swim-lane { grid-area: lane; }")).toBe(0);
+    // A stylesheet's content: string is drawn on screen, so it counts; url(), class names and comments don't.
+    expect(count("a.css", '.x::after { content: "each lane"; }')).toBe(1);
+    expect(count("a.css", ".x::before { content: 'a lane' }")).toBe(1);
+    expect(count("a.css", '.a { background: url("lane.png"); }')).toBe(0);
+    expect(count("a.css", '/* content: "lane" */ .a {}')).toBe(0);
     // a line comment -> 0
     expect(count("a.ts", "// the lane stays empty")).toBe(0);
     // a block comment -> 0
