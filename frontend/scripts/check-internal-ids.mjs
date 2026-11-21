@@ -24,6 +24,12 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 //     replacement field). The TypeScript parser finds those in .ts, .tsx, .js, .jsx, .mjs and .cjs.
 //     An identifier, a comment, a CSS class or a grid-area named lane is code and does not count,
 //     and stylesheets are not read for it at all.
+// Agent-facing markdown is read too (docs/MCP-SETUP.md, skills/**/*.md, .agents/skills/**/*.md):
+// agents follow those files as instructions. There all prose counts (paragraphs, headings, lists,
+// tables, block quotes, link text) for the same five kinds. Fenced code blocks, inline code spans
+// and link targets are skipped for the round, question and review ids and for "lane", since they
+// hold commands, flags and literal values; the studio initials count everywhere in the file, code
+// fences included, as in every other file type.
 // Round, question and review ids are restricted to comments and titles so identifiers, SVG
 // attributes and CSS values never trip the check. "round N" is skipped when it reads as
 // arithmetic (a decimal point, "decimal places", digits) and a question id after "quarter" or
@@ -68,6 +74,9 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 export const SCAN_DIRS = ['frontend/src', 'frontend/scripts', 'frontend/tests', 'backend', 'scripts'];
 export const SCAN_EXT = new Set(['ts', 'tsx', 'js', 'jsx', 'mjs', 'cjs', 'css', 'py', 'sh']);
+// Agent-facing markdown: a short explicit list of roots (a file, or a directory with a trailing
+// slash), not every .md in the repo.
+export const MD_ROOTS = ['docs/MCP-SETUP.md', 'skills/', '.agents/skills/'];
 // Directories skipped anywhere in the path: dependencies and build output.
 const SKIP_DIR_NAMES = new Set(['node_modules', 'dist', 'build', 'coverage', '.next', '.venv', 'venv', '__pycache__', '.git']);
 // Path prefixes (repo-relative) that hold data rather than prose.
@@ -508,8 +517,57 @@ function cssContentSpans(text, commentSpans) {
   return out;
 }
 
+/**
+ * The prose of a markdown file at the same offsets: fenced code blocks, inline code spans and link
+ * targets (the URL part of [text](url), and of a reference definition) are blanked with spaces,
+ * newlines kept, so a match's offset and line are the file's.
+ */
+function markdownProse(text) {
+  const blank = (m) => m.replace(/[^\n]/g, ' ');
+  return text
+    .replace(/^([ \t]*)(`{3,}|~{3,})[^\n]*\n[\s\S]*?(?:^[ \t]*\2[`~]*[ \t]*$|(?![\s\S]))/gm, blank)
+    .replace(/(`+)(?!`)[\s\S]*?[^`]\1(?!`)/g, (m) => (m.includes('\n\n') ? m : blank(m)))
+    .replace(/\]\([^)\n]*\)/g, (m) => `]${blank(m.slice(1))}`)
+    .replace(/^([ \t]{0,3}\[[^\]\n]+\]:)[ \t]*\S+/gm, (m, head) => head + blank(m.slice(head.length)));
+}
+
+/** Every match in a markdown file: the studio initials anywhere, the other kinds only in prose. */
+function scanMarkdown(text) {
+  const prose = markdownProse(text);
+  const lineStarts = [0];
+  for (let k = 0; k < text.length; k++) if (text[k] === '\n') lineStarts.push(k + 1);
+  const lineOf = (offset) => {
+    let lo = 0;
+    let hi = lineStarts.length - 1;
+    while (lo < hi) {
+      const mid = (lo + hi + 1) >> 1;
+      if (lineStarts[mid] <= offset) lo = mid;
+      else hi = mid - 1;
+    }
+    return lo;
+  };
+  const out = [];
+  const push = (offset, kind, match) => {
+    const idx = lineOf(offset);
+    const end = lineStarts[idx + 1] === undefined ? text.length : lineStarts[idx + 1] - 1;
+    out.push({ line: idx + 1, text: text.slice(lineStarts[idx], end).trim(), kind, match });
+  };
+  for (const m of text.matchAll(GM_RE)) push(m.index, 'gm', m[0]);
+  for (const m of prose.matchAll(LANE_RE)) push(m.index, 'lane', m[0]);
+  const seen = new Set();
+  scanBody(prose, (i) => i, (offset, kind, match) => {
+    const key = `${kind}:${offset}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    push(offset, kind, match);
+  });
+  out.sort((a, b) => a.line - b.line);
+  return out;
+}
+
 /** Every match in one file: [{line, text, kind: 'gm'|'round'|'question'|'review'|'lane', match}]. */
 export function scanSource(path, text) {
+  if (path.endsWith('.md')) return scanMarkdown(text);
   const allSpans = findSpans(path, text);
   const spans = allSpans.filter((s) => s.kind !== 'string');
   // Text people and agents read: every Python string, the strings and JSX text the TypeScript
@@ -556,10 +614,12 @@ export function scanSource(path, text) {
 
 export function isScanned(rel) {
   if (SELF_SKIP.has(rel)) return false;
-  if (!SCAN_DIRS.some((d) => rel.startsWith(`${d}/`))) return false;
+  const inMdRoot = MD_ROOTS.some((r) => (r.endsWith('/') ? rel.startsWith(r) : rel === r));
+  if (rel.endsWith('.md') ? !inMdRoot : !SCAN_DIRS.some((d) => rel.startsWith(`${d}/`))) return false;
   if (SKIP_PREFIXES.some((p) => rel.startsWith(p))) return false;
   if (rel.split('/').some((seg) => SKIP_DIR_NAMES.has(seg))) return false;
   if (SKIP_FILE.test(rel)) return false;
+  if (rel.endsWith('.md')) return true;
   return SCAN_EXT.has(rel.slice(rel.lastIndexOf('.') + 1));
 }
 
@@ -567,7 +627,7 @@ export function isScanned(rel) {
 export function listFiles(root) {
   let rels;
   try {
-    const out = execFileSync('git', ['-C', root, 'ls-files', '-z', '--cached', '--others', '--exclude-standard', '--', ...SCAN_DIRS], {
+    const out = execFileSync('git', ['-C', root, 'ls-files', '-z', '--cached', '--others', '--exclude-standard', '--', ...SCAN_DIRS, ...MD_ROOTS], {
       encoding: 'utf8',
       maxBuffer: 64 * 1024 * 1024,
       stdio: ['ignore', 'pipe', 'ignore'],
@@ -590,6 +650,10 @@ export function listFiles(root) {
       }
     };
     for (const d of SCAN_DIRS) walk(join(root, d));
+    for (const r of MD_ROOTS) {
+      if (r.endsWith('/')) walk(join(root, r));
+      else if (existsSync(join(root, r))) rels.push(r);
+    }
   }
   return rels.filter(isScanned).filter((rel) => existsSync(join(root, rel)));
 }
