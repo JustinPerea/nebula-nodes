@@ -592,22 +592,34 @@ function thinSize(value) {
   return null;
 }
 
-function weightOf(decls) {
+const MONO = /mono/i;
+
+/** True when the first family of a font-family list is a mono face; a mono fallback after a UI face does not count. */
+function firstFamilyIsMono(list) {
+  const first = splitTopLevel(list)[0] ?? '';
+  return MONO.test(first);
+}
+
+/** Reads the declarations in order and returns the weight and the family list that win. A font shorthand resets both. */
+function fontStyleOf(decls) {
   let weight = null;
+  let mono = false;
   for (const { prop, value } of decls) {
     const v = value.trim().replace(/\s*!important$/i, '').trim().toLowerCase();
     if (prop === 'font-weight') {
       weight = v === 'normal' ? 400 : v === 'bold' ? 700 : v === 'bolder' ? 700 : v === 'lighter' ? 300 : Number.parseFloat(v);
       if (!Number.isFinite(weight)) weight = 400;
+    } else if (prop === 'font-family') {
+      mono = firstFamilyIsMono(v);
     } else if (prop === 'font') {
       const word = /(?:^|\s)(normal|bold|bolder|lighter|[1-9]00)(?=\s)/.exec(v);
-      if (word) weight = word[1] === 'normal' ? 400 : /^bold/.test(word[1]) ? 700 : word[1] === 'lighter' ? 300 : Number(word[1]);
+      weight = word ? (word[1] === 'normal' ? 400 : /^bold/.test(word[1]) ? 700 : word[1] === 'lighter' ? 300 : Number(word[1])) : 400;
+      const fam = /(?:^|\s)(?:[\d.]+(?:px|rem|em|pt|%)|var\([^)]*\))(?:\/\S+)?\s+(.+)$/.exec(v);
+      mono = fam ? firstFamilyIsMono(fam[1]) : false;
     }
   }
-  return weight;
+  return { weight, mono };
 }
-
-const MONO = /mono/i;
 
 /** The rules that set a 9px or 10px size with no weight of 500 or more and no mono face. */
 export function findThinText(files) {
@@ -620,9 +632,8 @@ export function findThinText(files) {
       const decls = parseDeclarations(rule.body, rule.bodyStart);
       const size = decls.find((d) => (d.prop === 'font-size' || d.prop === 'font') && thinSize(d.prop === 'font' ? (/(?:^|\s)(9px|10px)(?:\/|\s|$)/.exec(d.value.toLowerCase())?.[1] ?? '') : d.value));
       if (!size) continue;
-      const family = decls.filter((d) => d.prop === 'font-family' || d.prop === 'font');
-      if (family.some((d) => MONO.test(d.value))) continue;
-      const weight = weightOf(decls);
+      const { weight, mono } = fontStyleOf(decls);
+      if (mono) continue;
       if (weight !== null && weight >= 500) continue;
       hits.push({ file, line: lineForOffset(lineStarts, size.offset), selector: compact(rule.selector), key: `${file}::${compact(rule.selector)}`, size: size.value, weight: weight ?? 'none (400)' });
     }

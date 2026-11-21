@@ -5052,3 +5052,8 @@ body.app-slava-restraint .chat-panel__connect-btn--primary:hover:not(:disabled) 
 body.app-slava-restraint .chat-panel__connect-commands-label {
   font-family: var(--sr-ui);
 }
+
+/* A tool cut off by the person's Stop is an ordinary end: the neutral ink, not the error tone. */
+body.app-slava-restraint .chat__tool--stopped .chat__tool-output {
+  color: var(--sr-ink-light);
+}

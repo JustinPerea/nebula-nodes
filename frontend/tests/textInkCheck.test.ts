@@ -606,6 +606,9 @@ describe('check-text-ink: thin text takes weight 500', () => {
     ['the micro size token', '.a { font-size: var(--sr-type-micro, 9px); }'],
     ['the prefixed twin', 'body.app-slava-restraint .a { font-size: 10px; font-family: var(--sr-ui); }'],
     ['the font shorthand', '.a { font: 400 10px/1.2 Inter; }'],
+    ['a mono fallback after a UI face', '.a { font-size: 10px; font-family: Inter, monospace; }'],
+    ['a mono fallback after a UI face in the shorthand', '.a { font: 10px Inter, ui-monospace; }'],
+    ['a font shorthand that resets a earlier weight', '.a { font-weight: 500; font: 10px Inter; }'],
   ])('fails %s', (_name, rules) => {
     expect(thin(rules)).toHaveLength(1);
   });
@@ -617,6 +620,8 @@ describe('check-text-ink: thin text takes weight 500', () => {
     ['a mono face', '.a { font-size: 10px; font-family: var(--sr-mono); }'],
     ['monospace', '.a { font-size: 10px; font-family: ui-monospace, monospace; }'],
     ['11px', '.a { font-size: 11px; }'],
+    ['a mono face first, with a UI fallback', '.a { font-size: 10px; font-family: "JetBrains Mono", Inter; }'],
+    ['a weight set after the shorthand', '.a { font: 10px Inter; font-weight: 500; }'],
     ['the font shorthand at 500', '.a { font: 500 10px/1.2 Inter; }'],
   ])('passes %s', (_name, rules) => {
     expect(thin(rules)).toHaveLength(0);
@@ -628,6 +633,11 @@ describe('check-text-ink: thin text takes weight 500', () => {
     const listed = thinTextFailures(files, new Set(['fixture.css::.a', 'fixture.css::.b', 'fixture.css::.gone']));
     expect(listed.fresh).toEqual([]);
     expect(listed.stale).toEqual(['fixture.css::.b', 'fixture.css::.gone']);
+  });
+
+  // The number may only go down. Never raise it to admit a new thin-text rule: give the text weight 500 or a mono face.
+  it('the baseline never grows past 90 entries', () => {
+    expect(THIN_TEXT_BASELINE.size).toBeLessThanOrEqual(90);
   });
 
   it('the status words under Choose model are not in the baseline', () => {

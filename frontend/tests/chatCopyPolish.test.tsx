@@ -260,6 +260,31 @@ describe('Stop says Stopping and Stopped', () => {
     expect(document.querySelector('.chat__tool-output')?.textContent).toBe('(stopped before this tool returned)');
   });
 
+  it('a tool cut off by Stop is not drawn as an error: no error class, ink-light; a real tool error keeps the error tone', async () => {
+    apiMocks.fetchClaudeStatus.mockResolvedValue(claude());
+    render(<ChatPanel />);
+    await waitFor(() => expect(ChatTestSocket.instances).toHaveLength(1));
+    const socket = ChatTestSocket.instances[0];
+    await act(async () => socket.open());
+    const input = screen.getByPlaceholderText('Message…');
+    fireEvent.change(input, { target: { value: 'Hello' } });
+    await act(async () => { fireEvent.keyDown(input, { key: 'Enter', shiftKey: false }); });
+    await act(async () => socket.receive({ type: 'tool_use', toolUseId: 't1', tool: 'Bash', input: { command: 'ls' } }));
+    await act(async () => socket.receive({ type: 'tool_use', toolUseId: 't2', tool: 'Read', input: { path: 'x' } }));
+    await act(async () => socket.receive({ type: 'tool_result', toolUseId: 't2', content: 'boom', isError: true }));
+    await act(async () => { fireEvent.click(await screen.findByRole('button', { name: 'Stop response' })); });
+    await act(async () => socket.receive({ type: 'cancellation', status: 'confirmed' }));
+    const stopped = screen.getByText('Bash').closest('.chat__tool') as HTMLElement;
+    const errored = screen.getByText('Read').closest('.chat__tool') as HTMLElement;
+    expect(stopped.classList.contains('chat__tool--error')).toBe(false);
+    expect(stopped.classList.contains('chat__tool--stopped')).toBe(true);
+    expect(errored.classList.contains('chat__tool--error')).toBe(true);
+    expect(errored.classList.contains('chat__tool--stopped')).toBe(false);
+    const sheet = css('slava-restraint.css');
+    expect(sheet).toMatch(/\.chat__tool--stopped \.chat__tool-output \{\s*color: var\(--sr-ink-light\);/);
+    expect(sheet).toMatch(/\.chat__tool--error \.chat__tool-output \{\s*color: var\(--sr-error\);/);
+  });
+
   it('the terminal label says "Or" only beside a button: Claude Code has none, Codex has two', async () => {
     apiMocks.fetchClaudeStatus.mockResolvedValue(claude());
     apiMocks.fetchCodexStatus.mockResolvedValue(codex({ loggedIn: false }));

@@ -143,6 +143,8 @@ type ToolCall = {
   input: unknown;
   result?: string;
   isError?: boolean;
+  /** Cut off by a Stop the person asked for: an ordinary end, not an error. */
+  stopped?: boolean;
 };
 
 type TextChunk = {
@@ -428,7 +430,7 @@ export function AssistantBubble({ message, agentName, onPermission }: {
         return (
           <div
             key={part.toolUseId || idx}
-            className={`chat__tool ${part.isError ? 'chat__tool--error' : ''}`}
+            className={`chat__tool ${part.isError ? 'chat__tool--error' : ''}${part.stopped ? ' chat__tool--stopped' : ''}`}
           >
             <button
               className="chat__tool-header"
@@ -1349,7 +1351,7 @@ export function ChatPanel() {
                 parts: [
                   ...msg.parts.map((p) =>
                     p.kind === 'tool' && p.result === undefined
-                      ? { ...p, result: '(stopped before this tool returned)', isError: true }
+                      ? { ...p, result: '(stopped before this tool returned)', stopped: true }
                       : p,
                   ),
                   { kind: 'system', ...notice },
