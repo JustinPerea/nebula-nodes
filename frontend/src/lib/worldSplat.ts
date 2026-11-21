@@ -12,7 +12,7 @@ import {
   SplatPlyTooLargeError,
 } from './splatPly';
 
-/** GM's heading for the world preview (error-copy round 2). */
+/** The design's heading for the world preview. */
 const LOAD_WORLD = "Couldn’t load the world.";
 
 // Spark expands compressed SPZ data into substantially larger GPU buffers.
@@ -219,7 +219,7 @@ export async function fetchWorldSplatBytes(
     cache: 'no-store',
   }, LOAD_WORLD);
 
-  // GM's line for the status; the status itself stays in the console.
+  // The design's line for the status; the status itself stays in the console.
   if (!response.ok) throw await requestError(LOAD_WORLD, response);
   requestSucceeded(LOAD_WORLD);
 

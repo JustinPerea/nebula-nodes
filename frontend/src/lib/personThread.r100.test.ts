@@ -9,9 +9,9 @@ import { springScrollTo } from './scrollSpring';
 import { receiveRows, receiveSync, usePersonThreadStore } from '../store/personThreadStore';
 import { useUIStore } from '../store/uiStore';
 
-/** #225 review 3 and GM r100: the possessive cut (NIT-1), the pinned
- * survivors F5/F6 (LOW-6), sync by row version (LOW-4), a reply saved in
- * another project's thread (r100.3) and the scroll spring (r100.2). */
+/** #225 and design: the possessive cut, the pinned
+ * survivors, sync by row version, a reply saved in
+ * another project's thread and the scroll spring. */
 
 const CLAUDE = { id: 'a1', name: 'Claude', color: '#E8825A', verified: true };
 const KEY = '0123456789ab';
@@ -38,7 +38,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe('review 3 NIT-1: cutAtWord keeps a possessive apostrophe', () => {
+describe('cutAtWord keeps a possessive apostrophe', () => {
   it('“the dogs’…”, straight or curly, and still drops a closing quote with no opener', () => {
     expect(cutAtWord("Feed the dogs' bowl first", byLength(15))).toBe("Feed the dogs'…");
     expect(cutAtWord('Feed the dogs’ bowl first', byLength(15))).toBe('Feed the dogs’…');
@@ -49,7 +49,7 @@ describe('review 3 NIT-1: cutAtWord keeps a possessive apostrophe', () => {
   });
 });
 
-describe('review 3 LOW-6 F5: a reply that names a later message clears the ones before it', () => {
+describe('a reply that names a later message clears the ones before it', () => {
   it('m1 and m2 are cleared by a reply to m2; m3 after it is not', () => {
     const m1 = message('m1', 1_000);
     const m2 = message('m2', 2_000);
@@ -61,7 +61,7 @@ describe('review 3 LOW-6 F5: a reply that names a later message clears the ones 
   });
 });
 
-describe('review 3 LOW-6 F6: the You row sits at the later of closedAt and the row', () => {
+describe('the You row sits at the later of closedAt and the row', () => {
   it('a set closed before its row arrived is placed at the row', () => {
     const row: ThreadRow = { id: 'row-q', kind: 'question', at: 5_000, questionId: 'q', agent: CLAUDE };
     const view = { status: 'answered', closedAt: 4_000, answers: [{ choices: [], text: 'Warm' }] };
@@ -70,7 +70,7 @@ describe('review 3 LOW-6 F6: the You row sits at the later of closedAt and the r
   });
 });
 
-describe('review 3 LOW-4: rows merge by version', () => {
+describe('rows merge by version', () => {
   it('a lower rev never replaces the copy held; an equal or higher one does', () => {
     const held = message('m1', 1_000, { state: 'accepted', rev: 2 });
     expect(mergeRows([held], [message('m1', 1_000, { state: 'sent', rev: 1 })])[0].state).toBe('accepted');
@@ -100,7 +100,7 @@ describe('review 3 LOW-4: rows merge by version', () => {
   });
 });
 
-describe('GM r100.3: a reply saved in another project’s thread is unread there', () => {
+describe('a reply saved in another project’s thread is unread there', () => {
   it('both ways: p2’s reply while p1 is open, then p1’s while p2 is open', () => {
     receiveSync('p1', [message('m1', 1_000)]);
     receiveRows('p2', [reply('r2', 2_000)]);
@@ -122,14 +122,14 @@ describe('GM r100.3: a reply saved in another project’s thread is unread there
     expect(state.unreadElsewhere).toEqual({});
   });
 
-  it('review 4 NIT-6: the same reply arriving twice (a newer rev) counts once', () => {
+  it('the same reply arriving twice (a newer rev) counts once', () => {
     receiveSync('p1', []);
     receiveRows('p2', [reply('r2', 2_000, { rev: 1 })]);
     receiveRows('p2', [reply('r2', 2_000, { rev: 2 }), reply('r3', 2_500)]);
     expect(usePersonThreadStore.getState().unreadElsewhere).toEqual({ p2: 2 });
   });
 
-  it('review 4 NIT-4: a sync keeps a row the tab holds at the snapshot’s newest time', () => {
+  it('a sync keeps a row the tab holds at the snapshot’s newest time', () => {
     const out = syncRows([message('m1', 1_000), reply('r-same', 2_000)], [message('m1', 1_000), message('m2', 2_000)]);
     expect(out.map((row) => row.id)).toEqual(['m1', 'm2', 'r-same']);
   });
@@ -144,7 +144,7 @@ describe('GM r100.3: a reply saved in another project’s thread is unread there
   });
 });
 
-describe('GM r100.2: the scroll spring', () => {
+describe('the scroll spring', () => {
   function box(): HTMLElement {
     const element = document.createElement('div');
     document.body.appendChild(element);

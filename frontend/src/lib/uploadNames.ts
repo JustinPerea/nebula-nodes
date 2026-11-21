@@ -3,7 +3,7 @@ import { apiFetch } from './backend';
 
 /**
  * The names files were uploaded with, by their stored (content-hash) name
- * (GM r48 Q1 on #222). Nebula records each upload's name beside the
+ * (design on #222). Nebula records each upload's name beside the
  * content-hash store (backend services/upload_names.py) and serves it at
  * GET /api/uploads/names. lib/fileName.ts fileParamName reads it here.
  *

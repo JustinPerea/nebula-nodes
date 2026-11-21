@@ -4,7 +4,7 @@ import { floatingBottomLimit, floatingTopLimit } from './bottomBar';
 const GUTTER = 16;
 
 /**
- * Where Styles sits (GM r8, 2 on PR #204: Creator Studio's notice region stays
+ * Where Styles sits (design on PR #204: Creator Studio's notice region stays
  * at the bottom, just above the composer, and a notice never lands on the
  * content of the popover the person is using). Styles stops above the
  * region's reserved band like every floating panel (lib/bottomBar.ts

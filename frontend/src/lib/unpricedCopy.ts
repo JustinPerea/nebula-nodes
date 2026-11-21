@@ -1,47 +1,47 @@
 /**
- * The money copy for the "+ unpriced" chip and its tooltip (GM - Design,
- * PR #198 r6 "FROM THE SHOTS" and r7 item 3), and the amount ceiling's
- * text (review 5, N4). One place, so GM can reword each line.
+ * The money copy for the "+ unpriced" chip and its tooltip (design,
+ * PR #198: "FROM THE SHOTS"), and the amount ceiling's
+ * text. One place, so each line can be reworded.
  *
- * Tooltip rules (r7): no colons; one sentence per reason, each ending with a
+ * Tooltip rules: no colons; one sentence per reason, each ending with a
  * period; the known part first. `names` is already a nodeNameList
  * ("“A”", "“A” and “B”", "4 nodes"), and `several` says whether it names
  * more than one node (namesSeveral).
  *
- * GM's words (r8) unless marked: the builder's plurals of GM's singular
- * lines are marked "Builder's plural", and lines still awaiting GM are
+ * The design's words unless marked: the builder's plurals of the design's singular
+ * lines are marked "Builder's plural", and lines still awaiting design are
  * marked PLACEHOLDER.
  */
 
 /** After the chip's figure when part of the run has no known price:
- * "Up to $0.43 + unpriced" (GM r6). */
+ * "Up to $0.43 + unpriced" (design). */
 export const UNPRICED_SUFFIX = ' + unpriced';
 
-/** The tooltip's first sentence: what the priced part costs (GM r7). */
+/** The tooltip's first sentence: what the priced part costs (design). */
 export const PRICED_PART = {
   upTo: (amount: string) => `The priced part of this run costs up to ${amount}.`,
   range: (low: string, high: string) => `The priced part of this run costs between ${low} and ${high}.`,
   exact: (amount: string) => `The priced part of this run costs about ${amount}.`,
   under: 'The priced part of this run costs under $0.01.',
-  /** The priced nodes add up to nothing: no line (GM r8: "$0 is a price,
+  /** The priced nodes add up to nothing: no line (design: "$0 is a price,
    * not unpriced"), so the tooltip starts with the reasons. */
   free: '',
-  /** The priced part is past the ceiling (review 5, N4), Nebula's display
-   * limit, not a price cap: no line (GM r9, "Ceiling: no line; drop the
+  /** The priced part is past the ceiling, Nebula's display
+   * limit, not a price cap: no line (design, "Ceiling: no line; drop the
    * placeholder"), so the tooltip starts with the reasons. */
   over: '',
 };
 
-/** A closed chip past the ceiling: no tooltip line (GM r9). */
+/** A closed chip past the ceiling: no tooltip line (design). */
 export const OVER_TITLE = '';
 
 type Line = (names: string, several: boolean) => string;
 
-/** No list price for these settings (GM r7). */
+/** No list price for these settings (design). */
 export const NO_LISTED_PRICE: Line = (names, several) => `${names} ${several ? 'have' : 'has'} no listed price.`;
 
-/** Line 1 and a reason line naming the same nodes, merged (GM, PR #203 r20
- * item 2, verbatim: "“Writer” and “Editor” call paid providers that have no
+/** Line 1 and a reason line naming the same nodes, merged (design, PR #203,
+ * verbatim: "“Writer” and “Editor” call paid providers that have no
  * listed price."; the singular is the builder's). */
 export const PAID_NO_LISTED_PRICE: Line = (names, several) => (several
   ? `${names} call paid providers that have no listed price.`
@@ -49,41 +49,41 @@ export const PAID_NO_LISTED_PRICE: Line = (names, several) => (several
 
 /** Line 1 and any other reason line naming the same nodes, merged: "“A”
  * calls a paid provider and can’t be priced until its fal.ai API key is
- * added." `rest` is the reason line after its names. Builder's, by GM r20
- * item 2's rule. */
+ * added." `rest` is the reason line after its names. Builder's, by the design's
+ * rule. */
 export const PAID_AND = (names: string, several: boolean, rest: string) =>
   `${names} ${several ? 'call paid providers' : 'calls a paid provider'} and ${rest}`;
 
-/** A run on the person's Krea plan, never "billed" (GM, PR #203 r19 item 1,
+/** A run on the person's Krea plan, never "billed" (design, PR #203,
  * verbatim: "“Krea 2” runs on your Krea plan."; the plural is the
  * builder's). */
 export const ON_KREA_PLAN: Line = (names, several) => `${names} ${several ? 'run' : 'runs'} on your Krea plan.`;
 
 /** The chosen route's key isn't set. `key` is the key as the node's own
  * route line names it ("fal.ai API key", "Black Forest Labs or fal.ai API
- * key"; directRoute.keyPhrase), so the two agree (GM r7; the plural, GM r8). */
+ * key"; directRoute.keyPhrase), so the two agree (design, plural included). */
 export const MISSING_KEY = (names: string, several: boolean, key: string) => (several
   ? `${names} can’t be priced until their ${key} is added.`
   : `${names} can’t be priced until its ${key} is added.`);
 
-/** A missing key that has no name Settings knows (GM r8): "“X” can't be
+/** A missing key that has no name Settings knows (design): "“X” can't be
  * priced until its API key is added." */
 export const MISSING_KEY_UNNAMED = 'API key';
 
 /** The chosen route can't take the run for another reason (a setting it
- * doesn't take, a retired model, an unknown provider). GM r8; the plural is
+ * doesn't take, a retired model, an unknown provider). Design; the plural is
  * the builder's. */
 export const ROUTE_CANT_RUN: Line = (names, several) => (several
   ? `${names} can’t run as they’re set up now, so they have no price.`
   : `${names} can’t run as it’s set up now, so it has no price.`);
 
-/** Priced from its input file's size, not known yet (GM r7; the plural, GM r8). */
+/** Priced from its input file's size, not known yet (design, plural included). */
 export const AWAITING_INPUT: Line = (names, several) => (several
   ? `${names} are priced from their inputs, which aren’t ready yet.`
   : `${names} is priced from its input, which isn’t ready yet.`);
 
 /** Priced from its input file's size, which the backend can't read (a file
- * on another host, never downloaded to price it). GM r8; the plural is the
+ * on another host, never downloaded to price it). Design; the plural is the
  * builder's. */
 export const SIZE_UNREADABLE: Line = (names, several) => (several
   ? `${names} are priced by their input sizes, which Nebula couldn’t read.`
@@ -100,7 +100,7 @@ export const AUDIO_UNREADABLE: Line = (names, several) => (several
   : `${names} isn’t priced because Nebula couldn’t read its audio’s length.`);
 
 /** A cost a priced node's estimate leaves out (its price entry's `plus`),
- * by name (GM r8): "“X” may cost more for its input images, which the
+ * by name (design): "“X” may cost more for its input images, which the
  * estimate leaves out." The table's values today are "input images",
  * "thinking tokens" and "input media and thinking tokens"; the plurals
  * ("their", "the models'") are the builder's. Nodes sharing one group with
@@ -112,12 +112,12 @@ export const LEFT_OUT: Readonly<Record<string, Line>> = {
   'thinking tokens': leftOut("the model’s thinking", "the models’ thinking"),
   'input media and thinking tokens': leftOut("its input media and the model’s thinking", "their input media and the models’ thinking"),
 };
-/** A `plus` the table adds later, until GM words it: named as the table
+/** A `plus` the table adds later, until design words it: named as the table
  * names it. PLACEHOLDER. */
 export const LEFT_OUT_OTHER = (plus: string): Line => leftOut(`its ${plus}`, `their ${plus}`);
 
-/** Amounts above this read as more than it, on both sides (review 5, N4;
- * backend services/money.py CEILING_USD). */
+/** Amounts above this read as more than it, on both sides
+ * (backend services/money.py CEILING_USD). */
 export const CEILING_USD = 1e13;
 export const OVER_CEILING_USD = '>$10,000,000,000,000';
 export const OVER_CEILING_SPENT_USD = '>$10,000,000,000,000.00';

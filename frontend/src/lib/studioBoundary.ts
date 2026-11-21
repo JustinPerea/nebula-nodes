@@ -2,12 +2,12 @@ import { NODE_DEFINITIONS } from '../constants/nodeDefinitions';
 import { becauseLine } from './errorCopy';
 
 /**
- * What a studio or a canvas card that can't render says (GM's follow-up for
- * PR #198 r2, M2; r4 and r5 for review 4, L3). It shows a contained line
+ * What a studio or a canvas card that can't render says (the design's follow-up for
+ * PR #198). It shows a contained line
  * (components/StudioBoundary.tsx, components/nodes/NodeCardBoundary.tsx)
  * instead of blanking the whole app. Which line depends on the data check
  * (nodeDataProblem): "missing or damaged" only when the check finds what's
- * wrong; when the data checks out, GM's neutral line says the data is fine
+ * wrong; when the data checks out, the design's neutral line says the data is fine
  * and to reload, and the Agent log names the error itself.
  */
 
@@ -16,9 +16,9 @@ export type StudioScreen =
   | 'cinema-editor' | 'editor' | 'remotion-editor' | 'character-editor' | 'moodboard-editor'
   | 'create' | 'commons' | 'brand-showcase';
 
-/** What the line calls a studio's subject when its node has no name. GM
- * worded "this scene", "this clip" and "this shot list"; the rest are
- * builder's, for GM to confirm. */
+/** What the line calls a studio's subject when its node has no name. The design words
+ * "this scene", "this clip" and "this shot list"; the rest are
+ * builder's, for the designer to confirm. */
 const SUBJECT: Record<StudioScreen, string> = {
   'cinema-editor': 'this scene',
   editor: 'this clip',
@@ -31,14 +31,14 @@ const SUBJECT: Record<StudioScreen, string> = {
 };
 
 const STUDIO_DAMAGED = 'Some of its data is missing or damaged.';
-/** GM r4: a card's line has no "so Nebula can't show it." */
+/** Design: a card's line has no "so Nebula can't show it." */
 const CARD_DAMAGED = 'Some of its data is missing or damaged.';
-/** GM r5: the data checks out, so the fault is Nebula's drawing. */
+/** Design: the data checks out, so the fault is Nebula's drawing. */
 const CARD_NEUTRAL = 'Something went wrong drawing it, but its data is fine. Reload Nebula to try again.';
 const STUDIO_NEUTRAL = 'Something went wrong showing it, but its data is fine. Reload Nebula to try again.';
 
-/** GM: "Couldn't open “<node>”. Some of its data is missing or damaged, so
- * Nebula can't show it." when `damaged`, else GM r5's "Couldn't open
+/** Design: "Couldn't open “<node>”. Some of its data is missing or damaged, so
+ * Nebula can't show it." when `damaged`, else the design's "Couldn't open
  * “<node>”. Nebula ran into a problem showing it, but its data is fine.
  * Reload Nebula to try again."; the studio's noun with no name. */
 export function studioBoundaryLine(studio: StudioScreen, label: string | null, damaged: boolean): string {
@@ -46,7 +46,7 @@ export function studioBoundaryLine(studio: StudioScreen, label: string | null, d
   return becauseLine({ heading: `Couldn’t open ${subject}.`, reason: damaged ? STUDIO_DAMAGED : STUDIO_NEUTRAL });
 }
 
-/** A canvas card's line (GM r4 and r5): "Couldn't show “<node>”. Some of
+/** A canvas card's line (design): "Couldn't show “<node>”. Some of
  * its data is missing or damaged." when `damaged`, else "Couldn't show
  * “<node>”. Nebula ran into a problem drawing it, but its data is fine.
  * Reload Nebula to try again."; "this node" with no name. */
@@ -54,7 +54,7 @@ export function nodeCardBoundaryLine(label: string | null, damaged: boolean): st
   return becauseLine({ heading: `Couldn’t show ${label ? `“${label}”` : 'this node'}.`, reason: damaged ? CARD_DAMAGED : CARD_NEUTRAL });
 }
 
-/** What the data check knows about the field it names (GM r6 item 4):
+/** What the data check knows about the field it names (design):
  * `missing` when the field is absent, `damaged` when it's there but isn't
  * what Nebula reads, `unknown` when the code can't tell (the check itself
  * failed, or a caller only had the field's name). */
@@ -64,7 +64,7 @@ export interface DataProblem {
   state: DataProblemState;
 }
 
-/** GM r6 item 4, the Agent log's ending for each kind: "<field> is
+/** Design, the Agent log's ending for each kind: "<field> is
  * missing.", "<field> is damaged.", and "missing or damaged" only when the
  * code can't tell. */
 const PROBLEM_TAIL: Record<DataProblemState, string> = {
@@ -73,10 +73,10 @@ const PROBLEM_TAIL: Record<DataProblemState, string> = {
   unknown: 'is missing or damaged.',
 };
 
-/** GM: the Agent log's line for damaged data, "Couldn't open “<node>”, node
- * n4. <field> is missing." (or "is damaged.", GM r6 item 4, by what the
+/** Design: the Agent log's line for damaged data, "Couldn't open “<node>”, node
+ * n4. <field> is missing." (or "is damaged.", design, by what the
  * check found; a bare field name can't say, so "is missing or damaged.").
- * Opened in a studio, it names the studio (GM r8): "Couldn't open “<node>”
+ * Opened in a studio, it names the studio (design): "Couldn't open “<node>”
  * in Cinema, node n4. …". Never names the agent. With no field found,
  * builder's: "Its data couldn't be read." */
 export function studioBoundaryLogLine(label: string | null, nodeId: string,
@@ -92,15 +92,15 @@ const errorText = (error: unknown) => {
   return message.trim() || 'An error with no message.';
 };
 
-/** GM r5: a canvas card's Agent log line when the data checks out,
+/** Design: a canvas card's Agent log line when the data checks out,
  * "Couldn't draw “<node>”, node n4. <error message>". */
 export function drawFailedLogLine(label: string | null, nodeId: string, error: unknown): string {
   return `Couldn’t draw ${label ? `“${label}”` : 'a node'}, node ${nodeId}. ${errorText(error)}`;
 }
 
 /** Where a studio's Agent log line says the node failed to open, after
- * "in". GM r6 item 5 worded "in Creator Studio"; the others are builder's,
- * for GM to confirm (each studio by the name its header shows). */
+ * "in". The design words "in Creator Studio"; the others are builder's,
+ * for the designer to confirm (each studio by the name its header shows). */
 export const STUDIO_PLACE: Record<StudioScreen, string> = {
   'cinema-editor': 'Cinema',
   editor: 'the video editor',
@@ -112,7 +112,7 @@ export const STUDIO_PLACE: Record<StudioScreen, string> = {
   'brand-showcase': 'the showcase',
 };
 
-/** GM r6 item 5: a studio's Agent log line when the data checks out,
+/** Design: a studio's Agent log line when the data checks out,
  * "Couldn't open “<node>” in <studio>, node n4. <error message>". */
 export function studioDrawFailedLogLine(studio: StudioScreen, label: string | null, nodeId: string, error: unknown): string {
   return `Couldn’t open ${label ? `“${label}”` : 'a node'} in ${STUDIO_PLACE[studio]}, node ${nodeId}. ${errorText(error)}`;
@@ -122,7 +122,7 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
   Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 
 /** A field that is there but not what Nebula reads is damaged; one that
- * isn't there at all is missing (GM r6 item 4). */
+ * isn't there at all is missing (design). */
 const problem = (field: string, value: unknown): DataProblem =>
   ({ field, state: value === undefined ? 'missing' : 'damaged' });
 
@@ -137,8 +137,8 @@ function listProblem(name: string, list: unknown, item: (value: unknown) => bool
 }
 
 /** The first part of a node's data a card or studio can't read (as the
- * backend names fields), with whether it is missing or damaged (GM r6 item
- * 4), or null when it checks out (review 4, L3: only then does a boundary
+ * backend names fields), with whether it is missing or damaged (design),
+ * or null when it checks out (only then does a boundary
  * say "missing or damaged"). It checks what every card reads (a known
  * definitionId; label as text; params and outputs as objects) and the
  * structures the studios walk (a scene's shots and base, an edit's clips, a

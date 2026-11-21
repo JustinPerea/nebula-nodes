@@ -85,8 +85,8 @@ export interface ForeignEdit {
 }
 
 /**
- * One of the person's own adds in this tab (round 14 of PR #114, review 13
- * M1 + M3): it owns exactly the ids that add created, never a whole-canvas
+ * One of the person's own adds in this tab:
+ * it owns exactly the ids that add created, never a whole-canvas
  * snapshot. Undo removes those nodes (their wires go with them) and nothing
  * else; Redo puts them back. A sync that brings the backend's nodes into the
  * tab (an empty tab's first add, a reconnect), another add racing this one,
@@ -98,7 +98,7 @@ export interface OwnAdd {
   kind: 'own-add';
   nodeIds: string[];
   /** Param keys the step changed on nodes it didn't add (an accepted
-   * proposal's `updatedNodes`, round 15 of PR #114, review 14 M5): the
+   * proposal's `updatedNodes`, PR #114): the
    * values before, and the keys that weren't set before. Undo puts back only
    * these keys; every other key keeps its value as the canvas has it then. */
   params?: OwnParamChange[];
@@ -106,12 +106,12 @@ export interface OwnAdd {
   after: GraphSlice;
   /** What its undo's restore removed, so Redo names them (as ForeignEdit). */
   removals?: RemovalRecord[];
-  /** An accepted proposal's step (round 16 of PR #114, review 15 M5): its
+  /** An accepted proposal's step: its
    * nodes as Accept added them. Undo removes one only while nobody edited it
    * since; one an agent changed is kept, as the agent left it. */
   accepted?: Record<string, Node<NodeData>>;
   /** The wires Accept removed (a model change's dropped connections, PR
-   * #216 r3): Undo puts each back while both its ends are still there. */
+   * #216): Undo puts each back while both its ends are still there. */
   unwired?: Edge[];
 }
 
@@ -121,11 +121,11 @@ export interface OwnParamChange {
   absent: string[];
   /** What the step set each key to (an accepted proposal's value). Undo puts
    * a key back only while it still holds this: a key an agent changed since
-   * is left as the agent set it (round 16 of PR #114, review 15 M5). */
+   * is left as the agent set it. */
   set?: Record<string, unknown>;
   /** Keys a run wrote into a part the step changed that can't be split from
    * it (a shot the step added and a run rendered since): Undo keeps that
-   * part as the run left it and names the key (PR #198 review 1, M1). */
+   * part as the run left it and names the key (PR #198). */
   runKept?: string[];
 }
 
@@ -135,22 +135,21 @@ export interface OwnParamChange {
 export interface KeptAfterAccept {
   nodeId: string;
   keys: string[];
-  /** A node Accept added, kept whole because it changed since (GM, round 17:
+  /** A node Accept added, kept whole because it changed since (design:
    * named as one item). False for settings kept on a node it didn't add. */
   wholeNode: boolean;
   /** A list Accept reordered that was reordered again since (design, PR #198):
    * the order now is kept, named as one item ("the shot order"). */
   order?: 'shots' | 'clips';
   /** Keys kept because a run wrote into the part Accept changed (a shot it
-   * added and a run rendered): nobody's edit, so the line names no one
-   * (review 2, N5). */
+   * added and a run rendered): nobody's edit, so the line names no one. */
   runKept?: string[];
 }
 
-/** Who made a change this tab saw arrive (round 17 of PR #114, review 16 L3;
- * GM's follow-up): an agent (its presence name, or null for an unnamed one),
- * the person in another window ("You"), or nobody this tab can name. A
- * change with no source on it counts as unknown: never guessed. */
+/** Who made a change this tab saw arrive (PR #114; the design's follow-up):
+ * an agent (its presence name, or null for an unnamed one), the person in
+ * another window ("You"), or nobody this tab can name. A change with no
+ * source on it counts as unknown: never guessed. */
 export type ChangeSource = { kind: 'agent'; name: string | null } | { kind: 'you' } | { kind: 'unknown' };
 
 export function isOwnAdd(entry: unknown): entry is OwnAdd {
@@ -191,7 +190,7 @@ export function renameOwnedNode(step: OwnAdd, from: string, to: string): void {
 /** Before an own add is undone: what it owns as the canvas has it now (its
  * nodes, and the wires that touch them), so Redo brings that back. Returns
  * what an accepted proposal's undo leaves alone because it changed since
- * Accept (round 16 of PR #114, review 15 M5); empty for every other add. */
+ * Accept; empty for every other add. */
 export function captureOwnAdd(step: OwnAdd, nodes: Node<NodeData>[], edges: Edge[]): KeptAfterAccept[] {
   const kept: KeptAfterAccept[] = [];
   // A node Accept added that someone edited since stays, as they left it.
@@ -213,7 +212,7 @@ export function captureOwnAdd(step: OwnAdd, nodes: Node<NodeData>[], edges: Edge
     step.after.edges[edgeKey(edge)] = { ...edge, selected: false };
   }
   // The wires Accept removed come back while both ends are still on the
-  // canvas and nobody drew the same wire since (PR #216 r3).
+  // canvas and nobody drew the same wire since (PR #216).
   const present = new Set(nodes.map((node) => node.id));
   const drawn = new Set(edges.map((edge) => edgeKey(edge)));
   for (const edge of step.unwired ?? []) {
@@ -225,7 +224,7 @@ export function captureOwnAdd(step: OwnAdd, nodes: Node<NodeData>[], edges: Edge
   // Param keys it changed on a node it didn't add: the node as it is now,
   // with only what the step changed put back (a key that wasn't set is unset
   // again). A compound value (a Cinema scene, a clip list) goes back path by
-  // path, before ⊕ (now − set) (PR #198 review 1, M1): what changed since in
+  // path, before ⊕ (now − set) (PR #198): what changed since in
   // a part the step didn't touch (a shot a run rendered, an agent's edit to
   // another shot) stays. A part changed both by the step and since stays as
   // it is now, and its key is named in the line.
@@ -270,7 +269,7 @@ export function captureOwnAdd(step: OwnAdd, nodes: Node<NodeData>[], edges: Edge
   return kept;
 }
 
-// -- putting back a compound param path by path (PR #198 review 1, M1) --------
+// -- putting back a compound param path by path (PR #198) --------
 
 /** A key a value doesn't have, as opposed to one set to undefined or null. */
 const ABSENT: unique symbol = Symbol('absent');
@@ -355,7 +354,7 @@ function merge3(base: Value, ours: Value, theirs: Value, path: Path, conflicts: 
     const reorders = (map: Map<string, unknown>) => order(map, b).join('\u0000') !== order(b, map).join('\u0000');
     const theirsReordered = reorders(t);
     // Both reordered, each its own way: theirs stays and the order is noted
-    // (PR #198 review 2, L3), so Undo never uses up its step in silence.
+    // (PR #198), so Undo never uses up its step in silence.
     if (theirsReordered && reorders(o) && order(t, o).join('\u0000') !== order(o, t).join('\u0000')) orders.push(path);
     return theirsReordered ? ordered([...t.keys()], [...o.keys()], items) : ordered([...o.keys()], [...t.keys()], items);
   }
@@ -419,7 +418,7 @@ function rebasePart(before: Value, set: Value, was: Value, now: Value, path: Pat
         // An item the step changed (a clip it sped up) that a run wrote into
         // since: everything the run wrote there is derived from what the step
         // set (a duration, a frame-snapped trim), so it goes back with the
-        // item (PR #198 review 2, L2). A shot's media is the exception: it
+        // item (PR #198). A shot's media is the exception: it
         // is the run's, and stays.
         const media = definitionId === 'cinema-scene' && path.length === 2 && path[0] === 'scene' && path[1] === 'shots';
         const back: Record<string, unknown> = { ...itemBefore };
@@ -462,8 +461,8 @@ function changedSettings(was: Node<NodeData>, now: Node<NodeData>): string[] {
 }
 
 /** Two values the same as saved JSON (key order ignored), with this
- * backend's asset links compared as the backend gave them (round 17 of PR
- * #114, review 16 M2): the canvas shows them absolute (a sync's
+ * backend's asset links compared as the backend gave them (PR
+ * #114): the canvas shows them absolute (a sync's
  * rewriteBackendAssetUrls), an Accept reply sends them relative, and both
  * name the same file. */
 export function sameValue(a: unknown, b: unknown): boolean {
@@ -478,8 +477,8 @@ function acceptedKey(node: Node<NodeData>): string {
 
 /**
  * A run's own param write-back reached the canvas (a sync with `runParams`,
- * round 17 of PR #114, review 16 L3): those values are the run's output,
- * nobody's edit. Taken path by path (PR #198 review 1, M1), never as whole
+ * PR #114): those values are the run's output,
+ * nobody's edit. Taken path by path (PR #198), never as whole
  * keys, so a run's write into one part of a compound param (a shot's image)
  * never stands for the rest of it:
  * - a node Accept added takes the run's changes as what Accept left, so Undo
@@ -528,10 +527,10 @@ export function rebaseAcceptedOnRunOutput(step: OwnAdd, before: Node<NodeData>, 
  * that node (a snapshot of the person's edit, an edit from elsewhere, an
  * undone add waiting for Redo): wherever the step holds what the run
  * replaced, it takes what the run wrote, so undoing or redoing it never takes
- * a run's output off the canvas (PR #198 review 2, N3: a shot rendered
+ * a run's output off the canvas (PR #198: a shot rendered
  * between Undo and Redo, a flat key a run wrote). A part the step holds
  * otherwise is the step's own and stays, whole within an id-keyed item (a
- * clip's duration goes back with the speed the step set, L2), except a
+ * clip's duration goes back with the speed the step set), except a
  * shot's media, which is always the run's. Changes the step in place.
  */
 export function rebaseStepOnRunOutput(entry: unknown, was: Node<NodeData>, now: Node<NodeData>): void {
@@ -591,16 +590,16 @@ function rebaseHeld(held: Value, was: Value, now: Value, path: Path, definitionI
 
 /**
  * What the canvas says when Undo of an accepted proposal left changes made
- * after Accept (GM - Design, rounds 16, 17 and 18 of PR #114 and r1 of PR
- * #198, verbatim; the forms GM didn't word are marked).
+ * after Accept (design, PR #114 and PR
+ * #198, verbatim; the forms the design didn't word are marked).
  *
  * `kept`: per node, the settings that changed, and whether it is a node the
  * proposal added, kept whole (named as one item: "except “<node>”"). `source`:
  * who changed them all; any mix, or a change with no known source, drops the
- * actor (GM: "Never guess "An agent"").
+ * actor (design: "Never guess "An agent"").
  *
- * GM r18, "never count 1": a single item is always named. Items are the
- * settings (a rename is the setting "Name") and the kept nodes. GM pr198 r1:
+ * Design, "never count 1": a single item is always named. Items are the
+ * settings (a rename is the setting "Name") and the kept nodes. Design, PR #198:
  * settings are named only when they are all on one node (1-3 of them);
  * across nodes they are counted, from 2. Kept nodes alone are named 1-3 and
  * counted from 4; kept nodes and settings mixed are counted from 2. G2: the
@@ -618,14 +617,14 @@ function rebaseHeld(held: Value, was: Value, now: Value, path: Path, definitionI
  * - "You": the person's other window, "… in another window after you
  *   accepted."
  * - A setting with no readable name (null: a provider setting the Inspector
- *   shows only by its key) is "a setting on “<node>”" (GM, PR #198 r2 ask
- *   3); more than one setting with one of them unnamed is counted.
- * - A list both reordered (`order`, GM's follow-up for PR #198 r2 and r3
- *   items 2 and 5): "Undid the proposal except the shot order in “<scene>”.
+ *   shows only by its key) is "a setting on “<node>”" (design, PR #198);
+ *   more than one setting with one of them unnamed is counted.
+ * - A list both reordered (`order`; design, PR #198):
+ *   "Undid the proposal except the shot order in “<scene>”.
  *   You reordered them in another window after you accepted." ("The shots
  *   were reordered after you accepted." for an unknown source), or "Nothing
  *   was undone. …" when that was all.
- * - Nothing undone with an unnamed setting (GM r3 item 7): "a setting on
+ * - Nothing undone with an unnamed setting (design): "a setting on
  *   “<node>”", "3 settings on “<node>”", "settings on “A” and “B”", "settings
  *   on 4 nodes".
  */
@@ -644,7 +643,7 @@ export function acceptUndoLine(
   if (orders.length > 0) {
     if (orders.length === 1 && kept.length === 1) {
       const { order, node } = orders[0];
-      // GM, PR #198 r3 item 5 (unknown) and item 2 ("You … them"): "Undid
+      // Design, PR #198 (the unknown case, and the "You … them" form): "Undid
       // the proposal except the shot order in “X”. The shots were reordered
       // after you accepted." / "… You reordered them in another window after
       // you accepted." "Nothing was undone." has no order to point back to,
@@ -657,7 +656,7 @@ export function acceptUndoLine(
       return `Undid the proposal except the ${order === 'shots' ? 'shot' : 'clip'} order in ${quote(node)}. ${who(true)}`;
     }
     // An order kept with other changes: counted, as kept nodes and settings
-    // mixed are (builder's, after GM's counted forms).
+    // mixed are (builder's, after the design's counted forms).
     const total = kept.reduce((count, item) => count + (item.order || item.wholeNode ? 1 : item.settings.length), 0);
     if (nothingUndone) {
       if (source.kind === 'unknown') return 'Nothing was undone. Every change in the proposal was changed again after you accepted.';
@@ -668,11 +667,11 @@ export function acceptUndoLine(
   }
   if (nothingUndone) {
     const one = kept.length === 1 ? kept[0] : null;
-    // GM, PR #198 r3 item 7: a setting with no readable name is never named.
+    // Design, PR #198: a setting with no readable name is never named.
     // One: "Nothing was undone. Codex changed a setting on “Hero still” after
     // you accepted."; several on one node: "…changed 3 settings on “Hero
     // still”…"; across nodes: "…changed settings on “A” and “B”…" or "…on 4
-    // nodes…". The unknown source's forms are builder's, on GM's pattern.
+    // nodes…". The unknown source's forms are builder's, on the design's pattern.
     const settingsOnly = kept.every((item) => !item.order && item.settings.length > 0);
     if (settingsOnly && kept.some((item) => item.settings.includes(null))) {
       let what: string;
@@ -694,7 +693,7 @@ export function acceptUndoLine(
       }
       return `Nothing was undone. ${lead} changed ${names(one.settings)} for ${quote(one.node)}${where} after you accepted.`;
     }
-    // Builder's forms for "You" and unknown (GM worded the agent's).
+    // Builder's forms for "You" and unknown (the agent's forms are the design's wording).
     if (source.kind === 'unknown') return 'Nothing was undone. Every setting in the proposal was changed after you accepted.';
     return `Nothing was undone. ${lead} changed every setting in the proposal${where} after you accepted.`;
   }
@@ -702,9 +701,9 @@ export function acceptUndoLine(
   const settingNodes = kept.filter((item) => !item.wholeNode && item.settings.length > 0);
   const total = wholeNodes.length + settingNodes.reduce((count, item) => count + item.settings.length, 0);
   const mixed = wholeNodes.length > 0 && settingNodes.length > 0;
-  // GM pr198 r1 (1): settings are named only when they are all on one node;
+  // Design, PR #198: settings are named only when they are all on one node;
   // across nodes they are counted (from 2). (2): kept nodes alone, 1-3 named.
-  // r2 ask 3: an unnamed setting is named only alone ("a setting on").
+  // An unnamed setting is named only alone ("a setting on").
   const unnamed = settingNodes.some((item) => item.settings.includes(null));
   const named = mixed ? total < 2 : settingNodes.length > 1 ? false : unnamed ? total === 1 : total < 4;
   if (named) {
@@ -718,7 +717,7 @@ export function acceptUndoLine(
     }
     return `Undid the proposal except ${list}. ${lead} changed ${total === 1 ? 'it' : 'them'}${where} after you accepted.`;
   }
-  // Counted (GM r18 G2, pr198 r1 (1)-(3)): "settings", "nodes" (4 or more
+  // Counted (design, PR #198, cases 1 to 3): "settings", "nodes" (4 or more
   // kept nodes alone), or "changes" when kept nodes and settings are mixed.
   const word = mixed ? 'changes' : wholeNodes.length > 0 ? 'nodes' : 'settings';
   const verb = mixed ? 'made' : 'changed';
@@ -726,7 +725,7 @@ export function acceptUndoLine(
   return `Undid the proposal except ${total} ${word} ${agentInner ?? 'you'} ${verb}${where} after you accepted.`;
 }
 
-/** GM's lines (round 16 follow-up, round 17) for a rename draft dropped on
+/** The design's lines for a rename draft dropped on
  * reconnect because the node was renamed while Nebula was offline, by who
  * renamed it: an agent, the person in another window, or unknown. */
 export function droppedRenameLine(source: ChangeSource, newName: string, draft: string): string {
@@ -778,7 +777,7 @@ export function foreignSource(origin: EditOrigin): ForeignEdit['source'] {
 }
 
 /** "Claude changed the canvas.": shown when an agent's edit lands, with
- * Undo. A sentence, so it ends with its period (GM #198 r22 note 1). */
+ * Undo. A sentence, so it ends with its period (design, PR #198). */
 export function editArrivedText(edit: ForeignEdit): string | null {
   if (edit.source !== 'agent' || !edit.agentName) return null;
   if (!edit.undoes) return `${edit.agentName} changed the canvas.`;
@@ -788,7 +787,7 @@ export function editArrivedText(edit: ForeignEdit): string | null {
 }
 
 /** "Undid Claude’s edit.", "Redid an edit from another window.": a
- * sentence, so it ends with its period (GM #198 r24 answer 2). */
+ * sentence, so it ends with its period (design #198). */
 export function undoNoticeText(action: 'undo' | 'redo', edit: ForeignEdit): string {
   const verb = action === 'undo' ? 'Undid' : 'Redid';
   if (edit.source === 'agent' && edit.agentName) return `${verb} ${agentNameInSentence(edit.agentName)}’s edit.`;
@@ -850,7 +849,7 @@ function keep(node: Node<NodeData>): Node<NodeData> {
     position: { ...node.position },
     data: {
       ...node.data,
-      // A shot's optimistic "running" never goes on the stack (review 2, M1).
+      // A shot's optimistic "running" never goes on the stack.
       params: { ...settledParams(node.data.definitionId, node.data.params ?? {}) },
       state: node.data.state === 'executing' || node.data.state === 'queued' ? 'idle' : node.data.state,
       progress: undefined,
@@ -977,7 +976,7 @@ interface RestoreNodeBody {
   label?: string;
   position?: { x: number; y: number };
   outputs?: Record<string, unknown>;
-  /** An agent's placeholder flag as the step had it, or null for none (Q125 item 3). */
+  /** An agent's placeholder flag as the step had it, or null for none. */
   pending?: PendingFlag | null;
 }
 export interface RestoreBody {
@@ -1058,7 +1057,7 @@ export function restoreRequest(
 // -- a placeholder made normal elsewhere -------------------------------------------
 
 /**
- * Placeholders (Q125 item 3) the backend made normal since these steps were
+ * Placeholders the backend made normal since these steps were
  * taken, by something that isn't the person's undoable edit here: the
  * owning agent's `pending: false` or its run, the 10-minute idle rule, the
  * person's direct run. The steps on both stacks still hold the flag (a

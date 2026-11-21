@@ -1,5 +1,5 @@
 /**
- * Tuned springs for CSS motion, sampled the way GM's mockups time them.
+ * Tuned springs for CSS motion, sampled the way the design's mockups time them.
  *
  * `springEase` is the mockup's sampler (moodboard-canvas-video/index.html):
  * a damped spring's closed-form position, timed to where it settles within

@@ -49,7 +49,7 @@ export interface SortDriver {
 }
 
 /**
- * Review r4 NIT-3: a drag marks the sort dirty, and Spark waits out its
+ * A drag marks the sort dirty, and Spark waits out its
  * minimum sort interval with a `setTimeout` that calls `driveSort()` again.
  * Disposed before it fires (Escape mid-drag), that sort reads the disposed
  * render target and throws "No target" from a promise nothing catches. Before
@@ -72,7 +72,7 @@ export const SORT_SETTLE_POLL_MS = 16;
 export const SORT_SETTLE_CAP_MS = 2_000;
 
 /**
- * Review r5 LOW-1 of PR #203: a sort already running when the viewer closes
+ * Review of PR #203: a sort already running when the viewer closes
  * (Spark's `sorting`) reads the render target after a 1 ms pause, so a
  * dispose then still throws "No target". With no sort queued and none able to
  * start (stopSparkSorting), the dispose waits for the running one to settle,

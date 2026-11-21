@@ -7,7 +7,7 @@ export function isDesktopMode(): boolean {
 
 const OPEN_HEADING = "Couldn’t open the Paper artwork.";
 
-/** Error copy round 3e (GM): a written line for each way it can fail; the
+/** Error copy (design): a written line for each way it can fail; the
  * bridge's own text goes to the console only. */
 export async function openExternalUrl(url: string): Promise<void> {
   const bridge = window.nebulaDesktop?.paperLinks;

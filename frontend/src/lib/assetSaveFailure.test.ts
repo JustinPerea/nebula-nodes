@@ -16,10 +16,10 @@ beforeEach(() => backend.apiFetch.mockReset());
 describe('saving an asset someone moved to Recently deleted', () => {
   it('says who moved the board and how to get it back', async () => {
     backend.apiFetch.mockResolvedValue(json(404, {
-      detail: 'x', code: 'in_trash', trashed: { deletedBy: { kind: 'agent', name: 'GM - Design' } },
+      detail: 'x', code: 'in_trash', trashed: { deletedBy: { kind: 'agent', name: 'Studio Agent' } },
     }));
     await expect(updateMoodboard('b1', { name: 'Edited' })).rejects.toThrow(
-      'Nebula couldn’t save the moodboard because it was moved to Recently deleted by GM - Design (agent). Restore it from the list on the left, then choose “Try again” to save your changes.');
+      'Nebula couldn’t save the moodboard because it was moved to Recently deleted by Studio Agent (agent). Restore it from the list on the left, then choose “Try again” to save your changes.');
   });
 
   it('leaves out who when it was the person, and keeps the plain error otherwise', async () => {
@@ -28,6 +28,6 @@ describe('saving an asset someone moved to Recently deleted', () => {
       'Nebula couldn’t save the character because it was moved to Recently deleted. Restore it');
     backend.apiFetch.mockResolvedValueOnce(json(404, { detail: "Character 'c1' not found" }));
     await expect(updateCharacter('c1', { name: 'Edited' })).rejects.toThrow(
-      "Nebula couldn’t save the character. Character 'c1' not found."); // error-copy round 2: heading + the backend's reason
+      "Nebula couldn’t save the character. Character 'c1' not found."); // heading + the backend's reason
   });
 });

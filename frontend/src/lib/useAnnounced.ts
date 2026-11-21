@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 
 /** A live region's text, set only after the region has been painted empty
- * (review 20 NIT-2 and review 21 LOW-1 on PR #199). Screen readers commonly
+ * (PR #199). Screen readers commonly
  * skip a region that arrives already holding its text. Setting the text in
  * an effect is not enough: React flushes that effect, and the re-render it
  * causes, before the browser paints, so the empty region is never drawn and

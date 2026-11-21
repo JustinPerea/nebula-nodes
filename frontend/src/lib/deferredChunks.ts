@@ -40,7 +40,7 @@ export const DeferredOnboardingOverlay = lazyWithPreload(
   (module) => module.OnboardingOverlay,
 );
 
-// The Agent log shows on the canvas by default (Q38) but isn't needed for the
+// The Agent log shows on the canvas by default but isn't needed for the
 // first paint; its store (store/agentLogStore.ts) is imported eagerly by
 // App.tsx so no entry is missed before the panel arrives.
 export const DeferredAgentLog = lazyWithPreload(
@@ -48,7 +48,7 @@ export const DeferredAgentLog = lazyWithPreload(
   (module) => module.AgentLog,
 );
 
-// The Updates corner (PR9a; on every screen since Q107 a): the chip shows at
+// The Updates corner (PR9a; on every screen): the chip shows at
 // once but isn't needed for the first paint. Its store
 // (store/agentNotesStore.ts) is imported eagerly by App.tsx, so no update is
 // missed before the chip arrives. The node outlines mount inside Canvas,
@@ -185,7 +185,7 @@ export const DeferredAgentScreenLayer = lazyWithPreload(
   (module) => module.AgentScreenLayer,
 );
 
-// Agents on the nodes (Q125 item 3): the mark above a node an agent is on
+// Agents on the nodes: the mark above a node an agent is on
 // and the placeholder outline. It reads the roster when it mounts, so it
 // draws nothing before its chunk and misses nothing.
 export const DeferredAgentNodeMarkLayer = lazyWithPreload(
@@ -335,8 +335,8 @@ export const DeferredSettings = lazyWithPreload(
 // inside that action, so it loads at the moment of use, with the chunk retry.
 export const jszipModule = deferredModule(() => import('jszip'));
 
-// The dialog before the person's direct run of agents' paid placeholders
-// (Q133): lib/placeholderRunDialogModule.ts, preloaded with the rest.
+// The dialog before the person's direct run of agents' paid placeholders:
+// lib/placeholderRunDialogModule.ts, preloaded with the rest.
 export { placeholderRunDialogModule } from './placeholderRunDialogModule';
 
 /** Fetch every deferred chunk; called once the canvas is idle after first paint. */
@@ -399,7 +399,7 @@ export const DEFERRED_MODULES: readonly string[] = [
   'components/KeyboardShortcutsDialog.tsx',
   'components/PlaceholderRunDialog.tsx',
   'components/askPlaceholderRun.tsx',
-  // The project store's flows (PR #199 round 25): store/projectFlowsLoader.ts.
+  // The project store's flows (PR #199): store/projectFlowsLoader.ts.
   'store/projectFlows.ts',
   'components/panels/AgentLog.tsx',
   'components/agent-notes/AgentNotesCorner.tsx',
@@ -407,13 +407,13 @@ export const DEFERRED_MODULES: readonly string[] = [
   'components/agent-notes/AgentNotesList.tsx',
   'components/agent-notes/AgentNoteParts.tsx',
   'components/agent-notes/AgentNoteOutlineLayer.tsx',
-  // Agents on the nodes (Q125 item 3).
+  // Agents on the nodes.
   'components/canvas/AgentNodeMarkLayer.tsx',
   'components/canvas/agentNodeMarks.ts',
   'components/canvas/nodeCardBox.ts',
   'components/agent-notes/AgentQuestionsForm.tsx',
   'components/agent-notes/AgentQuestionsAnswers.tsx',
-  // The Agents panel (Q125 item 2): its own chunk inside the corner's.
+  // The Agents panel: its own chunk inside the corner's.
   'components/agent-notes/AgentRoster.tsx',
   // The Needs-you rule the chip's badge shares with the panel (in the corner's chunk).
   'components/agent-notes/agentNeedsYou.ts',

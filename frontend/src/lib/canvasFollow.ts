@@ -4,16 +4,16 @@ import { becauseLine } from './errorCopy';
 import { agentNameInSentence } from './personalAgentName';
 
 /**
- * Round 20 of PR #195 (review 19, M1; GM - Design's follow-up of 2026-10-27).
+ * PR #195 (the design's follow-up of 2026-10-27).
  * From the moment the tab sees an agent's project switch until the new
  * canvas is loaded, the canvas is read-only, as offline is in PR #114: every
  * edit is refused before it changes anything (graphStore's edit gate, a
  * file drop, Clear, Load graph), fields show disabled, and an attempt pulses
  * the project bar, at most once a second. Nothing is typed into a canvas
- * that's about to go away (probe A1); what the person had typed before the
- * switch goes into the handoff save (H1).
+ * that's about to go away; what the person had typed before the
+ * switch goes into the handoff save.
  *
- * GM's words, verbatim:
+ * The design's words, verbatim:
  * - The project bar: "Opening “<project>”…" (ellipsis character, no
  *   period), in place of the "Unsaved changes"/"Saved" state, without the
  *   bar changing width.
@@ -26,7 +26,7 @@ export interface FollowingSwitch {
   projectName: string;
   /** The agent's name as presence shows it; null when it isn't known. */
   agent: string | null;
-  /** Nebula's own switch (round 18 of PR #199: the boot's reload of the
+  /** Nebula's own switch (the boot's reload of the
    * open project after it renumbered tab-local nodes): no agent is named. */
   byNebula?: boolean;
 }
@@ -82,11 +82,11 @@ export function openingLine(project: string): string {
   return `Opening “${project}”…`;
 }
 
-/** The project bar's name while following (fix round 1 of PR #200, GM bug
- * 1): in full up to OPENING_NAME_MAX characters; a longer one is cut to
+/** The project bar's name while following (design):
+ * in full up to OPENING_NAME_MAX characters; a longer one is cut to
  * fit with "…" (the bar's title and label keep all of it). Characters are
- * graphemes, what a person sees as one (fix round 2, review 2 N-2: a cut by
- * code point split 👩🏽‍🎨 and left a dangling joiner). */
+ * graphemes, what a person sees as one (a cut by
+ * code point used to split 👩🏽‍🎨 and leave a dangling joiner). */
 export const OPENING_NAME_MAX = 24;
 export function openingName(project: string): string {
   const characters = graphemes(project);
@@ -106,7 +106,7 @@ export function waitToOpenTooltip(project: string): string {
   return `Wait for “${project}” to open.`;
 }
 
-/** Who is opening what, after the action's own heading (GM round 21, G1:
+/** Who is opening what, after the action's own heading (design:
  * "An agent is opening “<project>”." is fine; with no project known,
  * "Another project is opening.", never "Nebula is opening another project."
  * on its own). */
@@ -115,10 +115,10 @@ export function followingReason(switching: FollowingSwitch | null): string {
   return `${switching.byNebula ? 'Nebula' : switching.agent || 'An agent'} is opening “${switching.projectName}”.`;
 }
 
-/** GM's derived lines (round 21, confirmed): `node` names a one-node run;
+/** The design's derived lines (confirmed): `node` names a one-node run;
  * `count` (2 or more) a run of several nodes ("Nebula couldn’t run <N> nodes.");
  * neither: a run of the whole canvas ("Nebula couldn’t run the canvas.").
- * Nebula's own reopen (the boot's) says the lock form instead, GM r27 (3)
+ * Nebula's own reopen (the boot's) says the lock form instead, design
  * on PR #199, verbatim for the canvas: "You can run the canvas when “P”
  * opens." */
 export function runWhileFollowingLine(node: string | null, agent: string | null, project: string, count?: number,

@@ -1,6 +1,6 @@
 import { recordedUploadName } from './uploadNames';
 
-/** File names as cards show them (GM - Design, drop follow-ups, 2026-10-24). */
+/** File names as cards show them (design, drop follow-ups, 2026-10-24). */
 
 /** How many characters of a file name fit on one line of a 200-240px card. */
 export const CARD_FILE_NAME_CHARS = 28;
@@ -59,7 +59,7 @@ export function fileNameParam(filePath: string, name: string): { file: string; n
 }
 
 /** A bare content hash, with or without an extension: never shown as a
- * name (GM r48 Q1 on #222). backend services/upload_names.py has the same
+ * name (design on #222). backend services/upload_names.py has the same
  * pattern; a backend test keeps the two equal. */
 export const CONTENT_HASH_NAME = /^[0-9a-f]{32,}(\.[a-z0-9]{1,8})?$/i;
 /** What shows in place of a bare content hash. */
@@ -72,7 +72,7 @@ export function shownFileName(name: string): string {
 }
 
 /** The name a file param shows, everywhere it shows (the Inspector row, the
- * node face, the dropped-upload line): GM r48 Q1 on #222. In order:
+ * node face, the dropped-upload line): Design on #222. In order:
  * 1. the name the file was uploaded with: the node's own `_fileName` for
  *    filePath, else Nebula's upload record (lib/uploadNames.ts);
  * 2. otherwise the path's base name;

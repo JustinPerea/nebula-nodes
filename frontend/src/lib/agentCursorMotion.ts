@@ -103,7 +103,7 @@ export function resolveAnchor(
  *  counts as its node's header point, as the backend counts it
  *  (agent_presence._target_point: the backend doesn't know where ports
  *  sit). One formula on both sides, so a cursor on a port can't put the tab
- *  and the backend on different points (GM - Design, #219 r62). Null if its
+ *  and the backend on different points (design, #219). Null if its
  *  node isn't drawn. */
 export function chainPoint(
   anchor: AgentCursorAnchor,
@@ -127,13 +127,13 @@ const GLYPH_X = 14;
 
 /**
  * Where a cursor aimed at a node (no handle) is DRAWN while that node's
- * header shows the waiting label (GM - Design, PR #212 round 3, item 2): the
+ * header shows the waiting label (design, PR #212): the
  * header's left end with the tip over the node's icon, so the mark and the
  * name pill never cover "Waiting for your OK", which sits on the header's
  * right. Only what is drawn moves: the point it counts as for its target
  * chain stays the header's middle (`chainPoint`, as the backend counts it),
  * the same split as a port's (drawn at the port, counted at its node's
- * header; GM r62). Null for a cursor on a handle, a point or a node not drawn.
+ * header; design). Null for a cursor on a handle, a point or a node not drawn.
  *
  * The spot is read from the page when it can be (`pane`: React Flow's pane,
  * `zoom`): the icon's centre, on the header's row, whichever card it is. With
@@ -182,7 +182,7 @@ const CARD_HEADS = '.model-node__header, .cinema-scene-node__title, .character-n
 
 /**
  * Where a cursor rests on a canvas node that is the launcher of a surface
- * item (a Character or Moodboard node; GM - Design, PR #243 round 1): the
+ * item (a Character or Moodboard node; design, PR #243): the
  * icon or first glyph of the card's own title row, read from the page, so it
  * sits in the header on every kind of card and never at the output port. With
  * nothing to measure it is the wait rest's fallback.

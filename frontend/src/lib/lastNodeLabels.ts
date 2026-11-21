@@ -1,7 +1,7 @@
 /**
  * The last card title this tab saw for each node id, kept after the node
  * leaves the canvas, so a World Labs record whose node is gone can still be
- * named (GM, round 14 of PR #114: "“<last label>”, no longer on the
+ * named (design of PR #114: "“<last label>”, no longer on the
  * canvas"). graphStore notes every node list it holds. In this tab only: a
  * reload starts empty, and such a record then reads "A removed World Labs
  * node".

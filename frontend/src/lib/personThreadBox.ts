@@ -1,15 +1,15 @@
 /**
- * The Message box's words, states and folds (GM - Design r50, r55, r61):
+ * The Message box's words, states and folds (design):
  * the pure parts only the deferred box (components/panels/MessageBox.tsx)
  * reads, so they load with the Agent log's chunk, not the app's entry
- * (r61's budget). The rows, the listeners and the send live in
+ * (the entry's size budget). The rows, the listeners and the send live in
  * lib/personThread.ts, which the eager store needs.
  *
  * Every state comes from something Nebula saw (the request in flight, the
  * listener's push or hold, an event from that session, a reply, a timer),
  * never from a read receipt.
  *
- * Names (r61 answer 3): the product is named literally ("Connect Claude
+ * Names: the product is named literally ("Connect Claude
  * Code…"); anything about one session uses its cursor label ("Waiting for
  * Claude · 2"). With one session the label is "Claude".
  */
@@ -19,15 +19,15 @@ import { MESSAGE_MAX, PRODUCT_LABEL, countsAsReply, type SessionActivity, type T
 
 /** "N left" shows from here (the composer's counter, PromptDialog's form). */
 export const MESSAGE_COUNTER_FROM = 200;
-/** Spoken past these only (GM r23 item 4, the PromptDialog rule). */
+/** Spoken past these only (design, the PromptDialog rule). */
 export const MESSAGE_ANNOUNCE_AT = [30, 10, 0] as const;
 export const COPY_COMMAND = 'nebula mcp connect claude-code --channel';
 
-/** One session's label when nothing names it (r61: one session is "Claude"). */
+/** One session's label when nothing names it (one session is "Claude"). */
 export const DEFAULT_SESSION_LABEL = 'Claude';
 export { PRODUCT_LABEL } from './personThread';
 
-// GM r50, r55 and r61, verbatim (curly quotes and apostrophes, the single …).
+// Design, verbatim (curly quotes and apostrophes, the single …).
 export const SENDING_LINE = 'Sending…';
 export const SENT_LINE = 'Sent';
 export const HELD_LINE = 'Sends in a few minutes because you’ve sent 200 this hour.';
@@ -36,22 +36,22 @@ export const SERVER_FAILED_LINE = 'Nebula couldn’t send your message because t
 export const COPY_LABEL = 'Copy command';
 export const COPIED_LINE = 'Copied the command';
 export const NEW_REPLY_PILL = 'New reply';
-/** GM r79.4: the pill names the newest unseen agent row addressed to the person
+/** Design: the pill names the newest unseen agent row addressed to the person
  * (a reply or a pin answer, countsAsReply's, reads NEW_REPLY_PILL). */
 export const NEW_ROW_PILLS = {
   question: 'New question',
   proposal: 'New proposal',
   note: 'New note',
 } as const satisfies Partial<Record<ThreadRow['kind'], string>>;
-/** GM r79.5: a question whose outcome Nebula no longer knows. */
+/** Design: a question whose outcome Nebula no longer knows. */
 export const QUESTION_CLOSED_LINE = 'This question is closed.';
-/** r61 answer 4: a question with no options is answered from the composer. */
+/** A question with no options is answered from the composer. */
 export const ANSWER_LABEL = 'Answer';
 export const ANSWERING_PREFIX = 'Answering';
-/** The × on the "Answering “…”" chip (GM r70): the words then go as a plain message. */
+/** The × on the "Answering “…”" chip (design): the words then go as a plain message. */
 export const ANSWERING_REMOVE_LABEL = 'Stop answering';
 
-/** "Waiting for Claude · 2" (r61: the session's cursor label). */
+/** "Waiting for Claude · 2" (the session's cursor label). */
 export function waitingLine(label: string = DEFAULT_SESSION_LABEL): string {
   return `Waiting for ${label}`;
 }
@@ -76,16 +76,16 @@ export function listenerLapsedLine(label: string = DEFAULT_SESSION_LABEL): strin
   return `${label} stopped listening. It’ll get this message if it reconnects from the same terminal.`;
 }
 
-/** GM r79.6: the question was withdrawn while the person typed its answer. */
+/** Design: the question was withdrawn while the person typed its answer. */
 export function withdrawnLine(label: string = DEFAULT_SESSION_LABEL): string {
   return `${label} withdrew the question. Send again to post your answer as a message every agent can read.`;
 }
 
-/** GM r89.3: answered or closed in another tab while the person typed its answer. */
+/** Design: answered or closed in another tab while the person typed its answer. */
 export const ANSWERED_ELSEWHERE_LINE = 'You answered this question in another tab. Send again to post your text as a message every agent can read.';
 export const CLOSED_ELSEWHERE_LINE = 'You closed this question in another tab. Send again to post your text as a message every agent can read.';
 
-/** GM r94.1: a set this tab no longer holds (F13). True whatever the cause. */
+/** Design: a set this tab no longer holds. True whatever the cause. */
 export const GONE_ELSEWHERE_LINE = 'This question is closed. Send again to post your text as a message every agent can read.';
 
 /** 'gone': the set went and this tab can't say why (GONE_ELSEWHERE_LINE). */
@@ -94,7 +94,7 @@ export type AnswerGoneCause = 'withdrawn' | 'answered' | 'closed' | 'gone';
 /** Why a question set is no longer answerable, from its status. Null while
  * it is open, and for a set this tab no longer holds: Nebula doesn't know
  * why it went, so the caller falls back to 'gone', whose line claims no
- * cause (review 2, F13; GM r94.1). */
+ * cause (design). */
 export function answerGoneCause(status: string | undefined): AnswerGoneCause | null {
   if (status === 'withdrawn') return 'withdrawn';
   if (status === 'answered') return 'answered';
@@ -116,7 +116,7 @@ export function pillFor(row: ThreadRow): string | null {
   return (NEW_ROW_PILLS as Partial<Record<ThreadRow['kind'], string>>)[row.kind] ?? null;
 }
 
-/** The one-session forms (r50's words, unchanged with one session). */
+/** The one-session forms (the earlier words, unchanged with one session). */
 export const WAITING_LINE = waitingLine();
 export const WORKING_LINE = workingLine();
 export const STOPPED_LISTENING_LINE = stoppedListeningLine();
@@ -130,7 +130,7 @@ export const QUIET_SENT_MS = 60_000;
 // -- availability ----------------------------------------------------------------
 // In personThread.ts (the store's module, already in the first load), so the
 // shortcut sheet's "/" label reads the same source without pulling this
-// module into the entry (GM r94.2). Re-exported here for the Message box.
+// module into the entry (design). Re-exported here for the Message box.
 export { availability, availabilityLabel, mostRecent, type Availability } from './personThread';
 
 
@@ -146,10 +146,10 @@ export type StatusLine =
   | null;
 
 /**
- * What shows for a message (r50's table, r55's held row), from what Nebula
+ * What shows for a message (the earlier table, the held row), from what Nebula
  * saw. `replied`: a reply from that agent after it (the row clears).
  * `activity`: the last event from the recipient's session (a cursor move, a
- * say, an edit). `label`: the recipient's cursor label (r61).
+ * say, an edit). `label`: the recipient's cursor label.
  */
 export function messageStatus(row: ThreadRow, now: number, options: {
   replied: boolean;
@@ -158,7 +158,7 @@ export function messageStatus(row: ThreadRow, now: number, options: {
 }): StatusLine {
   if (row.kind !== 'message' || options.replied) return null;
   if (row.state === 'held') return { kind: 'held', text: HELD_LINE };
-  // Its listener's token was revoked before it took this (#225 review 2): never delivered.
+  // Its listener's token was revoked before it took this (#225): never delivered.
   if (row.state === 'dropped') return { kind: 'dropped', text: listenerDroppedLine(options.label) };
   if (row.state === 'sent' && row.lapsed) return { kind: 'lapsed', text: listenerLapsedLine(options.label) };
   const event = options.activity && options.activity.at >= row.at ? options.activity : null;
@@ -181,7 +181,7 @@ export function nextStatusChange(row: ThreadRow, now: number, activity: SessionA
   return later.length ? Math.min(...later) : null;
 }
 
-/** Whether a status leads its run's fold (r61 A): while the session works on
+/** Whether a status leads its run's fold (A): while the session works on
  * the message or waits on it, the status row is the fold's header, so the
  * newest thing is the last row. "Sent" and the held line stay under the
  * message: they are settled, not news. */
@@ -189,7 +189,7 @@ export function statusLeadsRun(status: StatusLine): boolean {
   return status !== null && (status.kind === 'working' || status.kind === 'waiting');
 }
 
-/** "About “Hero shot”", "… and “Sky”", "About 4 nodes" (r50, quotedNames' rule). */
+/** "About “Hero shot”", "… and “Sky”", "About 4 nodes" (quotedNames' rule). */
 export function contextChipLabel(names: readonly string[]): string {
   return `About ${quotedNames(names, 'nodes')}`;
 }
@@ -212,16 +212,16 @@ export function joinQuoted(words: readonly string[]): string {
   return quoted.length <= 1 ? (quoted[0] ?? '') : `${quoted.slice(0, -1).join(', ')} and ${quoted[quoted.length - 1]}`;
 }
 
-/** GM r94: a quoted answer that ends its line already ending in . ? or !
+/** Design: a quoted answer that ends its line already ending in . ? or !
  * keeps its own mark, and the sentence drops its period:
  * "You answered “From the other tab.”", never "…tab.”.". */
 export function closingPeriod(lastQuoted: string): string {
   return /[.?!]$/.test(lastQuoted.trimEnd()) ? '' : '.';
 }
 
-/** r61 answer 4: the quiet line an answered question row keeps.
+/** The quiet line an answered question row keeps.
  * "You chose “Only this one”." and "You chose “All three” and “Keep 1:1”.";
- * words typed from the composer read "You answered “…”." (GM r94: no
+ * words typed from the composer read "You answered “…”." (design: no
  * period after a quote that ends in its own mark, closingPeriod). */
 export function answeredLine(answers: readonly { choices: readonly string[]; text: string | null }[]): string | null {
   const choices = answers.flatMap((answer) => answer.choices);
@@ -235,10 +235,10 @@ function typedAnswers(answers: readonly { text: string | null }[]): string[] {
 }
 
 /**
- * GM r70: "You answered “…”." on one line, the words cut with the ellipsis
+ * Design: "You answered “…”." on one line, the words cut with the ellipsis
  * inside the curly quotes: the line in three parts, the middle one the part
  * the CSS cuts (the closing quote and the full stop always show). `after`
- * is for the whole words (GM r94: no period after their own . ? or !);
+ * is for the whole words (design: no period after their own . ? or !);
  * `afterCut` for words cut short, which end in the ellipsis, not a mark.
  * Null for a chosen answer, whose line is answeredLine's as it is.
  */
@@ -260,7 +260,7 @@ export function oneLine(text: string): string {
 
 /** Closing brackets and quotes with their openers. */
 const OPENER_OF: Record<string, string> = { ')': '(', ']': '[', '}': '{', '”': '“', '’': '‘', '»': '«' };
-/** Openers with their closers; straight quotes pair with themselves (review 2, NIT-1). */
+/** Openers with their closers; straight quotes pair with themselves. */
 const CLOSER_OF: Record<string, string> = { '(': ')', '[': ']', '{': '}', '“': '”', '‘': '’', '«': '»', '"': '"', "'": "'" };
 
 const WORD_CHAR = /[\p{L}\p{N}]/u;
@@ -311,8 +311,8 @@ function scanPairs(text: string, inside?: string): { open: { ch: string; own: bo
 
 /** What a cut drops before its ellipsis: a trailing comma, space or other
  * punctuation, but never a closing bracket or quote whose opener is in the
- * words (review 1, NIT-2: “Use (see n4)…”, not “Use (see n4…”; review 2,
- * NIT-1: `Use the "warm"…`), nor a possessive apostrophe (“the dogs’…”). */
+ * words (“Use (see n4)…”, not “Use (see n4…”;
+ * `Use the "warm"…`), nor a possessive apostrophe (“the dogs’…”). */
 function cutTail(words: string, inside?: string): string {
   let out = words;
   for (;;) {
@@ -326,14 +326,14 @@ function cutTail(words: string, inside?: string): string {
       const callers = inside !== undefined && last === CLOSER_OF[inside] && !scan.open.some((entry) => entry.ch === inside);
       if (scan.lastClosedOwn && !callers) return out;
       // A ' or ’ at a word's end that closes no quote is a possessive
-      // apostrophe, part of the word (review 3, NIT-1: “the dogs’…”).
+      // apostrophe, part of the word (“the dogs’…”).
       if (!scan.lastClosedOwn && (last === "'" || last === '’') && WORD_CHAR.test(out.slice(-2, -1))) return out;
     }
     out = out.slice(0, -1);
   }
 }
 
-/** The closers for what the cut words leave open, innermost first (GM r89.5:
+/** The closers for what the cut words leave open, innermost first (design:
  * “Hero…” keeps its closing quote). The caller's own closer (for `inside`)
  * closes the outermost of its kind, so that one is left to it. */
 function closersFor(words: string, inside?: string): string {
@@ -346,8 +346,8 @@ function closersFor(words: string, inside?: string): string {
 }
 
 /**
- * GM r73: THE word-boundary cut, shared by the "Answering “…”" chip, "You
- * answered “…”." and the working fold (GM r89.5). The whole text when it
+ * Design: THE word-boundary cut, shared by the "Answering “…”" chip, "You
+ * answered “…”." and the working fold (design). The whole text when it
  * fits; else the longest run of whole words that fits with its ellipsis,
  * less any trailing comma, space or punctuation (“Use the same palette on
  * the other three shots…”, never “…shots, …”), then a closer for each
@@ -392,7 +392,7 @@ export function cutParts(shown: string, text: string): { words: string; ellipsis
   return shown !== oneLine(text) && at >= 0 ? { words: shown.slice(0, at), ellipsis: shown.slice(at) } : { words: shown, ellipsis: '' };
 }
 
-// -- the typed answer's You row (GM r73 item 2) --------------------------------------
+// -- the typed answer's You row (design) --------------------------------------
 
 /**
  * A typed (no-option) answer, shown in the person's thread as a You row. It
@@ -425,7 +425,7 @@ export function answerRows(rows: readonly ThreadRow[], sets: Readonly<Record<str
   for (const row of rows) {
     if (row.kind !== 'question' || !row.questionId || seen.has(row.questionId)) continue;
     seen.add(row.questionId);
-    // The set this tab holds, else the outcome kept with the row (GM r79.5: any reload).
+    // The set this tab holds, else the outcome kept with the row (design: any reload).
     const view = sets[row.questionId]?.view ?? row.outcome;
     if (!view || view.status !== 'answered' || !view.answers || typeof view.closedAt !== 'number') continue;
     if (view.answers.some((answer) => answer.choices.length > 0)) continue;
@@ -451,7 +451,7 @@ export function counterAnnouncement(lengthBefore: number, length: number, max: n
 }
 
 /** Whether a reply from this message's agent (and session, when both name one) came after it.
- * A reply that names the message it followed (`replyTo`, review 1 NIT-4)
+ * A reply that names the message it followed (`replyTo`)
  * clears that message and the ones before it, never a later one in flight;
  * one that names a question set (an answer push's reply) clears none. */
 export function repliedAfter(row: ThreadRow, rows: readonly ThreadRow[]): boolean {
@@ -480,9 +480,9 @@ export function firstSentence(text: string, limit = 140): string {
 /** How long after a reply its cursor's say may come. */
 const ECHO_MS = 10_000;
 
-/** GM r79.1: a session's "Replied on …" say matching its own reply row is no
+/** Design: a session's "Replied on …" say matching its own reply row is no
  * action: never folded or counted (the Agent log's own list still has it).
- * GM r112.3: the same for a pin answer (resolve_pin): its cursor's say folds
+ * Design: the same for a pin answer (resolve_pin): its cursor's say folds
  * into the pin reply row, never a trailing "1 action" after it. A pin reply
  * is about its pin's node, so it needs no nodeId of its own. */
 export function isReplyEcho(entry: { ts: number; message?: string; agent?: { id: string; name: string } },
@@ -497,8 +497,8 @@ export function isReplyEcho(entry: { ts: number; message?: string; agent?: { id:
     && (firstSentence(row.text ?? '') === message || (row.kind === 'pinReply' && (row.text ?? '').trim() === message)));
 }
 
-/** The thread with the Agent log's actions folded between its rows (r50: "3 actions"),
- * and the person's typed answers (r73) placed by time among them. */
+/** The thread with the Agent log's actions folded between its rows ("3 actions"),
+ * and the person's typed answers placed by time among them. */
 export type ThreadItem<E> =
   | { kind: 'row'; row: ThreadRow }
   | { kind: 'answer'; answer: AnswerRow }
@@ -534,7 +534,7 @@ export function foldActions<E extends { id: string; ts: number; message?: string
 }
 
 /**
- * GM r79.3: what woke Claude on purpose, whose run gets the working fold
+ * Design: what woke Claude on purpose, whose run gets the working fold
  * under it: a message, a pin note row, a typed answer's You row, or the
  * question card for an option pick. Passive wakes (edits, finished runs)
  * have none: their actions fold as plain "N actions". `agent` (and
@@ -609,7 +609,7 @@ export function nextOriginChange(origin: RunOrigin, now: number, activity: Reado
 }
 
 /**
- * r61 A: the thread's items with the run's fold marked. While the latest
+ * A: the thread's items with the run's fold marked. While the latest
  * message waits on its session (or the session works on it), the actions
  * after the last row are that run's, and the status row is their fold's
  * header; with no actions yet, the status row stands alone at the end. The

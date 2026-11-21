@@ -5,7 +5,7 @@ import { writtenLine } from './errorCopy';
 
 /**
  * Back to the open project's canvas from any screen, the way each screen's
- * own Back goes (Q107 a: the Updates corner is on every screen, and its
+ * own Back goes (the Updates corner is on every screen, and its
  * "Show on canvas" works from there). Projects opens the open project's
  * workspace first. Only the Updates corner, a deferred chunk, imports this.
  * Refuses while the Commons holds unsaved labels (leaving would unmount

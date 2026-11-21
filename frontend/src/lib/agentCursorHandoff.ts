@@ -114,7 +114,7 @@ export class CursorHandoff {
   }
 
   /**
-   * The cursor is on its way back to the canvas (GM r137): the screen layer
+   * The cursor is on its way back to the canvas (design): the screen layer
    * drew it last, under this screen, and has not yet landed it for event `seq`.
    * The screen layer then flies it the whole way and the canvas layer takes
    * it at the landing, so a dock never covers a cursor that left it (the

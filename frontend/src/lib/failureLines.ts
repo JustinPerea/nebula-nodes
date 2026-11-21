@@ -1,8 +1,8 @@
 import { keyPhrase, withArticle } from './directRoute';
 
 /**
- * Failure lines for steps whose request failed (review 12, L-4; GM - Design,
- * round 13, verbatim). A Cmd+Z held for such a step goes to nothing, so the
+ * Failure lines for steps whose request failed (design,
+ * verbatim). A Cmd+Z held for such a step goes to nothing, so the
  * failure itself has to say what happened: these three used to say nothing.
  */
 
@@ -12,14 +12,14 @@ export const CLEAR_REFUSED_TEXT = 'Nebula couldn’t clear the canvas because th
 
 /** Chat /clear failed any other way (a 5xx, no answer). The backend clears
  * its graph before saving it, so such a failure can come after the clear:
- * "Nothing was removed" would not be sure to be true (GM: "Use the second
+ * "Nothing was removed" would not be sure to be true (design: "Use the second
  * sentence only if it is true"). */
 export const CLEAR_FAILED_TEXT = 'Nebula couldn’t clear the canvas.';
 
 /** What chat /clear's request did to the canvas (lib/chatCanvasClear.ts):
  * cleared, refused (nothing was removed), or not confirmed (a server error
- * or no answer: it may have cleared). Its line is lib/chatClear.ts's (GM,
- * round 12 of PR #114; the round 21 merge took it over #195's round 14 line,
+ * or no answer: it may have cleared). Its line is lib/chatClear.ts's (design, PR #114;
+ * the merge took it over #195's line,
  * since a clear is all or nothing). */
 export type ChatClearOutcome = 'cleared' | 'refused' | 'unconfirmed';
 
@@ -36,8 +36,8 @@ export function modelSetupFailedText(name: string): string {
   return `Nebula couldn’t set up “${name}”.`;
 }
 
-/** The model pickers, the provider's key isn't set (review 13, L-5; GM -
- * Design, round 15, item 1; copy sweep item 12): what failed, because the
+/** The model pickers, the provider's key isn't set (design):
+ * what failed, because the
  * key is missing, and the fix. "Nebula couldn’t set up “X” because it needs
  * an OpenAI API key. Add one in Settings." The key is named by its
  * provider (no env names: directRoute.keyPhrase), in the provider's own

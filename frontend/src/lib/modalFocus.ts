@@ -2,7 +2,7 @@ import type { FocusEvent } from 'react';
 import { topModalDialog } from './canvasShortcutScope';
 
 /**
- * A modal dialog keeps focus (review 7, M-1; review 8, L-c): when focus
+ * A modal dialog keeps focus: when focus
  * leaves it for the page (a click on its text or its backdrop, an element
  * that went away), it comes back to `fallback`, once the browser has settled
  * where focus is. Focus that moved to another element (a dialog on top, a
@@ -22,11 +22,11 @@ export function returnFocusOnSlip(event: FocusEvent<HTMLElement>, fallback: () =
  * that hides the rest of the page (inert, aria-hidden) while it is open:
  * everything but the portal holding it (components/ModalPortal.tsx) and a
  * modal opened over it later (a higher `data-modal-layer`), which must stay
- * usable (review 9, M-1).
+ * usable.
  */
 export function sitsBehind(sibling: Element, own: Element): boolean {
   if (sibling.contains(own)) return false;
-  // GM r25: the notice region stays above every dialog and usable.
+  // Design: the notice region stays above every dialog and usable.
   if (sibling.matches(NOTICE_REGION)) return false;
   const layer = (element: Element | null) => Number(element?.getAttribute('data-modal-layer') ?? Number.NaN);
   const ownLayer = layer(own.closest('[data-modal-layer]'));
@@ -35,7 +35,7 @@ export function sitsBehind(sibling: Element, own: Element): boolean {
 }
 
 /**
- * GM r25 (PR #200 fix round 16): the app's notices stay above every dialog's
+ * Design (PR #200): the app's notices stay above every dialog's
  * backdrop and usable while it is open. The notice region (NoticeRegion, its
  * own child of <body>, on --sr-layer-notice above every modal) is a second
  * region of the open dialog's focus trap: Tab runs from the dialog's last
@@ -62,7 +62,7 @@ export function tabbablesIn(root: Element | null): HTMLElement[] {
     .sort((a, b) => (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1));
 }
 
-/** The proposal bar's slot: under every modal's scrim (GM r7, PR #203), so
+/** The proposal bar's slot: under every modal's scrim (design, PR #203), so
  * an open dialog's Tab never reaches it. */
 const PROPOSAL_SLOT = '[data-notice-slot="proposal"]';
 
@@ -74,7 +74,7 @@ export function noticeTabbables(): HTMLElement[] {
 
 /** Whether `node` is in a notice that stays usable over a dialog: in the
  * notice region, and not in the proposal bar's slot, which sits behind every
- * dialog (review r5 MEDIUM-1 of PR #203). A dialog's focus and key traps let
+ * dialog (review of PR #203). A dialog's focus and key traps let
  * these through, as Tab does (noticeTabbables). */
 export function inNoticeAboveDialogs(node: EventTarget | null): boolean {
   return inNoticeRegion(node) && node instanceof Element && node.closest(PROPOSAL_SLOT) === null;
@@ -84,22 +84,22 @@ export function inNoticeAboveDialogs(node: EventTarget | null): boolean {
  * A modal that hides the rest of the page while it is open (onboarding, the
  * result comparison): every child of <body> that sits behind it goes inert
  * and aria-hidden, and so does the proposal bar's slot inside the notice
- * region (review r5 MEDIUM-1 of PR #203, GM r10 item 2), which the scrim
- * dims like the canvas; the notices around it stay usable (GM r25). It holds
+ * region (review of PR #203, design), which the scrim
+ * dims like the canvas; the notices around it stay usable (design). It holds
  * as the page changes (a body child, the notice region, added later). The
  * returned function puts back each element's own attributes, as they were
  * before: the slot is the bar's container, so the bar's own `inert` (a
  * leaving proposal's, lib/noticeLeave.ts) is never touched.
  */
 /** Set on what a modal holds inert and aria-hidden (hideBehind), so a line behind the scrim, which a
- * sighted person still sees dimmed, still counts as shown (lib/notConnectedLine; PR #204 r27 2). */
+ * sighted person still sees dimmed, still counts as shown (lib/notConnectedLine; PR #204). */
 export const BEHIND_MODAL_ATTR = 'data-behind-modal';
 
 export function hideBehind(own: Element): () => void {
   // This call's hold on each element it hid. The element's own attributes
   // are kept once, by the first modal that hides it (`hidden`), and put back
-  // when the last one lets go, whatever order the modals close in (review 7
-  // of PR #203, LOW-2: closing the lower of two first left the page inert).
+  // when the last one lets go, whatever order the modals close in (PR #203: closing the lower of two first
+  // used to leave the page inert).
   const mine = new Set<Element>();
   const hide = (element: Element) => {
     if (mine.has(element)) return;
@@ -150,7 +150,7 @@ const hiddenBy = new Map<Element, { count: number; inert: string | null; hidden:
 /** Whether focus is moving back to a closing dialog's opener (ModalPortal).
  * A dialog's own focus trap that may still be listening ignores this one
  * focusin: it is the close, not focus leaving the dialog. The opener's own
- * focus handlers still hear it (review 7 of PR #203, NIT-5). */
+ * focus handlers still hear it. */
 let returning = false;
 export function isReturningFocus(): boolean {
   return returning;
@@ -160,7 +160,7 @@ export function isReturningFocus(): boolean {
 export function returnFocusTo(target: HTMLElement): void {
   returning = true;
   try {
-    // A visible ring wherever the close came from (GM, PR #203 r15 item 4):
+    // A visible ring wherever the close came from (design, PR #203):
     // the person sees where they are.
     target.focus({ preventScroll: true, focusVisible: true } as FocusOptions);
   } finally {
@@ -230,12 +230,12 @@ export function holdNoticeTabbing(): () => void {
 }
 
 /**
- * GM r25 (4) on PR #199: the notices already on the page when an aria-modal
+ * Design (4) on PR #199: the notices already on the page when an aria-modal
  * dialog opens go under its scrim with the rest of the page: inert, hidden
  * from assistive technology, and dimmed as the scrim dims the page
  * (UNDER_MODAL, styles/noticeRegion.css), so their buttons don't look live.
  * A notice that arrives while the dialog is open isn't held: it lands above
- * the scrim, live and in the dialog's focus trap (GM r25 of PR #200, the
+ * the scrim, live and in the dialog's focus trap (design of PR #200, the
  * stacking rule). ModalPortal holds this for every aria-modal dialog, so no
  * dialog does it on its own. Holds nest: a notice that arrived over one
  * dialog goes under a second one opened over it, and comes back when that
@@ -335,12 +335,12 @@ function noticeOf(node: Element): Element | null {
  * note dialog, the palette, the mask painter, the shortcuts, onboarding, the
  * comparison) or none. NoticeRegion installs it (window, capture: before any
  * dialog's or the app's document handler).
- * - GM r27 item 1 (PR #200 fix round 18): Escape closes that notice only, as
+ * - PR #200 (design): Escape closes that notice only, as
  *   its × does (focus then follows the × rule: the next notice's ×, else the
  *   open dialog's field), and never reaches the dialog. The nearest "Dismiss"
  *   inside that notice (a kept-note row's own) is the one pressed; a notice
  *   without one keeps the key and does nothing.
- * - GM r28 (fix round 19): with a dialog open, only Escape and × act on a
+ * - design: with a dialog open, only Escape and × act on a
  *   notice. Every other key pressed there (`?`, Cmd+K, a letter, Enter) stops
  *   here, so neither the dialog nor an app shortcut sees it: the shortcuts'
  *   `?` and the palette's Cmd+K close nothing. Its default stays, so Enter and
@@ -355,7 +355,7 @@ export function noticeKeys(event: KeyboardEvent): void {
   if (event.key === 'Tab' || event.isComposing) return;
   const target = event.target;
   if (!(target instanceof Element) || !inNoticeRegion(target)) return;
-  // The proposal bar sits behind an open dialog (review r5 MEDIUM-1 of PR
+  // The proposal bar sits behind an open dialog (review of PR
   // #203): a key there is the page's, which the dialog's own trap takes.
   if (!inNoticeAboveDialogs(target) && openModalDialog()) return;
   if (event.key !== 'Escape') {
@@ -377,12 +377,12 @@ export function noticeKeys(event: KeyboardEvent): void {
 }
 
 /**
- * Review 15 LOW-B (PR #200 fix round 18): a notice can be replaced rather
- * than leave (Undo turns "Deleted the node." into "Restored the node." under a
- * new key), so the button that had focus is simply gone and focus falls to
- * <body>. With a dialog open, it goes where the last × sends it: the dialog's
- * field (GM r27 item 3). Watches `region` for the focused notice control
- * going away; returns a stop function.
+ * PR #200: a notice can be replaced rather than leave (Undo turns "Deleted
+ * the node." into "Restored the node." under a new key), so the button that
+ * had focus is simply gone and focus falls to <body>. With a dialog open, it
+ * goes where the last × sends it: the dialog's field (design). Watches
+ * `region` for the focused notice control going away; returns a stop
+ * function.
  */
 export function keepNoticeFocus(region: HTMLElement): () => void {
   let held: Element | null = null;

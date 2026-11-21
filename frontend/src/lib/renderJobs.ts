@@ -17,7 +17,7 @@ export type VideoExportFormat = 'mp4' | 'mov' | 'webm' | 'gif';
 export type VideoExportResolution = 'source' | '1080p' | '720p' | '480p';
 export type VideoExportQuality = 'high' | 'balanced' | 'small';
 
-/** Each call names its action (GM, error-copy round 2); apiRequest says
+/** Each call names its action (design); apiRequest says
  * the reason, never the status. */
 async function job(heading: string, path: string, init?: RequestInit): Promise<RenderJob> {
   const response = await apiRequest(heading, path, init);

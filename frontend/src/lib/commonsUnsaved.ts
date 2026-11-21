@@ -41,7 +41,7 @@ export function whenCommonsClean(exit: () => void): () => void {
 }
 
 /**
- * How the Commons asks before the person leaves it (commons-leave, GM -
+ * How the Commons asks before the person leaves it (commons-leave, design -
  * Design): its popover, anchored to what they clicked. `leave` runs once they
  * chose Save and leave, Discard and leave or Stop and leave and the Commons is
  * clean; never on Stay. `busy` marks the clicked control while a save already

@@ -33,7 +33,7 @@ export interface ModelReadiness {
   tone: 'neutral' | 'success' | 'warning';
   setupTarget?: ProviderSetupTarget;
   connectionLabel?: string;
-  /** Muted words after the connection label ("Optional", GM PR #203 r1). */
+  /** Muted words after the connection label ("Optional", design, PR #203). */
   connectionNote?: string;
   /** A Hugging Face token is saved for the route this row describes (a Space route with a saved key), whatever the
    *  label says; the library button reads "Settings" then and "Set up" without one (design). */
@@ -181,13 +181,13 @@ export function modelReadiness(def: ModelNodeDefinition, params: Record<string, 
 }
 
 /** A maker's Hugging Face Space route (handler hf-space: Idol). Keyless
- * (PR #203 round 7: the first live call ran with no token), in GM's r12
- * words, and design's case: without the token "Hugging Face · free" and that it can be busy;
- * with it "Hugging Face token · saved" (the shared key vocabulary: "Saved"
+ * (PR #203: the first live call ran with no token), in the design's words, and
+ * the design's case: without the token "Hugging Face · free" and that it can
+ * be busy; with it "Hugging Face token · saved" (the shared key vocabulary: "Saved"
  * until a check runs, "Connected" after one passes, "Not connected" after
  * one fails) and "Idol uses your Hugging Face allowance." A keyed Space route
- * (one with `keys`, as Idol's was in rounds 4 to 6) says what is needed
- * (GM r5 item 1). The specific line replaces the generic one, never both (GM r3). */
+ * (one with `keys`, as Idol's once was) says what is needed
+ * (design). The specific line replaces the generic one, never both (design). */
 function spaceReadiness(
   def: ModelNodeDefinition,
   params: Record<string, unknown>,
@@ -217,14 +217,14 @@ function spaceReadiness(
   }
   if (!keyless && tokenKey) {
     if (!cache.loaded) return { ...keyReadiness(tokenKey, cache, health), connectionLabel };
-    // GM r5 item 1: "Hugging Face token · Needed": the connection label
+    // Design: "Hugging Face token · Needed": the connection label
     // says what is needed, the status only that it is.
     return {
       label: 'Needed', tone: 'warning', setupTarget: { kind: 'api-key', key: tokenKey }, connectionLabel,
       detail: `Add ${withArticle(`${name} token`)} in Settings to run ${def.displayName}.`,
     };
   }
-  // GM, PR #203 r12 item 1: no allowance numbers, and no "your allowance"
+  // Design, PR #203: no allowance numbers, and no "your allowance"
   // without a token: whose pool an anonymous call uses isn't known.
   return {
     // Lower case after the name: "Hugging Face · free" (design). The badge joins the name and this with " · ".

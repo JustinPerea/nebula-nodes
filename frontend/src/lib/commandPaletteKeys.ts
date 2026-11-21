@@ -11,8 +11,8 @@ import { keyBlockedByModal } from './canvasShortcutScope';
 export const COMMAND_PALETTE_OPEN_EVENT = 'nebula:command-palette-open';
 
 /** ⌘K / Ctrl+K toggles the palette, except in the video editors, whose own ⌘K cuts at the playhead,
- * and while a modal dialog is open: its "Run canvas" would run behind the dialog (review 7, M-1).
- * The open palette is one (review 9, L-1): pass it as `palette`, and its own ⌘K still closes it
+ * and while a modal dialog is open: its "Run canvas" would run behind the dialog.
+ * The open palette is one: pass it as `palette`, and its own ⌘K still closes it
  * unless another modal dialog is on top of it. */
 export function isPaletteHotkey(event: KeyboardEvent, palette: Element | null = null): boolean {
   if (!(event.metaKey || event.ctrlKey) || (event.key !== 'k' && event.key !== 'K')) return false;

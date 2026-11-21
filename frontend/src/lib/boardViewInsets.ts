@@ -1,8 +1,8 @@
 import { getViewportForBounds, type Rect, type Viewport } from '@xyflow/react';
 
 /**
- * The parts of the Board view's column that count as outside the view (GM,
- * #213 round 3): a whole-board fit, an Update's Show, and a new tile's "fully
+ * The parts of the Board view's column that count as outside the view (design,
+ * #213): a whole-board fit, an Update's Show, and a new tile's "fully
  * in view" (paste, drop and Add images, #210's placement) all use the column
  * less these insets, so nothing they place sits under the board's controls.
  *
@@ -11,7 +11,7 @@ import { getViewportForBounds, type Rect, type Viewport } from '@xyflow/react';
  *   bar's top edge down is outside. A card beside the bar in its band reads
  *   as tucked under it, and a fitted bottom row there is covered at narrow
  *   widths, where the bar spans most of the column.
- * - The Studio's notices at the board's top (#210 round 6q, GM r95): while a
+ * - The Studio's notices at the board's top (#210, design): while a
  *   line shows, the whole width of the board from its top down to the notice
  *   stack's bottom, and BOARD_NOTICE_GAP_PX below it, is outside, so a fit
  *   never puts a card under a line (at 1024 x 640 with the offline row up, a
@@ -19,10 +19,10 @@ import { getViewportForBounds, type Rect, type Viewport } from '@xyflow/react';
  *   centred the card in a column the row had shortened, under the line).
  *   While the view is fitted (BoardCanvas's
  *   `placed`: no pan or zoom by the person since the last fit, refit,
- *   Show or outside-chip press; #210 round 6r, GM r101; round 6s, GM r105:
+ *   Show or outside-chip press; #210, design:
  *   kept with the camera through List and back), a line coming or going frames the same
  *   cards again in the new insets. Once the person has panned or zoomed,
- *   their coming and going never moves the camera (GM #213 round 3): they
+ *   their coming and going never moves the camera (design, #213): they
  *   count in the next fit, refit, Show or placement.
  *
  * The band is measured from the bar itself (its height changes with the skin

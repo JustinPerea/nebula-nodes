@@ -1,5 +1,5 @@
 /**
- * The notice region's polite line (round 3l, GM r69 a): a screen reader
+ * The notice region's polite line (design): a screen reader
  * hears what a decision did without focus moving to say it. One visually
  * hidden element in the region (NoticeRegion), which is a
  * child of <body> above every dialog's backdrop, so a dialog's `inert`

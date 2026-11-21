@@ -2,8 +2,8 @@ import { DROP_GAP } from './boardDrop';
 import type { NodeRect } from './nodePlacement';
 
 /**
- * Where new tiles go on the Board view (Justin decided paste, 2026-10-31; GM -
- * Design's #210 rulings): one helper for a paste, Add images and a drop.
+ * Where new tiles go on the Board view (Justin decided paste, 2026-10-31;
+ * the design's #210 rulings): one helper for a paste, Add images and a drop.
  *
  * - A tile never lands on top of another: every tile keeps `DROP_GAP` from
  *   every other, the ones placed before it in the same batch included.
@@ -15,17 +15,17 @@ import type { NodeRect } from './nodePlacement';
  *   its own.
  * - A drop (`aim: true`) keeps the first tile where it was aimed when that
  *   overlaps nothing; if it would overlap a tile it takes the nearest free
- *   spot, even one partly past the view (GM r4 answer 4). That tile is
- *   reported only when it is wholly out of view (GM r4 answers 3 and 4). Its
+ *   spot, even one partly past the view (design). That tile is
+ *   reported only when it is wholly out of view (design). Its
  *   other files fan out by the free-spot rule. Aimed under the toolbar band
  *   (`band`), it moves up out of it by the smallest move that puts it wholly
  *   in view, then off any tile as before, so it isn't hidden there and gets
- *   no chip (GM r7 answer 2). If no free spot in view is left for it and it
+ *   no chip (design). If no free spot in view is left for it and it
  *   still reaches into the band, it is reported, so the chip points at it.
  * - Any tile is reported only while less than half its area is in view
- *   (GM r13, `outsideForChip`): at half or more the person sees it.
+ *   (design, `outsideForChip`): at half or more the person sees it.
  *
- * Exact, on any board size (review 2, M1). A tile's top-left may not sit in
+ * Exact, on any board size. A tile's top-left may not sit in
  * the open rectangle each other tile rules out (its own box grown by the gap
  * and the new tile's size). The nearest allowed point to the wish has its y
  * on the wish's row or a rectangle's top or bottom (clamped into the view),
@@ -49,9 +49,9 @@ export interface PlaceRequest {
   /** A drop: the first tile keeps its aim unless it would overlap a tile. */
   aim?: boolean;
   /** The view's bottom edge is the toolbar's top: an aimed tile reaching
-   *  under that band moves up out of it (GM r7 answer 2). */
+   *  under that band moves up out of it (design). */
   band?: boolean;
-  /** What of the board is really seen, for the chip (GM r15 2): left out,
+  /** What of the board is really seen, for the chip (design): left out,
    *  `view`. Placement itself uses `view` and its band. */
   seen?: SeenArea | null;
   gap?: number;
@@ -78,7 +78,7 @@ export const insideView = (rect: NodeRect, view: NodeRect) =>
   rect.x >= view.x && rect.y >= view.y && rect.x + rect.width <= view.x + view.width && rect.y + rect.height <= view.y + view.height;
 
 /**
- * What of the board the person really sees (GM r15 2): the board's pane
+ * What of the board the person really sees (design): the board's pane
  * clipped to the window (`view`), less what covers it there (`covers`): the
  * toolbar's real box, the notice region's reserved band across its real
  * width, and the notices on screen now. In board coordinates.
@@ -124,14 +124,14 @@ export function visibleShare(rect: NodeRect, area: NodeRect | SeenArea): number 
   return Math.max(0, inView.width * inView.height - covered) / whole;
 }
 
-/** At this share of its area in view, or more, a tile is seen: no chip (GM r13). */
+/** At this share of its area in view, or more, a tile is seen: no chip (design). */
 export const CHIP_SHARE = 0.5;
 
 /**
- * Whether the edge chip points at `rect` (GM r13: it must not contradict
+ * Whether the edge chip points at `rect` (design: it must not contradict
  * what the person sees): only when less than half the tile's area is in
  * view. A tile bigger than the view, which may never get half its area in,
- * is seen while it covers the view's centre (GM r4 answer 9, r7 answer 1).
+ * is seen while it covers the view's centre (design).
  * One rule for pastes, held spots, moved 409 adds and the chip's own going.
  */
 export function outsideForChip(rect: NodeRect, area: NodeRect | SeenArea): boolean {
@@ -217,13 +217,13 @@ function seal(cell: Cell) {
 }
 
 /**
- * The blocks, filed in a grid of cells (review 3, LOW-1): each block in every
+ * The blocks, filed in a grid of cells: each block in every
  * cell it rules out a point of, so the blocks over a point are all in that
  * point's cell (plus the few too big to file). Cells are a few blocks wide
  * and a quarter of one tall, so a row reads about the blocks on it, and a
  * tall tile or a long band costs nothing on the rows and columns it doesn't
  * touch. A block too big to file cell by cell goes in its rows' bands
- * instead (review 4, LOW-1): a band is one row of cells across the whole
+ * instead: a band is one row of cells across the whole
  * board as tall as the big blocks are, so a row reads only the big blocks
  * near it, in one pass in x order.
  */
@@ -377,7 +377,7 @@ function nearestFree(wish: NodeRect, occupied: ReadonlyArray<NodeRect>, bounds: 
 
 /**
  * The nearest free spot with no view to stay in: used when the view has no
- * room (GM, #210 answer 1 (a)), and for a drop's nudge (GM r4 answer 4), so
+ * room (design, PR #210), and for a drop's nudge (design), so
  * it may sit partly in the view. Always finds one: right of every tile is free.
  */
 export function nearestFreeAnywhere(wish: NodeRect, occupied: ReadonlyArray<NodeRect>, gap = DROP_GAP,
@@ -389,7 +389,7 @@ export function nearestFreeAnywhere(wish: NodeRect, occupied: ReadonlyArray<Node
 }
 
 /** `rect` moved up out of the band under the view's bottom edge, when it
- *  reaches into it and fits in the view (GM r7 answer 2); else as it is. */
+ *  reaches into it and fits in the view (design); else as it is. */
 function offBand(rect: NodeRect, view: NodeRect): NodeRect {
   const bottom = view.y + view.height;
   if (rect.y + rect.height <= bottom || rect.height > view.height) return rect;
@@ -417,7 +417,7 @@ export function placeTiles({ at, sizes, occupied, view, aim = false, band = fals
     // Aimed, it is reported only when wholly out of view; under the band it
     // would be hidden by the toolbar, so reaching into the band counts too
     // (no free spot in view to nudge it to): the chip points at it. Either
-    // way, only while less than half of it is in view (GM r13).
+    // way, only while less than half of it is in view (design).
     if (view && (!aimed || whollyOutside(rect, view) || (band && underBand(rect, view))) && outsideForChip(rect, seen ?? view)) outside.push(index);
     taken.push(rect);
     spots.push({ x: spot.x, y: spot.y });
@@ -427,7 +427,7 @@ export function placeTiles({ at, sizes, occupied, view, aim = false, band = fals
 
 /**
  * A spot the board took meanwhile: a held spot when the board changed under
- * it, or a queued add replayed after a 409 (GM r11 3: exactly the same
+ * it, or a queued add replayed after a 409 (design: exactly the same
  * rule). It moves to the nearest free spot, in the view the person had when
  * they added it, starting from the spot moved up off the toolbar's band, as
  * a drop there is (`band`: that view's bottom edge was the toolbar's top).

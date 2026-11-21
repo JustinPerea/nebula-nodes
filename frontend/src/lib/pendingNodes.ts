@@ -1,12 +1,12 @@
 /**
- * Placeholders: nodes an agent is still setting up (Q125 item 3; backend
+ * Placeholders: nodes an agent is still setting up (backend
  * services/pending_nodes.py). The backend keeps the flag on the node with
  * its owner and sends it as `data.pending`; only it changes one (an agent's
  * edit, its run, the idle rule, the person's edit or direct run). The canvas
  * draws it: a dashed outline in the agent's colour
  * (components/canvas/AgentNodeMarkLayer.tsx) and a line in the preview area.
  *
- * Copy is GM - Design's, 2026-10-25, verbatim.
+ * Copy is the design's, 2026-10-25, verbatim.
  */
 
 import { agentNameInSentence } from './personalAgentName';
@@ -29,7 +29,7 @@ export interface PendingSkipSummary {
   /** The placeholders and every node that needs one (the skip line's count). */
   count: number;
   /** The placeholders alone (a proposal's "runs nothing until Codex finishes
-   * 2 nodes", review 4, M2); absent from the canvas's own summaries and an
+   * 2 nodes"); absent from the canvas's own summaries and an
    * older backend's. */
   placeholders?: number;
   agents: string[];
@@ -54,13 +54,13 @@ export function pendingAttr(pending: unknown): 'true' | undefined {
   return cleanPending(pending) ? 'true' : undefined;
 }
 
-/** The line in a placeholder's preview area (GM: "Codex is setting this up."). */
+/** The line in a placeholder's preview area (design: "Codex is setting this up."). */
 export function placeholderLine(agentName: string): string {
   return `${agentName} is setting this up.`;
 }
 
 /**
- * "{prefix} N node(s) {agent} is still setting up.": GM - Design's naming
+ * "{prefix} N node(s) {agent} is still setting up.": The design's naming
  * rule, 2026-10-25: name the agent when every node belongs to one agent
  * (downstream nodes count toward the agent whose pending node blocked
  * them), "the agents" only when they come from more than one.
@@ -68,15 +68,15 @@ export function placeholderLine(agentName: string): string {
 function placeholderCountLine(prefix: string, summary: PendingSkipSummary | null | undefined): string | null {
   if (!summary || !Number.isFinite(summary.count) || summary.count < 1) return null;
   const nodes = `${summary.count} ${summary.count === 1 ? 'node' : 'nodes'}`;
-  // GM - Design, round 12, item 1: "the agents" ("nodes agents" read like a stumble).
+  // Design: "the agents" ("nodes agents" read like a stumble).
   const who = summary.agents.length === 1 && summary.agents[0] ? `${agentNameInSentence(summary.agents[0])} is` : 'the agents are';
   return `${prefix} ${nodes} ${who} still setting up.`;
 }
 
 /**
- * The line after Run when it skipped placeholders (GM, verbatim: "Skipped 1
+ * The line after Run when it skipped placeholders (design, verbatim: "Skipped 1
  * node Codex is still setting up.", "Skipped 3 nodes Codex is still setting
- * up.", "Skipped 3 nodes the agents are still setting up." (round 12), counting the nodes
+ * up.", "Skipped 3 nodes the agents are still setting up.", counting the nodes
  * downstream too).
  */
 export function pendingSkipLine(summary: PendingSkipSummary | null | undefined): string | null {
@@ -85,8 +85,8 @@ export function pendingSkipLine(summary: PendingSkipSummary | null | undefined):
 
 /**
  * The line under the cost before the person's direct run of placeholders
- * (GM, verbatim: "Includes 2 nodes Codex is still setting up.", "Includes 3
- * nodes the agents are still setting up." (round 12)), counting the nodes downstream of
+ * (design, verbatim: "Includes 2 nodes Codex is still setting up.", "Includes 3
+ * nodes the agents are still setting up."), counting the nodes downstream of
  * them that the run also makes run.
  */
 export function pendingIncludedLine(summary: PendingSkipSummary | null | undefined): string | null {

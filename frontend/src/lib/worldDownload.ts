@@ -12,7 +12,7 @@ export interface WorldDownloadOptions {
   signal?: AbortSignal;
   maxBlobBytes?: number;
   tooLargeMessage?: string;
-  /** What a failure's heading names (GM, error-copy round 2): "Couldn't
+  /** What a failure's heading names (design): "Couldn't
    * download the world." by default; a node's output or a mesh say theirs. */
   heading?: string;
 }

@@ -177,7 +177,7 @@ export interface AssetDetail {
   asset: { id: string; media: Media; width: number | null; height: number | null; made_by: string;
     analysis_state: AnalysisState; last_error: string | null;
     /** Why the analysis failed, for the person's line (backend commons/analysis_errors.py):
-     * 'unavailable' | 'unreadable' | 'other' | 'transparent'; absent from a backend before error-copy round 3. */
+     * 'unavailable' | 'unreadable' | 'other' | 'transparent'; absent from an older backend. */
     last_error_kind?: string | null;
     measurements: Record<string, unknown> | null };
   effective: { fields: EffectiveFields; sources: Record<string, string>; corrected_paths: string[];

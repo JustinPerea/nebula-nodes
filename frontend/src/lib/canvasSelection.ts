@@ -19,9 +19,9 @@ export function selectedNodeIds(nodes: Node<NodeData>[]): string[] {
 
 
 export async function publishCanvasSelection(nodeIds: string[], signal?: AbortSignal): Promise<void> {
-  // Review 14 of PR #199 (lock-order LOW-2): a kept canvas is this tab's
-  // own, and Nebula's canvas may be another project now, so its ids would
-  // name other nodes there. Nothing is shared while kept.
+  // A kept canvas is this tab's own, and Nebula's canvas may be another
+  // project now, so its ids would name other nodes there. Nothing is shared
+  // while kept.
   if (isCanvasKept()) return;
   // Background sync, never shown; named like every request so the console
   // says what failed, once.
@@ -50,7 +50,7 @@ function valueType(value: unknown): string | undefined {
     ? (value as { type: string }).type : undefined;
 }
 
-/** How a too-large output is named to the person (GM, error-copy round 2):
+/** How a too-large output is named to the person (design):
  * by the name its card shows on the canvas, never "n1:image"; with no name,
  * by its type, "This image". */
 function outputName(output: DownloadableOutput): string {
@@ -60,7 +60,7 @@ function outputName(output: DownloadableOutput): string {
   return `This ${noun || 'output'}`;
 }
 
-/** GM's lines, verbatim. */
+/** The design's lines, verbatim. */
 export const SELECTION_TOO_LARGE_COPY = 'Those outputs are too large for one ZIP. Download fewer at a time.';
 const outputTooLarge = (output: DownloadableOutput) => `${outputName(output)} is too large for the ZIP. Download it on its own.`;
 const DOWNLOAD_OUTPUTS = "Couldn’t download the outputs.";
@@ -143,8 +143,8 @@ export async function downloadSelectedOutputs(nodes: Node<NodeData>[]): Promise<
     const remainingBytes = GRAPH_BUNDLE_MAX_TOTAL_BYTES - totalBytes;
     if (remainingBytes <= 0) throw new FailureNotice('', SELECTION_TOO_LARGE_COPY);
     // An asset URL, not an API path, so apiFetch can't make this request;
-    // fetchUrl turns its no-answer into copy the same way (error-copy
-    // review): the selection toolbar shows this error as the Download
+    // fetchUrl turns its no-answer into copy the same way (error copy):
+    // the selection toolbar shows this error as the Download
     // button's title, one line: "Couldn’t download the outputs. <reason>".
     const response = await fetchUrl(backendAssetUrlSync(output.url), { cache: 'no-store' }, DOWNLOAD_OUTPUTS);
     if (!response.ok) {
@@ -162,13 +162,13 @@ export async function downloadSelectedOutputs(nodes: Node<NodeData>[]): Promise<
       );
     } catch (error) {
       // A body that dropped mid-stream is a no-answer, not "too large"
-      // (typeerror review, 2026-10-24); anything but the byte limit goes up
+      // (2026-10-24); anything but the byte limit goes up
       // to the toolbar's failureMessage as it is.
       if (!(error instanceof AssetByteLimitError)) throw error;
       // Too large for what's left of the ZIP: the whole selection when other
       // outputs already filled it, else this one.
-      // Written lines (GM, round 2), thrown as a FailureNotice so the toolbar
-      // shows them under its heading rather than GM's general line.
+      // Written lines (design), thrown as a FailureNotice so the toolbar
+      // shows them under its heading rather than the design's general line.
       throw new FailureNotice('', remainingBytes < GRAPH_BUNDLE_MAX_ASSET_BYTES && totalBytes > 0
         ? SELECTION_TOO_LARGE_COPY : outputTooLarge(output));
     }

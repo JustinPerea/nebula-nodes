@@ -1,11 +1,11 @@
 /**
  * Every tunable (t) number of the agent cursor, in one place, each beside the
- * line of GM - Design's cursor spec (.planning/private/cursor-design.md) it
- * comes from, so a retune is a one-line diff here (GM r49, ask 1).
+ * line of the design's cursor spec (.planning/private/cursor-design.md) it
+ * comes from, so a retune is a one-line diff here (design).
  *
  * Phase 1's motion numbers live here too (the planner re-exports them under
  * their old names). Values marked "build" are not numbered in the spec: the
- * build picked them, and they are open to GM's retune like the rest.
+ * build picked them, and they are open to the design's retune like the rest.
  *
  * No imports, so the planner, the layer, the expression state machine and
  * the dev-only states driver can all read it without pulling in each other.
@@ -29,7 +29,7 @@ export const AGENT_CURSOR_DURATION = { baseMs: 380, gainMs: 170, scalePx: 200, m
 export const AGENT_CURSOR_LAND_SPRING: TuningSpring = { stiffness: 260, damping: 26, mass: 1 };
 /** §3 "The arrow leans toward its velocity, up to 10° (t)". Built as
  *  14° × tanh(vx / 700) × min(1, speed / 250) in Phase 1, which peaks at
- *  6°, 12° and 14° at 100, 400 and 900 px: GM's measured prototype peaks
+ *  6°, 12° and 14° at 100, 400 and 900 px: the design's measured prototype peaks
  *  (docs/notes/2026-10-31-feat-agent-cursor-foundations.md). Left as built. */
 export const AGENT_CURSOR_LEAN = { maxDeg: 14, vxScale: 700, fullSpeed: 250 } as const;
 /** §3 "through a spring on the angle (k 180 / c 22 (t))". */
@@ -41,7 +41,7 @@ export const AGENT_CURSOR_LEAN_SPRING: TuningSpring = { stiffness: 180, damping:
  *  in the agent colour at 30% opacity, under the arrow." */
 export const AGENT_CURSOR_HALO = { blur: 3, opacity: 0.3 } as const;
 
-/** The mark slot (propose, wait), GM r56 item C: right of the arrow, its top
+/** The mark slot (propose, wait), design: right of the arrow, its top
  *  level with the tip, at least clearPx from the arrow, the dashed halo
  *  (both strokes included) and its own pills. 21 px is the nearest whole
  *  px that keeps the grown dashed halo 2 px off (agentCursorLayer's mark
@@ -58,7 +58,7 @@ export const AGENT_CURSOR_MIN_HOLD_MS = 400;
 export const AGENT_CURSOR_LOOK = { dimOpacity: 0.18, arcDeg: 90, sweepMs: 1400, radiusPx: 13, strokePx: 3, arcOpacity: 0.9 } as const;
 
 /** §2 think: "the halo breathes ... on a spring-sampled loop of about 2.2 s
- *  (t), while held". GM r58 (after r56's 1 → 1.15, 55% → 25% still read flat
+ *  (t), while held". Design (the earlier 1 → 1.15, 55% → 25% still read flat
  *  at 4×): the glow swings between a trough (the resting halo's 3 px blur,
  *  scale 1, 20%) and a peak (5 px blur, scale 1.25, 60%), the scale anchored
  *  at the arrow's centre so the glow grows evenly; it may reach about 3 px
@@ -119,24 +119,24 @@ export const AGENT_CURSOR_ERROR = { shakePx: 4, flashMs: 400, flashOpacity: 0.65
 /** Build: the shake's low-damping spring (ζ ≈ 0.22). */
 export const AGENT_CURSOR_SHAKE_SPRING: TuningSpring = { stiffness: 520, damping: 10, mass: 1 };
 
-// ── Say timing (GM r54) ───────────────────────────────────────────────────
+// ── Say timing (design) ───────────────────────────────────────────────────
 
-/** GM r54: "The agent's own says hold for max(3 s, 60 ms × characters),
+/** Design: "The agent's own says hold for max(3 s, 60 ms × characters),
  *  capped at 8 s (t)." Default lines take the same rule, unless their state
  *  holds them longer (think while held, propose and wait until resolved). */
 export const AGENT_CURSOR_SAY_HOLD = { minMs: 3000, perCharMs: 60, maxMs: 8000 } as const;
 
-/** Build (GM r54 item 2): an error's default line names what failed from the
+/** Build (design): an error's default line names what failed from the
  *  agent's last action (its `did`) only when that action was on the same node
  *  within this long; else the cause is unknown ("Couldn’t do that"). */
 export const AGENT_CURSOR_ERROR_CAUSE_MS = 60_000;
 
-// ── Item outlines (design section 5, GM - Design PR #233 r3) ───────────────
+// ── Item outlines (design section 5, PR #233) ───────────────
 
 /** Section 5: "The item an agent is changing gets a 1.5 px agent-colour
  *  outline for as long as the change is held. Two agents on one item show two
  *  outlines nested 2 px apart. From 3 on, the outermost one carries a '+N'
- *  chip." GM 3: it shows for `type` (solid) and `propose` (dashed, as the
+ *  chip." Design: it shows for `type` (solid) and `propose` (dashed, as the
  *  dashed halo). Build: at least `minHoldMs` (the section 2 held-state floor),
  *  at most `maxRings` drawn, the corner radius, and the dash. */
 export const AGENT_CURSOR_OUTLINE = {
@@ -149,7 +149,7 @@ export const AGENT_CURSOR_OUTLINE = {
   gapPx: 3,
 } as const;
 
-/** The launcher's activity badge (PR #233 slice 8, GM - Design 2; slice 10c): a
+/** The launcher's activity badge (PR #233 slice 8, design; slice 10c): a
  *  6 px dot in the agent colour on the launcher a cursor is parked at, with a
  *  `ringPx` ring in the rail's background so it reads on the icon's edge, `gapPx`
  *  apart from the next (the rings just touch). Up to `maxDots` agents get a dot
@@ -164,7 +164,7 @@ export const AGENT_CURSOR_DOT = {
   insetPx: 2,
 } as const;
 
-/** The canvas edge chip (PR #233 slice 9, GM - Design 7 and 8): where a
+/** The canvas edge chip (PR #233 slice 9, design): where a
  *  cursor off screen is pointed to. `insetPx` from the visible edge (or from
  *  the chrome it is under), `gapPx` between stacked chips, at most `maxPerEdge`
  *  chips on an edge and then a "+N" count; `slidePx` is how far a new chip
@@ -173,7 +173,7 @@ export const AGENT_CURSOR_DOT = {
 export const AGENT_CURSOR_CHIP = {
   insetPx: 12,
   gapPx: 6,
-  /** A chip stands this far clear of the canvas's own chrome (GM: a chip stands clear of chrome). */
+  /** A chip stands this far clear of the canvas's own chrome (design: a chip stands clear of chrome). */
   chromeGapPx: 8,
   maxPerEdge: 3,
   slidePx: 8,

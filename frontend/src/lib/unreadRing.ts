@@ -1,7 +1,7 @@
 /**
  * The Updates chip's unread ring is drawn in the newest unread author's colour
  * (agentNotes.css). Author colours come from agents (any #RRGGBB), so the ring
- * gets GM's floor: at least 3:1 against the header, the focus ring's bar. A
+ * gets the design's floor: at least 3:1 against the header, the focus ring's bar. A
  * colour under it is drawn as a lighter tint of itself (mixed toward white),
  * never another colour. The author dots in the chip stay as they are.
  */

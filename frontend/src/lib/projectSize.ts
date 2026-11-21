@@ -1,5 +1,5 @@
 /**
- * A project's size, the one way Nebula measures it (Q118).
+ * A project's size, the one way Nebula measures it.
  *
  * "Project size" is exactly the bytes the backend's save check counts
  * (backend/services/project_size.py, main._stage_project_snapshot): the
@@ -16,11 +16,11 @@
  * row for row: the panel computes it from the tab's own snapshot because a
  * paused tab's edits never reached the backend.
  *
- * Sizes are shown as GM writes them: MiB labelled "MB", one decimal.
+ * Sizes are shown as design writes them: MiB labelled "MB", one decimal.
  */
 
 export const MIB = 1024 * 1024;
-/** The backend's MAX_PROJECT_BYTES: 16 MiB, "16 MB" in GM's lines. */
+/** The backend's MAX_PROJECT_BYTES: 16 MiB, "16 MB" in the design's lines. */
 export const PROJECT_SAVE_LIMIT_BYTES = 16 * MIB;
 /** How many rows the panel lists before "{n} smaller items, …". */
 export const TOP_ROWS = 10;
@@ -161,7 +161,7 @@ export function projectSizeBreakdown(snapshot: unknown): { bytes: number; rows: 
   return { bytes: total, rows };
 }
 
-/** A project's size as GM writes it, without " MB": one decimal, rounded up
+/** A project's size as the design writes it, without " MB": one decimal, rounded up
  * while over the limit (so it never reads as the limit or under) and down at
  * or under it. */
 export function displaySize(bytes: number, limit = PROJECT_SAVE_LIMIT_BYTES): string {
@@ -177,7 +177,7 @@ export function overBy(bytes: number, limit = PROJECT_SAVE_LIMIT_BYTES): string 
 
 /** How many of the rows (largest first) the panel lists: those of 0.1 MB
  * and up, at most TOP_ROWS. The rest go in "{n} smaller items, {size} MB in
- * all" (GM - Design, #182: "Rows under 0.1 MB: don't show them. "0.0 MB"
+ * all" (design, #182: "Rows under 0.1 MB: don't show them. "0.0 MB"
  * tells nobody anything."). services/project_size.py listed_count. */
 export function listedRowCount(rows: ReadonlyArray<{ bytes: number }>): number {
   let count = 0;
@@ -194,8 +194,8 @@ export function rowSize(bytes: number): string {
  * project_name, in code points). */
 const PROJECT_NAME_MAX = 120;
 
-/** The new project's name for a Load graph file over the limit (Q120,
- * Justin: "Files over the limit open as a new project named after the
+/** The new project's name for a Load graph file over the limit
+ * (Justin: "Files over the limit open as a new project named after the
  * file."): the file's name without its graph extension, fitted to the
  * backend's name rule, or the default name when that leaves nothing. */
 export function projectNameForFile(fileName: string | undefined): string {

@@ -1,5 +1,5 @@
-/** Extract's palette, off the main thread (GM r16 on #208: no freeze). From
- *  round 8c (GM r18 5) the worker reads the picked file itself
+/** Extract's palette, off the main thread (design on #208: no freeze). From
+ *  now on the worker reads the picked file itself
  *  (``readPaletteJobOffscreen``: ``createImageBitmap`` and an sRGB
  *  ``OffscreenCanvas``), so the page does no pixel work at all. A file it
  *  can't read (an SVG, a browser without OffscreenCanvas in workers) it

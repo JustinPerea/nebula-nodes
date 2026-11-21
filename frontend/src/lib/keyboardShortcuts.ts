@@ -38,7 +38,7 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
     title: 'App',
     items: [
       { keys: ['Mod', 'K'], label: 'Search commands and nodes' },
-      // The sheet names the agent as the Message box does (MESSAGE_SHORTCUT_KEY, GM r94.2).
+      // The sheet names the agent as the Message box does (MESSAGE_SHORTCUT_KEY, design).
       { keys: [MESSAGE_SHORTCUT_KEY], label: `Message ${PRODUCT_LABEL}` },
       { keys: ['Mod', 'S'], label: 'Save canvas' },
       { keys: ['Mod', 'O'], label: 'Load canvas' },

@@ -3,7 +3,7 @@ import { insideView, nearestFreeAnywhere, outsideForChip, placeTiles, respot, vi
 import type { NodeRect } from './nodePlacement';
 import { DROP_GAP } from './boardDrop';
 
-// Where new tiles go on the Board view (GM - Design, #210 rulings): one helper
+// Where new tiles go on the Board view (design, #210 rulings): one helper
 // for paste, Add images and drop. Never on a tile, in view when there's room,
 // else just outside it; a drop keeps its aim unless it would cover a tile.
 
@@ -85,7 +85,7 @@ describe('no room in view', () => {
     expect(nearestFreeAnywhere({ x: 500, y: 500, width: 50, height: 50 }, crowd)).toEqual({ x: 500, y: 500 });
   });
 
-  it('a tile bigger than the view gets the chip unless it covers the view\'s centre (GM r4 answer 9, r13)', () => {
+  it('a tile bigger than the view gets the chip unless it covers the view\'s centre (design)', () => {
     const view = { x: 0, y: 0, width: 200, height: 200 };
     // Over the view, filling it: the person sees it.
     expect(placeTiles({ at: { x: 0, y: 0 }, sizes: [[500, 500]], occupied: [], view }).outside).toEqual([]);
@@ -95,7 +95,7 @@ describe('no room in view', () => {
     expect(placed.outside).toEqual([0]);
   });
 
-  // GM r13: a paste's tile is reported only while less than half of it is in view.
+  // Design: a paste's tile is reported only while less than half of it is in view.
   it('a paste reported by area: 49% in view takes the chip, 50% does not', () => {
     const view = { x: 0, y: 0, width: 1000, height: 700 };
     // A 200 x 100 tile; the view's room taken but for a spot past its right edge.
@@ -108,7 +108,7 @@ describe('no room in view', () => {
   });
 });
 
-describe('the seen area (round 6g, GM r15 2)', () => {
+describe('the seen area', () => {
   const view = { x: 0, y: 0, width: 1000, height: 700 };
   it('a tile is seen by its area in the view less what covers it there, each cover counted once', () => {
     const tile = { x: 100, y: 500, width: 200, height: 100 };
@@ -125,7 +125,7 @@ describe('the seen area (round 6g, GM r15 2)', () => {
     expect(visibleShare({ ...tile, y: 650 }, { view, covers: [{ x: 0, y: 675, width: 1000, height: 200 }] })).toBe(0.25);
   });
 
-  it('a tile wholly on screen beside the pill is seen: no chip; the same tile under the pill gets one (review 9 r9-area-045)', () => {
+  it('a tile wholly on screen beside the pill is seen: no chip; the same tile under the pill gets one', () => {
     const pill = { x: 0, y: 600, width: 400, height: 80 };
     const beside = { x: 576, y: 560, width: 217, height: 140 };
     expect(outsideForChip(beside, { view, covers: [pill] })).toBe(false);
@@ -154,7 +154,7 @@ describe('the seen area (round 6g, GM r15 2)', () => {
 });
 
 describe('a drop', () => {
-  it('aimed under the toolbar band, moves up out of it by the least, wholly in view, with no chip (GM r7 answer 2)', () => {
+  it('aimed under the toolbar band, moves up out of it by the least, wholly in view, with no chip (design)', () => {
     const view = { x: 0, y: 0, width: 1000, height: 700 };
     const { spots, outside } = placeTiles({ at: { x: 500, y: 690 }, sizes: [[200, 100]], occupied: [], view, aim: true, band: true });
     expect(spots).toEqual([{ x: 400, y: 600 }]);
@@ -175,7 +175,7 @@ describe('a drop', () => {
     expect(placeTiles({ at: { x: 500, y: 690 }, sizes: [[200, 900]], occupied: [], view, aim: true, band: true }).spots).toEqual([{ x: 400, y: 240 }]);
   });
 
-  it('lands where aimed when that is free, even partly past the view, with no chip (GM r4 answer 3)', () => {
+  it('lands where aimed when that is free, even partly past the view, with no chip (design)', () => {
     const view = { x: 0, y: 0, width: 1000, height: 700 };
     const { spots, outside } = placeTiles({ at: { x: 990, y: 350 }, sizes: [[200, 100]], occupied: [], view, aim: true });
     expect(spots).toEqual([{ x: 890, y: 300 }]);
@@ -189,7 +189,7 @@ describe('a drop', () => {
     expect(spots).toEqual([{ x: 100, y: 324 }]);
   });
 
-  it('a nudge near the edge takes the nearest free spot even partly outside, with no chip (GM r4 answer 4)', () => {
+  it('a nudge near the edge takes the nearest free spot even partly outside, with no chip (design)', () => {
     // A tile at the view's right edge; the drop lands on it. Right of it is
     // nearer than anywhere inside the view, and partly past the edge.
     const view = { x: 0, y: 0, width: 1000, height: 700 };
@@ -254,7 +254,7 @@ describe('a drop', () => {
   });
 });
 
-// Review 2, M1: the search is exact on any board size (it used only the 60
+// The search is exact on any board size (it used only the 60
 // tiles nearest the wish, so a big board's room in view was missed).
 describe('big boards', () => {
   let seed = 1;
@@ -274,7 +274,7 @@ describe('big boards', () => {
     return tiles;
   };
 
-  it('231 irregular tiles, zoomed out: three files all land in view (review 2 repro 1)', () => {
+  it('231 irregular tiles, zoomed out: three files all land in view (repro 1)', () => {
     const view = { x: -3000, y: -2000, width: 6000, height: 4000 };
     const occupied = board(231, { x: -3000, y: -2000, width: 6000, height: 4000 }, null, 99);
     expect(occupied.length).toBe(231);
@@ -284,7 +284,7 @@ describe('big boards', () => {
     expect(noOverlaps([...occupied, ...rectsOf(spots, sizes)])).toBe(true);
   });
 
-  it('a jittered board whose only room in view is one 600 x 600 gap far from the pointer (review 2 repro 2)', () => {
+  it('a jittered board whose only room in view is one 600 x 600 gap far from the pointer (repro 2)', () => {
     // 360 x 260 cells, each with a 300 x 200 tile jittered by up to 36 px: at
     // most 96 px between tiles, so no 300 x 200 tile fits anywhere but the
     // gap, two by three cells cleared far from the pointer.
@@ -405,7 +405,7 @@ describe('big boards', () => {
     }
   });
 
-  it('a wish one pixel inside a tile\'s ruled-out end lands just past it, on all four sides (review 4, X3/X4/X7/X8)', () => {
+  it('a wish one pixel inside a tile\'s ruled-out end lands just past it, on all four sides', () => {
     // A 100 x 100 tile at (0, 0) rules out top-lefts -74 < x < 124 (and the
     // same in y) for a 50 x 50 file, with the 24 px gap.
     const tile = [{ x: 0, y: 0, width: 100, height: 100 }];
@@ -429,8 +429,8 @@ describe('big boards', () => {
     expect(right.spots).toEqual([{ x: 126, y: 400 }]);
   });
 
-  // Every block the search reads, and every one it files, is counted (review
-  // 3 and 4, LOW-1), on these four costly shapes: a jittered grid with no room in view, one long
+  // Every block the search reads, and every one it files, is counted,
+  // on these four costly shapes: a jittered grid with no room in view, one long
   // band of tall tiles, one very tall tile beside a field, and a grid of
   // distinct heights (every row its own). Five files each.
   const shapes = (n: number) => {
@@ -474,9 +474,9 @@ describe('big boards', () => {
     }
   });
 
-  // Review 4's shapes (LOW-1): a half-overlap collage (a dense, messy
+  // Two more shapes: a half-overlap collage (a dense, messy
   // board), and a bimodal board whose tall half is all too big to file
-  // cell by cell. Round 4 read every big block on every step (172 million
+  // cell by cell. It used to read every big block on every step (172 million
   // reads for the bimodal board at 2,000 tiles); the row bands read only
   // the big blocks near a row.
   const reviewShapes = (n: number) => {
@@ -500,7 +500,7 @@ describe('big boards', () => {
     ];
   };
 
-  it.each([[500, 80_000, 950_000], [2000, 600_000, 4_000_000]])('stays fast at %i tiles on review 4\'s bimodal and collage boards',
+  it.each([[500, 80_000, 950_000], [2000, 600_000, 4_000_000]])('stays fast at %i tiles on the bimodal and collage boards',
     (n, bimodalBound, collageBound) => {
       const [bimodal, collage] = reviewShapes(n);
       for (const [shape, bound] of [[bimodal, bimodalBound], [collage, collageBound]] as const) {
@@ -537,7 +537,7 @@ describe('big boards', () => {
   });
 });
 
-describe('a spot the board took meanwhile (respot: a held spot, or an add replayed after a 409; GM r11 3)', () => {
+describe('a spot the board took meanwhile (respot: a held spot, or an add replayed after a 409; design)', () => {
   const view = { x: 0, y: 0, width: 1000, height: 600 };
   const occupied = [{ x: 200, y: 320, width: 500, height: 160 }, { x: 0, y: 0, width: 1000, height: 60 }];
   const spot = { x: 400, y: 480, width: 200, height: 200 };

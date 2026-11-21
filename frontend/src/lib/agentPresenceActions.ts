@@ -1,4 +1,4 @@
-/** What an agent is doing at its cursor (GM - Design's cursor spec, §2), in
+/** What an agent is doing at its cursor (the design's cursor spec, §2), in
  * the backend's order (backend/services/cursor_actions.py). Its own module,
  * with no imports, so the presence store can read it in tests that mock
  * wsClient; wsClient re-exports both. */

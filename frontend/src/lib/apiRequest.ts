@@ -3,10 +3,10 @@ import type { ProjectContext } from './projectContext';
 import { RequestFailedError, requestError, requestSucceeded, withHeading } from './errorCopy';
 
 /**
- * apiFetch for a call that names its action (GM, error-copy round 2:
+ * apiFetch for a call that names its action (design:
  * "Couldn’t {verb} {object}." then the reason). A request with no answer
  * comes back as a ConnectionLostError under `heading`; an answered failure
- * as a RequestFailedError (requestError: GM's line for its status, or the
+ * as a RequestFailedError (requestError: the design's line for its status, or the
  * backend's written reason), logged once for the console. Statuses in
  * `allow` (a 404 that means "none", a 409 the caller reads) come back as
  * the response, for the caller to handle; `as` turns the error into the
@@ -18,7 +18,7 @@ import { RequestFailedError, requestError, requestSucceeded, withHeading } from 
 export async function apiRequest(heading: string, path: string, init?: RequestInit,
   options: { allow?: number[]; as?: (error: RequestFailedError) => Error;
     /** The project and canvas the request was made for, when not the one
-     * open now (a note composed before a switch: round 23 of PR #195). */
+     * open now (a note composed before a switch). */
     project?: ProjectContext | null } = {}): Promise<Response> {
   let response: Response;
   try {

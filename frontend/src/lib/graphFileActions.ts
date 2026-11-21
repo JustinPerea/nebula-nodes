@@ -27,7 +27,7 @@ export function requestGraphLoad(): void {
   window.dispatchEvent(new CustomEvent(GRAPH_LOAD_EVENT));
 }
 
-/** GM PR #205 r4 item 4: Cmd+S or Cmd+O pressed while a wait holds the
+/** Design, PR #205: Cmd+S or Cmd+O pressed while a wait holds the
  * files (this tab's run, Create's launch, an import) says the palette's
  * line for it, in the key presses' place: "You can save the canvas when
  * the run finishes.", "You can load a canvas when the run finishes." Null

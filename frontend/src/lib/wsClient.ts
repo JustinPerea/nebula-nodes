@@ -94,8 +94,8 @@ export interface AgentPresenceEvent {
   /** One of AGENT_CURSOR_ACTIONS; anything else is read as 'move' (forward compatible). */
   action: string;
   say: string;
-  /** The Agent log's words when they differ from the bubble's (GM - Design,
-   * round 16 of PR #195; PR #198 r1, GM item 7): a field the card shows no
+  /** The Agent log's words when they differ from the bubble's (design,
+   * PR #195, PR #198): a field the card shows no
    * label for, which the bubble leaves out, is named here by its key; an
    * action whose bubble says nothing (a universal node's setting with no
    * label) still has its line here. Absent: the log uses `say` (and a bare
@@ -107,7 +107,7 @@ export interface AgentPresenceEvent {
    * Absent when the action names none. */
   nodeIds?: string[];
   /** "muted": a line the Agent log shows neutral, not as an action or an
-   * error (a run that waited with no proposal slot left, round 2 of PR #212). */
+   * error (a run that waited with no proposal slot left). */
   tone?: 'muted';
   /** Backend wall-clock milliseconds. */
   at: number;
@@ -115,7 +115,7 @@ export interface AgentPresenceEvent {
   projectId?: string | null;
   /** On a `propose` cursor: the proposal it waits on (lib/agentCursorSettled). */
   proposalId?: string;
-  /** What the action was, for the Agents panel (Q125 item 2): a past-tense
+  /** What the action was, for the Agents panel: a past-tense
    * verb and the node it names, and how long ago it was (a click or a drag
    * keeps the agent's last action). Absent when the agent has none. */
   did?: { verb: string; nodeId: string | null; label: string | null; secondsAgo?: number };
@@ -126,18 +126,18 @@ export interface AgentPresenceEvent {
   /** Person tabs only: backend wall-clock ms when this cursor came to where
    * it is (a move to the same node, or a nudge, keeps it). Columns stack by
    * it, so every tab, before and after a reload, draws the same cursors in
-   * full (GM - Design, PR #211 r21). */
+   * full (design, PR #211). */
   since?: number;
   /** Person tabs only: this event's own id, so the Agent log lists an action
    *  once, a live event and its replay alike, and never drops a real repeat
-   *  (#211 follow-up, LOW-5). */
+   *  (#211 follow-up). */
   eventId?: string;
 }
 
 /** Person tabs only: a node move changed these session cursors' target
  *  chains (the other cursors linked to each through targets 16 canvas units
- *  apart), so they arrive now (backend agent_presence.carry_nodes, GM -
- *  Design #219 r24 Q2). Every tab, and a reload, stack them by these. */
+ *  apart), so they arrive now (backend agent_presence.carry_nodes, design -
+ *  Design #219). Every tab, and a reload, stack them by these. */
 export interface AgentPresenceArrivalEvent {
   type: 'agentPresenceArrival';
   cursors: { agentId: string; key: string; ordinal: number; since: number }[];
@@ -160,13 +160,13 @@ export interface AgentPresenceRetargetEvent {
 
 /** Person tabs only, right after a verified hello: every live cursor, so a
  * tab that connects mid-session shows the same cursors and numbers as the
- * others (GM - Design, PR #211 r3). Each is drawn where it is, no flight. */
+ * others (design, PR #211). Each is drawn where it is, no flight. */
 export interface AgentPresenceReplayEvent {
   type: 'agentPresenceReplay';
   cursors: (AgentPresenceEvent & { replay?: boolean; secondsAgo?: number })[];
 }
 
-/** An agent's status line changed (backend services/agent_status.py, Q125 item 2). */
+/** An agent's status line changed (backend services/agent_status.py). */
 export interface AgentStatusEvent {
   type: 'agentStatus';
   agent: { id: string; name: string; color: string; verified: boolean };
@@ -178,8 +178,8 @@ export interface AgentStatusEvent {
 }
 
 /**
- * A node of a run an agent started began or stopped running (Q125 item 3;
- * backend services/run_done_cards.py AgentRunBook): the agent's mark on it.
+ * A node of a run an agent started began or stopped running
+ * (backend services/run_done_cards.py AgentRunBook): the agent's mark on it.
  */
 export interface AgentRunEvent {
   type: 'agentRun';
@@ -256,16 +256,16 @@ export interface ProjectsChangedEvent {
   change: 'created' | 'opened' | 'saved' | 'renamed' | 'cover' | 'deleted' | 'restored' | 'purged' | string;
   /** Null when several went at once (emptying Recently deleted). */
   projectId: string | null;
-  /** change 'canvasHeld' / 'canvasHoldRefused' (review 5 of PR #199, M-3;
-   * review 6, M-1): an agent's write held the waiting canvas aside (action
+  /** change 'canvasHeld' / 'canvasHoldRefused':
+   * an agent's write held the waiting canvas aside (action
    * 'cleared' | 'replaced' | 'changed'), or was refused at the limit
    * ('clear' | 'replace' | 'change'); agent null when unnamed. `agentId` and
-   * `color` (the agent's cursor's) make the Agent log row the agent's (N-3). */
+   * `color` (the agent's cursor's) make the Agent log row the agent's. */
   canvasHeld?: { action: string; agent: string | null; agentId?: string; color?: string;
-    /** GM's rule (a): the person's canvas was saved first as this project,
+    /** The design's rule: the person's canvas was saved first as this project,
      * untouched; `copy` when the agent's write changed a copy of it. */
     savedAs?: string; copy?: boolean;
-    /** GM r15 on PR #199: the canvas already was that project, so it
+    /** Design on PR #199: the canvas already was that project, so it
      * was kept as it was (not "saved as its own project"). */
     kept?: boolean };
 }
@@ -309,7 +309,7 @@ export interface ProposalCost {
 
 /** Why a paid node leaves the total open (backend model_pricing.estimate_run
  * reasons), in the Run chip's kinds (runScope UnpricedReason): the Accept
- * chip writes the same reason lines (GM, PR #203 r17 item 4). */
+ * chip writes the same reason lines (design, PR #203). */
 export type ProposalCostReason =
   | { kind: 'noPrice' | 'cantRun' | 'awaitingInput' | 'sizeUnreadable' | 'plan' }
   | { kind: 'missingKey'; keys?: string[] }
@@ -341,10 +341,10 @@ export interface ProposalNotReady {
   name: string;
   /** "needs OPENAI_API_KEY in Settings > Providers" (node_readiness.instance_missing): find_nodes' words, for agents. */
   missing: string;
-  /** The person's line (round 3f, node_readiness.instance_missing_line): "GPT Image 2 needs your
+  /** The person's line (node_readiness.instance_missing_line): "GPT Image 2 needs your
    *  OpenAI API key. Add it in Settings." Absent from a backend older than 3f. */
   person?: string;
-  /** Why it can't run, for one node and for several (PR #203 round 15:
+  /** Why it can't run, for one node and for several (PR #203:
    *  node_readiness.instance_missing_reason, person_line.NOT_READY_PREDICATES):
    *  what follows the quoted name ("needs your OpenAI API key. Add it in
    *  Settings." / "need …"). The bar merges nodes by it. Absent for a route's
@@ -394,7 +394,7 @@ export interface ProposalView {
     ports: { inputs: ProposalPort[]; outputs: ProposalPort[] };
   }>;
   /** `sourceName`, `targetName` and `targetLabel` are the panel's words for
-   * each wire: “Prompt” → “Second take” · Prompt (GM - Design, PR #216 r3). */
+   * each wire: “Prompt” → “Second take” · Prompt (design, PR #216). */
   edges: ProposalEdge[];
   /** Wires Accept removes: a model change drops the ones its new model has
    * no port for (backend main._stage_proposal `drops`). */
@@ -407,8 +407,8 @@ export interface ProposalView {
   /** `name` is "Hero shot (n4)", for agents; `title` and `model` are the
    * card's words, "Hero shot" and "Krea 2" (no id). `inputsUpdated`: the
    * change sets the model param `key` to the model the node already has, so
-   * its inputs are read again; `name` is that model's own name (GM - Design,
-   * PR #216 r4 8: "Krea 2 · inputs updated"). Names follow renames while the
+   * its inputs are read again; `name` is that model's own name (design,
+   * PR #216: "Krea 2 · inputs updated"). Names follow renames while the
    * proposal is open. */
   params: Array<{ nodeId: string; name: string; title?: string; model?: string;
     inputsUpdated?: { key: string; name: string };
@@ -418,12 +418,12 @@ export interface ProposalView {
     paidRuns: number;
     /** Runs that may bill the person's own account (a mayBillWithKey route
      * with their key set: Idol with a Hugging Face token), never counted as
-     * paid (GM, PR #203 r11 item 2), and who they are. Absent from a backend
-     * before round 7 of PR #203. */
+     * paid (design, PR #203), and who they are. Absent from an older
+     * backend. */
     mayCostRuns?: number;
     mayCost?: Array<{ name: string; account: string }>;
-    /** Runs on the person's Krea plan, never counted as paid (GM, PR #203
-     * r19 item 1: "2 paid · 1 on Krea plan"). Absent from an older backend. */
+    /** Runs on the person's Krea plan, never counted as paid (design, PR #203:
+     * "2 paid · 1 on Krea plan"). Absent from an older backend. */
     planRuns?: number;
     freeRuns: number;
     estimate: ProposalEstimate | null;
@@ -441,7 +441,7 @@ export interface ProposalView {
      * (backend main._not_ready_nodes, in find_nodes' words). Accept still runs. */
     notReady?: ProposalNotReady[];
     /** Agents' placeholders (and what needs them) its run will skip, left out
-     * of the counts above (backend main._proposal_cost, Q125 item 3). */
+     * of the counts above (backend main._proposal_cost). */
     pendingSkipped?: import('./pendingNodes').PendingSkipSummary;
     note: string;
   };
@@ -472,10 +472,10 @@ export interface ProposalWait {
   alsoModel: string | null;
   alsoFor: string | null;
   alsoPlanRuns: number | null;
-  /** GM's line for the bar ("This would pass the $5 daily total, which has $0.20 left."). */
+  /** The design's line for the bar ("This would pass the $5 daily total, which has $0.20 left."). */
   barLine: string;
   /** False when the run fits under the total and waits only for a node with
-   * no list price (Justin's Q165; absent on older proposals: true). */
+   * no list price (Justin's; absent on older proposals: true). */
   over?: boolean;
   /** Present while the spend record's 24-hour hold is on (backend agent_spend): when it ends
    * (epoch seconds) and the sentence the app adds after the bar line until then. */
@@ -526,9 +526,9 @@ export type ExecutionEvent = (
       withheld?: Record<string, string> | null }
   /** A gate upstream withheld this node's input, so it never ran (backend execution/gating.py). */
   | { type: 'skipped'; nodeId: string; reason: string; gateNodeId?: string | null }
-  /** `person`: the handler's line for the person (error copy round 3c); `error` is the specific text agents keep. */
+  /** `person`: the handler's line for the person (error copy); `error` is the specific text agents keep. */
   | { type: 'error'; nodeId: string; error: string; retryable: boolean; category?: ErrorCategory; friendly?: string; person?: string | null; providerText?: boolean; provider?: string | null; missingCredential?: boolean; variant?: VariantScope | null }
-  /** `person`: each check's line for the card (error copy round 3e); `message` is the agents' text. */
+  /** `person`: each check's line for the card (error copy); `message` is the agents' text. */
   | { type: 'validationError'; errors: Array<{ nodeId: string; portId: string; message: string; person?: string | null; missingKey?: boolean }> }
   | { type: 'graphComplete'; duration: number; nodesExecuted: number; nodesSkipped?: number }
   | { type: 'graphCancelled' }
@@ -562,7 +562,7 @@ export type ExecutionEvent = (
       /** Explicit committed graph import; ordinary updates remain merges. */
       graphReplaced?: boolean;
       /** A reopen of the project already open (the person's, an agent's, the
-       * boot's) kept its open proposals (GM r29 on PR #199, 3): with
+       * boot's) kept its open proposals (design on PR #199): with
        * graphReplaced, the tab keeps them and their held runs. */
       proposalsKept?: boolean;
       /** The backend process that sent it (a restart gives a new one). */
@@ -576,7 +576,7 @@ export type ExecutionEvent = (
       workspaceRevision?: string;
       /** Grows with each sync, in the order Nebula read the graph; each
        * socket gets them in that order. A restore's or node delete's answer
-       * names its own sync's (graphStore whenSynced; PR #205 review 8). */
+       * names its own sync's (graphStore whenSynced; PR #205). */
       syncSeq?: number;
       /** Someone other than the person (an agent, a script) opened or made a
        * project: the canvas follows and offers the way back. */
@@ -643,7 +643,7 @@ class WebSocketClient {
     if (typeof window !== 'undefined') onPersonConnected(() => this.personConnected());
     // A page back from the back/forward cache whose id a copy took moves to
     // a new one (lib/tabId.ts): the open socket says the kept state again
-    // under it (review 21 LOW-1 on PR #199).
+    // under it (PR #199).
     onTabIdRekeyed(() => { void tabIdReady().then(() => this.sayKeptAgain()); });
   }
 
@@ -654,14 +654,14 @@ class WebSocketClient {
   }
 
   private sayHello(socket: WebSocket, url: string): void {
-    // Never under an id the page doesn't hold yet (review 21 LOW-1 on PR
+    // Never under an id the page doesn't hold yet (on PR
     // #199): the hello and what follows it name this tab.
     const hello = (personToken: string | null | undefined) => {
       if (!personToken) {
         reportPersonRequired();
         // No hello, so this socket gets the agents' form: numbered cursors
         // from before (a token forgotten after a second 401) leave, as on a
-        // refused hello (GM - Design, PR #211 review 4, item 4).
+        // refused hello (design, PR #211).
         if (this.ws === socket) this.dispatch({ type: 'socketDemoted' });
         return;
       }
@@ -685,12 +685,12 @@ class WebSocketClient {
    * there themselves (null: none, Projects home, or a project the tab
    * reached by following an agent's switch), as the person's tab says it to
    * the backend: the person's own open ends the protection of a project
-   * filed from their waiting canvas (GM r13 on PR #199, 1). Sent after every
+   * filed from their waiting canvas (design on PR #199). Sent after every
    * hello, and on change, with `openedBy: 'person'`; undefined until the
    * store says it. */
   private viewing: string | null | undefined = undefined;
   private greeted: WebSocket | null = null;
-  /** The person's own acts not yet said on a promoted socket (GM r13, 1):
+  /** The person's own acts not yet said on a promoted socket (design):
    * their open of the project already loaded (no request goes out for it)
    * and their first own edit in a project. Each is said once. */
   private personActs: { type: 'personOpen' | 'personInput'; projectId: string }[] = [];
@@ -702,8 +702,8 @@ class WebSocketClient {
   }
 
   /** Whether this tab keeps edits Nebula couldn't save after a restore
-   * (GM r15 on PR #199): the backend refuses agents' canvas writes and
-   * project switches meanwhile (409 canvas_kept_in_tab, GM r16). Said on
+   * (design on PR #199): the backend refuses agents' canvas writes and
+   * project switches meanwhile (409 canvas_kept_in_tab, design). Said on
    * the promoted socket after every hello, and on change, with this tab's
    * id (X-Nebula-Tab): the person's kept save passes the project limit
    * only from a tab Nebula knows keeps edits. */
@@ -742,7 +742,7 @@ class WebSocketClient {
     if (!socket || socket.readyState !== WebSocket.OPEN) return;
     void personTokenForSocket(socket.url).then((personToken) => {
       if (this.ws !== socket) return;
-      // GM r29 item 3 (fix round 19): the backend ignores a second hello on a
+      // Design: the backend ignores a second hello on a
       // socket it already promoted, so a link taken in then (the same link
       // reopened) reconnects, and the new socket's hello is what the server
       // promotes, or refuses.
@@ -786,7 +786,7 @@ class WebSocketClient {
           try {
             const parsed = JSON.parse(event.data) as ExecutionEvent | { type: 'personRequired' };
             if (parsed.type === 'personRequired') {
-              // The server refused this socket's hello: demoted (GM r29 item 3).
+              // The server refused this socket's hello: demoted (design).
               if (this.promoted === socket) this.promoted = null;
               // Justin, 2026-10-31: that refusal is the backend saying the token this hello
               // carried is invalid, so the tab drops it (lib/personSession, with its guards).
@@ -796,7 +796,7 @@ class WebSocketClient {
               if (this.ws === socket) this.dispatch({ type: 'socketDemoted' });
               return;
             }
-            // GM r29 item 3: the person-only proposalSync comes on promote
+            // Design: the person-only proposalSync comes on promote
             // only (backend websocket_endpoint), by whatever path the hello
             // came: a new link, the same link again, a reconnect, the desktop
             // app's token. The hold and the banner follow it.

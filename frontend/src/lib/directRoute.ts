@@ -185,7 +185,7 @@ export function fallbackProvider(definition: Pick<ModelNodeDefinition, 'envKeyNa
 /** What a pasted key can carry at its ends that is no part of it:
  * whitespace, a byte-order mark, zero-width spaces and joiners. The same
  * code points as backend node_route.KEY_EDGE (JS trim strips a BOM and Python
- * strip doesn't; neither strips a zero-width space). Review 7 of PR #203, NIT-4. */
+ * strip doesn't; neither strips a zero-width space). */
 const KEY_EDGE = new Set('\t\n\v\f\r \u0085\u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007'
   + '\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\u200b\u200c\u200d\u2060\ufeff');
 
@@ -874,8 +874,8 @@ export function selectRoute(
 }
 
 /**
- * How a run on a `mayBillWithKey` route is counted (GM, PR #203 r11 item 2
- * and r12): "mayCost" with one of its optional keys set (it may bill the
+ * How a run on a `mayBillWithKey` route is counted (design, PR #203):
+ * "mayCost" with one of its optional keys set (it may bill the
  * person's own account past its free allowance: Idol with a Hugging Face
  * token), "free" without one. Null for any other route or node, counted as
  * before. Never "paid": such a route has no list price beyond its sourced
@@ -897,8 +897,8 @@ export function keyBilling(
  * bill, as every surface names it ("Hugging Face"): a Space route's host,
  * else its provider's PROVIDER_LABELS name. Null for any other node.
  * node_route.key_billing_account is the twin, from the same table
- * (backend/tests/fixtures/key_billing_cases.json pins both; review 8 of PR
- * #203, LOW-3). */
+ * (backend/tests/fixtures/key_billing_cases.json pins both; PR
+ * #203). */
 export function keyBillingAccount(
   definition: ModelNodeDefinition | undefined,
   params: Record<string, unknown> | undefined,
@@ -912,8 +912,8 @@ export function keyBillingAccount(
 }
 
 /** A key-billing node's cost label, by the ghost-card convention ("free ·
- * runs locally"): "may cost · Hugging Face" or "free · Hugging Face" (GM,
- * PR #203 r15 item 1). node_route.key_billing_label is the twin. */
+ * runs locally"): "may cost · Hugging Face" or "free · Hugging Face" (design,
+ * PR #203). node_route.key_billing_label is the twin. */
 export function keyBillingLabel(costClass: 'free' | 'mayCost', account: string): string {
   return `${costClass === 'mayCost' ? 'may cost' : 'free'} · ${account}`;
 }
@@ -944,7 +944,7 @@ export function providerLabel(provider: string | null | undefined): string {
 }
 
 /**
- * GM - Design, round 15, item 3 (review 14, L-I): a node's model as a run
+ * Design: a node's model as a run
  * on `provider` shows it. A display name that ends by naming its own
  * gateway ("Grok Imagine 2.0 (Krea)", "Nano Banana (FAL)") names the
  * provider the run actually goes through instead, by the label the running
@@ -960,7 +960,7 @@ export function nameOnRoute(definition: RoutedDefinition & Pick<ModelNodeDefinit
   provider: string | null | undefined): string {
   const stripped = gatewayStripped(definition);
   if (!stripped) return definition.displayName;
-  // Review 18, L-A (GM - Design, round 19): a node whose route depends on the
+  // Design: a node whose route depends on the
   // keys names the route on the gateway too ("Grok Imagine 2.0 via Krea"),
   // never "Grok Imagine 2.0 (Krea)"; with no route, the gateway is the route.
   if (routeDependsOnKeys(definition)) return `${stripped} via ${providerLabel(provider || definition.apiProvider)}`;
@@ -986,7 +986,7 @@ export function routeDependsOnKeys(definition: RoutedDefinition): boolean {
 }
 
 /**
- * GM - Design, round 18, item 1 (verbatim): "Unnamed node: the default title
+ * Design, (verbatim): "Unnamed node: the default title
  * drops the route. "Grok Imagine 2.0" in all three places" (the card title,
  * the dialog's changed line and its row), "Only for nodes whose route depends
  * on keys", canvas only: the library and search keep the catalog names
@@ -999,10 +999,10 @@ export function canvasTitle(definition: RoutedDefinition & Pick<ModelNodeDefinit
   return stripped && routeDependsOnKeys(definition) ? stripped : definition.displayName;
 }
 
-/** GM - Design, round 18: a node is unnamed when its saved label is either
+/** Design: a node is unnamed when its saved label is either
  * form of its own definition's default title, the catalog name or the
  * canvas title (canvasTitle). A hand-typed "Grok Imagine 2.0" reads as
- * unnamed too (GM: harmless). An empty label is unnamed. */
+ * unnamed too (design: harmless). An empty label is unnamed. */
 export function isDefaultTitle(definition: (RoutedDefinition & Pick<ModelNodeDefinition, 'displayName'>) | undefined,
   label: string | null | undefined): boolean {
   if (!label) return true;
@@ -1011,7 +1011,7 @@ export function isDefaultTitle(definition: (RoutedDefinition & Pick<ModelNodeDef
 }
 
 /** A node's title as its card shows it: the person's name for it, else its
- * canvas title (GM - Design, round 18). */
+ * canvas title (design). */
 export function nodeTitle(definition: (RoutedDefinition & Pick<ModelNodeDefinition, 'displayName'>) | undefined,
   label: string | null | undefined): string {
   if (!definition) return label ?? '';
@@ -1037,7 +1037,7 @@ function why(route: RouteSpec, block: DirectBlock): string {
   return String(block.detail ?? block.reason);
 }
 
-// The card's words for a route stop (error copy round 3f, GM: "A switch reads
+// The card's words for a route stop (error copy, design: "A switch reads
 // "{Node} can’t run on {Provider} with “{Label}” on." Never "Draft true".
 // Listed values use the option's label as the field shows it, never its
 // value."): a setting by its label in quotes, a value by its option's label
@@ -1054,7 +1054,7 @@ function plain(text: string): string {
   return String(text).split(' · ')[0].replace(/\s*\([^)]*\)/g, '').trim();
 }
 
-/** A rule's own label ("a video continuation longer than 15 s") in GM's rules. */
+/** A rule's own label ("a video continuation longer than 15 s") in the design's rules. */
 export function personWords(text: string): string {
   return plain(text).replace(/\b(\d+(?:\.\d+)?) ?s\b/g, '$1 seconds').replace(/\bwired\b/g, 'connected');
 }
@@ -1079,7 +1079,7 @@ function personSetting(param: ParamDefinition | undefined, key: string, value: u
 
 /** The setting a block names, as the switcher's notes say it: “Draft (fast
  * preview)” on, “Resolution” set to 1.5K, or the label alone for a field
- * the route doesn't take (error copy round 3f, GM: "Switcher notes become
+ * the route doesn't take (error copy, design: "Switcher notes become
  * "Doesn't take “{Label}”." / "Needs “{Label}”.""). */
 export function blockedSetting(definition: RoutedDefinition, block: Partial<DirectBlock>, params: Record<string, unknown>): string {
   const param = block.param ?? '';
@@ -1143,8 +1143,8 @@ function whyPerson(definition: ModelNodeDefinition, route: RouteSpec, block: Dir
  * action's first clause (node_route._fix_person; routeAction names who else
  * can take the run). */
 /** What the person can change where the node is, as a route line's first
- * action, and how many options it lists (person_line.Fix, GM, PR #203 r32
- * item 1). Since r37 every second action takes the comma (routeAction),
+ * action, and how many options it lists (person_line.Fix, design, PR #203).
+ * Every second action takes the comma (routeAction),
  * however many options the fix lists. */
 export interface FixClause {
   text: string;
@@ -1169,12 +1169,12 @@ function fixPerson(definition: ModelNodeDefinition, route: RouteSpec, block: Dir
   return one('Change that setting');
 }
 
-/** A route line's one action sentence, with its period (GM, PR #203 r31
- * item 3; person_line.route_action is the same): `fix`, then who can take
+/** A route line's one action sentence, with its period (design, PR #203;
+ * person_line.route_action is the same): `fix`, then who can take
  * the run, named: "… or switch to fal.ai" for providers with a key set,
  * "…, or add your fal.ai API key in Settings and switch to fal.ai" for ones
- * whose key isn't added. Two actions always take a comma between them (GM,
- * PR #203 r37 item 1: "Pick 1K, or switch to fal.ai."), as person_line.
+ * whose key isn't added. Two actions always take a comma between them (design,
+ * PR #203: "Pick 1K, or switch to fal.ai."), as person_line.
  * route_action builds them; route_cases.json pins the two alike. Never a
  * separate "… can take it." sentence. The card has no run-again ending; the
  * Agent Log's comes from the backend (". Then run the node again." after
@@ -1199,7 +1199,7 @@ export function keyPhrase(keys: readonly string[]): string | null {
 }
 
 /** "an OpenAI", "a fal.ai", "an xAI": a name with its article, chosen by
- * sound (review 10 of PR #203: "Add a Anthropic …"). A name read letter by
+ * sound (never "Add a Anthropic …"). A name read letter by
  * letter from an x ("xAI") takes "an". person_line.with_article is the twin;
  * both are held to one table of cases. */
 export function withArticle(name: string): string {
@@ -1210,8 +1210,8 @@ export function withArticle(name: string): string {
 export const MAX_KEY_NAMES = 3;
 
 /** "Add a Replicate token in Settings to run this node.": the one line that
- * says which key to add, a sentence with its period (GM, PR #203 r26 item 5
- * and r28 item 3; copy sweep item 12): the provider switcher rows take it
+ * says which key to add, a sentence with its period (design, PR #203):
+ * the provider switcher rows take it
  * from here, and the model pickers say it as the fix after their own
  * reason. The article goes by the first name, and the provider's own noun
  * stays ("token" for Replicate and Hugging Face). Null when a name isn't a
@@ -1219,7 +1219,7 @@ export const MAX_KEY_NAMES = 3;
 export function addKeyLine(keys: readonly string[]): string | null {
   const phrase = keyPhrase(keys);
   if (!phrase) return null;
-  // A list of names stops at three (design's names rule); four or more are the providers the card lists above.
+  // A list of names stops at three (the design's names rule); four or more are the providers the card lists above.
   if (keys.length > MAX_KEY_NAMES) return "Add a key for one of its providers in Settings to run this node.";
   return `Add ${withArticle(phrase)} in Settings to run this node.`;
 }
@@ -1238,7 +1238,7 @@ function acceptedValues(route: RouteSpec, block: DirectBlock): string[] {
 /** Why a route-table run can't start, as the card says it: the switcher's
  * stop line, its title, the run-cost summary (node_route.route_unavailable_line,
  * word for word; route_cases.json `unavailableLine` pins both). No env-var
- * names, route ids or param keys (GM - Design, error copy round 3e): a key
+ * names, route ids or param keys (design, error copy): a key
  * by its provider, a setting by its label. The agents keep the router's own
  * text (node_route.route_unavailable), which names the keys.
  * `keyless` are routes that would take the run but have no key set: a
@@ -1257,20 +1257,20 @@ export function routeMissingKeyLine(definition: ModelNodeDefinition, route: Node
 
 export function routeUnavailableMessage(definition: ModelNodeDefinition, route: NodeRoute, alternatives: string[] = [], keyless: string[] = [],
   params: Record<string, unknown> = {}, own?: string): string {
-  // Quoted, as the bar and the Agent log quote every name (GM, PR #203 r32;
+  // Quoted, as the bar and the Agent log quote every name (design, PR #203;
   // node_route.card_subject). `own`: the person's name for a renamed node,
-  // so its card and its bubble agree (GM, PR #203 r39 item 8).
+  // so its card and its bubble agree (design, PR #203).
   const name = own ? `“${own}”` : definition.displayName ? `“${definition.displayName}”` : 'This node';
   const spec = route.routeId ? routeById(definition, route.routeId) : undefined;
   const others = alternatives.map((alt) => providerLabel(routeById(definition, alt)?.provider));
   const keylessLabels = keyless.map((alt) => providerLabel(routeById(definition, alt)?.provider));
-  // GM, PR #203 r29 item 2: the key by its name, never "its key" (it read as
-  // the node's); r31 item 3: who can take the run is named in the action.
+  // Design, PR #203: the key by its name, never "its key" (it read as
+  // the node's): who can take the run is named in the action.
   const keylessPhrase = keyPhrase(keyless.flatMap((alt) => keyList(routeById(definition, alt)?.keys)));
   const action = (fix: FixClause | string) => routeAction(fix, others, keylessLabels, keylessPhrase);
   const block = route.block;
   if (block?.reason === 'unknown-provider') {
-    // GM, PR #203 r29 item 2 (node_route NOT_READY_PREDICATES "unknown_provider").
+    // Design, PR #203 (node_route NOT_READY_PREDICATES "unknown_provider").
     return `${name} is set to a provider that isn’t in its list. Choose one in its provider switcher.`;
   }
   if (block && spec) {
@@ -1309,7 +1309,7 @@ export function blockFields(block: DirectBlock | null | undefined): Partial<Dire
 }
 
 /** A node's own name when the person renamed it, else undefined: a line
- * then names it by its type, as before (GM, PR #203 r39 item 8). */
+ * then names it by its type, as before (design, PR #203). */
 export function renamedLabel(definition: ModelNodeDefinition | undefined, label: string | undefined): string | undefined {
   const own = label?.trim();
   return own && !isDefaultTitle(definition, own) ? own : undefined;
@@ -1347,7 +1347,7 @@ export function routeUnavailable(
 
 /** The routes other than `except` with a key set that take these
  * (routed) params as they are: who a line can name as able to take the run
- * (the one-click switches; Krea's sign-in line, GM, PR #203 r32 item 4). */
+ * (the one-click switches; Krea's sign-in line, design, PR #203). */
 export function routesThatCanTake(definition: ModelNodeDefinition, params: Record<string, unknown>, apiKeys: ApiKeys,
   except: string | null): string[] {
   return routesOf(definition)

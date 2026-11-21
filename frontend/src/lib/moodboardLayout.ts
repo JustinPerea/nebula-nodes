@@ -5,9 +5,9 @@
  * back about yet (an image dropped a moment ago).
  */
 
-/** A full-weight card's area: 480 x 270 (plan Q1). */
+/** A full-weight card's area: 480 x 270 (plan). */
 export const FULL_AREA = 129_600;
-/** The smallest card (plan Q3). */
+/** The smallest card (plan). */
 export const MIN_WEIGHT = 0.05;
 /** The aspect a card takes when the image's own is unknown. */
 export const DEFAULT_ASPECT = 4 / 3;

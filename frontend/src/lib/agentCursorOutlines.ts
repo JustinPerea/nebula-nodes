@@ -4,8 +4,8 @@ import type { Box } from './agentAnchorResolve';
 import { AGENT_CURSOR_OUTLINE } from './agentCursorTuning';
 
 /**
- * The outlines on the items agents are changing (design section 5; GM - Design
- * PR #233 r3): a 1.5 px agent-colour rect on the item while a resting cursor's
+ * The outlines on the items agents are changing (design section 5; design
+ * PR #233): a 1.5 px agent-colour rect on the item while a resting cursor's
  * action is `type` (solid) or `propose` (dashed). Pure: which cursors outline,
  * and how the rings of several agents on one item nest. The layer
  * (components/agent-cursor/AgentScreenLayer.tsx) draws them.

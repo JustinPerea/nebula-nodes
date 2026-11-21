@@ -9,7 +9,7 @@ export async function revealInFinder(url: string): Promise<void> {
 }
 
 export async function saveToFolder(url: string, filename?: string): Promise<{ savedPath: string }> {
-  // GM, round 3f: "Couldn't save the file." → "Couldn't save the output."
+  // Design: "Couldn't save the file." → "Couldn't save the output."
   const res = await apiRequest("Couldn’t save the output.", '/api/export', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

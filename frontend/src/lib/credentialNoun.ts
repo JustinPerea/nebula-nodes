@@ -1,6 +1,6 @@
 /**
  * What a provider calls its credential, by key name: "token" for Replicate and
- * Hugging Face, "key" for every other (GM, PR #203 r25 item 3).
+ * Hugging Face, "key" for every other (design, PR #203).
  *
  * The one source is the provider's Settings link word (providerCatalog
  * `keyLink`: "Open Replicate tokens"); that catalog, with every key's URL,

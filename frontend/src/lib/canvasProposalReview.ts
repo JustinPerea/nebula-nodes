@@ -9,7 +9,7 @@ let ringTimer: ReturnType<typeof setTimeout> | null = null;
 const PROPOSAL_BAR = '.proposal-bar:not(.proposal-bar--notice)';
 
 /**
- * Review on a canvas proposal's Update (Justin's Q112 a, 2026-10-21: "with
+ * Review on a canvas proposal's Update (Justin's, 2026-10-21: "with
  * Review taking you to the canvas and its bar"): go to the open project's
  * canvas from any screen (the way that screen's Back goes; Projects opens the
  * project first), show that proposal in the bar, bring its ghosts into view

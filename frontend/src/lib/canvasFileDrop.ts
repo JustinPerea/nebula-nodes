@@ -7,7 +7,7 @@
  * the point in a small grid. A file Nebula can't take, and an upload that
  * fails, each get a written line in the canvas notice (graphStore.notify).
  *
- * Copy is GM - Design's (2026-10-24): one notice per drop. One failed file
+ * Copy is the design's (2026-10-24): one notice per drop. One failed file
  * gets "Couldn't add “{filename}”. Nebula takes images, video, audio, PDFs
  * and text files." or, for a failed upload, "Couldn't upload “{filename}”."
  * then the reason. Two or more get a count heading ("Couldn't add 2 of 5
@@ -175,10 +175,10 @@ export function fileDropInFlight(): boolean {
  * file that made a node, owning only that node. Resolves when every upload
  * has settled. */
 export async function addDroppedFiles(files: readonly File[], origin: { x: number; y: number }): Promise<void> {
-  // Round 20 (M1): nothing lands on a canvas that's about to go away.
+  // Nothing lands on a canvas that's about to go away.
   if (refuseEditWhileKept() || refuseEditWhileFollowing()) return;
-  // Offline is read-only (GM, round 14 of PR #114): nothing uploads, no
-  // notice; the banner pulses (review 13, L6: a drop still sent).
+  // Offline is read-only (design): nothing uploads, no
+  // notice; the banner pulses.
   if (refuseEditWhileOffline()) return;
   // Failures by their place in the drop, so the notice names files in the
   // order they were dropped.
@@ -191,7 +191,7 @@ export async function addDroppedFiles(files: readonly File[], origin: { x: numbe
   });
   const inOrder = () => [...failed.entries()].sort(([a], [b]) => a - b).map(([, failure]) => failure);
   const notify = (text: string | null) => { if (text) useGraphStore.getState().notify(text, 'error'); };
-  // One notice per drop (GM): with nothing to upload it can say so now;
+  // One notice per drop (design): with nothing to upload it can say so now;
   // otherwise it waits for the uploads, so one notice names every failure.
   if (accepted.length === 0) { notify(dropNoticeText(inOrder(), files.length)); return; }
 
@@ -209,12 +209,12 @@ export async function addDroppedFiles(files: readonly File[], origin: { x: numbe
     // One undo step per dropped file, taken before its graphSync lands.
     const undoStep = useGraphStore.getState().beginUndoStep();
     const heading = `Couldn’t upload ${quoted(file.name)}.`;
-    // The node the upload adds, which comes with its echo (review 11, L-2).
+    // The node the upload adds, which comes with its echo.
     let arrives: string[] = [];
     try {
       const response = await apiRequest(heading, '/api/uploads', { method: 'POST', body: form });
-      // The step owns only the node the upload made (round 14 of PR #114,
-      // review 13 Q5): an agent's node its echo brings into an empty tab
+      // The step owns only the node the upload made:
+      // an agent's node its echo brings into an empty tab
       // isn't this step's, and its Undo leaves it (#195's `arrives`).
       const body = await response.json().catch(() => null) as { nodeId?: unknown } | null;
       if (typeof body?.nodeId === 'string' && body.nodeId) arrives = [body.nodeId];
@@ -224,7 +224,7 @@ export async function addDroppedFiles(files: readonly File[], origin: { x: numbe
         reason: failureCopy(error, { heading }).cause ?? '' });
     } finally {
       // An undo pressed while the upload was on its way acts once its node is
-      // on the canvas (review 10, L-2; review 11, L-2).
+      // on the canvas.
       useGraphStore.getState().endUndoStep(undoStep, { arrives });
     }
   }));

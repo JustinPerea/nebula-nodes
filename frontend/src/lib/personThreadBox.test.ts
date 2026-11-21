@@ -20,7 +20,7 @@ import {
   workingLine,
 } from './personThreadBox';
 
-/** GM - Design r61 on #225: the pure parts of A, 3 and 4. */
+/** Design on #225: the pure parts of A, 3 and 4. */
 
 const CLAUDE = { id: 'a1', name: 'Claude', color: '#E8825A', verified: true };
 const KEY = '0123456789ab';
@@ -43,8 +43,8 @@ function listener(over: Partial<ChannelListener> = {}): ChannelListener {
   };
 }
 
-describe('r61 answer 3: names', () => {
-  it('a session by its cursor label; one session reads as r50 did', () => {
+describe('names', () => {
+  it('a session by its cursor label; one session reads as plain “Claude”', () => {
     expect(waitingLine('Claude · 2')).toBe('Waiting for Claude · 2');
     expect(workingLine('Claude · 2', 'Cooler sky')).toBe('Claude · 2 is working · Cooler sky');
     expect(workingLine('Claude · 2')).toBe('Claude · 2 is working');
@@ -72,7 +72,7 @@ describe('r61 answer 3: names', () => {
   });
 });
 
-describe('r61 answer 4: answered lines', () => {
+describe('answered lines', () => {
   it('one choice, several joined, and words typed', () => {
     expect(answeredLine([{ choices: ['Only this one'], text: null }])).toBe('You chose “Only this one”.');
     expect(answeredLine([{ choices: ['All three'], text: null }, { choices: ['Keep 1:1'], text: null }]))
@@ -90,7 +90,7 @@ describe('r61 answer 4: answered lines', () => {
   });
 });
 
-describe('r61 A: the run', () => {
+describe('the run', () => {
   const entry = (id: string, ts: number) => ({ id, ts });
 
   it('the run is the latest message with no reply', () => {
@@ -125,7 +125,7 @@ describe('r61 A: the run', () => {
   });
 });
 
-describe('GM r112.3: a pin answer’s cursor say folds into the pin reply row', () => {
+describe('a pin answer’s cursor say folds into the pin reply row', () => {
   const pinReply: ThreadRow = { id: 'pr1', kind: 'pinReply', at: 5_000, text: 'Pin fold check answered. The sky is warmer.',
     pinId: 'pin1', agent: CLAUDE, session: null };
   const say = (over: Partial<{ id: string; ts: number; message: string; agent: { id: string; name: string } }> = {}) => ({

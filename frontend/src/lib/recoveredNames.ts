@@ -1,6 +1,6 @@
 /**
- * The tab's side of Nebula's copy names (PR #199: GM r23 a, r25 5, r27 2,
- * r29 2), by the backend's rule (services/project_store). Nebula never reads
+ * The tab's side of Nebula's copy names (PR #199, design),
+ * by the backend's rule (services/project_store). Nebula never reads
  * a number in someone else's name; the only number it raises is its own
  * "copy N":
  * - a recovered copy starts from "Recovered <name>" and takes it when it's
@@ -26,7 +26,7 @@ const RECOVERED_CANVAS = 'Recovered canvas';
  * "s" flag, as DOTALL on the backend: "." takes U+2028, U+2029 and every
  * other character a name can hold. Digits are ASCII only.
  *
- * The one exception to "Nebula never reads a number in a name" (GM r32 on
+ * The one exception to "Nebula never reads a number in a name" (design on
  * PR #199, as the Finder does): a trailing " copy" or " copy N" is read, so
  * "Budget copy 3", typed by the person, duplicates to "Budget copy 4". No
  * other number in a name is ever read ("Shot 7" is never a copy count). Don't

@@ -2,7 +2,7 @@ import { PERSON_REQUIRED_CODE } from './errorCopy';
 import { onPersonPromoted, personGateHeld } from './personSession';
 
 /**
- * GM, PR #204 round 3 (2026-10-30): "on promote, every line whose only
+ * Design, PR #204 (2026-10-30): "on promote, every line whose only
  * reason was 'this tab isn't connected as you' clears at once, wherever it
  * sits": panel lines, toasts, tooltips and notices.
  *
@@ -30,7 +30,7 @@ export function clearsOnPromote(clear: Clear): () => void {
 }
 
 /**
- * Review 3 LOW-1 (#204 r5): a refusal of a request sent before the latest promote, that
+ * PR #204: a refusal of a request sent before the latest promote, that
  * lands once the tab is connected. The sweep it would wait for has already run, so it
  * clears (and retries) now: on the next microtask, after its caller has shown the line.
  */
@@ -57,7 +57,7 @@ export function isPersonRefusal(error: unknown): boolean {
 
 /**
  * Any clear for a failure the person gate refused: on the promote, or at once when the
- * refusal came for a request sent before it (review 3 LOW-1). Returns whether it registered.
+ * refusal came for a request sent before it. Returns whether it registered.
  */
 export function clearRefusedOnPromote(error: unknown, clear: Clear): boolean {
   if (!isPersonRefusal(error)) return false;
@@ -97,7 +97,7 @@ export function pendingPromoteClears(): number {
 const retries = new Map<string, Clear>();
 
 /**
- * GM, PR #204 round 4 (item 1): a write the gate refused only because of this tab, done
+ * Design, PR #204: a write the gate refused only because of this tab, done
  * again once on the promote, silently (its line has cleared; a retry that fails again
  * says nothing new). `key` keeps one retry per thing: a later refusal of the same write
  * replaces the earlier one. Only for a person refusal; returns whether it registered.

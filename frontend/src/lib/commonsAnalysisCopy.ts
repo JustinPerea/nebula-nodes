@@ -1,8 +1,8 @@
 import { becauseLine } from './errorCopy';
 
 /**
- * A failed Commons analysis, in GM's words (GM - Design, error-copy round 3,
- * item 4): heading "Couldn’t analyze this reference." with the reason mapped
+ * A failed Commons analysis, in the design's words (design):
+ * heading "Couldn’t analyze this reference." with the reason mapped
  * from last_error's kind. The backend decides the kind where the analysis
  * fails (backend/commons/analysis_errors.py) and sends it as
  * `last_error_kind`. A kind this build doesn't know (a newer backend), or
@@ -16,7 +16,7 @@ const REASONS: Record<string, string> = {
   unavailable: 'The analysis service didn’t respond. Try again.',
   // the model refused or couldn't read the image: trying again would get the same answer (design: no button)
   unreadable: 'The analyzer couldn’t read this image.',
-  // no pixel of it is seen, so it was never sent (GM r5 on #208): neutral, not an error
+  // no pixel of it is seen, so it was never sent (design on #208): neutral, not an error
   transparent: 'This image is too transparent to analyze.',
 };
 

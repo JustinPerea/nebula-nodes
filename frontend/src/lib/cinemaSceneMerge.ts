@@ -1,7 +1,7 @@
 import type { CinemaSceneSpec, CinemaShot } from '../types';
 
 /**
- * PR #198 review 6, H2 (GM r9 decision 2, option b): a scene the person has
+ * PR #198 (design): a scene the person has
  * edits for that changed somewhere else (an agent, another window) is
  * rebased, never overwritten. A three-way merge per field: `base` is the
  * scene the person's edits started from, `mine` what the card shows,
@@ -23,7 +23,7 @@ import type { CinemaSceneSpec, CinemaShot } from '../types';
 export interface SceneField { shot: string | null; key: string }
 export const ORDER = '#order';
 export const PRESENCE = '#shot';
-/** The whole scene (fix round 8, H1): a merge that couldn't be made is one
+/** The whole scene: a merge that couldn't be made is one
  * clash over everything, so the person still chooses and nothing is lost. */
 export const WHOLE = '#scene';
 const RUNTIME = new Set(['output', 'variations', 'selectedVariation']);
@@ -133,7 +133,7 @@ export function withFields(target: CinemaSceneSpec, fields: readonly SceneField[
     } else if (field.shot === null && field.key === ORDER) {
       // The shots both sides have go in `source`'s order, in the slots they
       // hold now; the rest stay where they are. The next id is taken once
-      // per slot, outside any search's callback (fix round 8, H1: an index
+      // per slot, outside any search's callback (an index
       // moved inside `find` ran past the list and emptied every shot).
       const common = out.shots.filter((shot) => S.has(shot.id)).map((shot) => shot.id);
       const sorted = inOrder(common, source.shots.map((shot) => shot.id));

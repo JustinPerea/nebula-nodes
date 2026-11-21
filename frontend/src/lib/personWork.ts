@@ -1,7 +1,7 @@
 import { onPersonPromoted, personGateHeld, personUnconfirmed } from './personSession';
 
 /**
- * PR #204 round 11: person-only work the app does on its own (no click) runs only on a tab
+ * PR #204: person-only work the app does on its own (no click) runs only on a tab
  * connected as the person. On a held or demoted tab, or before the socket's first answer, it
  * waits and runs once on the promote. Keyed, so asking again while it waits keeps one: a tab
  * never sends a person-only request by itself only to be refused, and never retries a refusal

@@ -1,7 +1,7 @@
 import { springEase, SPRING_SOFT } from './springs';
 
 /**
- * The scroll spring (GM r100.2; the Inspector's "scroll spring, jump under
+ * The scroll spring (design; the Inspector's "scroll spring, jump under
  * reduced motion" from #208): scroll an element to `top` on SPRING_SOFT
  * (critically damped, so it never overshoots the row it brings into view),
  * or at once when the person asked for reduced motion. Rigid wins: the

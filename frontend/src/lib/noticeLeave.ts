@@ -2,8 +2,8 @@ import { useCallback, useLayoutEffect, useRef, useState, type AnimationEvent, ty
 import { dialogStart, openModalDialog } from './modalFocus';
 
 /**
- * The one place a notice-region item leaves (fix round 7 of PR #200, GM r11
- * answer 2: "The leave mirrors the enter for EVERY surface, toasts included").
+ * The one place a notice-region item leaves (PR #200, design:
+ * "The leave mirrors the enter for EVERY surface, toasts included").
  *
  * An item that goes stays mounted, marked `data-leaving` with its kind, until
  * its own leave animation ends; noticeRegion.css gives each kind its leave
@@ -30,7 +30,7 @@ export const LEAVE_SLACK_MS = 250;
 /** How many times the fallback waits again for a leave still running. */
 export const MAX_REARMS = 8;
 /** How long a visible leave may stall (running late, paused, never ending)
- * before it finishes with the reduced-motion fade (GM r12 answer 5). */
+ * before it finishes with the reduced-motion fade (design). */
 export const STALL_LIMIT_MS = 2300;
 /** The reduced-motion fade a stalled leave finishes with (noticeRegion.css notice-fade-out). */
 export const STALL_FADE_MS = 140;
@@ -52,8 +52,7 @@ const unfinished = (animation: Animation) => animation.pending || animation.play
 const tabHidden = () => typeof document !== 'undefined' && document.visibilityState === 'hidden';
 
 /**
- * How a leave ends, whatever happens to its animation (review 8 NIT-1,
- * review 9 LOW-3, review 10 NIT-1, GM r12 answer 5):
+ * How a leave ends, whatever happens to its animation (design):
  * - It ends on its own animationend (the caller's onAnimationEnd), or at
  *   once when its animation is cancelled (by a style change or by script).
  * - The tab hidden (now or during the leave): it finishes at once; nobody
@@ -123,7 +122,7 @@ export function watchLeave(element: HTMLElement, end: () => void): () => void {
   listen(true);
   document.addEventListener('visibilitychange', onVisibility);
   const planned = timeLeft(running);
-  // GM r19 answer 2 (PR #200 fix round 12): a running leave longer than the
+  // Design (PR #200): a running leave longer than the
   // limit plays out (only a stalled one is rescued), but it means a spring
   // or keyframe needs tuning: say so in development, never in production.
   if (import.meta.env.DEV && planned > STALL_LIMIT_MS) {
@@ -144,12 +143,12 @@ function focusOn(target: HTMLElement): void {
 }
 
 /**
- * Review 8 NIT-2, review 9 LOW-2, GM r16 answer 2: when what leaves holds
+ * Design: when what leaves holds
  * focus, focus lands on the next notice's × (else the one before's), never
  * on a primary or destructive action (Run, Restore, Undo, Delete), so a
  * second Enter (a double press, key repeat) can only dismiss. A notice with
  * no × takes focus itself. With no notice left and a dialog open, focus goes
- * back to the dialog's field (GM r25). Else it goes to the surface's
+ * back to the dialog's field (design). Else it goes to the surface's
  * start of page content: the Projects "Recent projects" heading, the canvas,
  * or the screen's <main>. Never <body>. It runs as the leave starts, before
  * the item's `inert` drops focus.
@@ -174,14 +173,14 @@ export function moveFocusFromLeave(leaving: HTMLElement): void {
     if (close) { close.focus({ preventScroll: true }); return; }
     if (notice !== own) { focusOn(notice); return; }
   }
-  // GM r25: with a dialog open, back to the dialog's field, never the page behind it.
+  // Design: with a dialog open, back to the dialog's field, never the page behind it.
   const dialog = document.querySelector('[aria-modal="true"]') ? openModalDialog() : null;
   if (dialog) { focusOn(dialogStart(dialog) ?? dialog); return; }
   const start = document.getElementById('recent-projects-title')
     ?? document.querySelector<HTMLElement>('.canvas-wrapper')
     ?? [...document.querySelectorAll<HTMLElement>('main')].find((main) => !main.closest('[inert]')) ?? null;
   if (start) {
-    // PR #204 round 18h (GM r38 3d): the start of the page takes focus only so it never drops to
+    // PR #204 (design): the start of the page takes focus only so it never drops to
     // <body>; it draws no ring there (styles/slava-restraint.css), from the keyboard either. The
     // mark goes with the focus, so a person who Tabs to the canvas later sees its ring.
     start.setAttribute(FOCUS_START_ATTR, '');

@@ -2,7 +2,7 @@ import { apiRequest } from './apiRequest';
 import { DEFAULT_AGENT_COLOR } from './agentNotes';
 
 /**
- * Questions an agent asked the person (Q125 item 1; backend
+ * Questions an agent asked the person (backend
  * services/agent_questions.py). The agent asks 1 to 5; the person answers
  * or dismisses them from the Update's Answer, and only from a canvas the
  * socket gave the set's answer key to. Nothing here lets an agent answer.

@@ -1,13 +1,13 @@
-/** The panel's gap to the outer edge of a port's rest dot (GM r111). */
+/** The panel's gap to the outer edge of a port's rest dot (design). */
 export const PORT_DOT_CLEARANCE = 8;
-/** The panel's gap to the edge of a port's hit target and of its hover circle (GM r114). */
+/** The panel's gap to the edge of a port's hit target and of its hover circle (design). */
 export const PORT_TARGET_CLEARANCE = 2;
 
 /**
  * Where the panel's edge stands, on screen, beside the node's outermost port
  * on one side ('right': the largest edge; 'left': the smallest), or null when
  * it has no port shown there. A port is a drag source, so the panel never
- * covers any part of it (GM r111, r114): the edge is the farthest of
+ * covers any part of it (design): the edge is the farthest of
  *   - the rest dot's outer edge + 8,
  *   - the handle's hit target (its box) + 2,
  *   - the hover circle's outer edge + 2 (the full glass circle that shows on

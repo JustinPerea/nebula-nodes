@@ -79,7 +79,7 @@ function versionedMeasure<T extends object>(same: (a: T, b: T) => boolean, measu
 }
 
 /** Keys for a canvas's nodes (by id) and connections (by edgeKey, as Undo's
- * slices key them: review 8 of PR #205, limits LOW-2), each made unique by
+ * slices key them), each made unique by
  * its place among those with the same key, so a duplicate counts as Save's
  * file counts it. */
 function keyed<T>(items: readonly T[], keyOf: (item: T) => string): Map<string, T> {
@@ -96,14 +96,13 @@ function keyed<T>(items: readonly T[], keyOf: (item: T) => string): Map<string, 
 
 /**
  * How many Undos, newest first, bring the canvas back within Save's shape
- * limits (0 when it already fits), or null when no number of them does (GM
- * PR #205 r16 item 1; review 7 limits MEDIUM-4: the step whose Undo fixes the
+ * limits (0 when it already fits), or null when no number of them does (design,
+ * PR #205: the step whose Undo fixes the
  * refusal, not the newest). Each slice step is applied as Undo applies it
  * (applySlice: a removed node takes its connections, a connection comes back
  * only between two nodes on the canvas), and the canvas is measured a node
  * and a connection at a time, as Save's file holds them: a node is measured
- * once per id and content version, so a step costs only what it changed
- * (review 8 of PR #205, limits LOW-2 and LOW-3).
+ * once per id and content version, so a step costs only what it changed.
  */
 export function undosToFitSave(nodes: Node<NodeData>[], edges: Edge[], viewport: Viewport | undefined,
   name: string | undefined, steps: readonly UndoWalkStep[]): number | null {
@@ -180,7 +179,7 @@ export function undosToFitSave(nodes: Node<NodeData>[], edges: Edge[], viewport:
 
 /** The step Save's shape line offers: the newest step's owner when its Undo
  * alone fixes it; "the last N changes" when it takes N; none when no number
- * of Undos does (GM PR #205 r16 item 1). */
+ * of Undos does (design, PR #205). */
 export function saveStepToFit(walk: SaveUndoWalk, nodes: Node<NodeData>[], edges: Edge[],
   viewport: Viewport | undefined, name: string | undefined): SaveUndoStep {
   if (walk.top.kind === 'none') return walk.top;

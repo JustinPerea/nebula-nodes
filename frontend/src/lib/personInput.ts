@@ -1,5 +1,5 @@
 /**
- * The person's own edits on the canvas (GM r13 on PR #199, 1): an undo step
+ * The person's own edits on the canvas (design on PR #199): an undo step
  * the person's own action takes (graphStore pushUndo / pushOwnAdd), or their
  * Undo and Redo. Never a graphSync, an agent's edit arriving, or a canvas
  * the tab loads. The project store says the first one in each project to the
@@ -19,7 +19,7 @@ export function onPersonInput(next: Listener): () => void {
 }
 
 /** One of the person's own edits happened. Not while the canvas is kept
- * in this tab (review 13 of PR #199, kept-scratch LOW-1): the project it was
+ * in this tab (kept-scratch): the project it was
  * is gone, and a kept edit is only this tab's until [Save as a project]. */
 export function notePersonInput(): void {
   if (isCanvasKept()) return;

@@ -1,6 +1,6 @@
 /**
  * A cursor's label, the one string its name pill shows and the Agent log
- * names it by (GM - Design, PR #211 r19), so the two never disagree. Kept
+ * names it by (design, PR #211), so the two never disagree. Kept
  * apart from agentCursorLook so the log, loaded with the app, doesn't pull
  * in the cursor layer's geometry. Person UI only: agents never read it.
  */
@@ -23,7 +23,7 @@ export function cleanSession(raw: unknown): AgentPresenceSession | null {
 }
 
 /** Narration stays beside the cursor this long after the agent's last event,
- * then fades (GM - Design, round 19: "fades out about 3 s after the agent's
+ * then fades (design: "fades out about 3 s after the agent's
  * last event"). Here, not in agentPresenceStore, so the Agent log (loaded
  * with the app) can tell a replayed say that is still current. */
 export const AGENT_SAY_MS = 3_000;

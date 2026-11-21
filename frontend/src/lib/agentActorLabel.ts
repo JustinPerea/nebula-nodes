@@ -10,7 +10,7 @@ export interface EditActor {
 }
 
 /**
- * The label a person line names an agent's edit by (#210 round 6q, GM r95.3):
+ * The label a person line names an agent's edit by (#210, design):
  * the Agent log's and its cursor's, from the same source (cursorLabel over
  * the agent's name and session), so a line never names an agent another
  * way than the log does: "Claude Code", "Claude Code · 2". Never a raw name

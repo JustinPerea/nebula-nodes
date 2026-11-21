@@ -1,7 +1,7 @@
 import { DEFERS_TO_NOTICE, saysPersonRequired } from './errorCopy';
 
 /**
- * GM r8 (1), PR #204 round 7: one notice, not two. GM r11 (round 8) gives the rule, verbatim:
+ * Design, PR #204: one notice, not two. The rule, verbatim from the design:
  * "the general notice steps out only beside a line that carries the fix itself. A 'because' line
  * names the fix, so the general notice steps out. A lock line, or a line that ends 'The notice
  * below says why.', doesn't name the fix, so the general notice stays."
@@ -12,10 +12,10 @@ import { DEFERS_TO_NOTICE, saysPersonRequired } from './errorCopy';
  * - `defers`: the desktop app's dev setups ("…The notice below says why."). The notice stays.
  * - `lock`: "You can … when this tab is connected as you." The notice stays.
  *
- * Round 9 (review 7 MEDIUM-1): lines register, the page's text is no longer read. Each surface
+ * Lines register, the page's text is no longer read. Each surface
  * renders its line through <LineText> (components/LineText.tsx), which registers the element and
  * the kind its words give, and unregisters when it goes. So an agent's own text that quotes the
- * words never counts (review 7 NIT-2), and a line is found however its text is split (NIT-3).
+ * words never counts, and a line is found however its text is split.
  * A ratchet (tests/lineRegistration.ratchet.test.ts) fails any surface that shows a line
  * without it.
  *
@@ -26,14 +26,14 @@ import { DEFERS_TO_NOTICE, saysPersonRequired } from './errorCopy';
  * - and nothing IntersectionObserver can't see hides it: `hidden`, `aria-hidden`, `inert`,
  *   `visibility: hidden` or opacity 0 (checkVisibility in the browser, computed styles in jsdom).
  *   A change to those attributes, or an animation's end, checks the registered lines again;
- * - and nothing opaque covers it (review 8 MEDIUM-2, round 10): a line under Settings' dock
+ * - and nothing opaque covers it: a line under Settings' dock
  *   doesn't count. When the lines settle, a line counts only if `elementFromPoint` at one of a
  *   few points of its rect, clipped to the window, lands inside it (or on what holds it, when the
  *   line itself takes no pointer events). A dock opening or closing, a panel moving, a resize or
  *   a scroll settles them again. Not IntersectionObserver v2's trackVisibility: it reports
  *   opacity and transforms only, at a cost on every frame.
  *
- * Round 10 (review 8 MEDIUM-3, LOW-3): a line registers once and its words update in place
+ * A line registers once and its words update in place
  * (registerLine returns `update`), so a line whose words change keeps what the observer said of it
  * and the notice never flashes back meanwhile. An element holds a registration per owner (two
  * LineTexts in one element don't lose each other); it counts while any of them is a `fix` line.
@@ -49,14 +49,14 @@ export function notConnectedKind(text: string): NotConnectedKind | null {
 }
 
 /** A because line (or the general words, or a dev setup's line): it says why the action didn't
- * happen and destroys nothing, so it is never drawn in the warning colour (GM r14 (4)). */
+ * happen and destroys nothing, so it is never drawn in the warning colour (design (4)). */
 export function isBecauseLine(text: string): boolean {
   const kind = notConnectedKind(text);
   return kind === 'fix' || kind === 'defers';
 }
 
 // What a modal holds inert behind its scrim (data-behind-modal, lib/modalFocus hideBehind) is dimmed, not
-// hidden: a line there still counts (GM r27 2, with the prompt open at the demote).
+// hidden: a line there still counts (design, with the prompt open at the demote).
 const HIDDEN = '[hidden], [aria-hidden="true"]:not([data-behind-modal]), [inert]:not([data-behind-modal])';
 
 /** Whether nothing IntersectionObserver can't see hides the element: hidden, aria-hidden or
@@ -83,8 +83,8 @@ interface Registered { readonly text: string; readonly kind: NotConnectedKind }
 
 const LIVE = '[aria-live]:not([aria-live="off"]), [role="status"], [role="alert"], [role="log"]';
 
-/** Set on an element while a line is registered on it: tests/setup.ts's runtime ratchet reads it
- * (review 8 LOW-1), whichever copy of this module a test loaded. */
+/** Set on an element while a line is registered on it: tests/setup.ts's runtime ratchet reads it,
+ * whichever copy of this module a test loaded. */
 export const LINE_ATTR = 'data-line-registered';
 
 /** Each element's registrations, one per owner (a LineText), in the order they came. */
@@ -117,7 +117,7 @@ function samplePoints(element: Element): [number, number][] {
 }
 
 /** Below this background alpha a layer over the line is a dim, not a cover (a modal's backdrop).
- * Round 17 (GM r27 3): 0.6. The rule asks whether the person can read the line behind the layer:
+ * Design: 0.6. The rule asks whether the person can read the line behind the layer:
  * through the prompt (0.4) or a dialog's dim (0.45) they can; through the mask painter's overlay
  * (0.72) or a 0.8 toast, at 20–28% contrast, they can't. */
 export const SEE_THROUGH_ALPHA = 0.6;
@@ -130,7 +130,7 @@ function backgroundAlpha(color: string): number {
   return parts.length >= 4 ? Number.parseFloat(parts[3]) * (parts[3].endsWith('%') ? 0.01 : 1) : 1;
 }
 
-/** PR #204 round 15 (GM r24 a): a layer the line shows through: a dimmed backdrop or an empty
+/** PR #204 (design): a layer the line shows through: a dimmed backdrop or an empty
  * wrapper, with no picture, blur, text or replaced content of its own. */
 function seeThrough(layer: Element): boolean {
   if (REPLACED.has(layer.tagName)) return false;
@@ -143,8 +143,8 @@ function seeThrough(layer: Element): boolean {
   return backgroundAlpha(style.backgroundColor) < SEE_THROUGH_ALPHA;
 }
 
-/** Review 8 MEDIUM-2: nothing opaque covers the whole line. A browser with no hit testing
- * (jsdom) has nothing to ask, so the line counts. PR #204 round 15 (GM r24 a): a layer the line
+/** Nothing opaque covers the whole line. A browser with no hit testing
+ * (jsdom) has nothing to ask, so the line counts. PR #204 (design): a layer the line
  * shows through (a modal's dim backdrop) doesn't cover it: the hit test looks beneath it. */
 export function lineUncovered(element: Element): boolean {
   if (typeof document.elementFromPoint !== 'function') return true;
@@ -180,7 +180,7 @@ function awaitingFirstEntry(): boolean {
 function settle() {
   frame = 0;
   const next = computeFixLine();
-  // PR #204 round 11 (review 9 lock-sweep MEDIUM-2): a line handing over to another element (one
+  // PR #204: a line handing over to another element (one
   // unregisters and the next registers in the same commit) keeps the answer on screen until the
   // new element's first observer entry, so the general notice doesn't flash back for a moment
   // and isn't announced again. The entry always comes, and then this settles for real.
@@ -197,7 +197,7 @@ function schedule() {
 
 function startWatching() {
   // What IntersectionObserver can't see: these attributes anywhere above a line, a fade's end, and
-  // (review 8 MEDIUM-2) what may cover one: a dock or panel added, removed, moved or resized.
+  // what may cover one: a dock or panel added, removed, moved or resized.
   const attributes = new MutationObserver(() => schedule());
   attributes.observe(document.body, { subtree: true, childList: true, attributes: true,
     attributeFilter: ['hidden', 'aria-hidden', 'inert', 'class', 'style'] });
@@ -227,7 +227,7 @@ function ensureObserver(): IntersectionObserver | null {
 }
 
 /** A line's registration: call it (or `unregister`) when the line goes; `update` when its words
- * change, which keeps what the observer said of the element (review 8 MEDIUM-3). */
+ * change, which keeps what the observer said of the element. */
 export interface LineRegistration {
   (): void;
   update(text: string): void;
@@ -281,7 +281,7 @@ function drop(element: Element) {
 }
 
 /**
- * Round 17 (review 13 LOW-2, GM r27 2): a screen whose demote brings its own because line (the
+ * Design: a screen whose demote brings its own because line (the
  * Commons: its loads are refused and its page line says why) says so while it is up. The general
  * notice then waits for that line before it enters, as Add's line waits, capped at
  * BECAUSE_LINE_WAIT_MS: when the line lands within the cap the notice never shows at all.

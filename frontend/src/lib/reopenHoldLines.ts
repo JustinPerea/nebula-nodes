@@ -4,7 +4,7 @@ import { UNLOCK_LABEL } from './worldLabsWaiting';
 import type { OpenHold, ReopenHold } from './reopenHold';
 
 /**
- * The table of lines for a held reopen (GM r30 to r33 on PR #199). Loaded
+ * The table of lines for a held reopen (design, PR #199). Loaded
  * when a hold first arrives (store/projectStore loadReopenHoldLines), not
  * with the entry chunk: a verdict is read and placed without it
  * (lib/reopenHold), and nothing says a line before it is here.
@@ -15,7 +15,7 @@ function fieldList(fields: string[]): string {
   return names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
 }
 
-/** GM r32 (item 8): a node of the project being reopened is "its"; another
+/** Design: a node of the project being reopened is "its"; another
  * project's adds "from “Alpha”". `null` when Nebula couldn't tell whose it
  * is: then the line names the node only (the "for" form holds for any). */
 function whose(hold: OpenHold, openId: string): 'its' | 'other' | 'unknown' {
@@ -28,7 +28,7 @@ function forNode(hold: OpenHold, openId: string): string {
   return whose(hold, openId) === 'other' ? `${node} from ${quoted(hold.projectName ?? '')}` : node;
 }
 
-/** The lock-shape line for each hold (GM r30 item 2, r31 item 1, r32 item 1),
+/** The lock-shape line for each hold (design),
  * under the card on Projects and on the canvas. `project` is the project's
  * name, `openId` its id. */
 export function reopenHoldLine(project: string, openId: string, hold: ReopenHold,

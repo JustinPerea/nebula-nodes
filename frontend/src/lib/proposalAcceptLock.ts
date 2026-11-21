@@ -41,7 +41,7 @@ function acceptedGraph(view: ProposalView, values: ProposalPersonValues | undefi
 }
 
 /**
- * GM, PR #203 r6 item 1, and review r4 LOW-1/LOW-2: Accept is locked while
+ * Design, PR #203: Accept is locked while
  * the run it starts would run a node that can't start without its key (a
  * keyed route's missing key): "You can accept this after you add your
  * Hugging Face token in Settings." Read from the run itself, as Accept runs

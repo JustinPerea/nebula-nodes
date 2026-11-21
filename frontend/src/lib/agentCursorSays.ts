@@ -1,9 +1,9 @@
 /**
- * The cursor's default say lines (GM - Design's cursor spec, §2), every one
+ * The cursor's default say lines (the design's cursor spec, §2), every one
  * in this module: the line a cursor shows when the agent sends no say of
  * its own. The agent's own say always wins.
  *
- * Person copy, approved by GM in r54 (2026-11-03): short labels, sentence
+ * Person copy, approved in the design (2026-11-03): short labels, sentence
  * case, no period, curly quotes around names, names through the shared
  * name-list helper (errorCopy nodeNameList), cut in the middle when the line
  * would pass the say cap. Display only: they never reach the Agent log or
@@ -17,7 +17,7 @@ import { AGENT_SURFACES, MOODBOARD_PART_LABELS, type AgentSurfaceName } from './
 /** A say's longest line (the backend's MAX_SAY_CHARS, agent_presence.py). */
 export const AGENT_SAY_MAX_CHARS = 140;
 
-/** What failed, for an error's line (GM r54 item 2). */
+/** What failed, for an error's line (design). */
 export type ErrorCause = 'run' | 'change' | null;
 
 /** What the line can name. */
@@ -77,7 +77,7 @@ export function defaultSay(action: AgentCursorAction, { node, from = null, pulle
     case 'drag':
       if (from && node) return line`Connecting ${from} to ${node}`;
       if (node) return line`Connecting to ${node}`;
-      // A drag to a spot is a wire only with a start (GM r54 item 3);
+      // A drag to a spot is a wire only with a start (design);
       // without one the cursor only moves there, so no line.
       return pulled ? 'Connecting' : '';
     case 'run':
@@ -97,8 +97,8 @@ export function defaultSay(action: AgentCursorAction, { node, from = null, pulle
 
 /** The words a moodboard control goes by in a line: the labels the Studio
  *  shows for it (a test pins each against the Studio's own source), in the
- *  backend's words too (cursor_actions.PART_LABELS). Phase 3, GM - Design
- *  r4 item 4. The per-surface table (lib/agentSurfaces.ts) holds these and
+ *  backend's words too (cursor_actions.PART_LABELS). Phase 3 (design).
+ *  The per-surface table (lib/agentSurfaces.ts) holds these and
  *  the Character Studio's. */
 export const AGENT_SURFACE_PART_LABELS = MOODBOARD_PART_LABELS;
 
@@ -120,7 +120,7 @@ export interface SurfaceSayContext {
   part?: string | null;
 }
 
-/** A Style's write, by part (GM - Design: lowercase nouns, no quotes). */
+/** A Style's write, by part (design: lowercase nouns, no quotes). */
 const STYLE_WRITES: Readonly<Record<string, readonly [string, string]>> = {
   name: ['Renaming ', ''],
   prompt: ['Writing the prompt for ', ''],
@@ -154,7 +154,7 @@ function styleSay(action: AgentCursorAction, { style, part = null }: SurfaceSayC
 }
 
 /**
- * The default line for a cursor on a surface item (GM - Design r4 item 4,
+ * The default line for a cursor on a surface item (design,
  * and the Characters and Styles round), or null for none: the line a cursor
  * shows when the agent sends no say of its own (the agent's always wins; a
  * board or Style write's is the backend's, in the past tense once the cursor
@@ -193,7 +193,7 @@ const RUN_VERBS = new Set(['Ran', 'Tried to run']);
 const CHANGE_VERBS = new Set(['Changed', 'Renamed', 'Added', 'Connected', 'Disconnected', 'Moved', 'Removed']);
 
 /**
- * What an error failed at (GM r54 item 2), from the agent's last action as
+ * What an error failed at (design), from the agent's last action as
  * the event carries it (`did`): a run or a change, when that action was on
  * the error's own node within AGENT_CURSOR_ERROR_CAUSE_MS; else unknown.
  */
@@ -208,14 +208,14 @@ export function errorCause(
   return null;
 }
 
-/** How long a say shows before its exit (GM r54): max(3 s, 60 ms ×
+/** How long a say shows before its exit (design): max(3 s, 60 ms ×
  *  characters), at most 8 s. */
 export function sayHoldMs(say: string): number {
   const { minMs, perCharMs, maxMs } = AGENT_CURSOR_SAY_HOLD;
   return Math.min(maxMs, Math.max(minMs, perCharMs * Array.from(say).length));
 }
 
-/** A default line that holds as long as its state (GM r54): think while
+/** A default line that holds as long as its state (design): think while
  *  held, propose and wait until resolved. They have no timer of their own;
  *  the next event (or, for think, idle) ends them. look's sweep ends inside
  *  the normal hold, so look takes the normal hold. */
@@ -223,7 +223,7 @@ export function heldDefault(action: AgentCursorAction): boolean {
   return action === 'think' || action === 'propose' || action === 'wait';
 }
 
-/** Every template, with an example, for GM's review and the docs. */
+/** Every template, with an example, for the design's review and the docs. */
 export const DEFAULT_SAY_EXAMPLES: readonly { action: AgentCursorAction; when: string; line: string }[] = [
   { action: 'look', when: 'at a node', line: defaultSay('look', { node: 'Brief' }) },
   { action: 'look', when: 'at a spot', line: defaultSay('look', { node: null }) },
@@ -243,8 +243,8 @@ export const DEFAULT_SAY_EXAMPLES: readonly { action: AgentCursorAction; when: s
   { action: 'error', when: 'unknown, or at a spot', line: defaultSay('error', { node: 'FLUX.2' }) },
 ];
 
-/** Every surface line, with its case, for GM's review and the docs (Phase 3,
- *  r4 item 4; Characters and Styles). */
+/** Every surface line, with its case, for the design's review and the docs (Phase 3;
+ *  Characters and Styles). */
 export const SURFACE_SAY_EXAMPLES: readonly { action: AgentCursorAction; when: string; line: string }[] = ([
   ['look', 'a moodboard', { board: 'Desert light', hasImage: false }],
   ['look', 'an image', { board: 'Desert light', image: 12, hasImage: true }],
@@ -259,7 +259,7 @@ export const SURFACE_SAY_EXAMPLES: readonly { action: AgentCursorAction; when: s
 ] as const).map(([action, when, context]) => ({ action, when, line: surfaceSay(action, context) ?? '' }));
 
 /** The Character and Style lines, with their cases (the common contract's
- *  words, in GM's order). */
+ *  words, in the design's order). */
 export const CS_SAY_EXAMPLES: readonly { action: AgentCursorAction; when: string; line: string }[] = ([
   ['look', 'a character', { surface: 'character', character: 'Mara' }],
   ['look', 'a reference view', { surface: 'character', character: 'Mara', view: 2, hasView: true }],

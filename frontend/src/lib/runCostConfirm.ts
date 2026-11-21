@@ -24,7 +24,7 @@ let migration: 'waiting' | Promise<unknown> | null = null;
 /** Apply the threshold from a GET /api/settings response. Before it was saved
  * there, it lived only in this browser: carry that choice over once.
  *
- * PR #204 round 11: the carry-over is PUT /api/settings, the person's alone. It used to go out
+ * PR #204: the carry-over is PUT /api/settings, the person's alone. It used to go out
  * on every read that lacked the setting (the app's load and each Settings open), from any tab,
  * and a refusal reset it to go again on the next read: a held tab sent it, and was refused, on
  * every read. Now it goes out only from a tab connected as the person (lib/personWork). A held

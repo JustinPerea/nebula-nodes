@@ -1,4 +1,4 @@
-/** Moves focus to the canvas once it is on screen (review 19 item 6 on PR
+/** Moves focus to the canvas once it is on screen (on PR
  * #199): Projects > Open of the project already loaded returns to the
  * canvas without a load, and focus would otherwise fall to <body> when the
  * Open button unmounts. The canvas root takes focus programmatically only
@@ -21,7 +21,7 @@ export function focusCanvasSoon(): void {
 }
 
 /*
- * The person's own focus moves (GM r36 item 6 on PR #199): after a refused
+ * The person's own focus moves (design on PR #199): after a refused
  * delete, a focus change the person made counts as moving on; one Nebula
  * made itself (to a refusal line, back after a toast, a dialog that opens
  * on a timer or an answer) doesn't. A focus change counts as the person's

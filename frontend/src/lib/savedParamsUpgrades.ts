@@ -103,8 +103,8 @@ export function upgradeRunSnapshot<T extends UpgradableSnapshot>(snapshot: T, ve
  * date: a record made on any build before the change shipped has a lower
  * stamp, whenever it merges.
  *
- * Krea 2 board strengths (Q21 b, Justin 2026-10-20; moodboard canvas PR13a,
- * plan section 4.8 item 7): behaviour version 1. A Nebula board's images used
+ * Krea 2 board strengths (Justin 2026-10-20; moodboard canvas PR13a,
+ * plan section 4.8): behaviour version 1. A Nebula board's images used
  * to go at `strength × weight` each, and now share out the board's strength.
  * The backend can't tell a replay from a new run (POST /api/execute carries
  * no record), so the canvas adds the line, beside the run's own notes, when
