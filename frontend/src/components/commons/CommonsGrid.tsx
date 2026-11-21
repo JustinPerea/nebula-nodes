@@ -12,7 +12,7 @@ interface Props {
   emptyHint: string;
   onOpen: (row: SearchRow) => void;
   onDropFiles: (files: File[]) => void;
-  /** PR #204 round 11: adding is locked (a tab that isn't connected as you). A drop is taken
+  /** PR #204: adding is locked (a tab that isn't connected as you). A drop is taken
    * (so the browser doesn't open the file) and does nothing: no highlight, nothing sent. */
   dropLocked?: boolean;
   /** References an agent proposes to change (open asset proposals of kind commons). */

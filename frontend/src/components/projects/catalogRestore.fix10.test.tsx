@@ -1,10 +1,9 @@
 /**
- * Fix round 10 of PR #199. GM r12: each waiting line has its own count (the
- * person's canvas is saved first, so its line counts only what it needs;
- * an agent's copy's counts the total), the copy's over-limit tail, and
- * [Save as a project] beside the line a restore leaves when this tab's edits
- * weren't saved, with its toast naming the project. GM r13, 2: the copy's
- * size-cap waiting line.
+ * PR #199: each waiting line has its own count (the person's canvas is
+ * saved first, so its line counts only what it needs; an agent's copy's
+ * counts the total), the copy's over-limit tail, and [Save as a project]
+ * beside the line a restore leaves when this tab's edits weren't saved, with
+ * its toast naming the project. Also the copy's size-cap waiting line.
  */
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
@@ -22,7 +21,7 @@ const base = { projects: [], loading: false, busy: false, error: null,
   onCreate: vi.fn(), onOpen: vi.fn(), onRename: vi.fn(), onDelete: vi.fn(), onRetry: vi.fn() } satisfies ProjectHomeProps;
 const LIMIT = { projectLimit: 4, trashHasItems: false };
 
-describe('GM r12, 2: each waiting line its own count, the person first', () => {
+describe('each waiting line its own count, the person first', () => {
   it("the person's line counts what it needs, the copy's line the total", () => {
     expect(canvasWaitingLine('projects', { ...LIMIT, deletes: 2,
       canvases: [{ name: null, deletes: 1 }, { name: null, agentCopy: { agent: 'Codex' }, deletes: 2 }] }))
@@ -47,7 +46,7 @@ describe('GM r12, 2: each waiting line its own count, the person first', () => {
   });
 });
 
-describe('GM r13, 2: the copy at the size cap', () => {
+describe('the copy at the size cap', () => {
   it('"Nothing in it is lost." then the singular size advice, by whether Recently deleted has items', () => {
     expect(agentCopyWaitingLine('Codex', 'storage', { projectLimit: 500, trashHasItems: true }))
       .toBe("Codex’s copy of your canvas isn’t saved as a project yet because Nebula’s project list is full. "
@@ -58,7 +57,7 @@ describe('GM r13, 2: the copy at the size cap', () => {
   });
 });
 
-describe('GM r12, 3: the saved copy over the save limit', () => {
+describe('the saved copy over the save limit', () => {
   it('verbatim, named or not', () => {
     expect(agentCopySavedLine('Codex', 'X copy', true))
       .toBe("Codex’s changes were saved as their own project, “X copy”. It’s over the save limit, so new changes to it won’t save until it’s smaller.");
@@ -67,7 +66,7 @@ describe('GM r12, 3: the saved copy over the save limit', () => {
   });
 });
 
-describe('GM r12, 1: [Save as a project] after a restore stopped this tab’s edits', () => {
+describe('[Save as a project] after a restore stopped this tab’s edits', () => {
   it('the whole line, and the button runs the save', () => {
     const onRetry = vi.fn();
     render(<ProjectHome {...base} error={RESTORED_LIST_UNSAVED} retry="save" onRetry={onRetry} />);
@@ -81,7 +80,7 @@ describe('GM r12, 1: [Save as a project] after a restore stopped this tab’s ed
   it('the saved toast names the project', async () => {
     render(<ProjectHome {...base} editsRecoveredAs={{ id: 'p', name: 'Delta (recovered)' }} />);
     expect(await screen.findByText(editsRecoveredToast('Delta (recovered)'))).toBeTruthy();
-    // GM r14 on PR #199, 1, verbatim.
+    // Verbatim from the design, PR #199.
     expect(editsRecoveredToast('Delta (recovered)')).toBe('Your latest edits were saved as their own project, “Delta (recovered)”.');
   });
 });

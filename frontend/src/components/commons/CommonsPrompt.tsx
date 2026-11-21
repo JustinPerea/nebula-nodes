@@ -21,7 +21,7 @@ export function PromptDialog({ request, onDone }: { request: PromptRequest; onDo
   };
   return (
     <ModalPortal>
-    {/* commons-scope: Commons' fields, focus rings and type wherever it renders (review 10, M-1). */}
+    {/* commons-scope: Commons' fields, focus rings and type wherever it renders. */}
     <div className="commons-prompt commons-scope" role="dialog" aria-modal="true" aria-label={request.label}>
       <form
         className="commons-prompt__card"

@@ -1,10 +1,10 @@
 /**
- * Fix round 13 of PR #199 (GM r17): "Delete a project and Nebula will save
- * it." stays at the limit; past it (a list an Undo took over the limit, then
- * a canvas waiting) the line names the number: "Delete 2 projects and Nebula
- * will save it.", on the Projects home's waiting line, in the restore
- * notice, and in an agent copy's own line. The listing's per-canvas counts
- * reach the store, so each line has its own.
+ * PR #199: "Delete a project and Nebula will save it." stays at the limit;
+ * past it (a list an Undo took over the limit, then a canvas waiting) the
+ * line names the number: "Delete 2 projects and Nebula will save it.", on
+ * the Projects home's waiting line, in the restore notice, and in an agent
+ * copy's own line. The listing's per-canvas counts reach the store, so each
+ * line has its own.
  */
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
@@ -17,7 +17,7 @@ const base = { projects: [], loading: false, busy: false, error: null,
   onCreate: vi.fn(), onOpen: vi.fn(), onRename: vi.fn(), onDelete: vi.fn(), onRetry: vi.fn() } satisfies ProjectHomeProps;
 const AT = 'The canvas you had open isn’t saved as a project yet because you’ve reached the limit of 500 projects. Nothing in it is lost.';
 
-describe('GM r17: the person’s line names the number past the limit', () => {
+describe('the person’s line names the number past the limit', () => {
   it('at the limit (one delete): "Delete a project and Nebula will save it."', () => {
     expect(canvasWaitingLine('projects', { projectLimit: 500, trashHasItems: false, canvases: [{ name: null, deletes: 1 }], deletes: 1 }))
       .toBe(`${AT} Delete a project and Nebula will save it.`);

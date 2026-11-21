@@ -1,4 +1,4 @@
-/* The "what's large" panel (Q118): a floating panel on the Inspector's
+/* The "what's large" panel: a floating panel on the Inspector's
  * surface and lines. It springs in on the region's tuned spring (the same
  * curve as the canvas notice, --canvas-undo-spring). */
 .project-size-panel {

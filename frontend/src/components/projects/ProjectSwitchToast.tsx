@@ -23,7 +23,7 @@ const switchKey = (notice: ProjectSwitchNotice | null) =>
 export function ProjectSwitchToast() {
   const notice = useProjectStore((state) => state.switchNotice);
   const busy = useProjectStore((state) => state.busy);
-  // GM r20 on PR #199: opening another project would strand a kept canvas.
+  // Opening another project would strand a kept canvas (design, PR #199).
   const kept = useKeptCanvas();
   // In the Commons is what App shows: Projects wins over it, and leaving by
   // Projects keeps viewMode 'commons' behind Projects (#163).
@@ -31,7 +31,7 @@ export function ProjectSwitchToast() {
   const onProjects = useProjectStore((state) => state.screen === 'home');
   const inCommons = commonsView && !onProjects;
   const [paused, setPaused] = useState(false);
-  // Waiting behind a capped popover (GM r13 2): its timer holds, so it isn't lost.
+  // Waiting behind a capped popover: its timer holds, so it isn't lost.
   const waiting = useSlotWaiting('project-switch');
   const key = switchKey(notice);
   const [seen, setSeen] = useState<string | null>(null);
@@ -47,11 +47,11 @@ export function ProjectSwitchToast() {
     const timer = window.setTimeout(() => useProjectStore.getState().dismissSwitchNotice(), VISIBLE_MS);
     return () => window.clearTimeout(timer);
   }, [notice, paused, held, waiting]);
-  // It leaves as it entered (fix round 7 of PR #200, GM r11 answer 2).
+  // It leaves as it entered (design, PR #200).
   const leave = useLeave(notice);
   if (!leave.shown) return null;
   const shown = leave.shown;
-  // In the app's notice region, like every toast (GM - Design, 2026-10-23).
+  // In the app's notice region, like every toast (design, 2026-10-23).
   return (
     <InNoticeRegion slot="project-switch">
       <div className="project-switch-toast" role="status" aria-live="polite" {...leave.props}

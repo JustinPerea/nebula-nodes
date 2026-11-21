@@ -15,15 +15,15 @@ export interface ClipboardImages {
   links: string[];
 }
 
-/** The line when a paste holds nothing to add (GM, #210 item 1). */
+/** The line when a paste holds nothing to add (design, PR #210). */
 export const NOTHING_TO_PASTE = 'There’s no image on the clipboard to add.';
-/** The line when a paste holds only http(s) links (GM, #210 item 2): nothing is fetched or added. */
+/** The line when a paste holds only http(s) links (design, PR #210): nothing is fetched or added. */
 export const LINKS_NOT_ADDED = 'Nebula can’t add images from links. Copy the image itself, then paste it.';
-/** Announced (politely, nothing on screen) when the backstop drops a file still being added (GM r4 answer 7). */
+/** Announced (politely, nothing on screen) when the backstop drops a file still being added. */
 export const ALREADY_BEING_ADDED = 'That image is already being added.';
 
-/** Adds a reload lost on their way to a board, said on its next open (GM r8
- *  answer 5): one file, or two or three, named; from four, a count. */
+/** Adds a reload lost on their way to a board, said on its next open:
+ *  one file, or two or three, named; from four, a count. */
 export function reloadLostLine(names: readonly string[]): string {
   const quoted = names.map((name) => `“${name}”`);
   if (quoted.length === 1) return `${quoted[0]} wasn’t added because the page reloaded while it uploaded. Paste it again.`;

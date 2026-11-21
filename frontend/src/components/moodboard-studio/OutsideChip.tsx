@@ -10,20 +10,20 @@ import { CHIP_EDGE, outsideChipText, placeChip } from './outsideChipText';
 import { outsideForChip, type SeenArea } from '../../lib/boardPlacement';
 
 /**
- * The reveal for tiles placed outside the view (GM - Design, #210 answer 1):
+ * The reveal for tiles placed outside the view (design, PR #210):
  * a chip centred on the view's edge nearest the first tile, never on a tile,
- * its arrow pointing at it (GM r13: outsideChipText placeChip), with the
+ * its arrow pointing at it (outsideChipText placeChip), with the
  * tile's thumbnail. It is up only while some tile it points at has less
  * than half its area in view (lib/boardPlacement outsideForChip). A button: pressing it brings the tiles into view
  * on the board's fit spring. No timer: it goes when pressed, when the person
  * pans or zooms the tiles into view, on Esc, or at the next paste (the
  * Studio replaces it). One polite announcement with the same words.
  *
- * "In view" is placement's own view (review 2, M2): `viewOf` is the board's
+ * "In view" is placement's own view: `viewOf` is the board's
  * live view rect, the pane less its inset and the toolbar, so a tile partly
- * under the toolbar keeps the chip (GM r4 answer 2).
+ * under the toolbar keeps the chip (design).
  *
- * Focus (GM r4 answer 6): Enter or Space sends it to the first tile (the
+ * Focus: Enter or Space sends it to the first tile (the
  * board's `onShow`); Esc gives it back to where it was before the chip had
  * it, or to the board; and if the chip goes for any other reason while it
  * has focus, focus goes to the board. Never to the page body.
@@ -32,7 +32,7 @@ export function OutsideChip({ tiles, viewOf, seenOf, onShow, onDone, focusBoard 
   tiles: OutsideTiles;
   /** The view placement uses, in board coordinates, or null before the board has a size. */
   viewOf: () => NodeRect | null;
-  /** What of the board is really seen (GM r15 2), which the chip goes by; left out, the view. */
+  /** What of the board is really seen, which the chip goes by; left out, the view. */
   seenOf?: () => SeenArea | null;
   onShow: (rects: NodeRect[], focus: boolean) => void;
   onDone: () => void;
@@ -88,12 +88,12 @@ export function OutsideChip({ tiles, viewOf, seenOf, onShow, onDone, focusBoard 
   const before = useRef<HTMLElement | null>(null);
   const hasFocus = () => chipRef.current !== null && document.activeElement === chipRef.current;
   // Whether the chip has focus, kept as state so the render can keep the
-  // button drawn while it does (review 4, MEDIUM-3).
+  // button drawn while it does.
   const [focused, setFocused] = useState(false);
   // Gone: any camera move brought the tiles into view (the person's pan or
   // zoom, Fit, a refit as the column resizes), or the board has no size. With focus on the chip, the board takes focus first,
-  // while the button is still on the page, so focus never drops to the body
-  // (review 4, MEDIUM-3); a layout effect, so it happens before paint.
+  // while the button is still on the page, so focus never drops to the body;
+  // a layout effect, so it happens before paint.
   const gone = inView || !view;
   useLayoutEffect(() => {
     if (!gone) return;

@@ -58,7 +58,7 @@ const TABS: Tab[] = ['all', 'inbox', 'review', 'labeling', 'settings'];
  * The two least-used sections: Blind labeling (an occasional evaluation
  * session) and Settings (set once). While the Updates chip takes its room in
  * the header below 1440 px they fold into More (commons.css), so the toolbar
- * keeps one row (GM review of Q107 a). All, Inbox and Agent review, the
+ * keeps one row (design). All, Inbox and Agent review, the
  * add controls and the worker line are what a visit acts on, so they stay.
  */
 const FOLDED_TABS: Tab[] = ['labeling', 'settings'];
@@ -182,12 +182,12 @@ const STATUS_POLL_MS = 5000;
 const SEARCH_DEBOUNCE_MS = 250;
 
 /**
- * The worker's status text. GM - Design: "Keep the worker status to its state
- * plus one action, short enough to show whole at 1280 (about 36 characters),
- * with the full explanation in the tooltip." The text is the status a person
- * reads at a glance; its title (the tooltip) says what it means and what
+ * The worker's status text. The design rule: "Keep the worker status to its
+ * state plus one action, short enough to show whole at 1280 (about 36
+ * characters), with the full explanation in the tooltip." The text is the status a
+ * person reads at a glance; its title (the tooltip) says what it means and what
  * resumes it. It still truncates on one line down to a minimum (commons.css),
- * the safety net for a status longer than the room (p157c), and it stays the
+ * the safety net for a status longer than the room, and it stays the
  * element's own text, so assistive tech reads it.
  */
 function StatusText({ text, title }: { text: string; title: string }) {
@@ -198,18 +198,18 @@ function StatusText({ text, title }: { text: string; title: string }) {
 
 const plural = (count: number, one: string, many: string) => (count === 1 ? one : many);
 
-/** Round 16 (L4): offline the Commons is read-only like the canvas. Start
- * is disabled with the offline mark; Stop stays, since it only ends work. */
+/** Offline the Commons is read-only like the canvas. Start is disabled with the
+ * offline mark; Stop stays, since it only ends work. */
 export function StatusLine({ status, connecting = true, onStart, onStop }: {
   status: CommonsStatus | null; connecting?: boolean; onStart: () => void; onStop: () => void;
 }) {
   const readOnly = useBackendOffline();
   if (!status) {
-    // PR #204 round 11 (GM r18 d): "Connecting…" only while a read of the status is on its way
+    // PR #204: "Connecting…" only while a read of the status is on its way
     // (the first one, or right after the promote), never once it was refused: the banner says why.
-    // Round 18 (GM r28 3): the status keeps its place, so the header never moves when the tab
-    // isn't connected: the slot the default status takes ("Stopped" and Start), held empty. It
-    // says nothing (nothing was read) and takes no focus.
+    // The status keeps its place, so the header never moves when the tab isn't connected:
+    // the slot the default status takes ("Stopped" and Start), held empty. It says nothing
+    // (nothing was read) and takes no focus.
     if (!connecting) {
       return (
         <span className="commons-status commons-status--stopped commons-status--held" aria-hidden="true" data-status-held="">
@@ -221,8 +221,8 @@ export function StatusLine({ status, connecting = true, onStart, onStop }: {
     return <span className="commons-status"><StatusText text="Connecting…" title="Connecting to library analysis…" /></span>;
   }
   if (status.evaluation_waiting) {
-    // GM: "the label names whatever has to be fixed first, and the tooltip
-    // lists anything still blocking after that." Sealing or closing only
+    // The design rule: "the label names whatever has to be fixed first, and the
+    // tooltip lists anything still blocking after that." Sealing or closing only
     // lifts the hold: a stopped worker (the default at launch) stays stopped,
     // so the label leads with "Stopped", in the stopped colour, and Start is
     // here ("\"Paused\" next to \"Start\" reads as a contradiction"). A used
@@ -278,7 +278,7 @@ export function StatusLine({ status, connecting = true, onStart, onStop }: {
     title = `Library analysis is stopped because it used ${groupedCount(status.worker.budget_used)} of this run’s ${groupedCount(budget)} calls. Restart Nebula to reset it.`;
   } else if (state === 'cap_reached' || status.meter.remaining === 0) {
     // Settings takes a cap from 0: a cap of 0 never resets, and a cap lowered
-    // below today's calls is not the number made (review of sf).
+    // below today's calls is not the number made.
     const { calls, cap } = status.meter;
     if (cap === 0) {
       text = 'Paused · daily cap is 0';
@@ -308,37 +308,36 @@ export function StatusLine({ status, connecting = true, onStart, onStop }: {
 }
 
 /**
- * PR #204 round 10 (GM r17 item 6, option b): the Commons is the person's to read, so a demoted
- * tab shows exactly what a tab that never connected shows. Once a hold has lasted the held
- * rule's 150 ms (useDemotedView), every Commons call answers as it does with no person token
+ * PR #204 (design): the Commons is the person's to read, so a demoted tab shows exactly what
+ * a tab that never connected shows. Once a hold has lasted the held rule's 150 ms
+ * (useDemotedView), every Commons call answers as it does with no person token
  * (lib/commonsHold: the not-connected line, nothing sent), and each pane shows its not-connected
  * state. The promote reads everything again. A quick reconnect never switches.
  *
- * Round 13 (review 10 MEDIUM-2, GM r19 item 2): a demote no longer remounts the view. The
- * controls (the header, Add, the filters, the search) stay the same elements, so focus and an
- * IME composition stay where they are. Only the data starts again: the body empties its loaded
- * data and reads again under the new `view` (the grid shows the emptied rows), and the panes
- * that load their own (a reference's detail, Settings, Agent review, Blind labeling) are keyed
- * on it.
+ * A demote no longer remounts the view. The controls (the header, Add, the filters, the
+ * search) stay the same elements, so focus and an IME composition stay where they are. Only
+ * the data starts again: the body empties its loaded data and reads again under the new
+ * `view` (the grid shows the emptied rows), and the panes that load their own (a reference's
+ * detail, Settings, Agent review, Blind labeling) are keyed on it.
  */
 export function CommonsView() {
   const { demoted, epoch } = useDemotedView();
   // Set while rendering, before the panes below load: an effect here would run after theirs. It
   // only mirrors `demoted`, so a second render sets the same value.
   holdCommonsCalls(demoted);
-  // Round 11: the flag is the view's; it goes with the view (commonsApi reads the session itself).
+  // The flag is the view's; it goes with the view (commonsApi reads the session itself).
   useEffect(() => () => holdCommonsCalls(false), []);
-  // Round 17 (review 13 LOW-2, GM r27 2): a demote here brings the page's because line (its loads
-  // are refused), so the general notice waits for it rather than flashing in first.
+  // A demote here brings the page's because line (its loads are refused), so the general
+  // notice waits for it rather than flashing in first.
   useEffect(() => expectBecauseLine(), []);
   const view = demoted ? 'demoted' : `live-${epoch}`;
-  // Round 11 (review 9 MEDIUM-3, GM r19 item 2): focus that the switch takes away (Add's menu, a
-  // keyed pane's control) moves to the same control, the not-connected line, or the heading.
+  // Focus that the switch takes away (Add's menu, a keyed pane's control) moves to the same
+  // control, the not-connected line, or the heading.
   const root = useRef<HTMLDivElement>(null);
-  // Round 14 (GM r23 3): going offline hides the lock lines, so it moves focus on as a demote does.
+  // Going offline hides the lock lines, so it moves focus on as a demote does.
   const offlineNow = useBackendOffline();
-  // Round 18f (review 15 MEDIUM-1, GM r35 1): the Commons turning off takes every section's
-  // controls away too, so it hands focus on by the same rule: to the heading.
+  // The Commons turning off takes every section's controls away too, so it hands focus on
+  // by the same rule: to the heading.
   const offNow = useCommonsOff();
   const handoverChange = useMemo(() => ({ view, offline: offlineNow, off: offNow }), [view, offlineNow, offNow]);
   const handover = useFocusHandover(handoverChange, () => root.current,
@@ -352,7 +351,7 @@ export function CommonsView() {
   );
 }
 
-/** The page's loads, in its order (GM r22: one line covers them on a held tab). */
+/** The page's loads, in its order (one line covers them on a held tab). */
 const COMMONS_LOADS = ['status', 'references', 'collections'] as const;
 function CommonsViewBody({ view }: {
   /** The data's generation: a new one (the switch to demoted, the promote) empties the loaded
@@ -361,7 +360,7 @@ function CommonsViewBody({ view }: {
 }) {
   const readOnly = useBackendOffline();
   const returnView = useUIStore((s) => s.commonsReturnView);
-  // GM r33 3's "← Projects" is CommonsOffView's: the app shows this view only with a project
+  // The "← Projects" way back is CommonsOffView's: the app shows this view only with a project
   // open (App: never over the Projects home), so its way back is always the screen it came from.
   const restoreWorkspace = useUIStore((s) => s.exitCommons);
   const exitCommons = () => {
@@ -377,8 +376,8 @@ function CommonsViewBody({ view }: {
   const [opened, setOpened] = useState<Tab[]>([]);
   if ((tab === 'labeling' || tab === 'review') && !opened.includes(tab)) setOpened([...opened, tab]);
   const backRef = useRef<HTMLButtonElement>(null);
-  // Round 18f (GM r35 5): opened from the Commons-off view after a reconnect: focus goes to the
-  // heading, or stays on the way back, and the sections spring in (commons.css). Taken once.
+  // Opened from the Commons-off view after a reconnect: focus goes to the heading, or stays
+  // on the way back, and the sections spring in (commons.css). Taken once.
   const [opening] = useState(peekCommonsOpening);
   const [springing, setSpringing] = useState(opening !== null);
   useEffect(() => {
@@ -428,7 +427,7 @@ function CommonsViewBody({ view }: {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   /** The files the last upload couldn't add, each "Couldn’t upload {filename}."
-   * over its reason (GM, error-copy round 2). Their own list: the refresh
+   * over its reason (design). Their own list: the refresh
    * after an upload must not clear them, as it clears a search's error. */
   const [uploadFailures, setUploadFailures] = useState<FailureCopy[]>([]);
   const [addOpen, setAddOpen] = useCommonsDraft('addOpen', false);
@@ -437,31 +436,31 @@ function CommonsViewBody({ view }: {
   const [refreshKey, setRefreshKey] = useState(0);
   const [ask, promptElement] = useCommonsPrompt();
   const proposedIds = useAssetProposalsStore(useShallow((state) => targetsOf(state, 'commons')));
-  // GM, PR #202 r1: a held tab shows the proposals line from the Updates it has;
-  // r2: and the tiles' PROPOSAL pill, from those Updates' targets only (never
-  // the person-only list), so the promote changes nothing on a tile.
+  // Design, PR #202: a held tab shows the proposals line from the Updates it has, and the
+  // tiles' PROPOSAL pill from those Updates' targets only (never the person-only list), so
+  // the promote changes nothing on a tile.
   const heldCommons = useHeldCommonsLines();
   const heldLines = heldCommons.length;
   const proposed = useMemo(() => new Set([...proposedIds, ...heldCommons.map((line) => line.assetId)]),
     [proposedIds, heldCommons]);
 
   const refresh = useCallback(() => setRefreshKey((k) => k + 1), []);
-  // PR #204 round 11 (GM r18): adding (files, a URL, moodboards: intake/*, human_dep) is the
+  // PR #204 (design): adding (files, a URL, moodboards: intake/*, human_dep) is the
   // person's alone, so Add locks on a tab that isn't connected as you, its line under it, and a
   // drop onto the grid does nothing (nothing sent, the browser doesn't open the file).
   const addLock = usePersonLock('add references');
-  // Round 14 (GM r23 4): a New collection prompt open at a demote stays, its name kept, with OK
-  // locked under this line (CommonsPrompt), and unlocks in place on the promote.
+  // A New collection prompt open at a demote stays, its name kept, with OK locked under
+  // this line (CommonsPrompt), and unlocks in place on the promote.
   const createLock = usePersonLock('create collections');
   // A load's failure (the collections, the worker status, a search) is kept
   // apart from an action's, so it can hide while Nebula is offline and be
-  // checked again on reconnect (GM, PR #198 r2: "Couldn’t check the Commons
+  // checked again on reconnect (design, PR #198: "Couldn’t check the Commons
   // status…" read as if the Commons broke when the backend was only away).
   const [collectionsKey, setCollectionsKey] = useState(0);
 
-  // Round 13 (review 10 MEDIUM-2): a new `view` starts the data again, as the remount did, while
-  // the controls and drafts stay (derived while rendering: no frame shows the old data).
-  // GM r22 (PR #204 round 14): the page's loads and their lines (useCommonsLoadLines): one line
+  // A new `view` starts the data again, as the remount did, while the controls and drafts
+  // stay (derived while rendering: no frame shows the old data).
+  // PR #204 (design): the page's loads and their lines (useCommonsLoadLines): one line
   // for the page on a tab that isn't connected as you, a load's own only when it fails alone.
   // A refused load runs all of them again on the promote (reloadAll, below).
   const reloadLoads = useRef(() => {});
@@ -469,11 +468,11 @@ function CommonsViewBody({ view }: {
   const loads = useCommonsLoadLines(COMMONS_LOADS, 'commons.view-load', runLoadsAgain);
   const loadFailed = loads.show;
   const loadsClear = loads.clear;
-  // Round 15 (GM r25 1): each load says when it is sent, so a failed one's line waits for the rest.
+  // Each load says when it is sent, so a failed one's line waits for the rest.
   const loadStarted = loads.start;
-  // Round 17 (review 13 LOW-1): and when it is cancelled before it answered, so no line waits for it.
+  // A load also says when it is cancelled before it answered, so no line waits for it.
   const loadAbandoned = loads.abandon;
-  // Round 15 (GM r24 b): what a list's last read answered for. Its empty state ("No matches…",
+  // What a list's last read answered for. Its empty state ("No matches…",
   // "No collections") shows only then: after a failure, or before the first answer, nothing was
   // read. The references' answer names its tab, so the Inbox's empty state never stands on All's.
   const [answered, setAnswered] = useState<{ references: Tab | null; collections: boolean }>({ references: null, collections: false });
@@ -515,33 +514,31 @@ function CommonsViewBody({ view }: {
     refresh();
   });
 
-  // PR #204 round 9: a line refused only because this tab isn't connected as you clears on the
+  // PR #204: a line refused only because this tab isn't connected as you clears on the
   // promote (useCommonsLine). A load (the collections, the worker status, a search) also runs
   // again then, all three, so the references load and the status line reads as it normally does.
   // An action isn't done again: the person does it again.
-  // Round 13: on a promote that ends a demoted view, this retry and the new `view` land in the
-  // same render, so each load still reads once (tests/presenceRound13.commonsFocus).
+  // On a promote that ends a demoted view, this retry and the new `view` land in the same
+  // render, so each load still reads once (tests/presenceRound13.commonsFocus).
   const reloadAll = useCallback(() => {
     setCollectionsKey((key) => key + 1);
     refresh();
   }, [refresh]);
   useEffect(() => { reloadLoads.current = reloadAll; }, [reloadAll]);
   const actionLine = useCommonsLine(setError, null);
-  // Refused offline before it was sent: the banner says why (round 16, L4). Round 18d (GM r32 1):
-  // refused because the backend runs without the Commons: the off view says it (lib/commonsApi
-  // turned the view off), no action line, then or once the Commons is back.
+  // Refused offline before it was sent: the banner says why. Refused because the backend runs
+  // without the Commons: the off view says it (lib/commonsApi turned the view off), no action
+  // line, then or once the Commons is back.
   const fail = (e: unknown) => {
     if (isCommonsOff(e)) return;
     if (!isOfflineRefusal(e)) actionLine.show(e, "Couldn’t update the library.");
   };
 
-  // Round 18d (review 14 LOW-1, GM r32 3): after New collection… or Import moodboards landed, the
-  // list is read again; that read failing is a load's failure (its neutral line, the last good
-  // list kept), never the action's.
-  // Round 18f (review 15 MEDIUM-1 of the logic lens): it says whether it read the list.
-  // Round 18h (review 16 LOW-2): collection reads are numbered as they are sent, and an answer
-  // older than one already applied (or than a failed newer read, whose write was merged in) is
-  // dropped: the latest read wins, whatever order they answer in.
+  // After New collection… or Import moodboards landed, the list is read again; that read
+  // failing is a load's failure (its neutral line, the last good list kept), never the
+  // action's. It says whether it read the list. Collection reads are numbered as they are
+  // sent, and an answer older than one already applied (or than a failed newer read, whose
+  // write was merged in) is dropped: the latest read wins, whatever order they answer in.
   const collectionsSent = useRef(0);
   const collectionsApplied = useRef(0);
   const freshCollections = (seq: number) => {
@@ -643,16 +640,15 @@ function CommonsViewBody({ view }: {
     };
   }, [filters, tab, refreshKey, loadFailed, loadsClear, loadStarted, loadAbandoned, noteAnswered, view]);
 
-  // Round 18h (review 16 LOW-2): what Add to shows and what Add sends are one value by
-  // construction: the target when the list has it, else the list's first (what a select shows
-  // for a value it has no option for), else none.
+  // What Add to shows and what Add sends are one value by construction: the target when the list
+  // has it, else the list's first (what a select shows for a value it has no option for), else none.
   const chosen = collections.some((c) => c.id === target) ? target : collections[0]?.id ?? '';
   const chooseTarget = async (value: string) => {
     if (value !== NEW_COLLECTION) {
       setTarget(value);
       return;
     }
-    // Round 11: a new collection (POST /api/commons/collections, human_dep) is the person's:
+    // A new collection (POST /api/commons/collections, human_dep) is the person's:
     // locked with Add, the option disabled and the choice doing nothing.
     if (addLock.locked) return;
     // A new collection is a write: offline the choice only pulses the banner.
@@ -671,8 +667,8 @@ function CommonsViewBody({ view }: {
   };
 
   const requireTarget = (): string | null => {
-    // Round 18c (GM r30 2): with the collections not loaded, Add is disabled and does nothing; no
-    // line asks the person to pick what Nebula couldn't list.
+    // With the collections not loaded, Add is disabled and does nothing; no line asks the
+    // person to pick what Nebula couldn't list.
     if (collectionsNotLoaded) return null;
     if (chosen) return chosen;
     setError('Pick or create a collection first.');
@@ -690,7 +686,7 @@ function CommonsViewBody({ view }: {
       const { results } = await commonsApi.uploadFiles(collectionId, files);
       const failed = results.filter((r) => !r.ok);
       setNotice(`Added ${groupedCount(results.length - failed.length)} of ${groupedCount(results.length)}.`);
-      // Never the backend's raw `error` (GM): its reason code, mapped.
+      // Never the backend's raw `error` (design): its reason code, mapped.
       setUploadFailures(failed.map(uploadFailureCopy));
       setError(null);
       refresh();
@@ -749,9 +745,9 @@ function CommonsViewBody({ view }: {
     if (tab !== 'all' && tab !== 'inbox') setTab('all');
   };
 
-  // Review on the proposal's Update (Q92 a): open that reference's detail;
-  // the strip there takes the request and comes into view. Each request opens
-  // it once: a later visit doesn't reopen it when no strip took the request.
+  // Review on the proposal's Update opens that reference's detail; the strip there takes
+  // the request and comes into view. Each request opens it once: a later visit doesn't
+  // reopen it when no strip took the request.
   const reviewAsked = useAssetProposalsStore((state) => (state.review?.kind === 'commons' ? state.review : null));
   useEffect(() => {
     if (reviewAsked && openOnce(reviewAsked)) reviewProposal(reviewAsked.targetId);
@@ -759,21 +755,21 @@ function CommonsViewBody({ view }: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reviewAsked]);
 
-  // Round 18d (review 14 LOW-3): a failed re-read keeps the list, so Add never stops working
-  // under an open menu and brings it back later by itself. A demote and going offline still
-  // hide it and bring it back with its URL and focus (GM r19 2, tests/presenceRound13.commonsFocus).
+  // A failed re-read keeps the list, so Add never stops working under an open menu and
+  // brings it back later by itself. A demote and going offline still hide it and bring it
+  // back with its URL and focus (tests/presenceRound13.commonsFocus).
   // The Commons turned off closes it: there is no Add to come back to.
   const commonsOff = useCommonsOff();
   useEffect(() => { if (commonsOff) setAddOpen(false); }, [commonsOff, setAddOpen]);
 
   // An action's failure first; a load's only while Nebula is online.
   const shownError = error ? [error] : shownLoadLines;
-  // Round 18c (GM r30): the backend runs without the Commons. Its page line, "Commons is turned
-  // off for this Nebula.", stands in place of every tab's content. Round 18d (GM r31 layout M,
-  // GM r32 1, review 14 LOW-2): and the header keeps only the way back, the title and Updates;
-  // the status read before goes. "Off" is what the Commons' calls last heard (lib/commonsOff, set
-  // by any call's 404 "disabled", a load's or an action's), never the lines shown, which hide
-  // offline: it stays until a Commons call answers, so going offline never brings the sections back.
+  // The backend runs without the Commons. Its page line, "Commons is turned off for this
+  // Nebula.", stands in place of every tab's content, and the header keeps only the way back,
+  // the title and Updates; the status read before goes. "Off" is what the Commons' calls last
+  // heard (lib/commonsOff, set by any call's 404 "disabled", a load's or an action's), never
+  // the lines shown, which hide offline: it stays until a Commons call answers, so going
+  // offline never brings the sections back.
   const [offSeen, setOffSeen] = useState(commonsOff);
   if (offSeen !== commonsOff) {
     setOffSeen(commonsOff);
@@ -785,24 +781,23 @@ function CommonsViewBody({ view }: {
       setPage(null);
     } else {
       // A Commons read answered: the Commons is back, so every load reads again (their off
-      // lines go with them), and the sections spring back in (round 18f, GM r35 5).
+      // lines go with them), and the sections spring back in.
       loads.clear();
       reloadAll();
       setSpringing(true);
     }
   }
-  // Round 14 (GM r23 1): Add locks at once; its line waits for the page's because line, so the
-  // row moves once (useLockLineHold, capped).
+  // Add locks at once; its line waits for the page's because line, so the row moves once
+  // (useLockLineHold, capped).
   const addLine = useLockLineHold(addLock, Boolean(shownError?.length));
-  // Round 16 (GM r26): a search can't succeed while the page says why the tab can't load, so
-  // "Searching…" goes in the same render (the same frame) as that because line.
+  // A search can't succeed while the page says why the tab can't load, so "Searching…" goes
+  // in the same render (the same frame) as that because line.
   const searching = loading && !shownError?.some(isBecauseLine);
 
-  // GM r18: on a tab that isn't connected as you nothing was searched and a drop won't add, so
-  // the area stays empty while the banner explains. Round 15 (GM r24 b): a search that failed
-  // found nothing either, so the area shows only its failure line; and offline, or back online
-  // before the search reads again, nothing claims the library is empty.
-  // Round 18d (GM r32 4, review 14 live LOW-2): and while the collections haven't loaded, Add and
+  // On a tab that isn't connected as you nothing was searched and a drop won't add, so the
+  // area stays empty while the banner explains. A search that failed found nothing either, so
+  // the area shows only its failure line; and offline, or back online before the search reads
+  // again, nothing claims the library is empty. While the collections haven't loaded, Add and
   // the drop do nothing, so nothing invites them.
   const emptyHint = addLock.locked || collectionsNotLoaded || answered.references !== tab ? ''
     : tab === 'inbox'
@@ -846,14 +841,14 @@ function CommonsViewBody({ view }: {
           <select value={collectionsNotLoaded || addLock.locked ? '' : chosen}
             onChange={(event) => { if (!collectionsNotLoaded && !addLock.locked) void chooseTarget(event.target.value); }}
             {...(collectionsNotLoaded ? { 'aria-disabled': true, 'aria-label': ADD_TO_NOT_LOADED, 'data-not-loaded': '' } : {})}
-            // Round 18c (GM r30 2): loaded with none, "No collections" in the disabled look; the
+            // Loaded with none, "No collections" in the disabled look; the
             // select stays live, since New collection… is how one is made.
             {...(!collectionsNotLoaded && !addLock.locked && collections.length === 0 ? { 'data-no-choice': '' } : {})}
-            // Round 18d (GM r31 2): a tab that isn't connected as you reads no collections: "Not
-            // loaded", with the reason, in the person lock's one disabled look, with Add's line.
+            // A tab that isn't connected as you reads no collections: "Not loaded", with the
+            // reason, in the person lock's one disabled look, with Add's line.
             {...(addLock.locked ? { ...addLine.control(), 'aria-label': ADD_TO_NOT_CONNECTED } : {})}>
             {collectionsNotLoaded || addLock.locked ? <option value="">Not loaded</option> : <>
-            {/* Round 15 (GM r24 b): "No collections" only when the collections answered with none. */}
+            {/* "No collections" only when the collections answered with none. */}
             {collections.length === 0 && answered.collections && <option value="">No collections</option>}
             {collections.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             <option value={NEW_COLLECTION}>New collection…</option>
@@ -914,9 +909,9 @@ function CommonsViewBody({ view }: {
         </>}
       </WorkspaceHeader>
 
-      {/* Round 18d (GM r31 layout M): the Commons off says only that, in the page row. */}
+      {/* The Commons off says only that, in the page row. */}
       {commonsOff ? <CommonsOffLine /> : (
-      /* Round 12 (GM r20 1): the banner row holds Add's lock line too, under the because line. */
+      /* The banner row holds Add's lock line too, under the because line. */
       <CommonsPageLines line={shownError} lock={addLine} onRetry={error ? undefined : reloadAll} more={Boolean(notice || uploadFailures.length > 0 || proposed.size > 0 || heldLines > 0)}>
           {uploadFailures.length > 0 && (
             <p className="commons-notice commons-notice--error" role="alert" data-line-box="">
@@ -998,8 +993,8 @@ function CommonsViewBody({ view }: {
           )}
         </>
       )}
-      {/* Round 14 (GM r23 4): the New collection prompt stays on screen while this tab isn't
-          connected as you, with OK locked and the typed name kept; it unlocks in place. */}
+      {/* The New collection prompt stays on screen while this tab isn't connected as you,
+          with OK locked and the typed name kept; it unlocks in place. */}
       <PromptLockContext.Provider value={createLock}>{promptElement}</PromptLockContext.Provider>
       {leave.asking && (
         <CommonsLeavePopover asking={leave.asking} unsaved={leave.unsaved.labeling || leave.unsaved.review} running={leave.running}

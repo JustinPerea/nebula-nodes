@@ -1,12 +1,13 @@
 /** How long a project stays in Recently deleted, as the list says it
- * (GM r7 of PR #199, bug 2). */
+ * (PR #199). */
 const DAY_MS = 86_400_000;
 
-/** Whole days left in Recently deleted (GM r7, bug 2): the window less the
- * whole days since the delete, so a project deleted today reads the whole
- * window (30), never 31. Counted from `deletedAt`, as durations: no time
- * zone or summer-time shift changes it, and a clock read before the delete
- * (the list opened, then a project deleted) can't add a day. */
+/** Whole days left in Recently deleted: the window less the whole days
+ * since the delete, so a project deleted today reads the whole window
+ * (30), never 31 (an earlier count read 31 for a project deleted today). Counted
+ * from `deletedAt`, as durations: no time zone or summer-time shift changes it, and
+ * a clock read before the delete (the list opened, then a project deleted) can't
+ * add a day. */
 export function daysLeft(deletedAt: string, purgeAt: string, now: number): number {
   const deleted = Date.parse(deletedAt);
   const purge = Date.parse(purgeAt);

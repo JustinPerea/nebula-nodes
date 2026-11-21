@@ -1,11 +1,9 @@
 /**
- * Fix round 6 of PR #199 (review 6 and GM's answers, 2026-10-28): the
- * waiting line counts or names every canvas that waits and the saved toast
- * names each one filed (N-2); a disabled button keeps its look under the
- * pointer (L-4); a project deleted today reads 30 days (GM bug 2); a held
- * canvas that couldn't be read is said (L-1). (L-3's greyed Restore and
- * N-4's refused toast are gone: a restore may pass the project limit,
- * Justin 2026-10-29, fix round 12.)
+ * PR #199 (2026-10-28): the waiting line counts or names every canvas that
+ * waits and the saved toast names each one filed; a disabled button keeps
+ * its look under the pointer; a project deleted today reads 30 days; a held
+ * canvas that couldn't be read is said. (A greyed Restore and a refused
+ * toast are gone: a restore may pass the project limit, Justin, 2026-10-29.)
  */
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -36,13 +34,13 @@ const props = (overrides: Partial<ProjectHomeProps> = {}): ProjectHomeProps => (
 const openTrash = () => fireEvent.click(screen.getByRole('button', { name: /Recently deleted/ }));
 const context = { projectLimit: 3, trashHasItems: false };
 
-describe('N-2: every canvas that waits is counted or named', () => {
+describe('every canvas that waits is counted or named', () => {
   it('keeps the singular line for one canvas', () => {
     expect(canvasWaitingLine('projects', { ...context, canvases: [{ name: 'Delta' }] })).toBe(
       "The canvas you had open isn’t saved as a project yet because you’ve reached the limit of 3 projects. Nothing in it is lost. Delete a project and Nebula will save it.");
   });
 
-  it('names up to 3 when every name is known (GM (a), the name helper)', () => {
+  it('names up to 3 when every name is known (the name helper)', () => {
     expect(canvasWaitingLine('projects', { ...context, canvases: [{ name: 'Delta' }, { name: 'Gamma' }] })).toBe(
       "The canvases you had open, “Delta” and “Gamma”, aren’t saved as projects yet because you’ve reached the limit of 3 projects. Nothing in them is lost. Delete 2 projects and Nebula will save them.");
   });
@@ -78,7 +76,7 @@ describe('N-2: every canvas that waits is counted or named', () => {
   });
 });
 
-describe('L-4: a disabled button keeps its look under the pointer', () => {
+describe('a disabled button keeps its look under the pointer', () => {
   const css = readFileSync(join(__dirname, '../../styles/project-home.css'), 'utf8');
   it('every hover rule that skips :disabled skips aria-disabled too', () => {
     const rules = css.split('\n').filter((line) => line.includes(':hover:not(:disabled)'));
@@ -87,7 +85,7 @@ describe('L-4: a disabled button keeps its look under the pointer', () => {
   });
 });
 
-describe('GM bug 2: Removed for good in 30 days', () => {
+describe('Removed for good in 30 days', () => {
   const day = 86_400_000;
   const at = (iso: string) => Date.parse(iso);
 
@@ -142,7 +140,7 @@ describe('GM bug 2: Removed for good in 30 days', () => {
   });
 });
 
-describe('L-1 and the Agent log lines', () => {
+describe('a held canvas that could not be read, and the Agent log lines', () => {
   it('says a held canvas that could not be read', async () => {
     expect(canvasHeldUnreadableLine(1)).toBe(
       "Nebula couldn’t read a canvas you had open that was waiting to be saved, so it may be lost. The damaged file was kept.");
@@ -152,7 +150,7 @@ describe('L-1 and the Agent log lines', () => {
     expect(await screen.findByText(/couldn’t read 2 canvases you had open/)).toBeTruthy();
   });
 
-  it("words GM's line for any other write", () => {
+  it("words the design's line for any other write", () => {
     expect(canvasHoldRefusedLogLine('Codex', 'change')).toBe(
       "Codex tried to change the canvas you had open. Nebula stopped it because that canvas isn’t saved as a project yet.");
     expect(canvasHoldRefusedLogLine(null, 'change')).toBe(

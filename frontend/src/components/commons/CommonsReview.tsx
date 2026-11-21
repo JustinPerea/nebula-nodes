@@ -22,21 +22,21 @@ import { isLoadLine, curlApostrophes } from '../../lib/errorCopy';
 import { isBackendOffline, isOfflineRefusal } from '../../lib/backendConnection';
 
 /**
- * Round 18o (GM r51 Q1): a failure while Nebula is offline. The poll is a GET, which the offline
- * gate never refuses, so going offline reaches it as no answer (or the dev proxy's 502) with the
- * app already marked offline by its health probe; a refused write is the gate's own refusal.
- * Online, a failed read still shows its line alone (GM r39 Fix B).
+ * A failure while Nebula is offline. The poll is a GET, which the offline gate never refuses,
+ * so going offline reaches it as no answer (or the dev proxy's 502) with the app already marked
+ * offline by its health probe; a refused write is the gate's own refusal. Online, a failed
+ * read still shows its line alone.
  */
 const offlineFailure = (error: unknown) => isOfflineRefusal(error) || isBackendOffline();
 
 const pretty = (text: string) => text === 'n_a' ? 'Not applicable' : text.replaceAll('_', ' ');
 
 type DraftActions = { save: () => Promise<SaveResult>; discard: () => void };
-/** Round 18o (GM r51 Q4): Save corrections & next, pressed from its button, hands focus on to the
- * next reference's heading once the save lands. */
+/** Save corrections & next, pressed from its button, hands focus on to the next reference's
+ * heading once the save lands. */
 type AcceptFrom = { focusNext?: boolean };
 
-/** A save refused while a grade is still being written (GM, PR #205 r1). */
+/** A save refused while a grade is still being written (design, PR #205). */
 const GRADE_LOCK_LINE = lockLine('save this review', 'grade');
 
 /**
@@ -48,25 +48,25 @@ const GRADE_LOCK_LINE = lockLine('save this review', 'grade');
  * sections (`active` false), where it skips the poll.
  */
 export function CommonsReview({ onWork, active = true }: { onWork?: (work: LabelingWork | null) => void; active?: boolean }) {
-  // Round 16 (L4): offline grading and saves are disabled; corrections stay
-  // editable and unsaved until Nebula answers.
+  // Offline grading and saves are disabled; corrections stay editable and unsaved
+  // until Nebula answers.
   const readOnly = useBackendOffline();
   const rowShown = useOfflineRowShown();
   const [batch, setBatch] = useState<ReviewBatch | null>(null);
-  /** A read has answered (GM r24 b, r27 1): until one has, `batch` null means
-   * nothing was read, so neither the counts nor the "prepare first" line show. */
+  /** A read has answered: until one has, `batch` null means nothing was read, so neither
+   * the counts nor the "prepare first" line show. */
   const [answered, setAnswered] = useState(false);
   const answeredRef = useRef(false);
   useEffect(() => { answeredRef.current = answered; }, [answered]);
   const headingId = useId();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  // PR #204 round 9: a not-connected line clears on the promote, and the review loads again.
+  // PR #204: a not-connected line clears on the promote, and the review loads again.
   const [loadEpoch, loadAgain] = useReloadEpoch();
   const line = useCommonsLine(setError, '', 'commons.review-load', loadAgain);
-  // Round 18h (GM r38 3c): its load line reads again quietly on reconnect.
+  // Its load line reads again quietly on reconnect.
   useLoadLineQuietOnReconnect(error, () => setError(''), loadAgain);
-  /** Round 18l (GM r43 Q7): how many of the poll's reads have answered (the close dialog's grade wait). */
+  /** How many of the poll's reads have answered (the close dialog's grade wait). */
   const [pollReads, setPollReads] = useState(0);
   const [index, setIndex] = useState(0);
   const [dirty, setDirty] = useState(false);
@@ -82,8 +82,8 @@ export function CommonsReview({ onWork, active = true }: { onWork?: (work: Label
   const requestVersion = useRef(0);
   const pendingWrites = useRef(0);
   const markDirty = (value: boolean) => { editingDraft.current = value; setDirty(value); };
-  // Round 18o (GM r51 Q4): after Discard, focus goes to the current reference's heading; after Save
-  // corrections & next, to the next reference's. The heading has tabindex -1 and draws no ring
+  // After Discard, focus goes to the current reference's heading; after Save corrections &
+  // next, to the next reference's. The heading has tabindex -1 and draws no ring
   // (slava-restraint's code-focus rule); the effect runs once the remounted heading is in the page.
   const referenceHeading = useRef<HTMLHeadingElement>(null);
   const headingFocus = useRef(false);
@@ -105,8 +105,8 @@ export function CommonsReview({ onWork, active = true }: { onWork?: (work: Label
           setBatch(value); setAnswered(true); setError(''); setPollReads((n) => n + 1);
         }
       }, (e: unknown) => {
-        // Round 18o (GM r51 Q1): once a read has answered, an offline refusal (no answer, see
-        // offlineFailure) is never a failed read. The last read stays on screen, read-only (as
+        // Once a read has answered, an offline refusal (no answer, see offlineFailure) is
+        // never a failed read. The last read stays on screen, read-only (as
         // Blind labeling and Settings keep theirs), with any open dialog, and the poll reads again
         // on reconnect. The offline row says why. Before any answer, the load line shows as before.
         if (answeredRef.current && offlineFailure(e)) return;
@@ -136,8 +136,8 @@ export function CommonsReview({ onWork, active = true }: { onWork?: (work: Label
     const version = ++requestVersion.current;
     api.get().then((value) => {
       if (!cancelled && !pendingWrites.current && !editingDraft.current && version === requestVersion.current) {
-        // Round 18i: a read that answers clears the line, as the poll's does (a failed load's line
-        // would otherwise keep the pane to that line alone).
+        // A read that answers clears the line, as the poll's does (a failed load's line would
+        // otherwise keep the pane to that line alone).
         setBatch(value); setAnswered(true); setError('');
       }
     }, () => undefined);
@@ -169,7 +169,7 @@ export function CommonsReview({ onWork, active = true }: { onWork?: (work: Label
     }
   }
   function accept(item: ReviewItem, labels: EvaluationLabels, from: AcceptFrom = {}): Promise<SaveResult> {
-    // GM, PR #205 r1: the lock line, by the refused action.
+    // PR #205 (design): the lock line, by the refused action.
     if (pendingWrites.current) return Promise.resolve({ ok: false, reason: GRADE_LOCK_LINE, message: GRADE_LOCK_LINE, retry: true });
     pendingWrites.current++;
     requestVersion.current++;
@@ -178,7 +178,7 @@ export function CommonsReview({ onWork, active = true }: { onWork?: (work: Label
       try {
         const value = await api.accept(item.position, item.revision, labels);
         requestVersion.current++;
-        // GM r51 Q4: the heading the form moves to (the next reference's, or this one's when none is left).
+        // The heading the form moves to (the next reference's, or this one's when none is left).
         if (from.focusNext) headingFocus.current = true;
         setBatch(value); markDirty(false);
         const next = value.items.findIndex((i, n) => n > index && !i.reviewed_at);
@@ -192,8 +192,8 @@ export function CommonsReview({ onWork, active = true }: { onWork?: (work: Label
     return attempt;
   }
   // The section's name is its h2, set as the eyebrow line like Blind
-  // labeling's (GM review of PR #157, round 2). The display line below it is
-  // a styled p, no longer a second h1 on the page.
+  // labeling's (PR #157, design). The display line below it is a styled p, no longer a
+  // second h1 on the page.
   const eyebrow = <SectionEyebrow id={headingId} name="Agent review" detail="agent grades · your judgment" />;
   if (loading) return <section className="commons-evaluation commons-review" aria-labelledby={headingId}>
     <header className="evaluation-heading"><div>{eyebrow}</div></header>
@@ -203,16 +203,15 @@ export function CommonsReview({ onWork, active = true }: { onWork?: (work: Label
     {eyebrow}<p className="evaluation-title">Does this read right?</p>
     <p>See the agent’s take. Agree, or change the parts you see differently.</p>
   </div>;
-  // GM r27 1: after a failed load, only the eyebrow, the heading and the failure line.
-  // Round 18i (GM r39 Fix B, r32): and whenever the latest read failed, until one succeeds:
-  // "Prepare the reference set…" and "0 / 15 reviewed · 0 grades ready" would be stale. The 5 s
-  // poll never reads while a draft is being edited, so this never hides one.
-  // Round 18o (GM r51 Q1): offline, a load line from a read that failed just before the app knew it
-  // was offline never hides the last read either; the offline row says why, and the line clears
-  // and reads again on reconnect (useLoadLineQuietOnReconnect).
+  // After a failed load, only the eyebrow, the heading and the failure line, and whenever the
+  // latest read failed, until one succeeds: "Prepare the reference set…" and "0 / 15 reviewed ·
+  // 0 grades ready" would be stale. The 5 s poll never reads while a draft is being edited, so
+  // this never hides one. Offline, a load line from a read that failed just before the app knew
+  // it was offline never hides the last read either; the offline row says why, and the line
+  // clears and reads again on reconnect (useLoadLineQuietOnReconnect).
   if (!answered || (isLoadLine(error) && !readOnly)) return <section className="commons-evaluation commons-review" aria-labelledby={headingId}>
     <header className="evaluation-heading">{intro}</header>
-    {/* Round 18f (GM r35 4): its "Try again" reads it again. */}
+    {/* Its "Try again" reads it again. */}
     <CommonsErrorLine line={error} onRetry={loadAgain} />
   </section>;
   const reviewed = batch?.items.filter((i) => i.reviewed_at).length ?? 0;
@@ -224,9 +223,9 @@ export function CommonsReview({ onWork, active = true }: { onWork?: (work: Label
   return <section className="commons-evaluation commons-review" aria-labelledby={headingId}>
     <header className="evaluation-heading">{intro}<div className="review-progress"><strong>{reviewed} / {batch?.items.length ?? 15} reviewed</strong>
       <p>{ready} grades ready{running ? ' · Grading in progress…' : ''}</p>
-      {/* Round 18o (GM r51 Q3): unsaved corrections lock it in place with its own line under it (it
-          isn't in the opener's row); natively disabled only while a save runs, or offline with no
-          lock. Offline, the lock keeps its line, the offline row a second reason (GM r43, r51 Q5). */}
+      {/* Unsaved corrections lock it in place with its own line under it (it isn't in the
+          opener's row); natively disabled only while a save runs, or offline with no lock.
+          Offline, the lock keeps its line, the offline row a second reason. */}
       {batch?.state === 'open' && !running && batch.attempts < batch.call_budget && batch.items.some((i) => i.status === 'pending') && <>
         <button className="commons-button" disabled={!!saving || (readOnly && !generateLocked)} {...offlineMark(readOnly && !generateLocked)}
           aria-disabled={generateLocked || undefined}
@@ -238,9 +237,9 @@ export function CommonsReview({ onWork, active = true }: { onWork?: (work: Label
     <CommonsErrorLine line={error} onRetry={loadAgain} />
     {!batch && <p>Prepare the reference set in Blind labeling first.</p>}
     {batch && item && <div className="evaluation-workspace">
-      {/* Round 18o (GM r51 Q3): unsaved corrections lock the reference buttons in place, the form's
-          status line ("…to change the reference.") their reason; native only while a save or the
-          pane's own grading runs. */}
+      {/* Unsaved corrections lock the reference buttons in place, the form's status line
+          ("…to change the reference.") their reason; native only while a save or the pane's own
+          grading runs. */}
       <nav aria-label="References to review">{batch.items.map((ref, n) => <button key={ref.position} disabled={!!saving || generating}
         aria-disabled={referencesLocked || undefined} aria-describedby={referencesLocked ? statusLineId : undefined}
         aria-current={index === n ? 'true' : undefined} onClick={() => { if (!referencesLocked) setIndex(n); }}>
@@ -253,11 +252,10 @@ export function CommonsReview({ onWork, active = true }: { onWork?: (work: Label
     </div>}
     <footer className="review-footer"><p>Agent proposals and your decisions are saved separately. This is assisted review, not an independent blind accuracy score.</p>
       {batch?.state === 'closed' && <p className="evaluation-hash" role="status">Closed as assisted review · {writtenDateTime(batch.closed_at)} · SHA-256: {batch.close_hash}</p>}
-      {/* Round 18l (review 17 MEDIUM-2, GM r43 Q7): inside the dialog the parent's state is an aria
-          lock with its line, and the grade wait follows this pane's 5 s poll. Round 18m (GM r44 1):
-          unsaved corrections lock the opener in place with their line; it is natively disabled
-          only while a save runs. Round 18o (GM r51 Q2): a running grade locks it the same way, with
-          its own line, which goes when this pane's poll sees the grade finish. */}
+      {/* Inside the dialog the parent's state is an aria lock with its line, and the grade wait
+          follows this pane's 5 s poll. Unsaved corrections lock the opener in place with their
+          line; it is natively disabled only while a save runs. A running grade locks it the same
+          way, with its own line, which goes when this pane's poll sees the grade finish. */}
       {batch?.state === 'open' && <CommonsCloseBatch revision={batch.batch_revision} assisted reviewed={reviewed} total={batch.items.length}
         disabled={!!saving} lock={running ? 'grade' : dirty ? 'edits' : null} editsLine={EDITS_LINE_REVIEW}
         gradePoll={{ running: !!batch.items.some((i) => i.status === 'running'), reads: pollReads }} onClosed={(closed) => {
@@ -269,7 +267,7 @@ export function CommonsReview({ onWork, active = true }: { onWork?: (work: Label
             if (alive.current && !editingDraft.current && version === requestVersion.current) setBatch(value);
           }, () => undefined);
         }} />}
-      {/* Round 18o (GM r51 Q3): a read of the saved record, so it stays live. */}
+      {/* A read of the saved record, so it stays live. */}
       {batch && <button className="commons-button" onClick={() => {
         const url = URL.createObjectURL(new Blob([JSON.stringify(batch, null, 2)], { type: 'application/json' }));
         const link = document.createElement('a'); link.href = url; link.download = 'commons-assisted-review.json'; link.click();
@@ -284,11 +282,11 @@ function ReferenceImage({ item, headingRef }: { item: ReviewItem; headingRef: { 
   const [error, setError] = useState('');
   const [loadEpoch, loadAgain] = useReloadEpoch();
   const line = useCommonsLine(setError, '', `commons.review-image-${item.position}`, loadAgain);
-  // Round 18o (GM r51 Q1): the pane keeps its last read offline, so this image stays mounted through
-  // an outage; a load that failed meanwhile reads again quietly on reconnect (GM r38 3c), as the
-  // pane's own load line does, instead of leaving "isn’t answering" behind.
+  // The pane keeps its last read offline, so this image stays mounted through an outage; a
+  // load that failed meanwhile reads again quietly on reconnect, as the pane's own load line
+  // does, instead of leaving "isn’t answering" behind.
   useLoadLineQuietOnReconnect(error, () => setError(''), loadAgain);
-  // Offline comes first (GM r23 3): a because line hides while offline.
+  // Offline comes first: a because line hides while offline.
   const shownError = useOfflineFirstBecause(error);
   useEffect(() => {
     const controller = new AbortController(); let objectUrl = '';
@@ -298,7 +296,7 @@ function ReferenceImage({ item, headingRef }: { item: ReviewItem; headingRef: { 
     return () => { controller.abort(); if (objectUrl) URL.revokeObjectURL(objectUrl); };
   }, [item.position, loadEpoch, line]);
   return <div className="evaluation-image"><h3 className="evaluation-step" ref={headingRef} tabIndex={-1}>Reference {String(item.position + 1).padStart(2, '0')}</h3>
-    {/* Round 18 (GM r28 1): its load's line in the one Commons line style. */}
+    {/* Its load's line in the one Commons line style. */}
     {shownError ? <CommonsErrorLine line={shownError} onRetry={loadAgain} /> : url ? <img className="review-reference" src={url} alt={`Reference ${item.position + 1}`} /> : !error && <p>Loading image…</p>}
     {item.proposal && <p>{item.proposal.model} · {item.proposal.prompt_version}</p>}
   </div>;
@@ -329,8 +327,8 @@ export function ReviewForm({ batch, item, dirty, saving, generating, onDirty, on
   const fields = item.proposal.fields;
   // The model's reasons are prose a person reads: curled where they show (design).
   const reason = (key: string) => { const why = (fields[key] as { why?: string } | undefined)?.why; return typeof why === 'string' ? curlApostrophes(why) : why; };
-  // Round 18o (GM r51 Q4): while it saves it is aria-busy and aria-disabled, never natively disabled
-  // (Chrome would drop its focus to the page); native only while the pane grades, or offline.
+  // While it saves it is aria-busy and aria-disabled, never natively disabled (Chrome would
+  // drop its focus to the page); native only while the pane grades, or offline.
   const agreement = <><button className="commons-button commons-button--primary" disabled={generating || offline} {...offlineMark(offline)}
     aria-busy={saving || undefined} aria-disabled={saving || undefined}
     onClick={() => { if (!saving) void onAccept(labels, { focusNext: true }); }}>{saving ? 'Saving…' : dirty ? 'Save corrections & next' : item.reviewed_at ? 'Keep this review & next' : 'Agree & next'}</button>

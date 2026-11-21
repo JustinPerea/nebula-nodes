@@ -18,7 +18,7 @@ const api = vi.hoisted(() => ({
   moveStoredAsset: vi.fn(), updateMoodboard: vi.fn(), SAVE_BOARD: "Couldn't save the moodboard.",
 }));
 const backend = vi.hoisted(() => ({ apiFetch: vi.fn() }));
-// Recently deleted (round 6j): the restore route, and what the rail's list was asked.
+// Recently deleted: the restore route, and what the rail's list was asked.
 const trash = vi.hoisted(() => ({ restore: vi.fn(),
   /** What the rail's Recently deleted lists: each row's Restore calls onRestored as the real one does after its route. */
   rows: [] as Array<{ id: string; name: string }> }));
@@ -27,7 +27,7 @@ const deletes = vi.hoisted(() => ({ bump: null as null | (() => void) }));
 const board = vi.hoisted(() => ({
   point: { x: 900, y: 300 } as { x: number; y: number } | null,
   view: { x: -1000, y: -1000, width: 4000, height: 3000 } as { x: number; y: number; width: number; height: number } | null,
-  /** The part of the view a tile is seen in (round 6f): null leaves it out, as a target without it. */
+  /** The part of the view a tile is seen in: null leaves it out, as a target without it. */
   seen: null as { x: number; y: number; width: number; height: number } | null,
   outside: null as null | { id: number; rects: Array<{ x: number; y: number; width: number; height: number }>; thumb: string | null },
   placeholders: [] as Array<{ id: string; x: number; y: number; width: number; height: number; source?: unknown; filled?: { imageId: string; url: string }; listOnly?: boolean }>,
@@ -39,7 +39,7 @@ const board = vi.hoisted(() => ({
 vi.mock('../../lib/api', () => api);
 vi.mock('../../lib/graphFile', () => ({ saveToFile: vi.fn(), loadFromFile: vi.fn() }));
 vi.mock('../../lib/backend', () => ({ apiFetch: backend.apiFetch, backendAssetUrlSync: (url: string) => url }));
-// The socket: a test can hand the Studio an event (round 6p: a board change event names who made it).
+// The socket: a test can hand the Studio an event (a board change event names who made it).
 const ws = vi.hoisted(() => ({ listeners: new Set<(event: unknown) => void>() }));
 vi.mock('../../lib/wsClient', () => ({ wsClient: {
   subscribe: (listener: (event: unknown) => void) => { ws.listeners.add(listener); return () => { ws.listeners.delete(listener); }; },
@@ -81,7 +81,7 @@ vi.mock('../asset-trash/AssetTrash', () => ({
   },
   UndoDeleteToast: () => null,
 }));
-// A project in Recently deleted (round 6l, GM r21 Q8): the list and its restore route.
+// A project in Recently deleted: the list and its restore route.
 const projects = vi.hoisted(() => ({ list: vi.fn(), restore: vi.fn() }));
 vi.mock('../../lib/projects', async (importOriginal) => ({ ...(await importOriginal<typeof import('../../lib/projects')>()),
   listProjects: projects.list, restoreProject: projects.restore }));
@@ -326,7 +326,7 @@ describe('a paste in the Board view', () => {
     expect(nudged.y >= 270 + 24 || nudged.x >= 1000 + 24 || nudged.x + w + 24 <= 0 || nudged.y + h + 24 <= 0).toBe(true);
   });
 
-  it('a tile placed in the view but under the notice band gets the chip (round 6f, GM r14)', async () => {
+  it('a tile placed in the view but under the notice band gets the chip', async () => {
     await openStudio('board');
     board.view = { x: 0, y: 0, width: 1000, height: 1000 };
     board.seen = { x: 0, y: 0, width: 1000, height: 600 };
@@ -470,7 +470,8 @@ describe('a paste in the List view', () => {
 describe('what a paste never takes', () => {
   it('a paste into the notes, an Image note, Direction or the name is the field\'s own, image or not', async () => {
     await openStudio('list');
-    // GM #210 item 7: the board's notes, an Image note, Direction and the name (and a private note).
+    // The fields a paste never takes (PR #210): the board's notes, an Image note, Direction and the
+    // name (and a private note).
     const notes = screen.getByPlaceholderText('Anything about the moodboard, in your words.');
     const imageNote = screen.getAllByPlaceholderText('What to take from this image')[0];
     const direction = screen.getByPlaceholderText(/Say what you want/);
@@ -610,7 +611,7 @@ describe('what a paste never takes', () => {
 });
 
 describe('links on the clipboard', () => {
-  it('only http(s) links: GM\'s line, nothing fetched or added', async () => {
+  it('only http(s) links: the design\'s line, nothing fetched or added', async () => {
     await openStudio('board');
     const event = paste(clipboard({ text: 'https://example.com/a.png\nhttps://example.com/b.png' }));
     expect(event.defaultPrevented).toBe(true);
@@ -620,7 +621,7 @@ describe('links on the clipboard', () => {
     expect(server.edits).toHaveLength(0);
   });
 
-  it('the lines read as GM wrote them', () => {
+  it('the lines read as the approved copy has them', () => {
     expect(NOTHING_TO_PASTE).toBe('There’s no image on the clipboard to add.');
     expect(LINKS_NOT_ADDED).toBe('Nebula can’t add images from links. Copy the image itself, then paste it.');
   });
@@ -644,7 +645,7 @@ describe('links on the clipboard', () => {
     expect(uriListLinks('ftp://h.example/a.png')).toEqual([]);
   });
 
-  it('a link that comes only as text/uri-list gets GM\'s links line too', async () => {
+  it('a link that comes only as text/uri-list gets the design\'s links line too', async () => {
     await openStudio('board');
     const event = paste(clipboard({ uriList: '# from an app\r\nhttps://example.com/a.png' }));
     expect(event.defaultPrevented).toBe(true);
@@ -653,7 +654,7 @@ describe('links on the clipboard', () => {
   });
 });
 
-describe('an info line and an Undo toast (GM, #210 review answer 1)', () => {
+describe('an info line and an Undo toast', () => {
   it('a nothing-to-add line never replaces a toast with Undo, and is still announced', async () => {
     const raf = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => { cb(0); return 0; });
     await openStudio('list');
@@ -676,7 +677,7 @@ describe('an info line and an Undo toast (GM, #210 review answer 1)', () => {
   });
 });
 
-describe('one physical press is one paste (GM, #210 review answer 2)', () => {
+describe('one physical press is one paste', () => {
   it('a held Cmd+V\'s repeats add nothing; the key up resets it; Edit > Paste (no keydown) always adds', async () => {
     await openStudio('list');
     keyV('keydown');
@@ -743,7 +744,7 @@ function holdUploads() {
 const spokenLines = () => Array.from(document.querySelectorAll('.moodboard-board__sr-only[role="status"]')).map((el) => el.textContent);
 const immediateFrames = () => vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => { cb(0); return 0; });
 
-describe('a placeholder holds the spot while the upload runs (GM r4 answer 1)', () => {
+describe('a placeholder holds the spot while the upload runs', () => {
   it('lands at once where the view at paste time puts it; the upload fills it there, as one step', async () => {
     const uploads = holdUploads();
     await openStudio('board');
@@ -762,7 +763,7 @@ describe('a placeholder holds the spot while the upload runs (GM r4 answer 1)', 
     await uploads.open();
     await waitFor(() => expect(addOps()).toHaveLength(1));
     expect(addOps()[0].at).toEqual(expected);
-    // The spot stays, marked filled with the upload, until the board's spring has shown the image (GM r5).
+    // The spot stays, marked filled with the upload, until the board's spring has shown the image.
     const spotId = board.placeholders[0]?.id;
     expect(board.placeholders).toEqual([expect.objectContaining({ id: spotId,
       filled: { imageId: addOps()[0].images[0].id, url: '/api/outputs/chat-uploads/slow.png' } })]);
@@ -775,7 +776,7 @@ describe('a placeholder holds the spot while the upload runs (GM r4 answer 1)', 
     expect(useBoardUndoStore.getState().history(key, entry.epoch).done).toHaveLength(1);
   });
 
-  it('names the file it holds for (GM r5)', async () => {
+  it('names the file it holds for', async () => {
     holdUploads();
     await openStudio('board');
     paste(clipboard({ files: [png('river-at-dusk.png')] }));
@@ -866,7 +867,7 @@ describe('the chip goes', () => {
     await waitFor(() => expect(addOps()).toHaveLength(2));
   });
 
-  it('on any view switch, and stays gone back on the Board (GM r4 answer 8)', async () => {
+  it('on any view switch, and stays gone back on the Board', async () => {
     await openStudio('board');
     await chipUp();
     act(() => { useBoardCanvasStore.getState().setView('list'); });
@@ -885,7 +886,7 @@ describe('the chip goes', () => {
   });
 });
 
-describe('a held key whose keyup went elsewhere (review 2, L1)', () => {
+describe('a held key whose keyup went elsewhere', () => {
   const held = () => { keyV('keydown'); keyV('keydown', { repeat: true }); };
   it('the window losing focus clears it: Edit > Paste then adds', async () => {
     await openStudio('list');
@@ -945,7 +946,7 @@ describe('a held key whose keyup went elsewhere (review 2, L1)', () => {
   });
 });
 
-describe('the backstop takes turns (review 2, the race)', () => {
+describe('the backstop takes turns: two adds of one file racing', () => {
   const same = () => new File([new Uint8Array([9, 8, 7, 6, 5, 4, 3, 2])], 'same.png', { type: 'image/png' });
   it('two quick presses of the same image add it once, and say so politely, with nothing on screen', async () => {
     const raf = immediateFrames();
@@ -1004,7 +1005,7 @@ describe('info lines in the toast slot', () => {
     expect(screen.queryAllByText(NOTHING_TO_PASTE).filter((el) => !el.classList.contains('moodboard-board__sr-only'))).toHaveLength(0);
   });
 
-  it('"Undid…" never replaces a live "Removed · Undo" toast, unless it undid that removal (GM r4 answer 5)', async () => {
+  it('"Undid…" never replaces a live "Removed · Undo" toast, unless it undid that removal', async () => {
     const raf = immediateFrames();
     await openStudio('list');
     act(() => { (document.querySelector('.moodboard-tile__remove') as HTMLButtonElement).click(); });
@@ -1056,8 +1057,8 @@ const fullView = () => {
   board.point = { x: 500, y: 135 };
 };
 
-describe('a held spot and a board that changes meanwhile (review 3)', () => {
-  it('LOW-2: an Undo brings a tile back under the placeholder: the image takes the nearest free spot instead', async () => {
+describe('a held spot and a board that changes meanwhile', () => {
+  it('an Undo brings a tile back under the placeholder: the image takes the nearest free spot instead', async () => {
     await openStudio('list');
     act(() => { (document.querySelector('.moodboard-tile__remove') as HTMLButtonElement).click(); });
     await waitFor(() => expect(draftUrls()).toHaveLength(1));
@@ -1087,7 +1088,7 @@ describe('a held spot and a board that changes meanwhile (review 3)', () => {
       filled: { imageId: addOps()[0].images[0].id, url: '/api/outputs/chat-uploads/fill.png' } })]);
   });
 
-  it('LOW-2: a spot the board left alone fills where it was held', async () => {
+  it('a spot the board left alone fills where it was held', async () => {
     const uploads = holdUploads();
     await openStudio('board');
     paste(clipboard({ files: [png('still.png')] }));
@@ -1098,8 +1099,8 @@ describe('a held spot and a board that changes meanwhile (review 3)', () => {
     expect(addOps()[0].at).toEqual(held);
   });
 
-  // Review 4 LOW-2: a moved spot never pushes a sibling off a spot the board left alone.
-  it('LOW-2 (review 4): only the spot the board took moves; its sibling keeps the spot it held', async () => {
+  // A moved spot never pushes a sibling off a spot the board left alone.
+  it('only the spot the board took moves; its sibling keeps the spot it held', async () => {
     await openStudio('list');
     act(() => { (document.querySelector('.moodboard-tile__remove') as HTMLButtonElement).click(); });
     await waitFor(() => expect(draftUrls()).toHaveLength(1));
@@ -1125,8 +1126,8 @@ describe('a held spot and a board that changes meanwhile (review 3)', () => {
     for (const other of [i1, i2, second]) expect(keepsGap(moved, other)).toBe(true);
   });
 
-  // Review 4 LOW-3: the chip follows a spot that moved.
-  it('LOW-3 (review 4): a moved spot outside the view takes the chip with it', async () => {
+  // The chip follows a spot that moved.
+  it('a moved spot outside the view takes the chip with it', async () => {
     await openStudio('list');
     act(() => { (document.querySelector('.moodboard-tile__remove') as HTMLButtonElement).click(); });
     await waitFor(() => expect(draftUrls()).toHaveLength(1));
@@ -1152,9 +1153,9 @@ describe('a held spot and a board that changes meanwhile (review 3)', () => {
   });
 });
 
-// Review 4 (X9-X11, X19, X21): how a spot the board took is moved. Tiles
-// reach the board while the files upload (an agent's add, followed into the
-// draft), walling off everything but a few free slots.
+// How a spot the board took is moved. Tiles reach the board while the files
+// upload (an agent's add, followed into the draft), walling off everything
+// but a few free slots.
 describe('moving a held spot the board took', () => {
   type Rect = { x: number; y: number; width: number; height: number };
   const G = 24;
@@ -1195,7 +1196,7 @@ describe('moving a held spot the board took', () => {
     return [slot(-900, 1000), slot(-900, 1000 + h + G)];
   };
 
-  // GM r13: the chip only while less than half the tile is in view.
+  // The chip only while less than half the tile is in view (design).
   it.each([
     ['a third in view: it takes the chip (mostly hidden there)', 3, true],
     ['half in view: no chip (the person sees it)', 2, false],
@@ -1214,7 +1215,7 @@ describe('moving a held spot the board took', () => {
     expect(addOps()[0].at).toEqual({ x: under.x, y: under.y });
     if (chip) {
       await waitFor(() => expect(board.outside?.rects).toEqual([under]));
-      // The chip made by the move carries the tile's image (review 9 lines-chip NIT-1).
+      // The chip made by the move carries the tile's image.
       expect(board.outside?.thumb).toBe('/api/outputs/chat-uploads/aimed.png');
     } else {
       await new Promise((done) => setTimeout(done, 30));
@@ -1222,7 +1223,7 @@ describe('moving a held spot the board took', () => {
     }
   });
 
-  it('X9: two spots of one paste moved together never land on the same slot', async () => {
+  it('two spots of one paste moved together never land on the same slot', async () => {
     const uploads = holdUploads();
     await openStudio('board');
     paste(clipboard({ files: [png('one.png'), png('two.png', 20)] }));
@@ -1237,7 +1238,7 @@ describe('moving a held spot the board took', () => {
     expect([one, two].map(({ x, y }) => `${x},${y}`).sort()).toEqual(slots.map(({ x, y }) => `${x},${y}`).sort());
   });
 
-  it('X19: a file the server gave no image for holds no slot: the one that uploaded takes the nearest', async () => {
+  it('a file the server gave no image for holds no slot: the one that uploaded takes the nearest', async () => {
     // Each upload held by name; `false` answers with no image url.
     const gates = new Map<string, (withUrl: boolean) => void>();
     backend.apiFetch.mockImplementation(async (path: string, init?: RequestInit) => {
@@ -1261,7 +1262,7 @@ describe('moving a held spot the board took', () => {
     expect(addOps()[0].at).toEqual(nearest);
   });
 
-  it('X21: a tile that came within the gap (not over the spot) moves it too', async () => {
+  it('a tile that came within the gap (not over the spot) moves it too', async () => {
     const uploads = holdUploads();
     await openStudio('board');
     paste(clipboard({ files: [png('near.png')] }));
@@ -1276,7 +1277,7 @@ describe('moving a held spot the board took', () => {
     expect(keepsGap(at, close)).toBe(true);
   });
 
-  it('X11: a moved spot counts another add\'s held spot, so it never lands on it', async () => {
+  it('a moved spot counts another add\'s held spot, so it never lands on it', async () => {
     const files = holdEach();
     await openStudio('board');
     paste(clipboard({ files: [png('first.png')] }));
@@ -1297,7 +1298,7 @@ describe('moving a held spot the board took', () => {
     await waitFor(() => expect(addOps()).toHaveLength(2));
   });
 
-  it('X10: a moved spot stays in the view the person pasted in when a slot there is free', async () => {
+  it('a moved spot stays in the view the person pasted in when a slot there is free', async () => {
     const uploads = holdUploads();
     // Below the board's own cards, so the slot above the view is clear of them.
     board.view = { x: 0, y: 1000, width: 2000, height: 2000 };
@@ -1317,7 +1318,7 @@ describe('moving a held spot the board took', () => {
   });
 });
 
-// GM on review 4: an add whose person left the board while it uploaded is
+// An add whose person left the board while it uploaded is
 // their paste. It finishes and lands on that board, placed as if they had
 // stayed, written through the draft store, never to the board open now.
 describe('an add that outlives its board', () => {
@@ -1344,7 +1345,7 @@ describe('an add that outlives its board', () => {
     // g1's draft holds it now; the board open now holds nothing new.
     await waitFor(() => expect(draftUrls()).toContain('/api/outputs/chat-uploads/river.png'));
     expect(imagesOf(entryKey((key) => key.includes('"new"')))).toEqual([]);
-    // Its spot waits, filled, for the person to come back to g1 (GM r8, review 5 LOW-3).
+    // Its spot waits, filled, for the person to come back to g1.
     expect(useBoardAddStore.getState().held).toEqual([expect.objectContaining({ away: true,
       filled: { imageId: addOps()[0].images[0].id, url: '/api/outputs/chat-uploads/river.png' } })]);
   });
@@ -1428,8 +1429,8 @@ describe('an add that outlives its board', () => {
   });
 });
 
-// GM (round 5 carry-over): Add images stays live during uploads, with no
-// toolbar status; concurrent adds go through placement and the backstop.
+// Add images stays live during uploads, with no toolbar status;
+// concurrent adds go through placement and the backstop.
 describe('adds at once', () => {
   it('a paste and a drop while it uploads hold spots clear of each other, and both land there', async () => {
     const uploads = holdUploads();
@@ -1488,7 +1489,7 @@ describe('adds at once', () => {
   });
 });
 
-describe('review 3 test gaps', () => {
+describe('refused uploads, toasts and chips across adds', () => {
   it('an upload refused before the image\'s shape is read is handled: its line, no placeholder, nothing added', async () => {
     let open: () => void = () => {};
     aspectGate.wait = new Promise<void>((resolve) => { open = resolve; });
@@ -1588,9 +1589,9 @@ describe('review 3 test gaps', () => {
   });
 });
 
-// Review 5 and GM r8: a board is its draft instance, not its draft key, and a
-// paste the person made is never lost silently.
-describe('an add and the board it belongs to (review 5, GM r8)', () => {
+// A board is its draft instance, not its draft key, and a paste the person
+// made is never lost silently.
+describe('an add and the board it belongs to', () => {
   const store = () => useAssetStudioDraftStore.getState();
   const newKey = JSON.stringify(['moodboard', 'global', 'new']);
   const madeKey = JSON.stringify(['moodboard', 'global', 'made1']);
@@ -1631,7 +1632,7 @@ describe('an add and the board it belongs to (review 5, GM r8)', () => {
     await screen.findByTestId('board-canvas');
   };
 
-  it('R5-A: an unsaved draft discarded mid-upload: nothing shows or lands on the fresh draft at that key, and nothing is created', async () => {
+  it('an unsaved draft discarded mid-upload: nothing shows or lands on the fresh draft at that key, and nothing is created', async () => {
     const uploads = holdUploads();
     await openNew();
     paste(clipboard({ files: [png('river.png')] }));
@@ -1651,7 +1652,7 @@ describe('an add and the board it belongs to (review 5, GM r8)', () => {
     expect(useBoardAddStore.getState().held).toEqual([]);
   });
 
-  it('R5-E: a new board saved mid-upload, then New: the add reaches the saved board, not the fresh one', async () => {
+  it('a new board saved mid-upload, then New: the add reaches the saved board, not the fresh one', async () => {
     const made = madeServer();
     const uploads = holdUploads();
     await openNew();
@@ -1678,7 +1679,7 @@ describe('an add and the board it belongs to (review 5, GM r8)', () => {
     expect(urlsOf(newKey)).toEqual([]);
   });
 
-  // #210 round 6t (review 12, pre-existing on main): a new board's camera and "view is fitted" flag move with its draft
+  // PR #210 (the gap was already on main): a new board's camera and "view is fitted" flag move with its draft
   // to the saved key on its first save, and the next New board opens fresh, not at the last one's camera.
   it('a new board\'s first save (its own autosave): its camera and flag move to the saved key, and nothing stays under "new"', async () => {
     madeServer();
@@ -1757,7 +1758,7 @@ describe('an add and the board it belongs to (review 5, GM r8)', () => {
     expect(urlsOf(newKey)).toEqual([]);
   });
 
-  it('MEDIUM-2: an unsaved board left mid-upload is saved when its add lands, shows in the rail, and survives the next New', async () => {
+  it('an unsaved board left mid-upload is saved when its add lands, shows in the rail, and survives the next New', async () => {
     madeServer();
     api.fetchMoodboards.mockImplementation(async (scope: string) => (scope === 'global'
       ? [clone(server.board), ...(api.createMoodboard.mock.results.length ? [await api.createMoodboard.mock.results[0].value] : [])] : []));
@@ -1768,7 +1769,7 @@ describe('an add and the board it belongs to (review 5, GM r8)', () => {
     await toBoard('g1');
     await uploads.open();
     await waitFor(() => expect(api.createMoodboard).toHaveBeenCalledTimes(1));
-    // The add went in the board's first save (review 5, M8).
+    // The add went in the board's first save.
     expect(api.createMoodboard.mock.calls[0][0].images.map((img: MoodboardImage) => img.url)).toEqual([river]);
     await waitFor(() => expect(store().entries[madeKey]?.savedId).toBe('made1'));
     expect(urlsOf(madeKey)).toEqual([river]);
@@ -1826,7 +1827,7 @@ describe('an add and the board it belongs to (review 5, GM r8)', () => {
     expect(api.editMoodboard.mock.calls[0][0]).toBe('g1');
   });
 
-  it('M18: an add landing while its board is still loading goes to the server, not into the loading draft', async () => {
+  it('an add landing while its board is still loading goes to the server, not into the loading draft', async () => {
     const uploads = holdUploads();
     await openStudio('board');
     paste(clipboard({ files: [png('river.png')] }));
@@ -1841,7 +1842,7 @@ describe('an add and the board it belongs to (review 5, GM r8)', () => {
     const gate = new Promise<void>((done) => { read = done; });
     let reads = 0;
     api.fetchMoodboard.mockImplementation(async (id: string) => {
-      // The Studio's own read waits; the add's own read of the board (LOW-5) doesn't.
+      // The Studio's own read waits; the add's own read of the board doesn't.
       if (reads++ === 0) await gate;
       return id === server.board.id ? clone(server.board) : null;
     });
@@ -1860,7 +1861,7 @@ describe('an add and the board it belongs to (review 5, GM r8)', () => {
     await waitFor(() => expect(urlsOf(g1Key).filter((url) => url === river)).toHaveLength(1));
   });
 
-  it('M17: a Studio still drawn but no longer current takes no step; the add lands on its board through the server', async () => {
+  it('a Studio still drawn but no longer current takes no step; the add lands on its board through the server', async () => {
     const uploads = holdUploads();
     await openStudio('board');
     paste(clipboard({ files: [png('river.png')] }));
@@ -1877,7 +1878,7 @@ describe('an add and the board it belongs to (review 5, GM r8)', () => {
     expect(useBoardUndoStore.getState().histories[g1Key]?.done ?? []).toEqual([]);
   });
 
-  it('GM 3: the same image on another board goes; on the same board, after the Studio closed and opened again, it is caught', async () => {
+  it('the same image on another board goes; on the same board, after the Studio closed and opened again, it is caught', async () => {
     const uploads = holdUploads();
     await openStudio('board');
     paste(clipboard({ files: [png('river.png')] }));
@@ -1896,7 +1897,7 @@ describe('an add and the board it belongs to (review 5, GM r8)', () => {
     await waitFor(() => expect(server.uploads).toEqual(['river.png', 'river.png']));
   });
 
-  it('GM 5: a reload mid-upload is said once on the board\'s next open; an add on its way is recorded until it lands', async () => {
+  it('a reload mid-upload is said once on the board\'s next open; an add on its way is recorded until it lands', async () => {
     window.sessionStorage.setItem('nebula:moodboard-adds-in-flight', JSON.stringify([
       { id: 'placeholder-9', board: 'g1', name: 'river.png', page: 'an earlier page', at: Date.now() },
       { id: 'placeholder-10', board: 'g1', name: 'lake.png', page: 'an earlier page', at: Date.now() },
@@ -1914,7 +1915,7 @@ describe('an add and the board it belongs to (review 5, GM r8)', () => {
     window.sessionStorage.removeItem('nebula:moodboard-adds-in-flight');
   });
 
-  it('GM 5: a reload cuts the upload short and the browser runs its failure on the way out: the record stays for the next load', async () => {
+  it('a reload cuts the upload short and the browser runs its failure on the way out: the record stays for the next load', async () => {
     const uploads = holdUploads();
     await openStudio('board');
     paste(clipboard({ files: [png('river.png')] }));
@@ -1931,7 +1932,7 @@ describe('an add and the board it belongs to (review 5, GM r8)', () => {
     }
   });
 
-  it('GM 5\'s line: one file or two or three named, from four a count', () => {
+  it('the reload line: one file or two or three named, from four a count', () => {
     expect(reloadLostLine(['river.png'])).toBe('“river.png” wasn’t added because the page reloaded while it uploaded. Paste it again.');
     expect(reloadLostLine(['a.png', 'b.png'])).toBe('“a.png” and “b.png” weren’t added because the page reloaded while they uploaded. Paste them again.');
     expect(reloadLostLine(['a.png', 'b.png', 'c.png']))
@@ -1939,7 +1940,7 @@ describe('an add and the board it belongs to (review 5, GM r8)', () => {
     expect(reloadLostLine(['a', 'b', 'c', 'd'])).toBe('4 images weren’t added because the page reloaded while they uploaded. Paste them again.');
   });
 
-  it('LOW-3: back on a board an add landed on while away, it fades in over its spot, with the chip when outside the view', async () => {
+  it('back on a board an add landed on while away, it fades in over its spot, with the chip when outside the view', async () => {
     const uploads = holdUploads();
     await openStudio('board');
     paste(clipboard({ files: [png('river.png')] }));
@@ -1960,7 +1961,7 @@ describe('an add and the board it belongs to (review 5, GM r8)', () => {
     await waitFor(() => expect(board.placeholders).toEqual([]));
   });
 
-  // GM r13: the chip only while less than half the tile is in view, here too.
+  // The chip only while less than half the tile is in view, here too (design).
   it.each([[0.49, true], [0.5, false]] as const)('back on the board, its spot %s in view: chip %s', async (inView, chip) => {
     const uploads = holdUploads();
     await openStudio('board');
@@ -1982,7 +1983,7 @@ describe('an add and the board it belongs to (review 5, GM r8)', () => {
     }
   });
 
-  // Round 6f (GM r14): "in view" leaves out what the notice band covers, the chip's own floor.
+  // "in view" leaves out what the notice band covers, the chip's own floor.
   it('back on the board, its spot in the view but under the notice band: chip', async () => {
     const uploads = holdUploads();
     await openStudio('board');
@@ -2001,7 +2002,7 @@ describe('an add and the board it belongs to (review 5, GM r8)', () => {
     await waitFor(() => expect(board.outside?.rects).toEqual([{ x: spot.x, y: spot.y, width: spot.width, height: spot.height }]));
   });
 
-  it('LOW-3: a landing the board\'s draft couldn\'t take (edits unsent) is read again on return; the draft keeps its own edit', async () => {
+  it('a landing the board\'s draft couldn\'t take (edits unsent) is read again on return; the draft keeps its own edit', async () => {
     const uploads = holdUploads();
     await openStudio('board');
     paste(clipboard({ files: [png('river.png')] }));
@@ -2017,7 +2018,7 @@ describe('an add and the board it belongs to (review 5, GM r8)', () => {
     await waitFor(() => expect(api.fetchMoodboard).toHaveBeenCalledWith('g1'));
   });
 
-  it('LOW-4: a failed write while away keeps the image in the board\'s draft and says the save failed', async () => {
+  it('a failed write while away keeps the image in the board\'s draft and says the save failed', async () => {
     const uploads = holdUploads();
     await openStudio('board');
     paste(clipboard({ files: [png('river.png')] }));
@@ -2026,14 +2027,14 @@ describe('an add and the board it belongs to (review 5, GM r8)', () => {
     api.editMoodboard.mockRejectedValue(Object.assign(new Error('offline'), { status: 0 }));
     await uploads.open();
     await waitFor(() => expect(store().entries[g1Key].saveError).toBeTruthy());
-    // Nothing is lost (the image stays in the draft): the neutral save line (round 6f, GM r14).
+    // Nothing is lost (the image stays in the draft): the neutral save line (design).
     expect(store().entries[g1Key].saveError).toEqual({ heading: '', reason: 'Nebula couldn’t save the moodboard because the server didn’t accept this save. Try again.' });
     expect(store().entries[g1Key].retry).toBe('save');
     expect(urlsOf(g1Key)).toContain(river);
     expect(((store().entries[g1Key].draft as { pendingOps?: MoodboardOp[] }).pendingOps ?? []).some((op) => op.op === 'add')).toBe(true);
   });
 
-  it('a failed write while away, signed out: its line says Reload and the board offers no Retry (GM r16 7a)', async () => {
+  it('a failed write while away, signed out: its line says Reload and the board offers no Retry', async () => {
     const uploads = holdUploads();
     await openStudio('board');
     paste(clipboard({ files: [png('river.png')] }));
@@ -2047,7 +2048,7 @@ describe('an add and the board it belongs to (review 5, GM r8)', () => {
     expect(urlsOf(g1Key)).toContain(river);
   });
 
-  it('a failed write while away for a saved board whose draft isn\'t loaded: the add is in no draft, so GM r16\'s red line naming it, no Retry (review 9 NIT-2)', async () => {
+  it('a failed write while away for a saved board whose draft isn\'t loaded: the add is in no draft, so the red line names it, no Retry', async () => {
     const uploads = holdUploads();
     await openStudio('board');
     paste(clipboard({ files: [png('river.png')] }));
@@ -2060,20 +2061,20 @@ describe('an add and the board it belongs to (review 5, GM r8)', () => {
     await waitFor(() => expect(store().entries[g1Key].saveError).toBeTruthy());
     expect(store().entries[g1Key]).toMatchObject({ retry: null,
       saveError: { heading: '', reason: 'Nebula couldn’t add “river.png” because the moodboard hadn’t loaded. Add it again.' } });
-    // The board saved fine: only the add was lost, so its state isn't an error (GM r17).
+    // The board saved fine: only the add was lost, so its state isn't an error (design).
     expect(store().entries[g1Key].saveState).not.toBe('error');
     expect(urlsOf(g1Key)).not.toContain(river);
-    // The person sees it when they open the board: its load keeps the red line, with no Retry (round 6h, live).
+    // The person sees it when they open the board: its load keeps the red line, with no Retry.
     await toBoard('g1');
     const line = await screen.findByText('Nebula couldn’t add “river.png” because the moodboard hadn’t loaded. Add it again.');
     expect(line.closest('.moodboard-studio__notice')!.className).toContain('moodboard-studio__notice--error');
     expect(store().entries[g1Key]).toMatchObject({ loaded: true, saveState: 'saved', retry: null });
-    // The chip stays "Saved"; the red line carries the loss (GM r17).
+    // The chip stays "Saved"; the red line carries the loss (design).
     expect(document.querySelector('.moodboard-studio-toolbar__state')!.textContent).toBe('Saved');
     expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
   });
 
-  it('LOW-5: away, the spot check reads the board from the server, so a tile added meanwhile moves the add off it', async () => {
+  it('away, the spot check reads the board from the server, so a tile added meanwhile moves the add off it', async () => {
     const uploads = holdUploads();
     await openStudio('board');
     paste(clipboard({ files: [png('river.png')] }));
@@ -2201,7 +2202,7 @@ describe('an add and the board it belongs to (review 5, GM r8)', () => {
     await waitFor(() => expect(window.sessionStorage.getItem('nebula:moodboard-adds-in-flight')).toBeNull());
   });
 
-  it('GM 3: the same file on the same board after a delete undone is still caught (the board, not its draft)', async () => {
+  it('the same file on the same board after a delete undone is still caught (the board, not its draft)', async () => {
     const uploads = holdUploads();
     await openStudio('board');
     paste(clipboard({ files: [png('river.png')] }));
@@ -2251,7 +2252,7 @@ describe('an add and the board it belongs to (review 5, GM r8)', () => {
   });
 });
 
-describe('review 6 (round 6b): the open board\'s commit, reload records per tab and per board', () => {
+describe('the open board\'s commit, reload records per tab and per board', () => {
   const store = () => useAssetStudioDraftStore.getState();
   const newKey = JSON.stringify(['moodboard', 'global', 'new']);
   const madeKey = JSON.stringify(['moodboard', 'global', 'made1']);
@@ -2313,7 +2314,7 @@ describe('review 6 (round 6b): the open board\'s commit, reload records per tab 
     await screen.findByTestId('board-canvas');
   };
 
-  it('MEDIUM-1 (R6-D): a Board paste on an unsaved board the person stays on is that board\'s own add: one create, no away edit, nothing marked away', async () => {
+  it('a Board paste on an unsaved board the person stays on is that board\'s own add: one create, no away edit, nothing marked away', async () => {
     const made = madeServer();
     await openNew();
     paste(clipboard({ files: [png('river.png')] }));
@@ -2327,7 +2328,7 @@ describe('review 6 (round 6b): the open board\'s commit, reload records per tab 
     expect(store().entries[madeKey].dirty).toBe(false);
   });
 
-  it('MEDIUM-1 (R6-A): New with an add in flight whose upload ends while New\'s save is out: the saved board holds the image, and its draft is clean', async () => {
+  it('New with an add in flight whose upload ends while New\'s save is out: the saved board holds the image, and its draft is clean', async () => {
     const create = gate();
     const made = madeServer(create.held);
     const uploads = holdUploads();
@@ -2359,7 +2360,7 @@ describe('review 6 (round 6b): the open board\'s commit, reload records per tab 
     expect(made.board?.images.filter((img) => img.url === river)).toHaveLength(1);
   });
 
-  it('MEDIUM-1: a board field changed while New\'s save was out is sent too, on a PUT after the image edit', async () => {
+  it('a board field changed while New\'s save was out is sent too, on a PUT after the image edit', async () => {
     const create = gate();
     const made = madeServer(create.held);
     const uploads = holdUploads();
@@ -2378,7 +2379,7 @@ describe('review 6 (round 6b): the open board\'s commit, reload records per tab 
     await waitFor(() => expect(store().entries[madeKey]).toMatchObject({ dirty: false, saveState: 'saved' }));
   });
 
-  it('MEDIUM-1: someone else saved the new board meanwhile (409): the queued send reads the board, replays, and sends again', async () => {
+  it('someone else saved the new board meanwhile (409): the queued send reads the board, replays, and sends again', async () => {
     const create = gate();
     const made = madeServer(create.held);
     const uploads = holdUploads();
@@ -2402,7 +2403,7 @@ describe('review 6 (round 6b): the open board\'s commit, reload records per tab 
     expect(urlsOf(madeKey)).toEqual(['/api/outputs/agent.png', river]);
   });
 
-  it('MEDIUM-1: a change made while the queued send is out goes the same way once it lands', async () => {
+  it('a change made while the queued send is out goes the same way once it lands', async () => {
     const create = gate();
     const made = madeServer(create.held);
     const uploads = holdUploads();
@@ -2425,7 +2426,7 @@ describe('review 6 (round 6b): the open board\'s commit, reload records per tab 
     await waitFor(() => expect(store().entries[madeKey]).toMatchObject({ dirty: false, saveState: 'saved' }));
   });
 
-  it('MEDIUM-1: the queued send failing is the saved board\'s own line, with Retry, and keeps the image', async () => {
+  it('the queued send failing is the saved board\'s own line, with Retry, and keeps the image', async () => {
     const create = gate();
     const made = madeServer(create.held);
     const uploads = holdUploads();
@@ -2445,7 +2446,7 @@ describe('review 6 (round 6b): the open board\'s commit, reload records per tab 
     expect(store().entries[newKey].saveError ?? null).toBeNull();
   });
 
-  it('MEDIUM-1 (R6-E): a List paste on an unsaved board the person stays on: one create, the Studio follows the saved board, nothing sent twice', async () => {
+  it('a List paste on an unsaved board the person stays on: one create, the Studio follows the saved board, nothing sent twice', async () => {
     const made = madeServer();
     await openNew();
     act(() => { useBoardCanvasStore.setState({ view: 'list' }); });
@@ -2472,7 +2473,7 @@ describe('review 6 (round 6b): the open board\'s commit, reload records per tab 
     expect(made.creates).toHaveLength(1);
   });
 
-  it('MEDIUM-2: reload records are this tab\'s: one in storage other tabs share is neither said nor taken, and this tab\'s go to its session storage', async () => {
+  it('reload records are this tab\'s: one in storage other tabs share is neither said nor taken, and this tab\'s go to its session storage', async () => {
     window.localStorage.setItem(PENDING, JSON.stringify([
       { id: 'placeholder-1', board: 'g1', name: 'tab-a.png', page: 'tab A, still open', at: Date.now() }]));
     try {
@@ -2490,7 +2491,7 @@ describe('review 6 (round 6b): the open board\'s commit, reload records per tab 
     } finally { window.localStorage.removeItem(PENDING); }
   });
 
-  it('R8: an add that ends clears only this page load\'s record, never an earlier load\'s with the same holder id', async () => {
+  it('an add that ends clears only this page load\'s record, never an earlier load\'s with the same holder id', async () => {
     const uploads = holdUploads();
     await openStudio('board');
     paste(clipboard({ files: [png('river.png')] }));
@@ -2504,7 +2505,7 @@ describe('review 6 (round 6b): the open board\'s commit, reload records per tab 
     await waitFor(() => expect(records().map((it) => it.name)).toEqual(['sea.png']));
   });
 
-  it('NIT-6: a record older than a day is dropped unsaid, and the list keeps only the newest 50', async () => {
+  it('a record older than a day is dropped unsaid, and the list keeps only the newest 50', async () => {
     const now = Date.now();
     window.sessionStorage.setItem(PENDING, JSON.stringify([
       { id: 'placeholder-900', board: 'g1', name: 'old.png', page: 'an earlier page', at: now - 25 * 60 * 60 * 1000 },
@@ -2524,7 +2525,7 @@ describe('review 6 (round 6b): the open board\'s commit, reload records per tab 
     await uploads.open();
   });
 
-  it('LOW-3 (GM r10 1): New with an add in flight, then a reload: the line shows on the board New saved, and only there', async () => {
+  it('New with an add in flight, then a reload: the line shows on the board New saved, and only there', async () => {
     madeServer();
     const uploads = holdUploads();
     await openNew();
@@ -2548,7 +2549,7 @@ describe('review 6 (round 6b): the open board\'s commit, reload records per tab 
     await uploads.open();
   });
 
-  it('LOW-3: an unsaved board an away landing saves: another add still on its way is recorded under the saved id, until it ends', async () => {
+  it('an unsaved board an away landing saves: another add still on its way is recorded under the saved id, until it ends', async () => {
     madeServer();
     const uploads = holdEach();
     await openNew();
@@ -2568,7 +2569,7 @@ describe('review 6 (round 6b): the open board\'s commit, reload records per tab 
     await waitFor(() => expect(records()).toEqual([]));
   });
 
-  it('NIT-5: New whose save of the unsaved board is out when the person picks another board: the fresh draft is made, and they stay where they went', async () => {
+  it('New whose save of the unsaved board is out when the person picks another board: the fresh draft is made, and they stay where they went', async () => {
     const create = gate();
     madeServer(create.held);
     const uploads = holdUploads();
@@ -2588,7 +2589,7 @@ describe('review 6 (round 6b): the open board\'s commit, reload records per tab 
     await uploads.open();
   });
 
-  it('NIT-5: a delete whose save of an unsaved board is out when the person leaves the Studio doesn\'t pull them back', async () => {
+  it('a delete whose save of an unsaved board is out when the person leaves the Studio doesn\'t pull them back', async () => {
     const create = gate();
     madeServer(create.held);
     removeAsset.fn = async () => true;
@@ -2608,7 +2609,7 @@ describe('review 6 (round 6b): the open board\'s commit, reload records per tab 
     expect(useUIStore.getState().viewMode).toBe('canvas');
   });
 
-  it('NIT-5: a delete whose trash move is out when the person picks another board leaves them there', async () => {
+  it('a delete whose trash move is out when the person picks another board leaves them there', async () => {
     const removal = gate();
     removeAsset.fn = async () => { await removal.held; return true; };
     await openStudio('board');
@@ -2620,7 +2621,7 @@ describe('review 6 (round 6b): the open board\'s commit, reload records per tab 
     expect(useUIStore.getState().moodboardEditorId).toBe('g2');
   });
 
-  it('R12/R13: New while the open new board\'s own first save is out waits for it and keeps that board: one create, and a fresh draft', async () => {
+  it('New while the open new board\'s own first save is out waits for it and keeps that board: one create, and a fresh draft', async () => {
     const create = gate();
     const made = madeServer(create.held);
     await openNew();
@@ -2638,7 +2639,7 @@ describe('review 6 (round 6b): the open board\'s commit, reload records per tab 
     expect(made.creates).toHaveLength(1);
   });
 
-  it('R3/R5: after an unsaved draft is discarded mid-upload, the same image pasted on the fresh draft (a later epoch) is its own add, and lands there', async () => {
+  it('after an unsaved draft is discarded mid-upload, the same image pasted on the fresh draft (a later epoch) is its own add, and lands there', async () => {
     const made = madeServer();
     const uploads = holdUploads();
     await openNew();
@@ -2659,7 +2660,7 @@ describe('review 6 (round 6b): the open board\'s commit, reload records per tab 
     expect(made.creates).toHaveLength(1);
   });
 
-  it('R14: a failed away write for a board whose draft was reset meanwhile writes nothing into the fresh draft at its key', async () => {
+  it('a failed away write for a board whose draft was reset meanwhile writes nothing into the fresh draft at its key', async () => {
     const uploads = holdUploads();
     await openStudio('board');
     paste(clipboard({ files: [png('river.png')] }));
@@ -2674,7 +2675,7 @@ describe('review 6 (round 6b): the open board\'s commit, reload records per tab 
     expect(urlsOf(g1Key)).toEqual([]);
   });
 
-  it('R16: away spots on a board read again (its draft loading) wait for the load before they fade in', async () => {
+  it('away spots on a board read again (its draft loading) wait for the load before they fade in', async () => {
     const uploads = holdUploads();
     await openStudio('board');
     paste(clipboard({ files: [png('river.png')] }));
@@ -2695,7 +2696,7 @@ describe('review 6 (round 6b): the open board\'s commit, reload records per tab 
     await waitFor(() => expect(useBoardAddStore.getState().held).toEqual([expect.objectContaining({ away: false })]));
   });
 
-  it('R17: the reload line waits for its board to load: a board read again says it once it is drawn', async () => {
+  it('the reload line waits for its board to load: a board read again says it once it is drawn', async () => {
     window.sessionStorage.setItem(PENDING, JSON.stringify([
       { id: 'placeholder-9', board: 'g1', name: 'river.png', page: 'an earlier page', at: Date.now() }]));
     const load = gate();
@@ -2714,7 +2715,7 @@ describe('review 6 (round 6b): the open board\'s commit, reload records per tab 
     expect(records()).toEqual([]);
   });
 
-  // Review 7 (round 6c), GM r11 1: a board New just saved keeps Undo like any saved board.
+  // A board New just saved keeps Undo like any saved board (design).
   const undoServer = (made: ReturnType<typeof madeServer>, holdMade: { on: boolean; gate: Promise<void> }) => {
     const madeEdit = api.editMoodboard.getMockImplementation()!;
     api.editMoodboard.mockImplementation(async (id: string, ops: MoodboardOp[], base?: number) => {
@@ -2735,7 +2736,7 @@ describe('review 6 (round 6b): the open board\'s commit, reload records per tab 
     });
   };
 
-  it('R7-U1: an add on the saved board while the queued send is out keeps its Undo', async () => {
+  it('an add on the saved board while the queued send is out keeps its Undo', async () => {
     const create = gate();
     const made = madeServer(create.held);
     const editGate = gate();
@@ -2768,7 +2769,7 @@ describe('review 6 (round 6b): the open board\'s commit, reload records per tab 
     await waitFor(() => expect(made.board?.images.map((img) => img.url)).toEqual([river]), { timeout: 2000 });
   });
 
-  it('R7-U1 control: the same paste after the queued send has landed keeps its Undo (persist sends it)', async () => {
+  it('the control case: the same paste after the queued send has landed keeps its Undo (persist sends it)', async () => {
     const create = gate();
     const made = madeServer(create.held);
     const editGate = gate();
@@ -2791,7 +2792,7 @@ describe('review 6 (round 6b): the open board\'s commit, reload records per tab 
     await waitFor(() => expect(made.board?.images.map((img) => img.url)).toEqual([river]), { timeout: 2000 });
   });
 
-  it('R7-U1 conflict: a paste on the saved board while the queued send replays a 409 is still its own step, with its Undo', async () => {
+  it('a paste on the saved board while the queued send replays a 409 is still its own step, with its Undo', async () => {
     const create = gate();
     const made = madeServer(create.held);
     const editGate = gate();
@@ -2830,7 +2831,7 @@ describe('review 6 (round 6b): the open board\'s commit, reload records per tab 
     await waitFor(() => expect(made.board?.images.map((img) => img.url)).toEqual([river]), { timeout: 2000 });
   });
 
-  it('R7-U1 a field the send owns, changed again on the saved board: the send takes its own value, the change is its own step', async () => {
+  it('a field the send owns, changed again on the saved board: the send takes its own value, the change is its own step', async () => {
     const create = gate();
     const made = madeServer(create.held);
     const editGate = gate();
@@ -2871,7 +2872,7 @@ describe('review 6 (round 6b): the open board\'s commit, reload records per tab 
     expect(steps.map((step) => step.state)).toEqual(['saved']);
   });
 
-  it('R7-U1 fields: a rename on the saved board while the queued send is out keeps its Undo', async () => {
+  it('a rename on the saved board while the queued send is out keeps its Undo', async () => {
     const create = gate();
     const made = madeServer(create.held);
     const editGate = gate();
@@ -2914,7 +2915,7 @@ describe('review 6 (round 6b): the open board\'s commit, reload records per tab 
     expect(steps[0].undo).toEqual([{ op: 'restore', slices: [{ part: 'fields', name: 'Untitled Moodboard' }] }]);
   });
 
-  it('R7 LOW-1: the queued send\'s 409 replay moves the add off a tile another tab put at its spot (GM r11 3)', async () => {
+  it('the queued send\'s 409 replay moves the add off a tile another tab put at its spot', async () => {
     const create = gate();
     const made = madeServer(create.held);
     const uploads = holdUploads();
@@ -2945,7 +2946,7 @@ describe('review 6 (round 6b): the open board\'s commit, reload records per tab 
     await waitFor(() => expect(store().entries[madeKey]).toMatchObject({ dirty: false, saveState: 'saved' }));
   });
 
-  it('R7-U1 away: a change on the saved board while no Studio has it open goes by the queued send', async () => {
+  it('a change on the saved board while no Studio has it open goes by the queued send', async () => {
     const create = gate();
     const made = madeServer(create.held);
     const editGate = gate();
@@ -2971,7 +2972,7 @@ describe('review 6 (round 6b): the open board\'s commit, reload records per tab 
   });
 });
 
-describe('round 6c: offline background sends, review 7\'s surviving mutants, the record cap, the reload line (GM r11 4)', () => {
+describe('offline background sends, the mutants that survived an earlier pass, the record cap, the reload line', () => {
   const store = () => useAssetStudioDraftStore.getState();
   const newKey = JSON.stringify(['moodboard', 'global', 'new']);
   const madeKey = JSON.stringify(['moodboard', 'global', 'made1']);
@@ -3054,7 +3055,7 @@ describe('round 6c: offline background sends, review 7\'s surviving mutants, the
   const offline = () => act(() => { noteBackendConnection('offline'); });
   const online = () => act(async () => { noteBackendConnection('online'); await Promise.resolve(); });
 
-  it('New\'s save (saveAway) of a board whose image went in the create: the add counts as sent, nothing replays it (review 9 R27)', async () => {
+  it('New\'s save (saveAway) of a board whose image went in the create: the add counts as sent, nothing replays it', async () => {
     const made = madeServer();
     await openNew();
     // No name, so the autosave can't save it: New's own save (saveAway) sends the create, under the default name.
@@ -3072,7 +3073,7 @@ describe('round 6c: offline background sends, review 7\'s surviving mutants, the
     expect(made.board?.images.map((img) => img.url)).toEqual([river]);
   });
 
-  it('a queued send whose owned name landed from another tab before it was refused: the record keeps no field, and the resend PUTs none (review 9 R23, R24)', async () => {
+  it('a queued send whose owned name landed from another tab before it was refused: the record keeps no field, and the resend PUTs none', async () => {
     const create = gate();
     const made = madeServer(create.held);
     await newWithAdd(made);
@@ -3136,7 +3137,7 @@ describe('round 6c: offline background sends, review 7\'s surviving mutants, the
     // Sent again once, not more.
     await new Promise((done) => setTimeout(done, 50));
     expect(made.editsTried).toBe(1);
-    // The line on that board: neutral, colour included (GM r12 1), with the
+    // The line on that board: neutral, colour included (design), with the
     // header's Retry its one retry and the chip "Not saved", not "Error".
     await toBoard('made1');
     const sentence = await screen.findByText('Nebula couldn’t save the moodboard because the server is busy. Try again.');
@@ -3304,7 +3305,7 @@ describe('round 6c: offline background sends, review 7\'s surviving mutants, the
     expect(urlsOf(madeKey)).toEqual([]);
   });
 
-  it('R8-A: offline queued send, the saved board opened and renamed while offline, then reconnect: the rename keeps its Undo', async () => {
+  it('offline queued send, the saved board opened and renamed while offline, then reconnect: the rename keeps its Undo', async () => {
     const create = gate();
     const made = madeServer(create.held);
     const madePut = api.updateMoodboard.getMockImplementation()!;
@@ -3337,7 +3338,7 @@ describe('round 6c: offline background sends, review 7\'s surviving mutants, the
     expect(steps[0].state).toBe('saved');
   });
 
-  it('U4: a queued PUT that conflicts sends only the fields it was for: an outside change of another field stays', async () => {
+  it('a queued PUT that conflicts sends only the fields it was for: an outside change of another field stays', async () => {
     const create = gate();
     const made = madeServer(create.held);
     await newWithAdd(made);
@@ -3354,8 +3355,8 @@ describe('round 6c: offline background sends, review 7\'s surviving mutants, the
     expect(made.puts.at(-1)).not.toHaveProperty('direction');
   });
 
-  // Review 7, LOW-3: the queued send's and New's and a delete's mutants that survived.
-  it('X3: a queued send that keeps conflicting stops after three tries, with the board\'s line', async () => {
+  // The queued send's and New's and a delete's mutants that survived an earlier pass.
+  it('a queued send that keeps conflicting stops after three tries, with the board\'s line', async () => {
     const create = gate();
     const made = madeServer(create.held);
     await newWithAdd(made);
@@ -3371,7 +3372,7 @@ describe('round 6c: offline background sends, review 7\'s surviving mutants, the
     expect(tries).toBe(3);
   });
 
-  it('X6: a field the server cleans (a trimmed direction) is the person\'s as sent: the draft doesn\'t read it as a change', async () => {
+  it('a field the server cleans (a trimmed direction) is the person\'s as sent: the draft doesn\'t read it as a change', async () => {
     const create = gate();
     const made = madeServer(create.held);
     await newWithAdd(made);
@@ -3384,7 +3385,7 @@ describe('round 6c: offline background sends, review 7\'s surviving mutants, the
     expect(draft.base.direction).toBe(draft.direction);
   });
 
-  it('X7: a project board\'s queued PUT names its project', async () => {
+  it('a project board\'s queued PUT names its project', async () => {
     const create = gate();
     const made = madeServer(create.held, 'p1');
     const uploads = holdUploads();
@@ -3402,7 +3403,7 @@ describe('round 6c: offline background sends, review 7\'s surviving mutants, the
     expect(made.puts[0]).toMatchObject({ notes: 'warm light', projectId: 'p1' });
   });
 
-  it('X8: the queued send keeps the thumbnail its edit answered', async () => {
+  it('the queued send keeps the thumbnail its edit answered', async () => {
     const create = gate();
     const made = madeServer(create.held);
     await newWithAdd(made);
@@ -3411,7 +3412,7 @@ describe('round 6c: offline background sends, review 7\'s surviving mutants, the
     expect(store().entries[madeKey].thumbnail).toBe('/api/outputs/made1-v2.png');
   });
 
-  it('X2: a board deleted while its queued send is out: the send stops, and nothing lands in the draft that replaced it', async () => {
+  it('a board deleted while its queued send is out: the send stops, and nothing lands in the draft that replaced it', async () => {
     const create = gate();
     const made = madeServer(create.held);
     await newWithAdd(made);
@@ -3429,7 +3430,7 @@ describe('round 6c: offline background sends, review 7\'s surviving mutants, the
     expect(made.puts).toEqual([]);
   });
 
-  it('X9: a delete whose save of an unsaved board fails keeps that board\'s draft', async () => {
+  it('a delete whose save of an unsaved board fails keeps that board\'s draft', async () => {
     madeServer();
     removeAsset.fn = async () => true;
     await openStudio('board');
@@ -3444,7 +3445,7 @@ describe('round 6c: offline background sends, review 7\'s surviving mutants, the
     expect(urlsOf(newKey)).toEqual(['/api/outputs/kept.png']);
   });
 
-  it('X10: New\'s save out while the person opens the new board of another scope: they stay there', async () => {
+  it('New\'s save out while the person opens the new board of another scope: they stay there', async () => {
     const create = gate();
     madeServer(create.held);
     await openNew();
@@ -3458,7 +3459,7 @@ describe('round 6c: offline background sends, review 7\'s surviving mutants, the
     expect(useUIStore.getState()).toMatchObject({ moodboardEditorId: 'new', moodboardEditorScope: 'project' });
   });
 
-  it('NIT-4: the cap drops earlier page loads\' records first, never this page\'s adds still on their way', async () => {
+  it('the cap drops earlier page loads\' records first, never this page\'s adds still on their way', async () => {
     const earlier = Array.from({ length: 60 }, (_, i) => ({ id: `old-${i}`, board: 'g9', name: `old-${i}.png`, page: 'before', at: Date.now() }));
     window.sessionStorage.setItem(PENDING, JSON.stringify(earlier));
     const uploads = holdUploads();
@@ -3470,7 +3471,7 @@ describe('round 6c: offline background sends, review 7\'s surviving mutants, the
     await uploads.open();
   });
 
-  it('NIT-4: past the cap with this page\'s own adds, every one of them is kept', async () => {
+  it('past the cap with this page\'s own adds, every one of them is kept', async () => {
     window.sessionStorage.setItem(PENDING, JSON.stringify([{ id: 'old', board: 'g9', name: 'old.png', page: 'before', at: Date.now() }]));
     const uploads = holdUploads();
     await openStudio('board');
@@ -3480,8 +3481,8 @@ describe('round 6c: offline background sends, review 7\'s surviving mutants, the
     await uploads.open();
   });
 
-  // Round 6d (review 8, MEDIUM-1): a resend owns what the refused send owned.
-  it('R8-O1: a rename on the saved board while its queued send waits offline: the resend sends only the add, the rename goes as its own step', async () => {
+  // A resend owns what the refused send owned.
+  it('a rename on the saved board while its queued send waits offline: the resend sends only the add, the rename goes as its own step', async () => {
     const create = gate();
     const made = madeServer(create.held);
     const madePut = api.updateMoodboard.getMockImplementation()!;
@@ -3516,7 +3517,7 @@ describe('round 6c: offline background sends, review 7\'s surviving mutants, the
     expect(waiting()).toEqual([]);
   });
 
-  it('R8-B: an away add refused offline, the person back on that board renames it offline, then reconnect: the resend sends only the add; the rename keeps its Undo', async () => {
+  it('an away add refused offline, the person back on that board renames it offline, then reconnect: the resend sends only the add; the rename keeps its Undo', async () => {
     const uploads = holdUploads();
     await openStudio('board');
     paste(clipboard({ files: [png('river.png')] }));
@@ -3557,7 +3558,7 @@ describe('round 6c: offline background sends, review 7\'s surviving mutants, the
     expect(steps.map((step) => [step.label, step.state])).toEqual([['Changed the name', 'saved']]);
   });
 
-  // Round 6d (review 8, MEDIUM-2): a background send cut off by a network drop.
+  // A background send cut off by a network drop.
   /** The banner's health probe, as BackendConnectionStatus answers one asked for: `answer`. */
   const probes = { active: 0 };
   const probeAnswers = (answer: 'online' | 'offline') => {
@@ -3569,7 +3570,7 @@ describe('round 6c: offline background sends, review 7\'s surviving mutants, the
     });
     return { asked, stop: () => { probes.active -= 1; unsubscribe(); } };
   };
-  /** A banner that finds Nebula online whenever a test hasn't said what its probe answers (round 6g: a cut-off
+  /** A banner that finds Nebula online whenever a test hasn't said what its probe answers (a cut-off
    *  create probes before it says the line), so the test doesn't sit out probeOffline's 5 s timeout. */
   const probesOnline = () => subscribeHealthProbeRequests(() => {
     if (!probes.active) act(() => { noteProbeAnswer(startHealthProbe(), 'online'); });
@@ -3600,7 +3601,7 @@ describe('round 6c: offline background sends, review 7\'s surviving mutants, the
     expect(waiting()).toEqual([]);
   });
 
-  it('a queued send cut off while the probe finds Nebula online: the board\'s neutral line (round 6f), and nothing kept', async () => {
+  it('a queued send cut off while the probe finds Nebula online: the board\'s neutral line, and nothing kept', async () => {
     const create = gate();
     const made = madeServer(create.held);
     await newWithAdd(made);
@@ -3728,7 +3729,7 @@ describe('round 6c: offline background sends, review 7\'s surviving mutants, the
     expect(waiting()).toHaveLength(1);
   });
 
-  it('New\'s own save cut off by a drop, the probe finding Nebula online: the neutral save line (round 6g: a create probes as a background send)', async () => {
+  it('New\'s own save cut off by a drop, the probe finding Nebula online: the neutral save line (a create probes as a background send)', async () => {
     madeServer();
     api.createMoodboard.mockImplementation(async () => { throw dropped(); });
     const probe = probeAnswers('online');
@@ -3745,8 +3746,8 @@ describe('round 6c: offline background sends, review 7\'s surviving mutants, the
     } finally { probe.stop(); }
   });
 
-  // Round 6g (GM r15 4): a create that loses the network is a background send.
-  describe('round 6g: a create cut off by a network drop', () => {
+  // A create that loses the network is a background send.
+  describe('a create cut off by a network drop', () => {
 
     /** made1's server behind the real fetch's offline check: a create while offline is refused unsent; `cut`
      *  creates lose their answer (the first `cut.made` of them made the board); the rest are answered. */
@@ -3849,8 +3850,8 @@ describe('round 6c: offline background sends, review 7\'s surviving mutants, the
     } finally { stop(); }
   });
 
-  // Round 6d (review 8, LOW-2): the attempt guards, the fields-only record, the lost records.
-  it('Y10: a refusal that comes back after the board was deleted (its key reset) leaves the fresh draft alone', async () => {
+  // The attempt guards, the fields-only record, the lost records.
+  it('a refusal that comes back after the board was deleted (its key reset) leaves the fresh draft alone', async () => {
     const create = gate();
     const made = madeServer(create.held);
     await newWithAdd(made);
@@ -3866,7 +3867,7 @@ describe('round 6c: offline background sends, review 7\'s surviving mutants, the
     expect(waiting()).toEqual([]);
   });
 
-  it('Y27: a refused create that comes back after its draft was reset leaves the fresh draft alone', async () => {
+  it('a refused create that comes back after its draft was reset leaves the fresh draft alone', async () => {
     madeServer();
     const create = gate();
     api.createMoodboard.mockImplementation(async () => { await create.held; throw new OfflineRefusal('POST', '/api/moodboards'); });
@@ -3885,7 +3886,7 @@ describe('round 6c: offline background sends, review 7\'s surviving mutants, the
     expect(store().entries[newKey]).toMatchObject({ dirty: false, pendingSaveId: null });
   });
 
-  it('Y19: the open board\'s refused save coming back after its draft was reset leaves the fresh draft alone', async () => {
+  it('the open board\'s refused save coming back after its draft was reset leaves the fresh draft alone', async () => {
     await openStudio('board');
     const g1Key = JSON.stringify(['moodboard', 'global', 'g1']);
     const edit = gate();
@@ -3899,7 +3900,7 @@ describe('round 6c: offline background sends, review 7\'s surviving mutants, the
     expect(store().entries[g1Key]).toMatchObject({ dirty: false, pendingSaveId: null });
   });
 
-  it('Y11: a queued send left with only a field to send when Nebula went offline keeps it for a reload', async () => {
+  it('a queued send left with only a field to send when Nebula went offline keeps it for a reload', async () => {
     const create = gate();
     const made = madeServer(create.held);
     await newWithAdd(made);
@@ -3920,7 +3921,7 @@ describe('round 6c: offline background sends, review 7\'s surviving mutants, the
     expect(waiting()).toEqual([]);
   });
 
-  it('D5: the record kept for a reload is what the refused send owned, not what the draft gained while it was out', async () => {
+  it('the record kept for a reload is what the refused send owned, not what the draft gained while it was out', async () => {
     const create = gate();
     const made = madeServer(create.held);
     await newWithAdd(made);
@@ -3936,13 +3937,13 @@ describe('round 6c: offline background sends, review 7\'s surviving mutants, the
     expect(waiting()).toEqual([expect.objectContaining({ board: 'made1', fields: {}, ops: [expect.objectContaining({ op: 'add' })] })]);
   });
 
-  it('NIT-4: a record left with nothing once its malformed ops are dropped isn\'t written back', () => {
+  it('a record left with nothing once its malformed ops are dropped isn\'t written back', () => {
     window.sessionStorage.setItem(WAITING, JSON.stringify([{ board: 'x', page: 'before', at: Date.now(), fields: {}, ops: [{}] }]));
     keepWaitingSend('made1', [{ op: 'add', images: [{ id: 'k', url: '/api/outputs/k.png' }], at: { x: 0, y: 0 } }], {});
     expect(waiting().map((it) => it.board)).toEqual(['made1']);
   });
 
-  it('Y13: a send that landed takes its unstorable images\' reload records with it', () => {
+  it('a send that landed takes its unstorable images\' reload records with it', () => {
     keepWaitingSend('made1', [{ op: 'add', images: [{ id: 'b', url: 'blob:http://localhost/only-here.png' }], at: { x: 0, y: 0 } }], {});
     expect(records()).toEqual([expect.objectContaining({ board: 'made1', name: 'only-here.png' })]);
     dropWaitingSend('made1');
@@ -3950,14 +3951,14 @@ describe('round 6c: offline background sends, review 7\'s surviving mutants, the
     expect(waiting()).toEqual([]);
   });
 
-  it('Y23: a data: image is no image a reload can add: it isn\'t stored, and the reload line names it', () => {
+  it('a data: image is no image a reload can add: it isn\'t stored, and the reload line names it', () => {
     keepWaitingSend('made1', [{ op: 'add', images: [{ id: 'd', url: 'data:image/png;base64,iVBORw0KGgo=' }], at: { x: 0, y: 0 } }], {});
     expect(waiting()).toEqual([]);
     expect(records()).toHaveLength(1);
     expect(window.sessionStorage.getItem(WAITING) ?? '').not.toContain('data:image');
   });
 
-  it('Y15: a waiting add the board holds under another id (same image) isn\'t sent again', async () => {
+  it('a waiting add the board holds under another id (same image) isn\'t sent again', async () => {
     const made = madeServer();
     made.board = { ...clone(server.board), id: 'made1', version: 2,
       images: [image('server-id', { url: river, placements: [card('server-id')] })] } as Moodboard;
@@ -3972,7 +3973,7 @@ describe('round 6c: offline background sends, review 7\'s surviving mutants, the
     expect(made.board?.images).toHaveLength(1);
   });
 
-  it('NIT-4 (review 8): a waiting record\'s op that isn\'t an op Nebula makes is dropped; the rest is sent', async () => {
+  it('a waiting record\'s op that isn\'t an op Nebula makes is dropped; the rest is sent', async () => {
     const made = madeServer();
     made.board = { ...clone(server.board), id: 'made1', images: [], version: 1 } as Moodboard;
     const good = { op: 'add', images: [{ id: 'kept', url: '/api/outputs/kept.png' }], at: { x: 0, y: 0 } };
@@ -3989,7 +3990,7 @@ describe('round 6c: offline background sends, review 7\'s surviving mutants, the
     expect(waiting()).toEqual([]);
   });
 
-  it('NIT-1: the reload line goes when the person leaves its board; a quick return doesn\'t show it again', async () => {
+  it('the reload line goes when the person leaves its board; a quick return doesn\'t show it again', async () => {
     window.sessionStorage.setItem(PENDING, JSON.stringify([{ id: 'r', board: 'g1', name: 'river.png', page: 'before', at: Date.now() }]));
     await openStudio('board');
     const line = '“river.png” wasn’t added because the page reloaded while it uploaded. Paste it again.';
@@ -4001,9 +4002,9 @@ describe('round 6c: offline background sends, review 7\'s surviving mutants, the
     expect(screen.queryByText(line)).toBeNull();
   });
 
-  // Round 6e: a create carries the unsaved board's id, so one sent again after
+  // A create carries the unsaved board's id, so one sent again after
   // its answer was lost returns the board the first one made.
-  describe('round 6e: a create sent again makes one board', () => {
+  describe('a create sent again makes one board', () => {
     let quiet: () => void = () => {};
     beforeEach(() => { quiet = probesOnline(); });
     afterEach(() => { quiet(); });
@@ -4014,7 +4015,7 @@ describe('round 6c: offline background sends, review 7\'s surviving mutants, the
      *  board has is skipped, as the server skips it. */
     const onceServer = (made: ReturnType<typeof madeServer>, cut: { next: boolean; hold?: Promise<void> }) => {
       const create = api.createMoodboard.getMockImplementation()!;
-      // Each id's record: the attempt that made the board and its version then (round 6g).
+      // Each id's record: the attempt that made the board and its version then.
       const seen = new Map<string, { attempt: number | null; version: number }>();
       api.createMoodboard.mockImplementation(async (body: Partial<Moodboard> & { requestId?: string; attempt?: number }) => {
         if (isBackendOffline()) throw new OfflineRefusal('POST', '/api/moodboards');
@@ -4101,7 +4102,7 @@ describe('round 6c: offline background sends, review 7\'s surviving mutants, the
       expect(new Set(requestIds()).size).toBe(1);
     });
 
-    it('a repeat naming no attempt of this draft\'s (an older Nebula, or an agent\'s create): it takes the board as it is and replays all (round 6g)', async () => {
+    it('a repeat naming no attempt of this draft\'s (an older Nebula, or an agent\'s create): it takes the board as it is and replays all', async () => {
       const made = madeServer();
       const held = gate();
       onceServer(made, { next: true, hold: held.held });
@@ -4165,8 +4166,8 @@ describe('round 6c: offline background sends, review 7\'s surviving mutants, the
       expect(new Set(after)).toEqual(new Set([after[0]]));
     });
 
-    // Round 6g (review 9 MEDIUM-1, GM r15 1): a repeat rebases on the attempt that made the board.
-    it('R9-A: the board renamed and its image taken off before the resend: the board\'s changes stay, nothing is replayed over them', async () => {
+    // A repeat rebases on the attempt that made the board.
+    it('the board renamed and its image taken off before the resend: the board\'s changes stay, nothing is replayed over them', async () => {
       const made = madeServer();
       onceServer(made, { next: true });
       const answer = api.createMoodboard.getMockImplementation()!;
@@ -4196,7 +4197,7 @@ describe('round 6c: offline background sends, review 7\'s surviving mutants, the
       expect(api.createMoodboard.mock.calls.map((call) => (call[0] as { attempt?: number }).attempt)).toEqual([1, 2]);
     });
 
-    it('R9-B: renamed on the rail while the unsaved board said Not saved; Retry keeps the rename and the open board\'s own draft', async () => {
+    it('renamed on the rail while the unsaved board said Not saved; Retry keeps the rename and the open board\'s own draft', async () => {
       const made = madeServer();
       onceServer(made, { next: true });
       const answer = api.createMoodboard.getMockImplementation()!;
@@ -4230,7 +4231,7 @@ describe('round 6c: offline background sends, review 7\'s surviving mutants, the
       expect(urlsOf(madeKey)).toEqual([river]);
     });
 
-    it('R9-B with what the unsaved board still had to send (an image, its notes): folded into the open board\'s draft and sent from it', async () => {
+    it('renamed on the rail, with what the unsaved board still had to send (an image, its notes): folded into the open board\'s draft and sent from it', async () => {
       const made = madeServer();
       onceServer(made, { next: true });
       const answer = api.createMoodboard.getMockImplementation()!;
@@ -4268,7 +4269,7 @@ describe('round 6c: offline background sends, review 7\'s surviving mutants, the
       expect((store().entries[madeKey].draft as { notes: string; name: string })).toMatchObject({ notes: 'from the unsaved board', name: 'Rivers' });
     });
 
-    it('R9-B with the open board\'s own rename still out when the repeat lands: its draft keeps it, never put over (review 9 R9-B)', async () => {
+    it('renamed on the rail, with the open board\'s own rename still out when the repeat lands: its draft keeps it, never put over', async () => {
       const made = madeServer();
       onceServer(made, { next: true });
       const answer = api.createMoodboard.getMockImplementation()!;
@@ -4350,7 +4351,7 @@ describe('round 6c: offline background sends, review 7\'s surviving mutants, the
       await waitFor(() => expect(screen.queryByText('Kept the name “Rivers” from the moodboard.')).toBeNull());
     });
 
-    it('name and notes changed on both, the board later: one line names both, joined with "and" (GM r16)', async () => {
+    it('name and notes changed on both, the board later: one line names both, joined with "and"', async () => {
       const made = madeServer();
       const state = await lostThenBusy(made);
       act(() => { store().edit(newKey, (draft) => ({ ...(draft as object), name: 'Dusk', notes: 'draft light' })); });
@@ -4390,7 +4391,7 @@ describe('round 6c: offline background sends, review 7\'s surviving mutants, the
       expect(store().entries[madeKey].notice ?? null).toBeNull();
     });
 
-    it('a field the server keeps differently from what was sent, the board unchanged since: no conflict, the draft\'s later edit goes (round 6g)', async () => {
+    it('a field the server keeps differently from what was sent, the board unchanged since: no conflict, the draft\'s later edit goes', async () => {
       const made = madeServer();
       // Sent with notes the made board doesn't keep (this server makes the board with its own).
       const state = await lostThenBusy(made, () => { store().edit(newKey, (draft) => ({ ...(draft as object), notes: 'river light' })); });
@@ -4405,7 +4406,7 @@ describe('round 6c: offline background sends, review 7\'s surviving mutants, the
       expect(store().entries[madeKey].notice ?? null).toBeNull();
     });
 
-    it('a name sent with a space the server trims is no change of the board\'s: the draft\'s later rename goes, nothing is kept (round 6g)', async () => {
+    it('a name sent with a space the server trims is no change of the board\'s: the draft\'s later rename goes, nothing is kept', async () => {
       const made = madeServer();
       const state = await lostThenBusy(made, () => { store().edit(newKey, (draft) => ({ ...(draft as object), name: 'Rivers ' })); });
       expect(made.board?.name).toBe('Rivers');
@@ -4420,7 +4421,7 @@ describe('round 6c: offline background sends, review 7\'s surviving mutants, the
       expect(store().entries[madeKey].notice ?? null).toBeNull();
     });
 
-    it('New\'s save sent again (saveAway) with an image added while the lost create was out: that image goes on the board (review 9 R27)', async () => {
+    it('New\'s save sent again (saveAway) with an image added while the lost create was out: that image goes on the board', async () => {
       const made = madeServer();
       const held = gate();
       onceServer(made, { next: true, hold: held.held });
@@ -4459,9 +4460,9 @@ describe('round 6c: offline background sends, review 7\'s surviving mutants, the
     });
   });
 
-  // Round 6f (GM r14): a failed create loses nothing (the draft keeps it all, and the create is idempotent,
+  // A failed create loses nothing (the draft keeps it all, and the create is idempotent,
   // so Retry is safe), so it says what a failed background save says, in the same look.
-  describe('round 6f: a failed create says what a failed save says (GM r14)', () => {
+  describe('a failed create says what a failed save says', () => {
     let quiet: () => void = () => {};
     beforeEach(() => { quiet = probesOnline(); });
     afterEach(() => { quiet(); });
@@ -4501,7 +4502,7 @@ describe('round 6c: offline background sends, review 7\'s surviving mutants, the
       expect(await lookOf(newKey, line)).toEqual(first);
       return first;
     };
-    /** made1's background save (the resend on reconnect, r12's line) refused with `cause`. */
+    /** made1's background save (the resend on reconnect) refused with `cause`. */
     const saveLook = async (cause: () => unknown, line: string, retry: 'save' | 'reload' = 'save') => {
       const create = gate();
       const made = madeServer(create.held);
@@ -4533,7 +4534,7 @@ describe('round 6c: offline background sends, review 7\'s surviving mutants, the
       ['400', () => new RequestFailedError(SAVE, 400, { detail: 'Bad board' }), 'the server didn’t accept this save'],
       ['a 422 on the content (not the id)', () => new RequestFailedError(SAVE, 422, { detail: 'name must be a string' }), 'the server didn’t accept this save'],
     ];
-    // GM r16 7a: signed out, the step is a reload, so no Retry anywhere.
+    // Signed out, the step is a reload, so no Retry anywhere.
     it.each([
       ['401', () => new RequestFailedError(SAVE, 401, { detail: 'Connect again' })],
       ['403', () => new RequestFailedError(SAVE, 403, { detail: 'Not yours', code: 'person_required' })],
@@ -4601,7 +4602,7 @@ describe('round 6c: offline background sends, review 7\'s surviving mutants, the
       expect(document.querySelector('.moodboard-studio__notice--neutral, .moodboard-studio__notice--error')).toBeNull();
     });
 
-    it('an unsaved board whose create failed (a 5xx) comes back after a reload with its image, its line, "Not saved" and Retry; Retry makes one board (GM r15 3)', async () => {
+    it('an unsaved board whose create failed (a 5xx) comes back after a reload with its image, its line, "Not saved" and Retry; Retry makes one board', async () => {
       const made = madeServer();
       const create = api.createMoodboard.getMockImplementation()!;
       const refuse = { on: true };
@@ -4638,7 +4639,7 @@ describe('round 6c: offline background sends, review 7\'s surviving mutants, the
       await waitFor(() => expect(window.sessionStorage.getItem('nebula:moodboard-unsaved-drafts')).toBeNull());
     });
 
-    it('a 422 for the create\'s id says 7(b)\'s neutral line; its Retry goes without the id and saves (round 6g; GM r16 7b)', async () => {
+    it('a 422 for the create\'s id says the neutral line; its Retry goes without the id and saves', async () => {
       const made = madeServer();
       const create = api.createMoodboard.getMockImplementation()!;
       // The server refuses this id however often it is sent; a create without one it takes.
@@ -4668,7 +4669,7 @@ describe('round 6c: offline background sends, review 7\'s surviving mutants, the
   });
 });
 
-describe('round 6c: an add replayed after a 409 (GM r11 3)', () => {
+describe('an add replayed after a 409', () => {
   type Add = Extract<MoodboardOp, { op: 'add' }>;
   const rect = (card: MoodboardPlacement) => ({ x: card.x, y: card.y, width: card.w, height: card.h });
   /** The first edit answers 409: meanwhile another tab put a tile `w` x `h` exactly where the add was going. */
@@ -4817,7 +4818,7 @@ describe('round 6c: an add replayed after a 409 (GM r11 3)', () => {
   });
 });
 
-describe('round 6d: the offline board, the chip, review 8\'s replay and toast gaps', () => {
+describe('the offline board, the chip, the replay and toast gaps', () => {
   const store = () => useAssetStudioDraftStore.getState();
   const g1Key = JSON.stringify(['moodboard', 'global', 'g1']);
   const offline = () => act(() => { noteBackendConnection('offline'); });
@@ -4827,7 +4828,7 @@ describe('round 6d: the offline board, the chip, review 8\'s replay and toast ga
   const rect = (placement: MoodboardPlacement) => ({ x: placement.x, y: placement.y, width: placement.w, height: placement.h });
   const [w, h] = sizeFor(1, 1.5);
 
-  it('GM r12 2, the List: offline, Add images is off with the offline reason and the drop hint goes; back online both come back', async () => {
+  it('the List: offline, Add images is off with the offline reason and the drop hint goes; back online both come back', async () => {
     await openStudio('list');
     const input = screen.getByLabelText('Add images') as HTMLInputElement;
     expect(input.disabled).toBe(false);
@@ -4846,7 +4847,7 @@ describe('round 6d: the offline board, the chip, review 8\'s replay and toast ga
     expect(screen.getByText(hint)).toBeTruthy();
   });
 
-  it('GM r12 2, the Board: the Studio tells the board it is offline, and that it is back', async () => {
+  it('the Board: the Studio tells the board it is offline, and that it is back', async () => {
     await openStudio('board');
     expect(board.offline).toBe(false);
     offline();
@@ -4880,7 +4881,7 @@ describe('round 6d: the offline board, the chip, review 8\'s replay and toast ga
     expect(board.outside).not.toBeNull();
   };
 
-  it('LOW-1 (review 8): Undo of an add placed outside the view takes its chip with it', async () => {
+  it('Undo of an add placed outside the view takes its chip with it', async () => {
     await openStudio('board');
     await pasteOutside();
     press('z', { metaKey: true });
@@ -4888,7 +4889,7 @@ describe('round 6d: the offline board, the chip, review 8\'s replay and toast ga
     await waitFor(() => expect(board.outside).toBeNull());
   });
 
-  it('LOW-1 (review 8): a remove of that add takes the chip too; one of two keeps the chip on the other', async () => {
+  it('a remove of that add takes the chip too; one of two keeps the chip on the other', async () => {
     await openStudio('board');
     board.view = { x: 0, y: 0, width: 1000, height: 270 };
     board.point = { x: 500, y: 135 };
@@ -4909,7 +4910,7 @@ describe('round 6d: the offline board, the chip, review 8\'s replay and toast ga
     await waitFor(() => expect(board.outside).toBeNull());
   });
 
-  it('a card that only touches the chip\'s tile doesn\'t hold it: moved edge to edge off it, the chip goes (review 9 R10)', async () => {
+  it('a card that only touches the chip\'s tile doesn\'t hold it: moved edge to edge off it, the chip goes', async () => {
     await openStudio('board');
     await pasteOutside();
     const [tile] = board.outside!.rects;
@@ -4923,7 +4924,7 @@ describe('round 6d: the offline board, the chip, review 8\'s replay and toast ga
     await waitFor(() => expect(board.outside).toBeNull());
   });
 
-  it('NIT-3 (review 8): an add a 409 replay moves out of the view it was made in gets the edge chip', async () => {
+  it('an add a 409 replay moves out of the view it was made in gets the edge chip', async () => {
     await openStudio('board');
     board.view = { x: 3000, y: 0, width: w + 60, height: h + 60 };
     board.point = { x: 3000 + (w + 60) / 2, y: (h + 60) / 2 };
@@ -4946,7 +4947,7 @@ describe('round 6d: the offline board, the chip, review 8\'s replay and toast ga
     expect(board.outside?.thumb).toBe('/api/outputs/chat-uploads/river.png');
   });
 
-  it('NIT-3: a replay move that stays in the view gets no chip', async () => {
+  it('a replay move that stays in the view gets no chip', async () => {
     await openStudio('board');
     const spots: Array<{ x: number; y: number }> = [];
     const send = api.editMoodboard.getMockImplementation()!;
@@ -4964,7 +4965,7 @@ describe('round 6d: the offline board, the chip, review 8\'s replay and toast ga
     expect(board.outside).toBeNull();
   });
 
-  it('round 6f: a replay move that stays in the view but leaves what is seen (the notice band) gets the chip', async () => {
+  it('a replay move that stays in the view but leaves what is seen (the notice band) gets the chip', async () => {
     await openStudio('board');
     // What is seen at paste time: exactly the spot the paste takes, so the add is seen where it was made.
     const made = placeTiles({ at: { ...board.point! }, sizes: [[w, h]], occupied: [{ x: 0, y: 0, width: 480, height: 270 },
@@ -4990,7 +4991,7 @@ describe('round 6d: the offline board, the chip, review 8\'s replay and toast ga
     await waitFor(() => expect(board.outside?.rects).toEqual([moved]));
   });
 
-  it('Y3 (review 8): a List add still uploading holds no spot on the Board: the replay leaves the add where it was', async () => {
+  it('a List add still uploading holds no spot on the Board: the replay leaves the add where it was', async () => {
     server.board = { ...server.board, images: [image('i1', { placements: [card('i1', 3000, 0)] }), image('i2', { placements: [card('i2', 3520, 0)] })] };
     await openStudio('board');
     board.point = { x: 0, y: 0 };
@@ -5014,7 +5015,7 @@ describe('round 6d: the offline board, the chip, review 8\'s replay and toast ga
     expect(addOps()[0].at).toEqual(spots[0]);
   });
 
-  it('Y4 (review 8): two adds a 409 replay moves land on spots of their own, a gap apart', async () => {
+  it('two adds a 409 replay moves land on spots of their own, a gap apart', async () => {
     await openStudio('board');
     // A view with one free spot left once the other tab's tiles are in: both
     // adds' nearest; the first takes it, the second goes on.
@@ -5039,7 +5040,7 @@ describe('round 6d: the offline board, the chip, review 8\'s replay and toast ga
     }
   });
 
-  it('Y20 (review 8): an Undo toast (it has an action) is still there back on its board', async () => {
+  it('an Undo toast (it has an action) is still there back on its board', async () => {
     const raf = immediateFrames();
     await openStudio('list');
     act(() => { (document.querySelector('.moodboard-tile__remove') as HTMLButtonElement).click(); });
@@ -5054,7 +5055,7 @@ describe('round 6d: the offline board, the chip, review 8\'s replay and toast ga
     raf.mockRestore();
   });
 
-  it('Y21 (review 8): an info line about the board the person is on stays: an Undo answered just as they come back to its board', async () => {
+  it('an info line about the board the person is on stays: an Undo answered just as they come back to its board', async () => {
     await openStudio('board');
     paste(clipboard({ files: [png('river.png')] }));
     await waitFor(() => expect(addOps()).toHaveLength(1));
@@ -5082,13 +5083,13 @@ describe('round 6d: the offline board, the chip, review 8\'s replay and toast ga
     expect(screen.getByText('Undid “Added image 3”')).toBeTruthy();
   });
 
-  it('GM r12 1: the neutral line\'s look is #204\'s neutral tokens, not the error colour', () => {
+  it('the neutral line\'s look is #204\'s neutral tokens, not the error colour', () => {
     const css = readFileSync(resolve(__dirname, '../../styles/moodboard-studio.css'), 'utf8');
     const rule = (selector: string) => css.match(new RegExp(`${selector.replace(/[.-]/g, (c) => `\\${c}`)} \\{([^}]*)\\}`))?.[1] ?? '';
     const line = rule('body.app-slava-restraint .moodboard-studio__notice--neutral');
     expect(line).toContain('color: var(--sr-ink-light)');
     expect(line).not.toMatch(/border-left/); // design: a fill, never a bar
-    // Its fill as a tint (round 6s): the base rule draws it, over the canvas colour on the board (tests/moodboardNoticeSurface.test.ts).
+    // Its fill as a tint: the base rule draws it, over the canvas colour on the board (tests/moodboardNoticeSurface.test.ts).
     expect(line).toContain('--mb-notice-fill: var(--sr-surface-control)');
     expect(rule('body.app-slava-restraint .moodboard-studio-toolbar__state--not-saved')).toContain('color: var(--sr-ink-light)');
     expect(css).not.toMatch(/--neutral[^{]*,[^{]*\{[^}]*#e0796b/);
@@ -5096,9 +5097,9 @@ describe('round 6d: the offline board, the chip, review 8\'s replay and toast ga
   });
 });
 
-// Round 6i (GM r17 2+3): a saved board's kept edit lives through a reload of
-// the tab and replays on the board as the server has it then, by the 6g rule.
-describe('a saved board\'s kept edit through a reload (round 6i, GM r17)', () => {
+// A saved board's kept edit lives through a reload of the tab and replays on the board as the
+// server has it then, by the later-edit rule a repeated create uses too (replayKeptFields).
+describe('a saved board\'s kept edit through a reload', () => {
   const EDITS = 'nebula:moodboard-kept-edits';
   const g1Key = JSON.stringify(['moodboard', 'global', 'g1']);
   const SAVE = "Couldn't save the moodboard.";
@@ -5235,7 +5236,7 @@ describe('a saved board\'s kept edit through a reload (round 6i, GM r17)', () =>
     expect(window.sessionStorage.getItem('nebula:moodboard-sends-waiting')).toBeNull();
   });
 
-  it('the board deleted for good elsewhere before the reload: nothing replays; the red line names it and the edit goes (round 6j)', async () => {
+  it('the board deleted for good elsewhere before the reload: nothing replays; the red line names it and the edit goes', async () => {
     const put = api.updateMoodboard.getMockImplementation()!;
     api.updateMoodboard.mockRejectedValue(new RequestFailedError(SAVE, 500, { detail: 'boom' }));
     await openStudio();
@@ -5251,7 +5252,7 @@ describe('a saved board\'s kept edit through a reload (round 6i, GM r17)', () =>
     expect(line.getAttribute('role')).toBe('status');
     await waitFor(() => expect(window.sessionStorage.getItem(EDITS)).toBeNull());
     expect(server.puts).toEqual([]);
-    // One line for the one fact (GM r21 Q4): no "Moodboard not found" beside the red line; once it's dismissed, the
+    // One line for the one fact: no "Moodboard not found" beside the red line; once it's dismissed, the
     // missing board's normal empty state comes back.
     expect(screen.queryByText(/Moodboard not found/)).toBeNull();
     fireEvent.click(within(line as HTMLElement).getByRole('button', { name: 'Dismiss' }));
@@ -5259,7 +5260,7 @@ describe('a saved board\'s kept edit through a reload (round 6i, GM r17)', () =>
   });
 });
 
-describe('a kept edit whose board was deleted (round 6j, GM r18)', () => {
+describe('a kept edit whose board was deleted', () => {
   const EDITS = 'nebula:moodboard-kept-edits';
   const TRASHED = 'Nebula couldn’t save your change to “Rivers” because the moodboard was deleted. Restore it to keep the change.';
   const PURGED = 'Nebula couldn’t save your change to “Rivers” because the moodboard was deleted somewhere else.';
@@ -5288,7 +5289,7 @@ describe('a kept edit whose board was deleted (round 6j, GM r18)', () => {
     expect(stored()).toEqual(['t1']);
   });
 
-  it('the open board in Recently deleted with a kept edit: only the new line (GM r19); Restore brings it back, replays, saves, then confirms', async () => {
+  it('the open board in Recently deleted with a kept edit: only the new line; Restore brings it back, replays, saves, then confirms', async () => {
     const kept = clone(server.board);
     seed(left('g1', 'Global board', { name: 'Dusk' }, { name: 'Global board' }));
     server.board = { ...kept, id: 'gone' } as Moodboard;
@@ -5317,7 +5318,7 @@ describe('a kept edit whose board was deleted (round 6j, GM r18)', () => {
     expect(screen.queryByText(/^Restored /)).toBeNull();
     act(() => { land(); });
     await waitFor(() => expect(server.board.name).toBe('Dusk'));
-    // Named by the name the line showed (GM r20 A): the rename shows in the rail on its own, and is "your change".
+    // Named by the name the line showed: the rename shows in the rail on its own, and is "your change".
     const done = await screen.findByText('Restored “Global board”. Your change is saved.', {}, { timeout: 3000 });
     expect(done.className).toContain('moodboard-studio__notice--neutral');
     expect(done.getAttribute('role')).toBe('status');
@@ -5329,7 +5330,7 @@ describe('a kept edit whose board was deleted (round 6j, GM r18)', () => {
     expect(screen.queryByText(/^Restored /)).toBeNull();
   });
 
-  it('the open board restored from the rail\'s Recently deleted instead: it loads again, replays, and gets the same confirmation (GM r19 2)', async () => {
+  it('the open board restored from the rail\'s Recently deleted instead: it loads again, replays, and gets the same confirmation', async () => {
     const kept = clone(server.board);
     seed(left('g1', 'Global board', { name: 'Dusk' }, { name: 'Global board' }));
     server.board = { ...kept, id: 'gone' } as Moodboard;
@@ -5350,7 +5351,7 @@ describe('a kept edit whose board was deleted (round 6j, GM r18)', () => {
     expect(trash.restore).not.toHaveBeenCalled();
   });
 
-  it('a plain Restore from Recently deleted, with no kept edit, is confirmed by its name alone (GM r20 A)', async () => {
+  it('a plain Restore from Recently deleted, with no kept edit, is confirmed by its name alone', async () => {
     trash.rows = [{ id: 'g1', name: 'Global board' }];
     await openStudio();
     fireEvent.click(screen.getByTestId('rail-restore-g1'));
@@ -5382,7 +5383,7 @@ describe('a kept edit whose board was deleted (round 6j, GM r18)', () => {
     act(() => { useUIStore.getState().enterMoodboardEditor('g1', 'global'); });
     render(<ReactFlowProvider><MoodboardStudioView /></ReactFlowProvider>);
     fireEvent.click(await screen.findByRole('button', { name: 'Restore' }));
-    // Nothing was left to send (GM r21 Q6): the first sentence alone, then the "Kept …" line.
+    // Nothing was left to send: the first sentence alone, then the "Kept …" line.
     const done = await screen.findByText('Restored “Global board”.', {}, { timeout: 3000 });
     const keptLine = await screen.findByText('Kept the notes from the moodboard.');
     expect(screen.queryByText(/Your change is saved/)).toBeNull();
@@ -5431,7 +5432,7 @@ describe('a kept edit whose board was deleted (round 6j, GM r18)', () => {
     expect(useUIStore.getState().moodboardEditorId).toBe('g1');
   });
 
-  // #210 round 6t (review 12 live MEDIUM-1, GM r113 1): the line's Restore follows Restore project offline (r90.3), and
+  // PR #210: the line's Restore follows Restore project offline (aria-disabled, a press sends nothing), and
   // no line or alert ever mounts with nothing to say.
   /** Every notice line on the page, after its text has had its frame: none is empty. */
   const noEmptyLines = async () => {
@@ -5584,7 +5585,7 @@ describe('a kept edit whose board was deleted (round 6j, GM r18)', () => {
     await new Promise((done) => setTimeout(done, 100));
     expect(api.lookupStoredAsset).not.toHaveBeenCalledWith('moodboard', 'g1');
   });
-  it('the red line closes by its × and when another board opens, and a re-check doesn\'t say it again (GM r19 1)', async () => {
+  it('the red line closes by its × and when another board opens, and a re-check doesn\'t say it again', async () => {
     seed(left('t1', 'Rivers'));
     await openStudio();
     const line = (await screen.findByText(PURGED)).parentElement!;
@@ -5611,7 +5612,7 @@ describe('a kept edit whose board was deleted (round 6j, GM r18)', () => {
     expect(screen.queryByText(PURGED)).toBeNull();
   });
 
-  it('several restored from the rail: the line names those left, then goes, and one confirmation names them (GM r19 3)', async () => {
+  it('several restored from the rail: the line names those left, then goes, and one confirmation names them', async () => {
     const boardOf = (id: string, name: string) => ({ ...clone(server.board), id, name, version: 1 } as Moodboard);
     const boards: Record<string, Moodboard> = { t1: boardOf('t1', 'Rivers'), t2: boardOf('t2', 'Harbor') };
     const back = new Set<string>();
@@ -5648,8 +5649,10 @@ describe('a kept edit whose board was deleted (round 6j, GM r18)', () => {
 });
 
 
-// Round 6l: GM r20 (the 6k sign-off's fixes), review 10 and GM r21 (its answers).
-describe('round 6l: kept edits and deleted boards (GM r20, r21; review 10)', () => {
+// Kept edits and deleted boards: the confirmation and the line's order, a kept image change the
+// board changed later, Delete forever or Empty in the list the line opened, the tab holding the
+// edit, where focus goes, a project in Recently deleted.
+describe('kept edits and deleted boards', () => {
   const EDITS = 'nebula:moodboard-kept-edits';
   const SAVE = "Couldn't save the moodboard.";
   const SERVER_ERROR = 'Nebula couldn’t save the moodboard because the server hit an error. Try again.';
@@ -5684,7 +5687,7 @@ describe('round 6l: kept edits and deleted boards (GM r20, r21; review 10)', () 
   const sentOps = () => server.edits.flat();
   const chip = () => document.querySelector('.moodboard-studio-toolbar__state')!.textContent;
 
-  describe('GM r20: the confirmation and the line\'s order', () => {
+  describe('the confirmation and the line\'s order', () => {
     it('B: the line names its boards as Recently deleted lists them, newest first, and focus asks for its top row first', async () => {
       seed(left('t1', 'Rivers'), left('t2', 'Harbor'));
       lookups({ t1: trashedAs('t1', 'Rivers', '2026-11-03T10:00:00+00:00'), t2: trashedAs('t2', 'Harbor', '2026-11-03T11:00:00+00:00') });
@@ -5694,7 +5697,7 @@ describe('round 6l: kept edits and deleted boards (GM r20, r21; review 10)', () 
       await waitFor(() => expect(screen.getByTestId('recently-deleted').getAttribute('data-focus')).toBe('t2,t1'));
     });
 
-    it('a confirmation\'s line mounts empty and gets its text after (review 10 NIT-4: announced)', async () => {
+    it('a confirmation\'s line mounts empty and gets its text after (announced)', async () => {
       const inserted: string[] = [];
       const watch = new MutationObserver((records) => {
         for (const record of records) {
@@ -5720,8 +5723,8 @@ describe('round 6l: kept edits and deleted boards (GM r20, r21; review 10)', () 
     });
   });
 
-  describe('GM r21 Q1, review 10 MEDIUM-1: a kept image change the board changed later', () => {
-    it('K1: a weight kept through a reload isn\'t sent over an agent\'s later weight; the Kept line names the image', async () => {
+  describe('a kept image change the board changed later', () => {
+    it('a weight kept through a reload isn\'t sent over an agent\'s later weight; the Kept line names the image', async () => {
       const edit = api.editMoodboard.getMockImplementation()!;
       api.editMoodboard.mockRejectedValue(new RequestFailedError(SAVE, 500, { detail: 'boom' }));
       await openStudio();
@@ -5745,7 +5748,7 @@ describe('round 6l: kept edits and deleted boards (GM r20, r21; review 10)', () 
       await waitFor(() => expect(window.sessionStorage.getItem(EDITS)).toBeNull());
     });
 
-    it('named by the label the board shows, "Reference #N", never its private note, beside a kept board field (GM r53)', async () => {
+    it('named by the label the board shows, "Reference #N", never its private note, beside a kept board field', async () => {
       const label = 'sunset.jpg, the one with the long orange sky over the harbor';
       seed(left('g1', 'Global board', { fields: { name: 'Dusk' }, base: { name: 'Global board' }, fieldEditedAt: { name: Date.now() - 120_000 },
         ops: [{ op: 'weight', image: 'i2', value: 0.2 }, { op: 'setAside', image: 'i2', value: true }],
@@ -5802,8 +5805,8 @@ describe('round 6l: kept edits and deleted boards (GM r20, r21; review 10)', () 
       expect(screen.queryByText(/apply your Undo/)).toBeNull();
     });
 
-    // Round 6p (review 11 LOW-3, R11-E): the number is the one the board shows once the replay is on it.
-    it('R11-E: a kept remove of an earlier image: the Kept line names the number the board shows after it', async () => {
+    // The number is the one the board shows once the replay is on it.
+    it('a kept remove of an earlier image: the Kept line names the number the board shows after it', async () => {
       seed(left('g1', 'Global board', { fields: {}, base: {},
         ops: [{ op: 'remove', images: ['i1'] }, { op: 'weight', image: 'i2', value: 0.2 }],
         opMeta: [{ at: Date.now() - 120_000 }, { at: Date.now() - 120_000, from: 1 }] }));
@@ -5814,8 +5817,8 @@ describe('round 6l: kept edits and deleted boards (GM r20, r21; review 10)', () 
       expect(screen.queryByText(/image 2/)).toBeNull();
     });
 
-    // Review 11 LOW-4, W3: the board already holds the person's value (another tab saved it): nothing to keep or send.
-    it('W3: a change the board already holds, older than the board\'s, is neither sent nor named', async () => {
+    // The board already holds the person's value (another tab saved it): nothing to keep or send.
+    it('a change the board already holds, older than the board\'s, is neither sent nor named', async () => {
       seed(left('g1', 'Global board', { fields: {}, base: {}, ops: [{ op: 'weight', image: 'i1', value: 0.2 }],
         opMeta: [{ at: Date.now() - 120_000, from: 1 }] }));
       server.board = { ...server.board, version: 3, updatedAt: later(-60_000),
@@ -5826,8 +5829,8 @@ describe('round 6l: kept edits and deleted boards (GM r20, r21; review 10)', () 
       expect(sentOps()).toEqual([]);
     });
 
-    // Review 11 LOW-4, W4: a card the board moved after the person's move keeps the board's spot and is named.
-    it('W4: a kept card move the board moved later is named by its image, and not sent', async () => {
+    // A card the board moved after the person's move keeps the board's spot and is named.
+    it('a kept card move the board moved later is named by its image, and not sent', async () => {
       seed(left('g1', 'Global board', { fields: {}, base: {}, ops: [{ op: 'place', placement: 'c-i2', x: 900, y: 40 }],
         opMeta: [{ at: Date.now() - 120_000, from: { x: 520, y: 0 } }] }));
       server.board = { ...server.board, version: 3, updatedAt: later(-60_000),
@@ -5838,8 +5841,9 @@ describe('round 6l: kept edits and deleted boards (GM r20, r21; review 10)', () 
       expect(sentOps()).toEqual([]);
     });
 
-    // Round 6p (GM r90.5): a kept remove follows the later-edit rule; on the board's own load the image is named in the
-    // Kept line (its confirmation, after a Restore, says it in GM's words: the GM r21 Q8 tests).
+    // A kept remove follows the later-edit rule; on the board's own load the image is named in the
+    // Kept line (its confirmation, after a Restore, says it in the design's words: see the tests in the
+    // 'a board whose project is in Recently deleted' describe).
     it('a kept remove of an image the board changed after it: the image stays, named, and the remove isn\'t sent', async () => {
       const at = Date.now() - 120_000;
       seed(left('g1', 'Global board', { fields: {}, base: {}, ops: [{ op: 'remove', images: ['i2'] }],
@@ -5884,7 +5888,7 @@ describe('round 6l: kept edits and deleted boards (GM r20, r21; review 10)', () 
     });
   });
 
-  describe('GM r21 Q2, review 10 live MEDIUM-1: Delete forever or Empty in the list the line opened', () => {
+  describe('Delete forever or Empty in the list the line opened', () => {
     it('Delete forever: its confirm says the change goes too; on confirm the line clears at once, the edit goes, no red line', async () => {
       seed(left('t1', 'Rivers'));
       lookups({ t1: trashedAs('t1', 'Rivers') });
@@ -5949,8 +5953,8 @@ describe('round 6l: kept edits and deleted boards (GM r20, r21; review 10)', () 
       expect(screen.queryByText(/because the moodboard was deleted|deleted somewhere else/)).toBeNull();
     });
 
-    // Review 11 LOW-5: Empty sends what its list showed; one an agent restored meanwhile wasn't purged, so its edit stays.
-    it('LOW-5: Empty forgets only the edits of boards it purged; a board restored meanwhile keeps its edit', async () => {
+    // Empty sends what its list showed; one an agent restored meanwhile wasn't purged, so its edit stays.
+    it('Empty forgets only the edits of boards it purged; a board restored meanwhile keeps its edit', async () => {
       const harbor = { ...clone(server.board), id: 't2', name: 'Harbor' } as Moodboard;
       seed(left('t1', 'Rivers'), left('t2', 'Harbor'));
       lookups({ t1: trashedAs('t1', 'Rivers', '2'), t2: trashedAs('t2', 'Harbor', '1') });
@@ -5965,8 +5969,8 @@ describe('round 6l: kept edits and deleted boards (GM r20, r21; review 10)', () 
       expect(screen.queryByText(/deleted somewhere else/)).toBeNull();
     });
 
-    // Review 11 LOW-4, W8: a purged board with no kept edit here: its draft in this tab is left alone.
-    it('W8: Delete forever of a board with no kept edit leaves this tab\'s drafts alone', async () => {
+    // A purged board with no kept edit here: its draft in this tab is left alone.
+    it('Delete forever of a board with no kept edit leaves this tab\'s drafts alone', async () => {
       seed(left('t1', 'Rivers'));
       lookups({ t1: trashedAs('t1', 'Rivers') });
       trash.rows = [{ id: 't1', name: 'Rivers' }, { id: 't5', name: 'Other' }];
@@ -5987,7 +5991,7 @@ describe('round 6l: kept edits and deleted boards (GM r20, r21; review 10)', () 
       expect(stored().map((it) => it.board)).toEqual(['t1']);
     });
 
-    it('the list stays open across a remount while the several-board Restore has boards left (review 10 NIT-3)', async () => {
+    it('the list stays open across a remount while the several-board Restore has boards left', async () => {
       seed(left('t1', 'Rivers'), left('t2', 'Harbor'));
       lookups({ t1: trashedAs('t1', 'Rivers'), t2: trashedAs('t2', 'Harbor') });
       await openStudio();
@@ -5998,7 +6002,7 @@ describe('round 6l: kept edits and deleted boards (GM r20, r21; review 10)', () 
     });
   });
 
-  describe('re-checks (review 10 live MEDIUM-1, logic LOW-2)', () => {
+  describe('re-checks', () => {
     it('deleted for good while the line is up: Recently deleted changing turns it red', async () => {
       seed(left('t1', 'Rivers'));
       lookups({ t1: trashedAs('t1', 'Rivers') });
@@ -6025,7 +6029,7 @@ describe('round 6l: kept edits and deleted boards (GM r20, r21; review 10)', () 
       expect(screen.queryByText(TRASHED('Rivers'))).toBeNull();
     });
 
-    it('a stale look-up from the board before is never applied (V8)', async () => {
+    it('a stale look-up from the board before is never applied', async () => {
       seed(left('t1', 'Rivers'));
       let first: (answer: unknown) => void = () => {};
       let calls = 0;
@@ -6044,7 +6048,7 @@ describe('round 6l: kept edits and deleted boards (GM r20, r21; review 10)', () 
       expect(stored().map((it) => it.board)).toEqual(['t1']);
     });
 
-    it('an earlier failure to restore goes with a Restore that works (V17)', async () => {
+    it('an earlier failure to restore goes with a Restore that works', async () => {
       seed(left('t1', 'Rivers'));
       lookups({ t1: trashedAs('t1', 'Rivers') });
       trash.restore.mockRejectedValueOnce(new RequestFailedError("Couldn’t restore the moodboard.", 500, { detail: 'boom' }));
@@ -6056,7 +6060,7 @@ describe('round 6l: kept edits and deleted boards (GM r20, r21; review 10)', () 
       expect(screen.queryByText(/restore the moodboard/i)).toBeNull();
     });
 
-    it('two boards restored from the rail in one tick both leave the line (V20)', async () => {
+    it('two boards restored from the rail in one tick both leave the line', async () => {
       seed(left('t1', 'Rivers'), left('t2', 'Harbor'));
       lookups({ t1: trashedAs('t1', 'Rivers'), t2: trashedAs('t2', 'Harbor') });
       trash.rows = [{ id: 't1', name: 'Rivers' }, { id: 't2', name: 'Harbor' }];
@@ -6069,7 +6073,7 @@ describe('round 6l: kept edits and deleted boards (GM r20, r21; review 10)', () 
       expect(screen.queryByText(/because the moodboard was deleted|because they were deleted/)).toBeNull();
     });
 
-    it('K2: a purged board\'s edit is dropped only once its red line has shown (logic LOW-1)', async () => {
+    it('a purged board\'s edit is dropped only once its red line has shown', async () => {
       seed(left('t1', 'Rivers'));
       lookups({});
       api.fetchMoodboard.mockImplementation((id: string) => (id === 'g1' ? new Promise(() => {}) : Promise.resolve(null)));
@@ -6086,10 +6090,10 @@ describe('round 6l: kept edits and deleted boards (GM r20, r21; review 10)', () 
     });
   });
 
-  describe('GM r21 Q3, review 10 live MEDIUM-2: the tab holding the edit finds its board deleted', () => {
+  describe('the tab holding the edit finds its board deleted', () => {
     const inTrash = () => new RequestFailedError(SAVE, 404, { detail: { code: 'in_trash', trashed: { deletedAt: '2026-11-03T10:00:00+00:00' } } });
 
-    it('in Recently deleted: the r18 line with Restore at once, no Retry, "Not saved"; Restore sends the edit, then confirms', async () => {
+    it('in Recently deleted: the deleted-board line with Restore at once, no Retry, "Not saved"; Restore sends the edit, then confirms', async () => {
       const put = api.updateMoodboard.getMockImplementation()!;
       api.updateMoodboard.mockRejectedValue(inTrash());
       await openStudio();
@@ -6142,8 +6146,8 @@ describe('round 6l: kept edits and deleted boards (GM r20, r21; review 10)', () 
     });
   });
 
-  describe('GM r21 Q5 and Q7: where the person and focus go', () => {
-    it('Q5: another board opened while Restore is out: they stay; the confirmation names the board; the rail lists it', async () => {
+  describe('where the person and focus go', () => {
+    it('another board opened while Restore is out: they stay; the confirmation names the board; the rail lists it', async () => {
       seed(left('t1', 'Rivers'));
       lookups({ t1: trashedAs('t1', 'Rivers') });
       let done: () => void = () => {};
@@ -6161,7 +6165,7 @@ describe('round 6l: kept edits and deleted boards (GM r20, r21; review 10)', () 
       expect(stored().map((it) => it.board)).toEqual(['t1']);
     });
 
-    it('Q7: after a single Restore, focus is on the restored board\'s row in the rail', async () => {
+    it('after a single Restore, focus is on the restored board\'s row in the rail', async () => {
       const rivers = { ...clone(server.board), id: 't1', name: 'Rivers' } as Moodboard;
       seed(left('t1', 'Rivers'));
       lookups({ t1: trashedAs('t1', 'Rivers') });
@@ -6175,7 +6179,7 @@ describe('round 6l: kept edits and deleted boards (GM r20, r21; review 10)', () 
       await waitFor(() => expect((document.activeElement as HTMLElement | null)?.getAttribute('data-board-id')).toBe('t1'), { timeout: 3000 });
     });
 
-    it('Q7: after the red line\'s ×, focus goes to the screen\'s main, never the page body', async () => {
+    it('after the red line\'s ×, focus goes to the screen\'s main, never the page body', async () => {
       seed(left('t1', 'Rivers'));
       lookups({});
       await openStudio();
@@ -6187,8 +6191,8 @@ describe('round 6l: kept edits and deleted boards (GM r20, r21; review 10)', () 
     });
   });
 
-  describe('GM r21 Q8: a board whose project is in Recently deleted', () => {
-    // Round 6p (GM r90.2): the line names the project too.
+  describe('a board whose project is in Recently deleted', () => {
+    // The line names the project too.
     const LINE = 'Nebula couldn’t save your change to “Rivers” because its project “Shore” was deleted. Restore the project to keep the change.';
 
     it('says so, with Restore project, which restores the project through its route and replays the edit where it is', async () => {
@@ -6213,7 +6217,7 @@ describe('round 6l: kept edits and deleted boards (GM r20, r21; review 10)', () 
       await waitFor(() => expect(projects.restore).toHaveBeenCalledWith('p9'));
       await waitFor(() => expect(sent).toEqual([['pb1', expect.objectContaining({ notes: 'mine', projectId: 'p9' })]]), { timeout: 3000 });
       expect(screen.queryByText(LINE.replace('Shore', 'Old project'))).toBeNull();
-      // Round 6m (GM r53 Q1): confirmed by the project's name in a board Restore's slot, once the edit is saved.
+      // Confirmed by the project's name in a board Restore's slot, once the edit is saved.
       const confirmed = await screen.findByText('Restored “Old project”. Your change to “Rivers” is saved.', {}, { timeout: 3000 });
       expect(confirmed.closest('[data-restored]')).not.toBeNull();
       // The person stays where they were.
@@ -6221,7 +6225,7 @@ describe('round 6l: kept edits and deleted boards (GM r20, r21; review 10)', () 
       await waitFor(() => expect(stored()).toEqual([]));
     });
 
-    // Round 6m (GM r53 Q1): Restore project's outcomes.
+    // Restore project's outcomes.
     const SHORE_NO_ANSWER = 'Nebula couldn’t restore “Shore” because the server isn’t answering. Try again.';
     const SHORE_REFUSED = 'Nebula couldn’t restore “Shore” because the server didn’t accept the request. Try again.';
     const SHORE_PURGED = 'Nebula couldn’t restore “Shore” because it was deleted for good. Your change to “Rivers” can’t be kept.';
@@ -6302,7 +6306,7 @@ describe('round 6l: kept edits and deleted boards (GM r20, r21; review 10)', () 
       seed(left('pb1', 'Rivers'));
       const sent = shoreBoard();
       projects.restore.mockRejectedValueOnce(new ConnectionLostError(new TypeError('Failed to fetch')));
-      // The banner's probe finds Nebula online: one dropped request, not a lost connection (round 6p).
+      // The banner's probe finds Nebula online: one dropped request, not a lost connection.
       const stopProbes = subscribeHealthProbeRequests(() => { act(() => { noteProbeAnswer(startHealthProbe(), 'online'); }); });
       onTestFinished(stopProbes);
       await openStudio();
@@ -6380,7 +6384,7 @@ describe('round 6l: kept edits and deleted boards (GM r20, r21; review 10)', () 
       }
     });
 
-    // Round 6n (GM r71): two boards in one Restore project, named by the names rule, on success and when purged.
+    // Two boards in one Restore project, named by the names rule, on success and when purged.
     /** pb1 ("Rivers") and pb2 ("Tide") in project p9 ("Shore"), both with a kept edit; each save recorded by id. */
     const shoreBoards = () => {
       const boards: Record<string, Moodboard> = { pb1: inShore(), pb2: inShore({ id: 'pb2', name: 'Tide' }) };
@@ -6397,10 +6401,10 @@ describe('round 6l: kept edits and deleted boards (GM r20, r21; review 10)', () 
       });
       return sent;
     };
-    // Round 6p (GM r90.2): one line for the project, naming both.
+    // One line for the project, naming both.
     const BOTH_LINE = 'Nebula couldn’t save your changes to “Rivers” and “Tide” because their project “Shore” was deleted. Restore the project to keep the changes.';
 
-    it('two boards restored with their project: the confirmation names both (GM r71)', async () => {
+    it('two boards restored with their project: the confirmation names both', async () => {
       seed(left('pb1', 'Rivers'), left('pb2', 'Tide'));
       const sent = shoreBoards();
       await openStudio();
@@ -6411,7 +6415,7 @@ describe('round 6l: kept edits and deleted boards (GM r20, r21; review 10)', () 
       expect(screen.queryByText(BOTH_LINE)).toBeNull();
     });
 
-    it('a board whose draft goes before its save lands is not named as saved (GM r71)', async () => {
+    it('a board whose draft goes before its save lands is not named as saved', async () => {
       seed(left('pb1', 'Rivers'), left('pb2', 'Tide'));
       shoreBoards();
       // Both replayed saves are held, to drop Tide's draft while they're out.
@@ -6432,7 +6436,7 @@ describe('round 6l: kept edits and deleted boards (GM r20, r21; review 10)', () 
       expect(screen.queryByText(/“Tide” (is|are) saved/)).toBeNull();
     });
 
-    it('two boards whose project was deleted for good: the red line names both (GM r71)', async () => {
+    it('two boards whose project was deleted for good: the red line names both', async () => {
       seed(left('pb1', 'Rivers'), left('pb2', 'Tide'));
       const sent = shoreBoards();
       projects.restore.mockImplementation(async () => {
@@ -6448,7 +6452,7 @@ describe('round 6l: kept edits and deleted boards (GM r20, r21; review 10)', () 
       await waitFor(() => expect(stored()).toEqual([]));
     });
 
-    // ---- Round 6p: review 11 and GM r90 ----
+    // ---- Restore project: one line per project, focus, hidden tabs, offline ----
     const SHORE_LOST = 'Nebula couldn’t restore “Shore” because it lost the connection. Try again.';
     const SHORE_GONE = 'Nebula couldn’t keep your change to “Rivers” because its project “Shore” was deleted for good.';
     /** Boards by id in projects by id (name), each in Recently deleted unless `live`; saves recorded by board id. */
@@ -6487,7 +6491,7 @@ describe('round 6l: kept edits and deleted boards (GM r20, r21; review 10)', () 
       act(() => { document.dispatchEvent(new Event('visibilitychange')); });
     };
 
-    it('GM r90.2: four boards in one project are one line naming them, with one Restore project; the title lists every name', async () => {
+    it('four boards in one project are one line naming them, with one Restore project; the title lists every name', async () => {
       seed(left('pb1', 'Rivers'), left('pb2', 'Tide'), left('pb3', 'Harbor'), left('pb4', 'Quiet'));
       projectBoards({ pb1: { name: 'Rivers', project: 'p9' }, pb2: { name: 'Tide', project: 'p9' }, pb3: { name: 'Harbor', project: 'p9' },
         pb4: { name: 'Quiet', project: 'p9' } }, { p9: 'Shore' });
@@ -6499,7 +6503,7 @@ describe('round 6l: kept edits and deleted boards (GM r20, r21; review 10)', () 
       expect(screen.getAllByRole('button', { name: 'Restore project' })).toHaveLength(1);
     });
 
-    it('R11-A: Restore project for a project with two boards, from the keyboard: focus goes to <main>, never body', async () => {
+    it('Restore project for a project with two boards, from the keyboard: focus goes to <main>, never body', async () => {
       seed(left('pb1', 'Rivers'), left('pb2', 'Tide'));
       shoreBoards();
       await openStudio();
@@ -6509,7 +6513,7 @@ describe('round 6l: kept edits and deleted boards (GM r20, r21; review 10)', () 
       expect(document.activeElement?.tagName).toBe('MAIN');
     });
 
-    it('review 11 MEDIUM-1: focus goes to the next project\'s Restore project, never one inside the project restored', async () => {
+    it('focus goes to the next project\'s Restore project, never one inside the project restored', async () => {
       seed(left('pb1', 'Rivers'), left('pb2', 'Tide'), left('pb3', 'Dune'));
       projectBoards({ pb1: { name: 'Rivers', project: 'p9' }, pb2: { name: 'Tide', project: 'p9' }, pb3: { name: 'Dune', project: 'p8' } },
         { p9: 'Shore', p8: 'Coast' });
@@ -6522,7 +6526,7 @@ describe('round 6l: kept edits and deleted boards (GM r20, r21; review 10)', () 
       await waitFor(() => expect(document.activeElement).toBe(next));
     });
 
-    it('review 11 MEDIUM-1: the last project\'s Restore project, with another line above it: focus goes to <main>, not back up', async () => {
+    it('the last project\'s Restore project, with another line above it: focus goes to <main>, not back up', async () => {
       seed(left('pb1', 'Rivers'), left('pb3', 'Dune'));
       projectBoards({ pb1: { name: 'Rivers', project: 'p9' }, pb3: { name: 'Dune', project: 'p8' } }, { p9: 'Shore', p8: 'Coast' });
       await openStudio();
@@ -6536,7 +6540,7 @@ describe('round 6l: kept edits and deleted boards (GM r20, r21; review 10)', () 
       expect(document.activeElement?.tagName).toBe('MAIN');
     });
 
-    it('R11-B: a re-check takes the line while Restore project is out: focus goes to <main> at once, and the restore still confirms', async () => {
+    it('a re-check takes the line while Restore project is out: focus goes to <main> at once, and the restore still confirms', async () => {
       seed(left('pb1', 'Rivers'));
       const { sent, live } = projectBoards({ pb1: { name: 'Rivers', project: 'p9' } }, { p9: 'Shore' });
       let answer: () => void = () => {};
@@ -6555,7 +6559,7 @@ describe('round 6l: kept edits and deleted boards (GM r20, r21; review 10)', () 
       expect(document.activeElement?.tagName).toBe('MAIN');
     });
 
-    it('R11-D, GM r90.1: the project deleted for good while its line is up: the red project line, once; the edit goes once seen', async () => {
+    it('the project deleted for good while its line is up: the red project line, once; the edit goes once seen', async () => {
       seed(left('pb1', 'Rivers'));
       projectBoards({ pb1: { name: 'Rivers', project: 'p9' } }, { p9: 'Shore' });
       await openStudio();
@@ -6583,7 +6587,7 @@ describe('round 6l: kept edits and deleted boards (GM r20, r21; review 10)', () 
       expect(document.activeElement).not.toBe(document.body);
     });
 
-    it('GM r90.1: after a reload, a project deleted for good is named from the kept edit; a project never seen gets the board\'s red line', async () => {
+    it('after a reload, a project deleted for good is named from the kept edit; a project never seen gets the board\'s red line', async () => {
       seed({ ...left('pb1', 'Rivers'), project: { id: 'p9', name: 'Shore' } } as ReturnType<typeof left>, left('pb2', 'Tide'));
       projectBoards({ pb1: { name: 'Rivers', project: 'p9' }, pb2: { name: 'Tide', project: 'p7' } }, {});
       await openStudio();
@@ -6592,7 +6596,7 @@ describe('round 6l: kept edits and deleted boards (GM r20, r21; review 10)', () 
       await waitFor(() => expect(stored()).toEqual([]));
     });
 
-    it('GM r90.1: in a hidden tab the red line\'s edit is dropped only once the tab is shown', async () => {
+    it('in a hidden tab the red line\'s edit is dropped only once the tab is shown', async () => {
       seed({ ...left('pb1', 'Rivers'), project: { id: 'p9', name: 'Shore' } } as ReturnType<typeof left>);
       projectBoards({ pb1: { name: 'Rivers', project: 'p9' } }, {});
       Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true });
@@ -6609,7 +6613,7 @@ describe('round 6l: kept edits and deleted boards (GM r20, r21; review 10)', () 
       }
     });
 
-    it('GM r90.3: offline, Restore project is aria-disabled, focus stays on it, a press sends nothing and says nothing', async () => {
+    it('offline, Restore project is aria-disabled, focus stays on it, a press sends nothing and says nothing', async () => {
       seed(left('pb1', 'Rivers'));
       projectBoards({ pb1: { name: 'Rivers', project: 'p9' } }, { p9: 'Shore' });
       await openStudio();
@@ -6630,7 +6634,7 @@ describe('round 6l: kept edits and deleted boards (GM r20, r21; review 10)', () 
       expect(button.hasAttribute('aria-disabled')).toBe(false);
     });
 
-    it('GM r90.3: the connection drops mid-request: "…because it lost the connection. Try again." with a real Try again', async () => {
+    it('the connection drops mid-request: "…because it lost the connection. Try again." with a real Try again', async () => {
       seed(left('pb1', 'Rivers'));
       const { sent } = projectBoards({ pb1: { name: 'Rivers', project: 'p9' } }, { p9: 'Shore' });
       projects.restore.mockRejectedValueOnce(new ConnectionLostError(new TypeError('Failed to fetch')));
@@ -6652,7 +6656,7 @@ describe('round 6l: kept edits and deleted boards (GM r20, r21; review 10)', () 
       expect(sent).toEqual(['pb1']);
     });
 
-    // ---- Round 6t: review 12 live LOW-2, GM r113 2 ----
+    // ---- Restore project, then the replayed save fails ----
     const COAST_LINE = 'Nebula couldn’t save your change to “Rivers” because its project “Coast” was deleted. Restore the project to keep the change.';
     const RIVERS_NOT_SAVED = 'Nebula couldn’t save your change to “Rivers” because the server didn’t respond. Try again.';
     /** Rivers in Coast (in Recently deleted), its replayed save answered 503 `fails` times, then saved. */
@@ -6672,7 +6676,7 @@ describe('round 6l: kept edits and deleted boards (GM r20, r21; review 10)', () 
     };
     const awayLine = () => document.querySelector<HTMLElement>('[data-away-save="pb1"]');
 
-    it('GM r113 2: Restore project, then the replayed save fails: "Restored “Coast”." then Rivers\' own line under it, neutral, with Try again that saves it', async () => {
+    it('Restore project, then the replayed save fails: "Restored “Coast”." then Rivers\' own line under it, neutral, with Try again that saves it', async () => {
       seed(left('pb1', 'Rivers'));
       const { sent, tries } = coastFails(1);
       await openStudio();
@@ -6702,7 +6706,7 @@ describe('round 6l: kept edits and deleted boards (GM r20, r21; review 10)', () 
       await waitFor(() => expect(stored()).toEqual([]));
     });
 
-    it('GM r113 2: Try again that fails again: the same line and button, saying why, with focus kept on it', async () => {
+    it('Try again that fails again: the same line and button, saying why, with focus kept on it', async () => {
       seed(left('pb1', 'Rivers'));
       const { tries } = coastFails(2);
       await openStudio();
@@ -6721,7 +6725,7 @@ describe('round 6l: kept edits and deleted boards (GM r20, r21; review 10)', () 
       expect(screen.getByText('Restored “Coast”.')).toBeTruthy();
     });
 
-    it('GM r113 2: offline, the line\'s Try again is aria-disabled, a press sends nothing; after reconnect it saves', async () => {
+    it('offline, the line\'s Try again is aria-disabled, a press sends nothing; after reconnect it saves', async () => {
       seed(left('pb1', 'Rivers'));
       const { tries } = coastFails(1);
       await openStudio();
@@ -6740,8 +6744,8 @@ describe('round 6l: kept edits and deleted boards (GM r20, r21; review 10)', () 
       await screen.findByText('Restored “Coast”. Your change to “Rivers” is saved.', {}, { timeout: 3000 });
     });
 
-    // ---- Round 6t: review 12 LOW-3, survivors pinned ----
-    it('review 12 N15: Nebula goes offline as Restore project is pressed (refused unsent): no failure line, the line and its button stay', async () => {
+    // ---- the mutation survivors, pinned ----
+    it('Nebula goes offline as Restore project is pressed (refused unsent): no failure line, the line and its button stay', async () => {
       seed(left('pb1', 'Rivers'));
       const { sent } = projectBoards({ pb1: { name: 'Rivers', project: 'p9' } }, { p9: 'Shore' });
       projects.restore.mockRejectedValue(new OfflineRefusal('POST', '/api/projects/p9/restore'));
@@ -6757,7 +6761,7 @@ describe('round 6l: kept edits and deleted boards (GM r20, r21; review 10)', () 
       expect(sent).toEqual([]);
     });
 
-    it('review 12 N18: a re-check takes the line while Restore project is out, focus elsewhere: it stays where the person put it', async () => {
+    it('a re-check takes the line while Restore project is out, focus elsewhere: it stays where the person put it', async () => {
       seed(left('pb1', 'Rivers'));
       const { live } = projectBoards({ pb1: { name: 'Rivers', project: 'p9' } }, { p9: 'Shore' });
       let answer: () => void = () => {};
@@ -6776,7 +6780,7 @@ describe('round 6l: kept edits and deleted boards (GM r20, r21; review 10)', () 
       expect(document.activeElement).toBe(name);
     });
 
-    it('review 12 N13: the project is back, but the board moved to another project meanwhile: no replay on the project\'s line', async () => {
+    it('the project is back, but the board moved to another project meanwhile: no replay on the project\'s line', async () => {
       seed(left('pb1', 'Rivers'));
       const { sent, live, boards } = projectBoards({ pb1: { name: 'Rivers', project: 'p9' } }, { p9: 'Shore' });
       await openStudio();
@@ -6791,7 +6795,7 @@ describe('round 6l: kept edits and deleted boards (GM r20, r21; review 10)', () 
       expect(stored().map((it) => it.board)).toEqual(['pb1']);
     });
 
-    it('review 12 N14: a deleted board restored elsewhere into a project still in Recently deleted: no replay; its project\'s line', async () => {
+    it('a deleted board restored elsewhere into a project still in Recently deleted: no replay; its project\'s line', async () => {
       seed(left('t1', 'Rivers'));
       lookups({ t1: trashedAs('t1', 'Rivers') });
       projects.list.mockImplementation(async () => ({ projects: [{ id: 'p1', name: 'Project' }], trash: [{ id: 'p9', name: 'Shore' }] }));
@@ -6814,7 +6818,7 @@ describe('round 6l: kept edits and deleted boards (GM r20, r21; review 10)', () 
       expect(screen.queryByText(/^Restored /)).toBeNull();
     });
 
-    it('GM r90.4: an agent restores the project while the line is up: the edit replays at once and the r71 line confirms', async () => {
+    it('an agent restores the project while the line is up: the edit replays at once and the line confirms', async () => {
       seed(left('pb1', 'Rivers'));
       const { sent, live } = projectBoards({ pb1: { name: 'Rivers', project: 'p9' } }, { p9: 'Shore' });
       await openStudio();
@@ -6829,7 +6833,7 @@ describe('round 6l: kept edits and deleted boards (GM r20, r21; review 10)', () 
       await waitFor(() => expect(stored()).toEqual([]));
     });
 
-    it('GM r90.4: in a hidden tab the replay waits for the tab to be shown', async () => {
+    it('in a hidden tab the replay waits for the tab to be shown', async () => {
       seed(left('pb1', 'Rivers'));
       const { sent, live } = projectBoards({ pb1: { name: 'Rivers', project: 'p9' } }, { p9: 'Shore' });
       await openStudio();
@@ -6850,7 +6854,7 @@ describe('round 6l: kept edits and deleted boards (GM r20, r21; review 10)', () 
       }
     });
 
-    it('GM r90.4: an agent restores a board from Recently deleted while its line is up: replayed in place and confirmed', async () => {
+    it('an agent restores a board from Recently deleted while its line is up: replayed in place and confirmed', async () => {
       const rivers = { ...clone(server.board), id: 't1', name: 'Rivers' } as Moodboard;
       seed(left('t1', 'Rivers'));
       lookups({ t1: trashedAs('t1', 'Rivers') });
@@ -6894,7 +6898,7 @@ describe('round 6l: kept edits and deleted boards (GM r20, r21; review 10)', () 
       })) });
     });
 
-    it('GM r90.5: a kept remove of an image an agent changed after it: the image stays, and the confirmation says who', async () => {
+    it('a kept remove of an image an agent changed after it: the image stays, and the confirmation says who', async () => {
       seed(keptRemove(['i2']));
       const { sent, edits } = projectBoards({ pb1: { name: 'Rivers', project: 'p9', extra: changedBoard(['i2']) } }, { p9: 'Shore' });
       await openStudio();
@@ -6907,7 +6911,7 @@ describe('round 6l: kept edits and deleted boards (GM r20, r21; review 10)', () 
       expect(edits).toEqual([]);
     });
 
-    it('GM r90.5: the agent\'s own label, the names rule for numbers; with no known agent the image is the subject', async () => {
+    it('the agent\'s own label, the names rule for numbers; with no known agent the image is the subject', async () => {
       seed(keptRemove(['i1', 'i2']));
       projectBoards({ pb1: { name: 'Rivers', project: 'p9', extra: changedBoard(['i1', 'i2']) } }, { p9: 'Shore' });
       await openStudio();
@@ -6925,7 +6929,7 @@ describe('round 6l: kept edits and deleted boards (GM r20, r21; review 10)', () 
         {}, { timeout: 3000 });
     });
 
-    it('round 6q (GM r95.2): kept removes across two boards stay: counted, "still on their boards"', async () => {
+    it('kept removes across two boards stay: counted, "still on their boards"', async () => {
       seed(keptRemove(['i2'], 'pb1', 'Rivers'), keptRemove(['i1'], 'pb2', 'Tide'));
       projectBoards({ pb1: { name: 'Rivers', project: 'p9', extra: changedBoard(['i2']) },
         pb2: { name: 'Tide', project: 'p9', extra: changedBoard(['i1']) } }, { p9: 'Shore' });
@@ -6939,7 +6943,7 @@ describe('round 6l: kept edits and deleted boards (GM r20, r21; review 10)', () 
         + 'them, so they’re still on their moodboards.', {}, { timeout: 3000 });
     });
 
-    it('round 6q (GM r95.3): the changer is named by its Agent log label: its live session\'s number, else its name', async () => {
+    it('the changer is named by its Agent log label: its live session\'s number, else its name', async () => {
       onTestFinished(() => useAgentPresenceStore.setState({ agents: {} }));
       const run = async (ordinals: Array<number | null>, id: string | undefined, expected: string) => {
         cleanup();
@@ -6965,7 +6969,7 @@ describe('round 6l: kept edits and deleted boards (GM r20, r21; review 10)', () 
       expect(document.body.textContent).not.toContain('(agent)');
     });
 
-    it('review 11 LOW-1: Restore project pressed twice before it answers is one restore, and the confirmation names the board', async () => {
+    it('Restore project pressed twice before it answers is one restore, and the confirmation names the board', async () => {
       seed(left('pb1', 'Rivers'));
       const sent = shoreBoard();
       await openStudio();
@@ -6977,7 +6981,7 @@ describe('round 6l: kept edits and deleted boards (GM r20, r21; review 10)', () 
       expect([...document.querySelectorAll('[data-restored]')].map((it) => it.textContent)).toEqual(['Restored “Shore”. Your change to “Rivers” is saved.']);
     });
 
-    it('review 11 live NIT-1: two projects restored before either\'s save lands: both confirm', async () => {
+    it('two projects restored before either\'s save lands: both confirm', async () => {
       seed(left('pb1', 'Rivers'), left('pb3', 'Dune'));
       projectBoards({ pb1: { name: 'Rivers', project: 'p9' }, pb3: { name: 'Dune', project: 'p8' } }, { p9: 'Shore', p8: 'Coast' });
       const put = api.updateMoodboard.getMockImplementation()!;
@@ -6992,7 +6996,7 @@ describe('round 6l: kept edits and deleted boards (GM r20, r21; review 10)', () 
       await screen.findByText('Restored “Coast”. Your change to “Dune” is saved.', {}, { timeout: 3000 });
     });
 
-    it('review 11 LOW-4, W7: a 404, then the project list doesn\'t answer: neutral with Try again, never the red line, the edit kept', async () => {
+    it('a 404, then the project list doesn\'t answer: neutral with Try again, never the red line, the edit kept', async () => {
       seed(left('pb1', 'Rivers'));
       shoreBoard();
       projects.restore.mockRejectedValue(new RequestFailedError("Couldn’t restore the project.", 404, { detail: 'gone?' }));
@@ -7024,9 +7028,9 @@ describe('round 6l: kept edits and deleted boards (GM r20, r21; review 10)', () 
   });
 });
 
-// Round 6m (GM r53 Q2): a waiting send lives as long as its board's kept edit, not a fixed day. Silently dropping a
+// A waiting send lives as long as its board's kept edit, not a fixed day. Silently dropping a
 // person's send is a bug: while the board can be restored, the send stays, and it lands when the board comes back.
-describe('round 6m: a waiting send on a restorable board (GM r53 Q2)', () => {
+describe('a waiting send on a restorable board', () => {
   const EDITS = 'nebula:moodboard-kept-edits';
   const WAITING = 'nebula:moodboard-sends-waiting';
   const TWO_DAYS = 2 * 24 * 60 * 60 * 1000;

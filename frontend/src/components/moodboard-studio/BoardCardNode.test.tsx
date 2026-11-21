@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render } from '@testing-library/react';
 import type { NodeProps } from '@xyflow/react';
 
 // A card draws the 512 px thumbnail the backend makes (`?thumb=1`) unless it
-// is wider than about 480 css px on screen (plan PR5), so a 300-card board
+// is wider than about 480 css px on screen (PR #127), so a 300-card board
 // doesn't decode 300 full-size files.
 
 // The canvas works out once per zoom which card widths are "wide" and hands
@@ -57,21 +57,21 @@ describe('a card on the board', () => {
     expect(wideFrom([270, 480, 600], 2)).toBe(270);
   });
 
-  it('a link to another site is never loaded: the placeholder says why (Q98)', () => {
+  it('a link to another site is never loaded: the placeholder says why', () => {
     const { container } = mount({ url: 'https://example.com/a.jpg' });
     expect(container.querySelector('img')).toBeNull();
     expect(container.textContent).toContain('Image link from outside Nebula');
   });
 });
 
-describe('a card taking a placeholder\'s spot (GM r5)', () => {
+describe('a card taking a placeholder\'s spot', () => {
   const url = '/api/outputs/chat-uploads/new.png';
   const propsFor = (filling: boolean) => ({
     id: 'c1', data: { imageId: 'i1', url, number: 1, setAside: false, filling },
     width: 480, height: 270, selected: false, dragging: false, type: 'card', zIndex: 0, isConnectable: false,
     positionAbsoluteX: 0, positionAbsoluteY: 0, draggable: true, selectable: true, deletable: false,
   } as unknown as NodeProps<BoardCardNodeType>);
-  // Progress is read by image id (review 4, MEDIUM-1): only i1's counts.
+  // Progress is read by image id: only i1's counts.
   const fillOf = (progress = 0) => ({ progress: (imageId: string) => (imageId === 'i1' ? progress : 0) });
   const tree = (filling: boolean, progress = 0) => (
     <BoardFillContext.Provider value={fillOf(progress)}>
@@ -92,7 +92,7 @@ describe('a card taking a placeholder\'s spot (GM r5)', () => {
     expect(card.style.opacity).toBe('');
   });
 
-  it('drawn afresh mid-fade (React Flow remounts it), it starts where the spring is, not at 0 (live, r4)', () => {
+  it('drawn afresh mid-fade (React Flow remounts it), it starts where the spring is, not at 0', () => {
     const card = draw(true, 0.8).container.querySelector('.moodboard-card') as HTMLElement;
     expect(card.style.opacity).toBe('0.8');
   });

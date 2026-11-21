@@ -1,13 +1,12 @@
 import { useEffect, useState } from 'react';
 
-/** GM r32 5: a load quicker than this shows no loading line at all. */
+/** A load quicker than this shows no loading line at all. */
 export const LOADING_SHOW_AFTER_MS = 300;
 
 /**
- * PR #204 round 18d (GM r32 5, review 14 live NIT-2): the Commons' one loading look. A plain
- * muted line where the content will appear, no box or rail, naming what is loading ("Loading
- * agent reviews…", "Loading settings…", "Loading details…"), and only once the load has taken
- * LOADING_SHOW_AFTER_MS.
+ * PR #204: the Commons' one loading look. A plain muted line where the content will appear,
+ * no box or rail, naming what is loading ("Loading agent reviews…", "Loading settings…",
+ * "Loading details…"), and only once the load has taken LOADING_SHOW_AFTER_MS.
  */
 export function CommonsLoadingLine({ text }: { text: string }) {
   const [shown, setShown] = useState(false);

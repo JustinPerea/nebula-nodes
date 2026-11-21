@@ -1,4 +1,4 @@
-/* The canvas kept in this tab (GM r15 on PR #199): the line stays
+/* The canvas kept in this tab (design, PR #199): the line stays
    until [Save as a project] files the edits. A refused edit meanwhile (a
    move, an add, a run) nudges it once, on the repo's k 500 / c 36 spring
    sampled as linear() (the same curve as the opening bar's pulse). */
@@ -21,7 +21,7 @@
 @media (prefers-reduced-motion: reduce) {
   .kept-edits-notice--pulse .canvas-undo-notice__text { animation-timing-function: steps(1, end); }
 }
-/* [Discard edits] throws away edits only this tab has (GM r20 on PR #199):
+/* [Discard edits] throws away edits only this tab has (design, PR #199):
    red on hover, as Forget ID and Clear run history; its confirm is red too. */
 body.app-slava-restraint .kept-edits-notice button.kept-edits-notice__discard:not(:disabled):hover {
   border-color: var(--sr-danger-edge);

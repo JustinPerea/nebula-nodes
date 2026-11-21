@@ -9,8 +9,8 @@ import { nearestEdge, outsideChipText, placeChip } from './outsideChipText';
 import { CHIP_SHARE, outsideForChip, visibleShare } from '../../lib/boardPlacement';
 import type { OutsideTiles } from './BoardCanvas';
 
-// The reveal for tiles placed outside the view (GM - Design, #210 answer 1):
-// an edge chip with an arrow, a thumbnail and GM's words; a button that brings
+// The reveal for tiles placed outside the view (design, PR #210): an edge chip
+// with an arrow, a thumbnail and the design's words; a button that brings
 // the tiles into view; no timer; it goes when pressed, when the tiles come
 // into view, on Esc, or at the next paste (the Studio replaces it).
 
@@ -58,7 +58,7 @@ function mount(tiles: OutsideTiles, inset = 0, barTop: number | null = null) {
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 describe('the outside-the-view chip', () => {
-  it('says GM\'s words for one tile, with the thumbnail, on the edge nearest it, arrow pointing at it', () => {
+  it('says the design\'s words for one tile, with the thumbnail, on the edge nearest it, arrow pointing at it', () => {
     const { view } = mount(one);
     const chip = screen.getByRole('button', { name: 'Added outside the view, show it' });
     expect(chip.textContent).toContain('Added outside the view');
@@ -96,7 +96,7 @@ describe('the outside-the-view chip', () => {
     expect(onDone).toHaveBeenCalledTimes(1);
   });
 
-  it('with several tiles, stays until every one is in view (review 3)', () => {
+  it('with several tiles, stays until every one is in view', () => {
     const split: OutsideTiles = { id: 5, rects: [{ x: 100, y: 100, width: 300, height: 200 }, { x: 1200, y: 100, width: 300, height: 200 }], thumb: null };
     const { onDone } = mount(split);
     // The first is in view from the start; the second is not.
@@ -146,8 +146,7 @@ describe('the outside-the-view chip', () => {
   });
 });
 
-// Review 2, M2 and L4: one "in view" for placement and the chip (GM r4 answer 2),
-// now by GM r13's half-area rule.
+// One "in view" for placement and the chip (design), by the half-area rule.
 describe('the chip judges "in view" as placement does', () => {
   // Pane 1000 x 700, a 16 px inset, the toolbar's top at 652: placement's
   // view is 16..984 x 16..636.
@@ -164,7 +163,7 @@ describe('the chip judges "in view" as placement does', () => {
     expect(onDone).not.toHaveBeenCalled();
   });
 
-  it('it goes once half the tile is out of the band (GM r13), before it clears it', () => {
+  it('it goes once half the tile is out of the band, before it clears it', () => {
     const band: OutsideTiles = { id: 3, rects: [{ x: 20, y: 580, width: 200, height: 150 }], thumb: null };
     const { onDone } = mount(band, 16, 652);
     // Up 18: 74 of 150 rows (49%), still up.
@@ -183,8 +182,8 @@ describe('the chip judges "in view" as placement does', () => {
   });
 });
 
-// GM r13: the chip must not contradict what the person sees.
-describe('GM r13: the half-area rule', () => {
+// The chip must not contradict what the person sees.
+describe('the half-area rule', () => {
   const view = { x: 0, y: 0, width: 1000, height: 700 };
   // A 200 x 100 tile with `share` of its area in view, past each edge.
   const past = (edge: 'left' | 'right' | 'top' | 'bottom', share: number) => {
@@ -222,7 +221,7 @@ describe('GM r13: the half-area rule', () => {
   });
 });
 
-describe('round 6g: the chip goes by what is seen (GM r15 2)', () => {
+describe('the chip goes by what is seen', () => {
   const pill = { x: 0, y: 600, width: 400, height: 80 };
   const seenMount = (tile: { x: number; y: number; width: number; height: number }) => {
     const onDone = vi.fn();
@@ -235,7 +234,7 @@ describe('round 6g: the chip goes by what is seen (GM r15 2)', () => {
     );
     return onDone;
   };
-  it('a tile wholly on screen beside the pill, below the toolbar\'s line, is seen: the chip goes at once (review 9 r9-area-045)', () => {
+  it('a tile wholly on screen beside the pill, below the toolbar\'s line, is seen: the chip goes at once', () => {
     expect(seenMount({ x: 576, y: 560, width: 217, height: 140 })).toHaveBeenCalledTimes(1);
   });
   it('the same tile under the pill keeps the chip', () => {
@@ -245,7 +244,7 @@ describe('round 6g: the chip goes by what is seen (GM r15 2)', () => {
   });
 });
 
-describe('GM r13: where the chip sits and where its arrow points', () => {
+describe('where the chip sits and where its arrow points', () => {
   const pane = { width: 1000, height: 700 };
   const view = { x: 0, y: 0, width: 1000, height: 700 };
   const size = { w: 200, h: 36 };
@@ -341,7 +340,7 @@ describe('GM r13: where the chip sits and where its arrow points', () => {
   });
 });
 
-// GM r4 answer 9: a tile bigger than the view.
+// The centre rule: a tile bigger than the view.
 describe('a tile bigger than the view', () => {
   const big: OutsideTiles = { id: 4, rects: [{ x: 700, y: -200, width: 2000, height: 1400 }], thumb: null };
   it('keeps the chip while it doesn\'t cover the view\'s centre, and goes once it does', () => {
@@ -360,7 +359,7 @@ describe('a tile bigger than the view', () => {
     expect(outsideForChip({ x: 600, y: 300, width: 3000, height: 3000 }, view)).toBe(true);
   });
 
-  it('the centre rule is only for a tile bigger than the view (GM r7 answer 1); a smaller one goes by its area (GM r13)', () => {
+  it('the centre rule is only for a tile bigger than the view; a smaller one goes by its area', () => {
     const view = { x: 0, y: 0, width: 1000, height: 700 };
     // Smaller than the view, cut by its top edge: 500 of 600 rows in view, seen.
     expect(outsideForChip({ x: 400, y: -100, width: 300, height: 600 }, view)).toBe(false);
@@ -371,7 +370,7 @@ describe('a tile bigger than the view', () => {
   });
 });
 
-// GM r4 answer 6: focus never falls to the page body.
+// Focus never falls to the page body.
 describe('focus and the chip', () => {
   it('Enter or Space (a click with focus on it) asks the board to focus the first tile', () => {
     const { onShow } = mount(two);
@@ -405,7 +404,7 @@ describe('focus and the chip', () => {
     expect(focusBoard).toHaveBeenCalledTimes(1);
   });
 
-  it('Esc on the chip keeps the viewport exactly (GM r5): the board\'s transform is unchanged and nothing is shown', () => {
+  it('Esc on the chip keeps the viewport exactly: the board\'s transform is unchanged and nothing is shown', () => {
     const { onShow, onDone } = mount(one);
     // Zoomed out and moved, the tile still wholly past the right edge.
     pan(100, -40, 0.75);
@@ -433,9 +432,9 @@ describe('focus and the chip', () => {
   });
 });
 
-// Review 4, MEDIUM-3: the person's own pan or zoom (or the board losing its
-// size) dismisses the chip while it has focus. Focus goes to the board while
-// the button is still on the page: it never drops to the body.
+// The person's own pan or zoom (or the board losing its size) dismisses the
+// chip while it has focus. Focus goes to the board while the button is still
+// on the page: it never drops to the body.
 describe('the chip going while it has focus', () => {
   function Board({ tiles, keep = false }: { tiles: OutsideTiles; keep?: boolean }) {
     const [up, setUp] = useState(true);
@@ -499,7 +498,7 @@ describe('the chip going while it has focus', () => {
   });
 });
 
-// Review 2 (chip-toasts L3): the chip never sits under the toolbar or the notices.
+// The chip never sits under the toolbar or the notices.
 describe('the chip\'s floor', () => {
   const rectOf = (top: number, height: number, left = 0, width = 1000) => ({ top, bottom: top + height, left, right: left + width,
     width, height, x: left, y: top, toJSON: () => ({}) }) as DOMRect;

@@ -4,10 +4,10 @@ import type { ReactNode } from 'react';
 import { ReactFlowProvider } from '@xyflow/react';
 import type { Moodboard } from '../../types';
 
-// #208 (review 1, GM r1 and r2): a board analyzed before alpha counted, with
-// a transparent image, says so in Studio twice, verbatim as the backend sends
-// it: under its colours, and by "Brief sent to generators", since that brief
-// is built from those colours while a run analyzes again and sends a new one.
+// #208: a board analyzed before alpha counted, with a transparent image,
+// says so in Studio twice, verbatim as the backend sends it: under its
+// colours, and by "Brief sent to generators", since that brief is built from
+// those colours while a run analyzes again and sends a new one.
 
 const api = vi.hoisted(() => ({
   analyzeMoodboard: vi.fn(), createMoodboard: vi.fn(), editMoodboard: vi.fn(), fetchMoodboard: vi.fn(),
@@ -81,7 +81,7 @@ async function open() {
 }
 
 describe('a board whose saved colors are out of date', () => {
-  it('says so under the colors and by the brief, in GM’s words', async () => {
+  it('says so under the colors and by the brief, in the design’s words', async () => {
     current = board(true);
     await open();
     expect((await screen.findByText(COLORS_LINE)).className).toBe('moodboard-analysis__outdated');
@@ -98,7 +98,7 @@ describe('a board whose saved colors are out of date', () => {
     expect(screen.queryByText(BRIEF_LINE)).toBeNull();
   });
 
-  it('sits right after the brief text and before its controls (GM r5)', async () => {
+  it('sits right after the brief text and before its controls', async () => {
     current = board(true);
     await open();
     const line = await screen.findByText(BRIEF_LINE);
@@ -125,14 +125,14 @@ describe('a board whose saved colors are out of date', () => {
   });
 });
 
-// GM r6 on #208, item 4: "The brief holds its place ... When clearing the
+// #208: "The brief holds its place ... When clearing the
 // line would shorten a panel scrolled to the bottom, put a bottom spacer of
 // the removed height in its place. The spacer collapses on the person's next
 // scroll, or when the panel's content next changes. No jump, and no automatic
 // scroll." On b972eb9d clearing the two 27 px lines shortened the content by
 // 54 px, the browser clamped scrollTop (654 -> 600), and the brief moved.
-// GM r10 (review 4, M1): the spacer shrinks as the person scrolls up or the
-// content grows; removing it in one step was the same jump, one scroll later.
+// The spacer shrinks as the person scrolls up or the content grows; removing
+// it in one step was the same jump, one scroll later.
 describe('Analyze clearing the lines while the panel is scrolled to the bottom', () => {
   const LINE_H = 27;
   const CONTENT_H = 1000;
@@ -239,7 +239,7 @@ describe('Analyze clearing the lines while the panel is scrolled to the bottom',
     expect(briefOnScreen(panel) - before).toBe(0);
   });
 
-  it('a 5 px scroll up moves the brief 5 px, not the spacer\'s height (review 4, M1)', async () => {
+  it('a 5 px scroll up moves the brief 5 px, not the spacer\'s height', async () => {
     const { panel, geo, before } = await analyzeAtTheBottom();
     expect(geo.spacerH()).toBe(2 * LINE_H);
     geo.scrollTo(panel.scrollTop - 5);

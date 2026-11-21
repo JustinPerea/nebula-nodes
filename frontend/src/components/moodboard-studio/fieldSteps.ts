@@ -1,7 +1,7 @@
 import type { BoardFieldKey } from '../../lib/moodboardEdits';
 
 /**
- * Board fields as undo steps in Moodboard Studio (Q83). Justin: "A field
+ * Board fields as undo steps in Moodboard Studio. Justin: "A field
  * becomes one step when you leave it, and Cmd+Z inside a text box still
  * undoes your typing first."
  *

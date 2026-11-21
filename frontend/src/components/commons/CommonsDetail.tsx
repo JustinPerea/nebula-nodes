@@ -79,7 +79,7 @@ function Membership({ assetId, membership, run }: {
   const postingRef = useRef(false);
   return (
     // data-focus-scope (hooks/useFocusHandover FOCUS_SCOPE_ATTR): each membership is its own pane,
-    // so its Role and Why are never another collection's to the focus handover (review 12 MEDIUM-1).
+    // so its Role and Why are never another collection's to the focus handover.
     <section className="commons-detail__section commons-membership" data-focus-scope={membership.id}>
       <header className="commons-membership__head">
         <strong>{membership.collection_name}</strong>
@@ -184,12 +184,12 @@ export function CommonsDetail({ assetId, onClose, onChanged, onDeleted }: Props)
   const dragStart = useRef<[number, number] | null>(null);
   const [ask, promptElement] = useCommonsPrompt();
   const readOnly = useBackendOffline();
-  // PR #204 round 9: a not-connected line clears on the promote, and the reference loads again.
+  // PR #204: a not-connected line clears on the promote, and the reference loads again.
   const [loadEpoch, loadAgain] = useReloadEpoch();
   const line = useCommonsLine(setError, null, 'commons.detail-load', loadAgain);
-  // Round 18h (GM r38 3c): its load line reads again quietly on reconnect.
+  // Its load line reads again quietly on reconnect.
   useLoadLineQuietOnReconnect(error, () => setError(null), loadAgain);
-  // Offline comes first (GM r23 3): the not-loaded state's line goes through CommonsErrorLine,
+  // Offline comes first: the not-loaded state's line goes through CommonsErrorLine,
   // which hides a because line while offline.
 
   const load = useCallback(async () => {
@@ -234,7 +234,7 @@ export function CommonsDetail({ assetId, onClose, onChanged, onDeleted }: Props)
       onChanged();
       return true;
     } catch (e) {
-      // Refused offline before it was sent: the banner says why (round 16, L4).
+      // Refused offline before it was sent: the banner says why.
       if (!isOfflineRefusal(e)) line.show(e, "Couldn’t save the change.");
       return false;
     }
@@ -256,10 +256,9 @@ export function CommonsDetail({ assetId, onClose, onChanged, onDeleted }: Props)
         <div className="commons-detail__bar">
           <button type="button" className="commons-button" onClick={onClose}>Close</button>
         </div>
-        {/* Round 18 (GM r28 1): a failed load is a Commons line, in the one style every Commons
-            load line takes (CommonsErrorLine: neutral when it got no answer or for a because
-            line). Hidden offline when it is a because line, as before. Round 18d (GM r32 5): the one
-            loading look until then. */}
+        {/* A failed load is a Commons line, in the one style every Commons load line takes
+            (CommonsErrorLine: neutral when it got no answer or for a because line). Hidden
+            offline when it is a because line, as before. The one loading look until then. */}
         {error ? <CommonsErrorLine line={error} onRetry={loadAgain} /> : <CommonsLoadingLine text="Loading details…" />}
       </aside>
     );
@@ -323,7 +322,7 @@ export function CommonsDetail({ assetId, onClose, onChanged, onDeleted }: Props)
   const keywords = fields.keywords ?? [];
   const badge = analysisBadge(asset.analysis_state, asset.last_error_kind);
   // Too transparent: re-analyzing can't change a property of the image, so
-  // there is no Re-analyze (GM r6 on #208, item 3). An asset's file never
+  // there is no Re-analyze (design, PR #208). An asset's file never
   // changes (content-addressed), so the state always belongs to this file; a
   // changed file comes in as a new asset, with Re-analyze.
   const settledUnanalyzed = asset.analysis_state === 'analysis_failed' && analysisFailureIsNeutral(asset.last_error_kind);
@@ -343,7 +342,7 @@ export function CommonsDetail({ assetId, onClose, onChanged, onDeleted }: Props)
 
       <CommonsErrorLine line={error} onRetry={loadAgain} />
 
-      {/* Round 16 (L4): offline the reference is read-only like the canvas.
+      {/* Offline the reference is read-only like the canvas.
           Everything below Close is a write, so one fieldset disables it all;
           Close and reading stay. */}
       <fieldset className="commons-fieldset" disabled={readOnly} {...offlineMark(readOnly)}>
@@ -351,8 +350,8 @@ export function CommonsDetail({ assetId, onClose, onChanged, onDeleted }: Props)
 
       {asset.analysis_state === 'analysis_failed' && (
         analysisFailureIsNeutral(asset.last_error_kind) ? (
-          // Too transparent: nothing in it is seen, so it was never sent. Not an error (design, r5 on #208), so
-          // the note says what is so and does not word it as a failure.
+          // Too transparent: nothing in it is seen, so it was never sent. Not an error
+          // (design, PR #208), so the note says what is so and does not word it as a failure.
           <p className="commons-notice commons-notice--muted">{analysisFailureReason(asset.last_error_kind)}</p>
         ) : (
         <div className="commons-notice commons-notice--error commons-analysis-failure" data-line-box="">
