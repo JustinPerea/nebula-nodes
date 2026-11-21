@@ -5,17 +5,17 @@ wires, param changes) plus renames, moves, removals and unwires, and applies
 all of it or none of it. Graph validation happens in main, with the same
 validators as proposals and single edits.
 
-A direct edit has no per-edit caps (decision C1). Its only bound is the
+A direct edit has no per-edit caps. Its only bound is the
 canvas's own size limit, which main checks on the staged graph
 (RESTORE_MAX_GRAPH_NODES / RESTORE_MAX_GRAPH_EDGES), plus the request
 complexity limits every graph route has. Proposals keep their caps because
 the person reviews them item by item.
 
 `arrange` asks the open canvas to lay out this edit's new nodes once it has
-drawn them (decision C3; services/canvas_arrange.py).
+drawn them (services/canvas_arrange.py).
 
-`pending: true` makes this edit's new nodes the agent's placeholders (Q125
-item 3, services/pending_nodes.py); `pending: false` with `nodeIds` makes
+`pending: true` makes this edit's new nodes the agent's placeholders
+(services/pending_nodes.py); `pending: false` with `nodeIds` makes
 the agent's own placeholders ready. Never an existing node: `pending: true`
 needs new nodes and takes no `nodeIds`.
 """

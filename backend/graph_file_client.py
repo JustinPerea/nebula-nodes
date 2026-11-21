@@ -2,7 +2,7 @@
 `load_graph_file` and `nebula load`, as upload_client.py is for upload_file
 and `nebula upload`.
 
-Q123 a (Justin, 2026-10-24): "Yes: `nebula load` and an MCP tool open a
+Justin, 2026-10-24: "Yes: `nebula load` and an MCP tool open a
 bundle, restoring its files, as Load graph does. A big one opens as a new
 project."
 
@@ -23,7 +23,7 @@ readGraphSelection, components/GraphFileActions.tsx load):
   sends to POST /api/graph/import (``import_body``), and no value in it may
   name a protected file (validate_file_references, as `nebula load` always
   checked).
-- Q120's rule (Justin: "Files over the limit open as a new project named
+- The rule (Justin: "Files over the limit open as a new project named
   after the file. The open project is left as it was. Files under the limit
   still replace the canvas, as today."): with a project open, the import
   asks to be refused when the file is over the save limit
@@ -68,7 +68,7 @@ class GraphFileError(RuntimeError):
 
 def _size_line(size: int) -> str:
     # The same limit as the canvas's (graphFile.ts graphSizeLine), in an
-    # agent's words: the person's line says "canvas" (GM PR #205 r9 item 2).
+    # agent's words: the person's line says "canvas" (design PR #205).
     return (f"This graph is {size / MIB:.1f} MB. "
             f"Nebula opens graphs up to {MAX_GRAPH_FILE_BYTES // MIB} MB.")
 
@@ -272,7 +272,7 @@ def prepare(api: NebulaAPI, source: str, *, headers: dict[str, str] | None = Non
 def _words(headers: dict[str, str]) -> dict[str, str]:
     """The calls a load note names, in the caller's words: the one table
     (services/agent_words.WORDS) and the one signal, the CLI's
-    X-Nebula-Surface (review 11 of PR #203, NIT-3)."""
+    X-Nebula-Surface (PR #203)."""
     where = agent_words.surface(headers)
     return {"size": agent_words.worded("{size}", where), "trim": agent_words.worded("{apply} or {delete}", where),
             "back": agent_words.worded("{open}", where)}
@@ -298,8 +298,8 @@ def _counts(imported: dict[str, Any], files: int) -> str:
 
 def _refused(exc: NebulaAPIError) -> str:
     """A refusal's detail, with its code when it carries one an agent acts
-    on: a canvas waiting to be saved as a project (409 canvas_waiting,
-    review 5 of PR #199, M-3), so an agent tells it from a stale revision."""
+    on: a canvas waiting to be saved as a project (409 canvas_waiting, PR #199), so an
+    agent tells it from a stale revision."""
     payload = exc.payload if isinstance(exc.payload, dict) else {}
     code = payload.get("code")
     return f"{exc.detail} ({exc.status}, {code})" if code in AGENT_REFUSAL_CODES else exc.detail
@@ -345,14 +345,14 @@ def load(api: NebulaAPI, source: str, *, headers: dict[str, str] | None = None) 
         return reply
 
     def saved_first(imported: dict[str, Any]) -> dict[str, Any] | None:
-        """GM's rule (a) of PR #199: the person's canvas was saved as its own
+        """The design's rule (a) of PR #199: the person's canvas was saved as its own
         project first (never opened), and the file went into a new canvas."""
         saved = imported.get("savedCanvas") if isinstance(imported, dict) else None
         if not isinstance(saved, dict) or not isinstance(saved.get("name"), str):
             return None
         reply = result(imported, None, new=False)
         reply["savedCanvas"] = {"id": saved.get("id"), "name": saved["name"], **({"kept": True} if saved.get("kept") else {})}
-        # GM r15: "kept" when the canvas already was that project.
+        # Design: "kept" when the canvas already was that project.
         reply["note"] = (f"Nebula kept “{saved['name']}” as it was and loaded “{name}” into a new canvas."
                          if saved.get("kept") else
                          f"Nebula saved the open canvas as its own project, “{saved['name']}”, "
@@ -390,7 +390,7 @@ def load(api: NebulaAPI, source: str, *, headers: dict[str, str] | None = None) 
 def _open_as_new_project(api: NebulaAPI, source: str, prepared: dict[str, Any], previous: dict[str, Any],
                          refusal: dict[str, Any], headers: dict[str, str], words: dict[str, str],
                          call: Callable[..., Any], result: Callable[..., dict[str, Any]]) -> dict[str, Any]:
-    """Q120: a project named after the file, made the way new_project makes
+    """A project named after the file, made the way new_project makes
     one (with the workspace revision), and the file loaded there. The project
     that was open stays as it was."""
     from services.project_size import limit_text, project_name_for_file

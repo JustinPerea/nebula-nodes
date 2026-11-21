@@ -1,19 +1,19 @@
 """A Krea node with a required field that has nothing chosen.
 
-GM - Design, round 12 addendum (b), 2026-10-26: Topaz Standard with no model
+Design, 2026-10-26: Topaz Standard with no model
 chosen can't run (Krea's schema requires ``model``, and the gateway refuses
 it before calling Krea), so Nebula refuses the run up front instead of asking
 anyone to approve a run that can't go out, and the refusal names the node and
 the field: "Nothing ran. Choose a model for “Clean plate” first."
 
-Review 12, L-7, and GM's round-13 rule: the same holds for every required
+The design's rule for every other field: the same holds for every required
 field a Krea node has with no default (Krea 2's Aspect ratio and Resolution, a
 Flux 1.1 Pro's Width and Height, a node app's Version, a style training's
 Name). The canvas fills no value in (a new node keeps nothing, and its field
 reads "Choose…"), so a run can reach the gateway without it. The line follows
 the pattern: "Choose an aspect ratio for “X” first." When a node misses more
 than one, only the first in the card's field order is named, so the notice
-stays one line (GM, round 13: the same for the model and version lines).
+stays one line (design: the same for the model and version lines).
 
 The canvas shows that line itself before any dialog (frontend
 lib/placeholderRunConfirm.ts ``modelNotChosenText``); here is the run's own
@@ -27,7 +27,7 @@ that are required, have no default, aren't hidden, and have no input port of
 the same id (a wire could fill those). Nothing here adds a default: which
 value to use is the person's choice.
 
-Review 13, M-1 and L-6 (round 14): the refusal follows the route the run
+The refusal follows the route the run
 takes (:func:`unchosen`), as node_route.select_route picks it for the router,
 pricing and the spend gate. The Krea gateway (an API token, or the plan)
 needs every field above. A Krea copy that runs on its maker's own API with
@@ -38,7 +38,7 @@ plan not signed in) no field is named: the key or sign-in refusal comes
 first. frontend lib/placeholderRunConfirm.ts reads the same rule, and both
 are pinned by tests/fixtures/required_field_cases.json.
 
-GM - Design, round 14, item 1: a typed value is "Set" ("Set a width for “X”
+Design: a typed value is "Set" ("Set a width for “X”
 first."), a picker keeps "Choose" (model, version, aspect ratio).
 """
 from __future__ import annotations
@@ -56,7 +56,7 @@ _SETTING_KEYS = ("variant", "engine", "model", "enhancement_model", "frame_inter
 # The word a field goes by in the line; else its card label, lowercased.
 _FIELD_WORDS = {"node_app_version_id": "version"}
 # Fields the person picks rather than types, besides every enum: a node app's
-# Version (GM, round 14: "Choose stays for pickers (model, version, aspect ratio)").
+# Version (design: "Choose stays for pickers (model, version, aspect ratio)").
 _PICKED = frozenset({"node_app_version_id"})
 
 
@@ -113,7 +113,7 @@ def required_model_settings() -> dict[str, tuple[str, str]]:
 
 
 def field_verb(definition_id: str, key: str) -> str:
-    """GM - Design, round 14, item 1: "Choose" for a picker (an enum, a node
+    """Design: "Choose" for a picker (an enum, a node
     app's version), "Set" for a value the person types (width, height, name)."""
     definition = NodeRegistry().get_all().get(definition_id) or {}
     spec = next((spec for spec in _specs(definition) if spec.get("key") == key), {})
@@ -200,7 +200,7 @@ def unchosen_field(definition_id: str, params: Mapping[str, Any] | None) -> str 
 
 
 def not_chosen_line(name: str, field: str, verb: str = "Choose") -> str:
-    """GM's refusal for the node, without the "Nothing ran." that the run's
+    """The design's refusal for the node, without the "Nothing ran." that the run's
     own refusal already says ("Nothing ran, so nothing was spent. …"):
     "Choose an aspect ratio for “X” first.", "Set a width for “X” first."."""
     article = "an" if field[:1].lower() in "aeiou" else "a"

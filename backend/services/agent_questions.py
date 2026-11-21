@@ -1,18 +1,18 @@
 """Questions: an agent asks the person, the person answers or dismisses.
 
-Q125 item 1 (Justin, 2026-10-24: "Yes, all four, in that order"; then "go
-with your suggestions"). When an agent hits a decision only the person can
-make (which direction, a name, a detail it can't find), it asks 1-5 short
-questions (``ask_person``, ``nebula ask``, ``POST /api/canvas/questions``)
-and waits for the answers (``get_answers``). A concrete change to approve is
-a proposal instead (services/canvas_proposals.py), and what it noticed is an
-Update (post_note).
+Approved by Justin, 2026-10-24. When an agent hits a decision only the
+person can make (which direction, a name, a detail it can't find), it asks
+1-5 short questions (``ask_person``, ``nebula ask``,
+``POST /api/canvas/questions``) and waits for the answers
+(``get_answers``). A concrete change to approve is a proposal instead
+(services/canvas_proposals.py), and what it noticed is an Update
+(post_note).
 
 Modelled on proposals, with one difference: sets are kept.
 
 - Kept with the project they were asked in (follow-up in the same PR,
   2026-10-24: a side agent noted that memory-only sets closed on a restart
-  and lost the person's unsent answers, and GM - Design agreed). Each lives
+  and lost the person's unsent answers, and that was agreed). Each lives
   on its project's record, ``catalog["projects"][id]["agentQuestions"]``,
   next to pins and agentNotes and outside ``snapshot`` (services/
   agent_notes.py's storage rules): the browser's autosave never drops them,
@@ -43,12 +43,12 @@ Modelled on proposals, with one difference: sets are kept.
   Update or sent to a socket other than the person's own. On disk it is in
   the set's own record, which no agent route reads (project_store's
   metadata, public_project and project_view.agent_project name their keys),
-  and in the Message box thread's question row as its ``outcome`` (GM r79.5:
+  and in the Message box thread's question row as its ``outcome`` (design:
   the person's record of their answer), which agents never read
   (person_thread.agent_view drops it, and keeps a question's text for its
   asker only).
 
-Forward (Q125 items 2 and 3, not built here): ``open_for_agent`` lists one
+Forward (not built here): ``open_for_agent`` lists one
 agent identity's open sets, so a later "Needs you" count is proposals plus
 questions without new plumbing.
 """
@@ -90,11 +90,11 @@ RECORD_KEY = "agentQuestions"
 # The Updates of sets that closed and were pruned before their Update heard
 # how (a note or project store error at the time): note ids only, kept while
 # that Update is on the record and unresolved, so it can say "Closed." and
-# not the restart line (GM - Design, PR #193 review, item 6).
+# not the restart line (design, PR #193).
 CLOSED_UPDATES_KEY = "agentQuestionsClosed"
 _SET_ID = re.compile(r"^qs_[0-9a-f]{8}$")
 
-# GM - Design's agent-facing line at the cap, verbatim.
+# The design's agent-facing line at the cap, verbatim.
 CAP_LINE = "You already have 3 open question sets. Wait for answers or withdraw one."
 TOTAL_LINE = "Too many question sets are waiting for the person. Wait for answers or withdraw one of yours."
 
@@ -385,7 +385,7 @@ def _text_field(raw: Any, limit: int) -> str:
 def from_record(raw: Any, project_id: str) -> QuestionSet | None:
     """A stored set read back, checked as strictly as when it was asked (the
     same parse), or None when it can't be read: its Update then closes with
-    GM's restart line. A new answer key comes with it."""
+    The design's restart line. A new answer key comes with it."""
     try:
         if not isinstance(raw, dict) or not isinstance(raw.get("id"), str) or not _SET_ID.fullmatch(raw["id"]):
             return None
@@ -700,7 +700,7 @@ class QuestionBook:
 
     def open_for_agent(self, agent_id: str) -> list[QuestionSet]:
         """One agent identity's open sets, oldest first (the forward hook for
-        Q125 items 2 and 3: "Needs you" counts these with proposals)."""
+        the Agents panel: "Needs you" counts these with proposals)."""
         return [s for s in self.open_list() if s.agent.id == agent_id]
 
     def close(self, set_id: str, status: str, *, answers: list[dict[str, Any]] | None = None) -> QuestionSet:
@@ -767,7 +767,7 @@ class QuestionBook:
                 self._dirty.add(project_id or "")
 
     def closed_before(self, project_id: str | None, note_id: str) -> bool:
-        """Whether this Update's set closed and was pruned here (GM: its
+        """Whether this Update's set closed and was pruned here (design: its
         Update then says "Closed.", not the restart line)."""
         self._ensure_loaded()
         with self._lock:
@@ -826,7 +826,7 @@ def cap_message(detail: str, rows: Iterable[Mapping[str, Any]]) -> str:
 # record, or a set from a build that didn't keep them).
 
 RESTART_OUTCOME = "Closed when Nebula restarted."
-# GM - Design (PR #193 review, item 6): a set that closed, whose Update
+# Design, PR #193: a set that closed, whose Update
 # couldn't hear it then (a note or project store error), and that was pruned
 # after its 30 minutes. No restart happened, so not the restart line.
 CLOSED_OUTCOME = "Closed."

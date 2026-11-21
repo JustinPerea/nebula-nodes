@@ -1,8 +1,8 @@
-"""A node run error's line for the person (error copy round 3c, GM - Design).
+"""A node run error's line for the person (design).
 
 A handler's exception text is the specific text: ids, record and parameter
 names, what to call. Agents read it (MCP run results, the node's stored error,
-the run record), so it stays exactly as it is. GM: "the person reads these on
+the run record), so it stays exactly as it is. Design: "the person reads these on
 the node, so their lines shouldn't carry ids or record names. ... The node's
 error stores the specific text for agents (and the run record and MCP keep
 it), and the canvas shows the written line. If a fact helps the person act,
@@ -14,10 +14,10 @@ additive ``person`` field (execution/engine.py), beside ``error``. Only the
 raised exception's own line counts: a wrapper that turns one failure into
 another writes its own line, so a cause's line never leaks into a different
 failure. A node error with no person line shows "Couldn't run the node." and
-GM's general line on the card, the raw text behind "Details" (the frontend's
+The design's general line on the card, the raw text behind "Details" (the frontend's
 lib/nodeErrorCopy.ts).
 
-The rule for every raise during a node's run (round 3c-2). GM's guard:
+The rule for every raise during a node's run. The design's guard:
 "provider run errors often carry the one fact the person needs ... Don't let
 the general fallback hide them." A line Nebula wrote for the person is a
 written line, so it never goes without a person line:
@@ -40,18 +40,18 @@ written line, so it never goes without a person line:
 - Provider text (a provider's body or message), malformed provider answers,
   timeouts the classifier names, moderation blocks (their own card) and
   developer-only states keep no line at the raise: the card says the
-  classifier's line or GM's general line, with the raw text behind Details.
-  Since round 3d the engine gives a provider's answer GM's line from one
+  classifier's line or the design's general line, with the raw text behind Details.
+  The engine gives a provider's answer the design's line from one
   shared table (execution/provider_status.py: a rejected key, no credits,
   busy, trouble, an empty or malformed answer), naming the provider the node
   called, and keeps the raw text behind Details.
 - A line of Nebula's own around a provider's words (a validator's message, a
   provider's reason) is ``with_provider_line(exc, line)``: the card shows the
-  line and keeps the exception text behind Details. GM: "Raw provider text
+  line and keeps the exception text behind Details. Design: "Raw provider text
   stays behind Details in every case."
 
-GM's rules for every line: no ids, no parameter keys, no parentheses in error
-copy, model names in their own spelling (round 3d strengthened the guard to
+The design's rules for every line: no ids, no parameter keys, no parentheses in error
+copy, model names in their own spelling (strengthened the guard to
 catch kebab-case and dated model ids and parentheses).
 
 Either way the exception text stays word for word. A guard counts the raises
@@ -69,7 +69,7 @@ from typing import NamedTuple, TypeVar
 
 # The shared rule for lists in a person's line: up to 3 things are named,
 # from 4 they are counted (frontend errorCopy.NAMED_AT_MOST and
-# countsInstead, the same number; GM, PR #203 r24; tests/test_idol_round14.py
+# countsInstead, the same number; design, PR #203; tests/test_idol_round14.py
 # pins the two).
 NAMED_AT_MOST = 3
 
@@ -99,7 +99,7 @@ def as_person_line(exc: E) -> E:
 def with_provider_line(exc: E, line: str) -> E:
     """The person's line for a failure whose exception text carries the
     provider's own words: the card shows ``line`` and keeps that text behind
-    Details (round 3d)."""
+    Details."""
     setattr(exc, _PROVIDER_TEXT, True)
     return with_person_line(exc, line)
 
@@ -107,7 +107,7 @@ def with_provider_line(exc: E, line: str) -> E:
 def with_details_line(exc: E, line: str) -> E:
     """The person's line for a failure whose exception text carries a fact
     that belongs behind the card's Details, not in prose (a settings link,
-    round 3f: GM "The URL goes behind Details or becomes a link, not prose"):
+    per design: "The URL goes behind Details or becomes a link, not prose"):
     the card shows ``line`` and keeps the text behind Details."""
     setattr(exc, _PROVIDER_TEXT, True)
     return with_person_line(exc, line)
@@ -130,7 +130,7 @@ def carries_provider_text(exc: BaseException) -> bool:
     return getattr(exc, _PROVIDER_TEXT, False) is True
 
 
-# The provider's answer, as facts the raise knows (round 3d, part 2). GM's
+# The provider's answer, as facts the raise knows. The design's
 # status table (execution/provider_status.py) reads these, never the text: a
 # number in a provider's body or in Nebula's own words ("Prompt is too long:
 # 500 characters over") is not a status, and a storage upload's 403 is not the
@@ -178,7 +178,7 @@ def is_job_failure(exc: BaseException) -> bool:
 def with_call_facts(exc: E, cause: BaseException) -> E:
     """`exc` rewrites `cause`'s text (a hint added for agents): it keeps what
     the call said, the provider's status and the job-failure mark, so the
-    card reads the same. A person line never carries over (round 3c: a
+    card reads the same. A person line never carries over (a
     wrapper writes its own)."""
     status = api_status(cause)
     if status is not None:
@@ -188,7 +188,7 @@ def with_call_facts(exc: E, cause: BaseException) -> E:
     return exc
 
 
-# A connected file's kind, in words (GM: "A connected {image|audio|video} file
+# A connected file's kind, in words (design: "A connected {image|audio|video} file
 # can't be found."), from what the input is called or the file's extension.
 _KIND_WORDS = (
     ("image", ("image", "frame", "mask", "photo", "picture", "still", "thumbnail")),
@@ -219,7 +219,7 @@ def _file_kind(what: str, value: object = None) -> str:
 
 def missing_file_line(what: str = "file", value: object = None) -> str:
     """A connected file that isn't there, named in words, never by its path.
-    GM: "A connected {image|audio|video} file can't be found. Connect it
+    Design: "A connected {image|audio|video} file can't be found. Connect it
     again, then run the node again." ``what`` is the input ("image file",
     "Veo clip", "Dubbing audio"); ``value`` (the missing path) tells the kind
     by its extension when ``what`` doesn't."""
@@ -284,7 +284,7 @@ def needs_key(keys: Iterable[str], *, routed: bool = False) -> str | None:
     "your Anthropic API key". A routed node's key names each route's key
     the way its route line does, "your Black Forest Labs API key or fal.ai
     API key", and from 4 providers counts them, "a key for one of its 4
-    providers" (GM, PR #203 r40 item 1). None when a name isn't a key
+    providers" (design, PR #203). None when a name isn't a key
     Settings stores."""
     keys = list(dict.fromkeys(keys))
     names = [KEY_NAMES.get(key) for key in keys]
@@ -297,8 +297,8 @@ def needs_key(keys: Iterable[str], *, routed: bool = False) -> str | None:
     return "your " + _or_list([f"{provider} {kind}" for provider, kind in names])  # type: ignore[misc]
 
 
-# A Krea sign-in as one need among a node's needs (a draft for GM, PR #203
-# round 20): the card says "sign in to Krea", the bubble "a Krea sign-in".
+# A Krea sign-in as one need among a node's needs (a draft for design, PR #203):
+# the card says "sign in to Krea", the bubble "a Krea sign-in".
 KREA_SIGN_IN_NEED = "a Krea sign-in"
 
 
@@ -313,8 +313,8 @@ MAX_KEY_NAMES = 3
 
 
 def key_line(keys: Iterable[str]) -> str | None:
-    """The line for a run that stopped at its own key check (GM, copy sweep
-    item 12): "Add an OpenAI API key in Settings to run this node." The
+    """The line for a run that stopped at its own key check (design): "Add an OpenAI API
+    key in Settings to run this node." The
     article goes by the first name; a provider whose own term is "token"
     keeps it."""
     keys = list(keys)
@@ -331,9 +331,9 @@ def key_name(key: str) -> tuple[str, str] | None:
     return KEY_NAMES.get(key)
 
 
-# GM's lines for a provider's answer (round 3d), one table: the engine applies
+# The design's lines for a provider's answer, one table: the engine applies
 # it (execution/provider_status.py) where the handler wrote no line.
-# GM: "{Provider} didn't accept your API key. ..." The key's own name stands
+# Design: "{Provider} didn't accept your API key. ..." The key's own name stands
 # in for "API key" where Settings calls it something else ("token",
 # "service account key"), as the missing-key line does.
 STATUS_LINES: dict[str, str] = {
@@ -347,7 +347,7 @@ STATUS_LINES: dict[str, str] = {
 
 
 def status_line(kind: str, provider: str, credential: str = "API key") -> str:
-    """GM's line for ``kind`` (STATUS_LINES), naming ``provider``."""
+    """The design's line for ``kind`` (STATUS_LINES), naming ``provider``."""
     it = "them" if credential.endswith("s") else "it"
     return STATUS_LINES[kind].format(provider=provider, a_provider=with_article(provider),
                                      credential=credential, it=it)
@@ -355,24 +355,24 @@ def status_line(kind: str, provider: str, credential: str = "API key") -> str:
 
 def slow_job_line(provider: str) -> str:
     """A paid provider accepted the job and Nebula stopped waiting on it.
-    GM (round 3f): ""Is taking longer than usual" suggests Nebula is still
+    Design: ""Is taking longer than usual" suggests Nebula is still
     waiting, but it has stopped and the result won't come back to the canvas."""
     return (f"{provider} took too long, so Nebula stopped waiting. The job may still finish there and be billed, "
             f"so check {provider} before you run the node again.")
 
 
 def download_line(provider: str) -> str:
-    """A provider's result Nebula couldn't download (GM's rule 11, round 3f)."""
+    """A provider's result Nebula couldn't download (the design's rule 11)."""
     return f"Nebula couldn’t download the result from {provider} because its download link may have expired. Run the node again."
 
 
 def unknown_model_line(provider: str, field: str = "Model") -> str:
-    """The node's model isn't one the provider lists (GM's rule 10, round 3f)."""
+    """The node's model isn't one the provider lists (the design's rule 10)."""
     return f"This node’s model isn’t one {provider} offers. Pick one in “{field}”, then run the node again."
 
 
 def no_result_line(provider: str) -> str:
-    """The provider's answer had no result in it, or wasn't one (GM)."""
+    """The provider's answer had no result in it, or wasn't one (design)."""
     return status_line("no_result", provider)
 
 
@@ -409,7 +409,7 @@ def field_label(definition_id: str, key: str, default: str | None = None) -> str
 
 
 def count_field(definition_id: str, key: str = "num_images") -> str:
-    """The image-count field as the node shows it, in quotes (GM's rule 5:
+    """The image-count field as the node shows it, in quotes (the design's rule 5:
     “Count”, “Images”, “Generations”), or "the number of images" in words
     for a node that doesn't show the field (Nano Banana's copies)."""
     label = str((_param(definition_id, key) or {}).get("label") or "").strip() if definition_id else ""
@@ -440,7 +440,7 @@ def option_labels(definition_id: str, key: str, values: Iterable[object]) -> str
 
 
 def it_was(value: object) -> str:
-    """GM's rule for a value on the card: it goes in its own sentence, as the
+    """The design's rule for a value on the card: it goes in its own sentence, as the
     person set it ("Set Duration to whole seconds from 4 to 12. It was 3.5."),
     never in parentheses."""
     if isinstance(value, bool):
@@ -477,12 +477,12 @@ def model_name(model: object, definition_id: str | None = None, default: str = "
 
 
 def missing_key_line(keys: Iterable[str]) -> str:
-    """The pre-run check's missing key (error copy round 3e): key_line, or,
+    """The pre-run check's missing key: key_line, or,
     for a key Settings doesn't list by name, the same line without one."""
     return key_line(keys) or "Add an API key in Settings to run this node."
 
 
-# An input said in words (GM's rule 6, round 3f: "Connect {a/an X in words} to
+# An input said in words (the design's rule 6: "Connect {a/an X in words} to
 # this node, then run it again."). A label is lowercased word by word, except
 # an acronym or a name ("SVG", "3D", "Krea"); a plural or a mass noun takes no
 # article. A few labels read better as what they bring.
@@ -493,10 +493,10 @@ _INPUT_WORDS = {
 }
 _MASS_NOUNS = {"audio", "text", "context", "lighting", "messages", "guidance"}
 # The mass nouns above that are plural ("needs messages. Connect them"); the
-# rest are one thing the person connects and take "it" (GM r36 B2).
+# rest are one thing the person connects and take "it" (design).
 _PLURAL_MASS_NOUNS = {"messages"}
 # Nouns that aren't one thing the person connects, said as the port they
-# fill: "a media input" (GM, PR #203 r37 item 2: never "it"; "Connect one",
+# fill: "a media input" (design, PR #203: never "it"; "Connect one",
 # and after a count "Connect a media input to each").
 _PORT_NOUNS = {"media"}
 _NAMES = {"krea"}
@@ -537,32 +537,30 @@ def input_words(label: object) -> str:
 
 
 def connect_line(label: object) -> str:
-    """GM's rule 6 line for an input with no wire, from its label."""
+    """The design's rule 6 line for an input with no wire, from its label."""
     # A numbered or lettered input ("Item 1", "Image A") and a pass-through
     # are named by their label: "an item" wouldn't say which one. One rule
-    # for the card and the log (_named_by_label; review 18 of PR #203,
-    # copy-ui NIT-2).
+    # for the card and the log (_named_by_label, PR #203).
     if _named_by_label(label):
-        # The label exactly as the node shows it (round 3g, GM: ports in quotes).
+        # The label exactly as the node shows it (design: ports in quotes).
         return f"Connect an output to “{str(label or '').strip()}”, then run the node again."
     return f"Connect {input_words(label)} to this node, then run it again."
 
 
 def port_name(label: object) -> str:
     """An input's label as a line names it: a note in its parentheses
-    ("Mask (white = edit)", "Images (1-4)") left out (GM: no parentheses)."""
+    ("Mask (white = edit)", "Images (1-4)") left out (design: no parentheses)."""
     return _without_aside(label)
 
 
 def port_line(label: str) -> str:
-    """A required input with no wire, before the run (error copy round 3e,
-    in GM's rule 6 words since round 3f)."""
+    """A required input with no wire, before the run (in the design's rule 6 words)."""
     return connect_line(label)
 
 
 def joined_lines(lines: Iterable[str | None]) -> str | None:
     """Several checks' person lines on one card, in order, each once. None
-    when any check has no line: the card then shows GM's general line with
+    when any check has no line: the card then shows the design's general line with
     every specific text behind Details, so no check goes unsaid."""
     listed = list(lines)
     if not listed or any(not (line and line.strip()) for line in listed):
@@ -577,21 +575,20 @@ def joined_lines(lines: Iterable[str | None]) -> str | None:
 # -- not-ready reasons: a node that can't run here, said for one node or several --
 #
 # Each reason says what follows the node's quoted name, for one node and for
-# several (review 14 of PR #203, copy LOW-1: the plural came from a regex on
+# several (PR #203: the plural came from a regex on
 # English). The line is a subject, the quoted name for one node or the
 # shared name list for several (not_ready_subject), then the predicate for
 # that count. The proposal bar, its layer (frontend canvasProposals) and the
-# Agent Log merge nodes by the reason, never by the words. GM's wording:
-# r20 item 3 (quoted names), r21 (Krea's "Sign in"), r28 (merges), r29
-# items 1 and 2 (route-table Auto, the switcher, Replicate's key), r31 item
-# 3 (route lines: the reason, then one action sentence that names who can
-# take the run).
+# Agent Log merge nodes by the reason, never by the words. The design's wording covers
+# quoted names, Krea's "Sign in", merges, the route-table Auto, the switcher,
+# Replicate's key, and route lines (the reason, then one action sentence that
+# names who can take the run).
 #
 # Every predicate ends in one action sentence whose end is a slot, {end}:
 # "." on the card and the bar, the run-again ending in the Agent Log (", then
 # run the node again." or, after an action that already holds a comma
 # clause, ". Then run the node again."). The ending is built there, never
-# appended to whatever the last sentence is (review 15, copy LOW-1).
+# appended to whatever the last sentence is.
 NOT_READY_PREDICATES: dict[str, tuple[str, str]] = {
     "key": ("needs your {phrase}. Add {it} in Settings{end}",
             "need your {phrase}. Add {it} in Settings{end}"),
@@ -612,8 +609,8 @@ CARD_END = "."
 
 
 def again_end(nodes: int, *, after_clause: bool = False) -> str:
-    """The Agent Log's ending for a not-ready line's action sentence (GM, PR
-    #203 r29 item 3, r31 item 3): ", then run the node again." ("the nodes"
+    """The Agent Log's ending for a not-ready line's action sentence (design, PR
+    #203): ", then run the node again." ("the nodes"
     for several), or its own sentence after an action that already holds a
     comma clause (", or add your fal.ai API key in Settings and switch to
     fal.ai. Then run the node again.")."""
@@ -624,7 +621,7 @@ def again_end(nodes: int, *, after_clause: bool = False) -> str:
 class Fix(NamedTuple):
     """What the person can change where the node is, as a route line's first
     action ("Turn “Raw” off", "Pick 1K, 2K or 4K"), and how many options it
-    offers (GM, PR #203 r32 item 1). Since r37 every second action takes the
+    offers (design, PR #203). Every second action takes the
     comma (route_action), however many options the fix lists."""
 
     text: str
@@ -632,8 +629,8 @@ class Fix(NamedTuple):
 
 
 def route_action(fix: Fix | str | None, others: list[str], needs_key: list[str], key: str | None) -> tuple[str, bool]:
-    """A route line's one action sentence, without its end (GM, PR #203 r31
-    item 3), and whether it holds a comma clause (again_end):
+    """A route line's one action sentence, without its end (design, PR #203), and
+    whether it holds a comma clause (again_end):
 
     - ``fix`` is what the person can change where the node is ("Turn “Raw”
       off", "Add it in Settings"), or None;
@@ -643,9 +640,9 @@ def route_action(fix: Fix | str | None, others: list[str], needs_key: list[str],
       added (``key`` names that key): "…, or add your fal.ai API key in
       Settings and switch to fal.ai".
 
-    Two actions always take a comma between them (GM, PR #203 r37 item 1:
-    "Pick 1K, or switch to fal.ai."; r32 item 1 and r36 B4 were the first
-    cases), and the second action makes the sentence a comma clause, so the
+    Two actions always take a comma between them (design, PR #203:
+    "Pick 1K, or switch to fal.ai."), and the second action makes the sentence a comma
+    clause, so the
     Agent Log's ending is its own sentence (again_end: ". Then run the node
     again."): ", then run…" after it would read as applying only to the
     switch. This is the one place the comma is decided; the card, the bar,
@@ -702,10 +699,10 @@ class NotReadyReason:
 
 # -- input needs: a required input with no wire, in the Agent Log's merge --
 #
-# A refused run's other stops merge as its reasons do (GM, PR #203 r33 item
-# 1): every node that needs the same input is one line, by the shared name
-# list (not_ready_subject: up to 3 names, a same-name group, "4 nodes" from
-# 4), the plural naming the input again in the action, never "one" after a
+# A refused run's other stops merge as its reasons do (design, PR #203): every
+# node that needs the same input is one line, by the shared name list
+# (not_ready_subject: up to 3 names, a same-name group, "4 nodes" from 4), the
+# plural naming the input again in the action, never "one" after a
 # count: "2 “GPT Image 2” nodes need a prompt. Connect a prompt to each, then
 # run the nodes again."; "“GPT Image 2” needs a prompt. Connect one, then
 # run the node again." Every input kind takes the same pattern from this one
@@ -715,8 +712,8 @@ class NotReadyReason:
 # one, a pass-through: connect_line) takes the "port" row, the label in
 # quotes as the card says it.
 #
-# A node with two or more different needs says them as one need (GM, PR #203
-# r34 item 1), in the node's input order, the action naming how many:
+# A node with two or more different needs says them as one need (design, PR
+# #203), in the node's input order, the action naming how many:
 # "“FLUX Kontext” needs a prompt and an image. Connect both, then run the
 # node again."; "…needs a prompt, an image and a mask. Connect them, …".
 # Nodes with the same set merge as one need does: "2 “FLUX Kontext” nodes
@@ -727,8 +724,7 @@ class NotReadyReason:
 INPUT_NEED_PREDICATES: dict[str, tuple[str, str]] = {
     "input": ("needs {input}. Connect {one}{end}",
               "need {input}. Connect {input} to each{end}"),
-    # After a count the action names what to connect, never "one" (GM r33
-    # item 1; review 17 copy-ui MEDIUM-1, GM r36 B1).
+    # After a count the action names what to connect, never "one" (design).
     "port": ("needs an output connected to “{port}”. Connect one{end}",
              "need an output connected to “{port}”. Connect an output to “{port}” on each{end}"),
     "inputs": ("needs {inputs}. Connect {all}{end}",
@@ -739,8 +735,7 @@ INPUT_NEED_PREDICATES: dict[str, tuple[str, str]] = {
 def _one(words: str) -> str:
     """The pronoun for one need: "one" after an article, else by the noun's
     number. A mass noun takes no article but is still "them" when it is
-    plural (_PLURAL_MASS_NOUNS: "messages"; review 17 copy-ui LOW-1, GM r36
-    B2)."""
+    plural (_PLURAL_MASS_NOUNS: "messages"; design)."""
     if words.startswith(("a ", "an ")):
         return "one"
     last = words.split()[-1].lower()
@@ -782,8 +777,8 @@ def _once(items: Iterable[str]) -> list[str]:
 
 
 def needs_card_line(labels: Iterable[object], key: str | None = None) -> str | None:
-    """The card's one line for a node with several needs (GM, PR #203 r38
-    item 1, r34's form; one "then run it again" at the end, never one per
+    """The card's one line for a node with several needs (design, PR #203; one "then run
+    it again" at the end, never one per
     need), from its inputs with no wire, in the node's input order, and its
     missing key (``key``: key_phrase's words):
 
@@ -812,7 +807,7 @@ def needs_card_line(labels: Iterable[object], key: str | None = None) -> str | N
 
 def needs_bubble(labels: Iterable[object], key: str | None = None) -> str | None:
     """The cursor bubble's words after the node's name for the same needs
-    (GM, PR #203 r38 item 1; the bubble drops "then run it again"):
+    (design, PR #203; the bubble drops "then run it again"):
     "needs a prompt and an image. Connect both."; "needs a prompt and your
     Anthropic API key. Connect the prompt and add the key in Settings."
     None with no input to connect."""
@@ -855,8 +850,8 @@ def need_words(labels: Iterable[object]) -> list[str]:
 
 
 def input_needs(labels: Iterable[object]) -> NotReadyReason:
-    """Every required input one node has with no wire, as one need (GM, PR
-    #203 r34 item 1), in the order given (the node's input order): one
+    """Every required input one node has with no wire, as one need (design, PR
+    #203), in the order given (the node's input order): one
     input is input_need's line; two or more list them, each once, and
     "Connect both" or "Connect them"."""
     labels = list(labels)
@@ -881,7 +876,7 @@ def not_ready_subject(names: list[str]) -> str:
 
 def merged_not_ready(rows: Iterable[tuple[str, NotReadyReason]], *, again: bool = False) -> list[tuple[str, int]]:
     """Each reason once, in the order first met, with every node that has it
-    (GM, PR #203 r28): (the line, how many nodes say it). A route's own line
+    (design, PR #203): (the line, how many nodes say it). A route's own line
     stays a line per node. ``again``: the Agent Log's forms, each action
     sentence ending in the run-again ending (NotReadyReason.again)."""
     groups: dict[object, tuple[NotReadyReason, list[str]]] = {}

@@ -143,8 +143,8 @@ def _cut(text: Any, limit: int) -> str:
 
 
 def _cut_note(text: Any, limit: int) -> str:
-    """A pin's note as stored, its lines and spacing kept (fix round 2 of PR
-    #200: agents get the note as written; round 3 N-6: the same spacing as
+    """A pin's note as stored, its lines and spacing kept (PR
+    #200: agents get the note as written: the same spacing as
     look_at_canvas), cut at `limit`."""
     lines = [line.rstrip() for line in str(text or "").splitlines()]
     note = "\n".join(lines).strip()
@@ -232,7 +232,7 @@ def canvas_part(snapshot: Mapping[str, Any], *, project: Mapping[str, Any] | Non
         "view": _view_part(snapshot),
         "selection": selection,
         # Nodes the person selected that only their tab has (a duplicate or
-        # a paste): counted, never listed (review 17 agents-docs LOW-2).
+        # a paste): counted, never listed.
         **{key: snapshot[key] for key in ("tabOnlyCount", "tabOnlyNote") if snapshot.get(key)},
         "agents": agents,
         "nodeCount": total,
@@ -276,8 +276,8 @@ def pins_part(pins: Iterable[Mapping[str, Any]], *, via: str) -> dict[str, Any]:
     used = size(part) + size({"more": HINTS[via]["pins"]})
     cut = False
     for pin in open_pins[:MAX_PINS]:
-        # Stripped here too, whatever the caller passes (review 10 NIT-3).
-        text = agent_text(pin.get("text"))  # agents' form (GM r23)
+        # Stripped here too, whatever the caller passes.
+        text = agent_text(pin.get("text"))  # agents' form (design)
         row = {"id": pin.get("id"), "text": _cut_note(text, PIN_CHARS), "anchor": pin.get("anchor")}
         cost = size(row) + 2
         if used + cost > budget:
@@ -483,7 +483,7 @@ def catalog_restore_part(view: Mapping[str, Any]) -> dict[str, Any]:
     was added back and of what the copy decided (reverted, cameBack,
     backInTrash); list_projects has `catalogRestore` in full. Only what
     still holds (a row marked `current: false` is left out, and its count
-    with it: GM's stale-lines rule, which the note follows too)."""
+    with it: the design's stale-lines rule, which the note follows too)."""
     def holding(key: str) -> list[Mapping[str, Any]]:
         return [row for row in view.get(key) or [] if isinstance(row, Mapping) and row.get("current") is not False]
 
@@ -500,7 +500,7 @@ def catalog_restore_part(view: Mapping[str, Any]) -> dict[str, Any]:
             "copyAt": view.get("copyAt"), "damagedFile": view.get("damagedFile"), "addedBack": rows("addedBack"),
             "addedBackCount": count("addedBack"), "notAddedBackCount": count("notAddedBack"),
             "damagedReadWhole": view.get("damagedReadWhole"),
-            # PR #199 round 16: the CLI's context line reads it, as `nebula
+            # PR #199: the CLI's context line reads it, as `nebula
             # projects` does (without it, "may be missing" showed beside a
             # note saying every record was read).
             "damagedRecordsUnread": view.get("damagedRecordsUnread")}
@@ -526,6 +526,6 @@ def build(**parts: dict[str, Any]) -> dict[str, Any]:
     lead = {"catalogRestore": parts["catalogRestore"]} if parts.get("catalogRestore") else {}
     if parts.get("canvasNotFiled"):
         # The live canvas waiting to be filed (the list at a limit), whether
-        # or not a restore notice is open (review 3 of PR #199, L-5).
+        # or not a restore notice is open (PR #199).
         lead["canvasNotFiled"] = parts["canvasNotFiled"]
     return {**lead, **{name: parts[name] for name in BUDGETS}}

@@ -383,8 +383,8 @@ async def stream_execute_image(
         )
         if job_state == "running":
             # fal.ai took the job and it is still queued or running when
-            # Nebula stops asking: it may still finish and bill (GM's slow-job
-            # line, round 3d part 2).
+            # Nebula stops asking: it may still finish and bill (the design's slow-job
+            # line).
             raise with_person_line(failure, slow_job_line("fal.ai"))
         if job_state == "failed":
             raise as_job_failure(failure)  # fal.ai ran the job and reported it failed

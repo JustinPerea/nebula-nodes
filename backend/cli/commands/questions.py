@@ -1,6 +1,6 @@
 """`nebula ask`, `nebula answers <id>`, `nebula questions withdraw <id>`.
 
-An agent asks the person 1-5 questions only they can answer (Q125 item 1);
+An agent asks the person 1-5 questions only they can answer;
 the person answers or dismisses them in Nebula's Updates. There is
 deliberately no answer or dismiss command here: that is the person's alone.
 Sets are kept with the project, so they survive a Nebula restart: `nebula

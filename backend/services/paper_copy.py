@@ -1,4 +1,4 @@
-"""Error copy round 3e: the Paper source card's lines (GM - Design).
+"""The Paper source card's lines (design).
 
 "People get the written line; agents keep the specific detail." A Paper
 error's own text (paper_transport, paper_sources) stays word for word in the

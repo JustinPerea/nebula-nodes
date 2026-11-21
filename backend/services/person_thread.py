@@ -1,6 +1,6 @@
 """The Message box's thread: the person and the terminal Claude, per project.
 
-GM - Design r50 (Justin's choice on 2026-11-03, option b of the demo
+Design (Justin's choice on 2026-11-03, from the demo
 audit): a canvas-wide "Message Claude" box inside the Agent log. The person
 writes; a Claude Code session listening through the Nebula channel
 (mcp_channel.py, ``--channel``) is woken at once; it answers with
@@ -12,8 +12,8 @@ it), so a reload and every tab show the same rows.
 Rows, oldest first, at most ``MAX_ROWS``. Past it the oldest agent rows
 go first, then the person's settled rows (an accepted message, a pin); a
 message of theirs still ``sent`` or ``held`` is never trimmed, so an agent
-replying in a loop can't push it out before its listener takes it (review
-1 of #225, MEDIUM-2; replies are also paced per agent: ReplyPace).
+replying in a loop can't push it out before its listener takes it (PR #225; replies are
+also paced per agent: ReplyPace).
 
 - ``message``: the person's. ``{id, kind, at, text, nodeIds, to: {listenerId,
   agent, session: {key, ordinal}}, state, acceptedAt}``. ``state`` is
@@ -23,16 +23,16 @@ replying in a loop can't push it out before its listener takes it (review
   message (Try again after a lost answer) land once.
 - ``reply``: an agent's, through reply_to_person. ``{id, kind, at, text,
   nodeId, agent, session, replyTo}``. ``replyTo`` names the push it
-  answers (services/push_ledger.py, review 4): that push's newest message,
+  answers (services/push_ledger.py): that push's newest message,
   else its first question set id; null for a follow-up that answers no
   push. The box clears that message's status and the ones before it, never
-  a later one still in flight (review 1, NIT-4), and a question set id
+  a later one still in flight, and a question set id
   clears no message.
 - Rows that point at what Nebula already keeps elsewhere, added only while
   that agent's session listens (what crosses the channel): ``question``
   (``questionId``, the questions as asked and, once it closes, ``outcome``:
   ``{status, closedAt, answers?}``, the person's own record of what they
-  chose or typed, GM r79.5), ``proposal``
+  chose or typed, design), ``proposal``
   (``proposalId``), ``note`` (an Update it posted, ``noteId``), ``pinReply``
   (its reply on a pin) and, from the person while any session listens,
   ``pin`` (a note they pinned, with its text and node).
@@ -50,7 +50,7 @@ message's ``to`` is woken, whatever the switch. It reads its messages back
 from ``inbox`` (the journal is not trusted to hold them), pushes them and
 says so (``accept``).
 
-Questions stay owner-scoped in the thread too (review 1, MEDIUM-1): every
+Questions stay owner-scoped in the thread too: every
 agent reads a question row's ``questionId`` and ``agent``, but only the
 asker reads the questions' text and options, as GET
 /api/canvas/questions/{id} answers only the asker. A row's ``outcome``
@@ -61,7 +61,7 @@ every agent route.
 
 Sending is the person's alone (the route checks the person token): agents
 write only replies. The 201st message to one listener in a rolling hour is
-accepted and held, never refused (GM r55): PR A's listener holds a
+accepted and held, never refused (design): PR A's listener holds a
 deliberate send past its runaway cap of 200 an hour. The row reads
 ``held`` while Nebula knows it waits: the route marks it when that
 listener already had ``SEND_CAP`` messages this hour (its push of each of
@@ -87,7 +87,7 @@ MAX_ROWS = 300
 MAX_TEXT = 2000
 MAX_NODE_IDS = 20
 MAX_QUESTIONS_SHOWN = 5
-SEND_CAP = 200          # messages in a rolling hour (GM r50 "Pacing")
+SEND_CAP = 200          # messages in a rolling hour (design: "Pacing")
 SEND_WINDOW = 3600.0
 FIELD = "personThread"
 # The journal kind a send wakes listeners with (mcp_channel.MESSAGE_KIND; a test keeps them equal).
@@ -104,7 +104,7 @@ AGENT_ROWS = frozenset({"reply", "question", "proposal", "note", "pinReply"})
 REPLY_BURST = 5
 REPLY_EVERY = 2.0
 REPLY_LIMITED_CODE = "replies_rate_limited"
-# J1 (Justin, 2026-11-04): replying takes a Settings agent token, the same as
+# Justin, 2026-11-04: replying takes a Settings agent token, the same as
 # listening. A name alone, an in-app agent's turn token, or a token Nebula no
 # longer knows is refused (401) with one of these lines and codes. The token
 # middleware (agent_workspaces) answers the revoked one on REPLIES_PATH.
@@ -113,7 +113,7 @@ AGENT_THREAD_PREFIX = "/api/agent/thread/"  # the listener's own routes (inbox, 
 REPLY_NO_TOKEN_CODE = "reply_no_token"
 REPLY_IN_APP_CODE = "reply_in_app_token"
 REPLY_BAD_TOKEN_CODE = "reply_token_invalid"
-# GM r94 (verbatim): the command on its own line.
+# Design (verbatim): the command on its own line.
 CONNECT_CHANNEL_COMMAND = "nebula mcp connect claude-code --channel"
 REPLY_NO_TOKEN_LINE = ("Nebula couldn’t post this reply because this agent has no token. Copy one from Settings › "
                        "Connect your agent, run this command, then reply again.\n" + CONNECT_CHANNEL_COMMAND +
@@ -123,14 +123,14 @@ REPLY_IN_APP_LINE = ("Nebula couldn’t post this reply because it uses an in-ap
                      "in this chat instead.")
 REPLY_BAD_TOKEN_LINE = ("Nebula couldn’t post this reply because its token isn’t valid anymore. Copy a new one from "
                         "Settings › Connect your agent, run this command, then reply again.\n" + CONNECT_CHANNEL_COMMAND)
-# GM r110 (verbatim): a reply that answers no push, with no project open.
+# Design (verbatim): a reply that answers no push, with no project open.
 # Agents open a project themselves (open_project, its id from list_projects);
 # open_project switches the person's canvas, so the docs say to open the
 # project the person's message came from, never an unrelated one.
 REPLY_NO_PROJECT_CODE = "no_project"
 REPLY_NO_PROJECT_LINE = ("Nebula couldn’t post this reply because no project is open. Open one with open_project, "
                          "then reply again.")
-# Round 5 (D2), GM r108 string 3: a reply from a terminal that isn't a
+# Design: a reply from a terminal that isn't a
 # listening session of this agent, while two or more of its sessions
 # listen. Nebula saves it but won't guess which push it answers (replyTo
 # None).
@@ -141,7 +141,7 @@ def reply_unmatched_line(name: str, count: int) -> str:
             "terminals share.\n" + CONNECT_CHANNEL_COMMAND)
 
 
-# Review 4 (the push ledger): a reply that answers a push from another
+# The push ledger: a reply that answers a push from another
 # project than the open one ignores its node_id (the node is on that
 # project's canvas, not the one the person sees), and says so.
 def reply_node_elsewhere_line(node_id: str, project_name: str) -> str:
@@ -149,10 +149,10 @@ def reply_node_elsewhere_line(node_id: str, project_name: str) -> str:
             "isn’t open, so your cursor stayed where it was.")
 
 
-# GM r100, r112.1: the Update a reply posts when it lands in another
+# Design: the Update a reply posts when it lands in another
 # project's thread than the open one (the thread of the push it answers).
 # One per agent and project while unread, counted from the second reply.
-# An unnamed project reads “Untitled” (GM r108 d).
+# An unnamed project reads “Untitled” (design).
 UNTITLED = "Untitled"
 
 
@@ -167,7 +167,7 @@ def route_key(agent_id: str, session: str | None) -> str:
     """Which listener a message is for, stable across Nebula restarts: a
     digest of (agent, raw session). A listener id (an HMAC under a secret
     each backend process makes) changes when Nebula restarts, so a message
-    "Sent" before a restart was never read back after it (review 4). Kept
+    "Sent" before a restart was never read back after it. Kept
     on the row as ``route``, which never leaves the backend."""
     import hashlib
 
@@ -178,10 +178,10 @@ def route_key(agent_id: str, session: str | None) -> str:
 # the person plus each row's own agent.
 AGENTS_READ_WHOLE_THREAD = True
 
-# The person's lines (GM r50 and r55, verbatim; curly apostrophes).
+# The person's lines (design, verbatim; curly apostrophes).
 HELD_LINE = "Sends in a few minutes because you’ve sent 200 this hour."
 # A message whose listener's token the person revoked before it took the
-# message (boundary LOW-1): never delivered, so it settles as ``dropped``
+# message: never delivered, so it settles as ``dropped``
 # (the box words it as the send-time "stopped listening" line).
 DROPPED_STATE = "dropped"
 STOPPED_LINE = ("Nebula couldn’t send your message because Claude stopped listening. Reconnect it in the "
@@ -233,7 +233,7 @@ def reply_event_data(row: Mapping[str, Any]) -> dict[str, Any]:
 
     Every saved reply is journaled, whatever the switch: the replying
     agent's own channel listener counts it as an answer to the message it
-    pushed (``replyTo``, set by Nebula: round 5, D1; its reply from any
+    pushed (``replyTo``, set by Nebula; its reply from any
     route, `nebula reply` in its shell too: Justin, 2026-11-04, PR A's
     ownReplies=1). Never a session key or a listener id: this event reaches
     every agent's feed. The ids say nothing of what the reply says."""
@@ -286,7 +286,7 @@ def clean_node_ids(raw: Any) -> list[str]:
 
 
 def first_sentence(text: str, limit: int = 140) -> str:
-    """The reply's first sentence for the cursor's say (GM r50): up to the
+    """The reply's first sentence for the cursor's say (design): up to the
     first . ! ? or line break, at most ``limit`` characters."""
     line = " ".join(text.splitlines()[0].split()) if text else ""
     for index, ch in enumerate(line):
@@ -300,7 +300,7 @@ def first_sentence(text: str, limit: int = 140) -> str:
 
 def _bump(row: dict[str, Any]) -> None:
     """A row changed: its ``rev`` goes up, so a tab keeps the newer copy
-    whatever order a sync and a change reach it in (review 3, LOW-4)."""
+    whatever order a sync and a change reach it in."""
     rev = row.get("rev")
     row["rev"] = (rev if isinstance(rev, int) and rev > 0 else 1) + 1
 
@@ -404,7 +404,7 @@ class ReplyPace:
 
     def refund(self, agent_id: str) -> None:
         """Give back the reply take() counted, when Nebula then refused it
-        (no project, a store failure): a refusal never spends one (live L1)."""
+        (no project, a store failure): a refusal never spends one."""
         with self._lock:
             held = self._tokens.get(agent_id)
             if held is not None:
@@ -449,7 +449,7 @@ class PersonThread:
     def inbox(self, listener_ids: Iterable[str], route: str | None = None
               ) -> tuple[str | None, list[dict[str, Any]]]:
         """Messages to this listener that no listener has taken yet, in
-        every project (boundary LOW-2: the person may switch projects before
+        every project (the person may switch projects before
         the listener reads), the open project's first. Each names its
         project. Returns (the open project, messages). A message is this
         listener's by its ``route`` (agent and session, so one sent before
@@ -495,7 +495,7 @@ class PersonThread:
                    ) -> list[tuple[str, list[dict[str, Any]]]]:
         """``mutate`` each project's thread in one transaction (``mutate(
         project_id, rows)`` with ``with_project``); the projects whose rows
-        changed, with those rows (boundary LOW-2: a message is found by id
+        changed, with those rows (a message is found by id
         wherever it was sent)."""
         store = self._store()
         changed: list[tuple[str, list[dict[str, Any]]]] = []
@@ -564,8 +564,8 @@ class PersonThread:
                 elif (counted is not None and row.get("state") == "accepted" and agent_id and route is not None
                       and row.get("route") == route
                       and ((row.get("to") or {}).get("agent") or {}).get("id") == agent_id):
-                    # A re-report counts only from the session the row was sent to (round 5c,
-                    # MEDIUM-1): the route survives a restart, an invented session never matches.
+                    # A re-report counts only from the session the row was sent to:
+                    # the route survives a restart, an invented session never matches.
                     counted[row["id"]] = project_id
             return changed
 
@@ -590,8 +590,8 @@ class PersonThread:
         return self._write_all(mutate)
 
     def drop_for(self, agent_id: str) -> list[tuple[str, list[dict[str, Any]]]]:
-        """That agent is gone for good (its token was revoked, boundary
-        LOW-1): its messages still in flight settle as dropped, in every
+        """That agent is gone for good (its token was revoked): its messages still in
+        flight settle as dropped, in every
         project and every session, whether a listener of it was still
         registered or not. Never touches an accepted message."""
         own = agent_id
@@ -610,7 +610,7 @@ class PersonThread:
 
     def lapse_route(self, agent_id: str, session: str | None, listener_id: str | None = None
                     ) -> list[tuple[str, list[dict[str, Any]]]]:
-        """That listener's beats lapsed (round 5d): its messages still in
+        """That listener's beats lapsed: its messages still in
         flight stay ``sent``, marked ``lapsed``, so the box says Claude
         stopped listening and will get them if it reconnects, and asks for no
         resend. ``revive_route`` clears the mark when the same agent and
@@ -635,7 +635,7 @@ class PersonThread:
                    ) -> list[tuple[str, list[dict[str, Any]]]]:
         """That one listener (agent and raw session) is gone for good: its
         lapse window ended, it ended or stopped on purpose, or it was pushed
-        out for room (round 5c, LOW-2; round 5d). Its messages still in
+        out for room. Its messages still in
         flight settle as dropped, never to come back, so the box reads
         ``listenerDroppedLine`` and not "Sent" forever. Never touches an
         accepted message or another session's."""
@@ -690,8 +690,8 @@ class PersonThread:
         OLDEST open push in the push ledger (``key``: (agent id, raw
         session); services/push_ledger.py) whose project still exists:
         ``replyTo`` is that push's newest message, else its first question
-        set, and the reply goes to that one's project (GM r100.3, r112.2:
-        the person may have opened another project since). Nothing to
+        set, and the reply goes to that one's project (design: the person may have
+        opened another project since). Nothing to
         answer: the open project's thread, ``replyTo`` None (a follow-up);
         no project open: refused (REPLY_NO_PROJECT_LINE). The push is
         marked answered only once the row is saved; a save that fails
@@ -740,7 +740,7 @@ class PersonThread:
     def close_question(self, question_id: str, outcome: Mapping[str, Any], *,
                        project_id: str | None = None) -> tuple[str | None, list[dict[str, Any]]]:
         """A question set closed: its rows keep the outcome (person form
-        only, GM r79.5), so "You chose …" survives any reload. Nothing
+        only, design), so "You chose …" survives any reload. Nothing
         changes when no row names the set."""
         kept = copy.deepcopy(dict(outcome))
 
@@ -788,8 +788,8 @@ def agent_view(row: Mapping[str, Any], viewer_id: str | None = None) -> dict[str
     the person's form), no client id; a message names the agent it was for.
     A question row keeps its id and agent for every agent, but its text and
     options only for the asker (``viewer_id``), and its outcome for none
-    (review 1 of #225, MEDIUM-1; GM r79.5). Pin text is in agents' form
-    (canvas_pins.agent_text, GM r23)."""
+    (PR #225; design). Pin text is in agents' form
+    (canvas_pins.agent_text, design)."""
     shown = {key: copy.deepcopy(value) for key, value in row.items() if key not in _PERSON_ONLY_KEYS}
     if row.get("kind") == "question" and (viewer_id is None or row_agent_id(row) != viewer_id):
         shown.pop("questions", None)

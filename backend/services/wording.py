@@ -1,4 +1,4 @@
-"""Counts in the agents' words (PR #199 round 17, GM r23 e): "1 node", "2
+"""Counts in the agents' words (PR #199, design): "1 node", "2
 nodes", never "1 nodes". The one helper for every count the agent surfaces
 print (`nebula context`, `nebula projects`, MCP, the notes and summaries)."""
 from __future__ import annotations

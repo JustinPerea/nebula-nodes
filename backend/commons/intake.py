@@ -21,8 +21,7 @@ class IntakeError(Exception):
     """A refused add. The message is the specific text (agents read it to fix
     their call; it is logged); `code` is a machine reason the person's UI
     maps to written copy (commons/person_copy.INTAKE, the frontend's
-    UPLOAD_REASONS). Never show the message to the person (GM, error-copy
-    round 2)."""
+    UPLOAD_REASONS). Never show the message to the person (design)."""
 
     def __init__(self, message: str, code: str = "refused"):
         super().__init__(message)

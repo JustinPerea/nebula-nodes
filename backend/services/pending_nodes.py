@@ -1,9 +1,9 @@
-"""Placeholders: nodes an agent is still setting up (Q125 item 3).
+"""Placeholders: nodes an agent is still setting up.
 
-Justin, 2026-10-24, merge-oks Q125 ("Yes, all four, in that order"), item 3:
+Justin, 2026-10-24:
 "The agent stays on the node it's working on, and reserves the spot ... A
 node an agent is about to fill shows as a placeholder in its colour."
-GM - Design, 2026-10-25: "A dashed outline in the agent's color: OK. Dashed
+Design, 2026-10-25: "A dashed outline in the agent's color: OK. Dashed
 means pending; the color says whose."
 
 The flag lives on the canvas node (``cli_graph.nodes[id]["pending"]``) with
@@ -21,7 +21,7 @@ is ever deleted by any of these:
 - the owning agent goes quiet for IDLE_SECONDS (the status line's rule,
   services/agent_status.py: any identified request is a sign);
 - the person edits it in any way (params, name, position, a connection to or from it);
-- the person runs it directly (GM: "counts as their edit").
+- the person runs it directly (design: "counts as their edit").
 
 Another agent can't clear or claim it. A run skips pending nodes, and every
 node downstream that takes their output, on every way to run (``run_skips``),
@@ -149,13 +149,13 @@ def check_ready(nodes: Mapping[str, Mapping[str, Any]], node_ids: Iterable[str],
 # -- runs -----------------------------------------------------------------------------
 
 def pending_reason(agent_name: str) -> str:
-    """A skipped placeholder's reason: GM - Design's tooltip line, 2026-10-25,
+    """A skipped placeholder's reason: the design's tooltip line, 2026-10-25,
     which the canvas shows as "Skipped: Codex is still setting this up."."""
     return f"{agent_name} is still setting this up."
 
 
 def downstream_reason(root_label: str, agent_name: str) -> str:
-    """A node downstream of a placeholder: GM - Design's round-4 line,
+    """A node downstream of a placeholder: the design's line,
     2026-10-25, verbatim ("needs “Hero prompt”, which Codex is still setting
     up."), naming the placeholder by its name (its type's name when it has
     no label; the caller's ``label``), never its id."""
@@ -201,7 +201,7 @@ def skip_summary(skips: Mapping[str, Mapping[str, Any]]) -> dict[str, Any] | Non
     """What the canvas says after Run: how many nodes it skipped (``count``,
     the placeholders and what needs them, for the skip line), how many of
     those are the placeholders themselves (``placeholders``, for a proposal's
-    "runs nothing until Codex finishes 2 nodes": review 4, M2) and whose
+    "runs nothing until Codex finishes 2 nodes") and whose
     placeholders they wait on (names, in order). None when nothing was skipped."""
     if not skips:
         return None
@@ -215,10 +215,10 @@ def skip_summary(skips: Mapping[str, Mapping[str, Any]]) -> dict[str, Any] | Non
 
 
 def skip_line(summary: Mapping[str, Any] | None) -> str | None:
-    """GM - Design's line for a run that skipped placeholders (2026-10-25,
+    """The design's line for a run that skipped placeholders (2026-10-25,
     verbatim): "Skipped 1 node Codex is still setting up.", "Skipped 3 nodes
     Codex is still setting up.", "Skipped 3 nodes the agents are still
-    setting up." (round 12, item 1): the agent named when every skipped
+    setting up.": the agent named when every skipped
     node is one agent's (downstream nodes count toward the agent whose
     placeholder blocked them). The canvas
     has its twin (frontend lib/pendingNodes.ts pendingSkipLine)."""

@@ -18,7 +18,7 @@ Avoid list; content intent goes into the brief as positive sentences.
 
 ``apply_to_generator`` is the one place a board reaches a generator's request
 (the engine calls it before any handler). A board at strength 0 is dropped
-first, as if it weren't wired (Q36 a). Then it resolves the node's moodboard
+first, as if it weren't wired. Then it resolves the node's moodboard
 adapter entry (``services/moodboard_adapters.py``, plan section 5.7.3 step 2)
 and sends the text through it: the brief joins the prompt, the negatives fill
 a ``negative_prompt`` field when the model has one, and the Avoid list joins
@@ -27,9 +27,9 @@ Krea 2). Diffusion-style models read "no X" as "X", so they never get it in
 the prompt. The Moodboard port is not passed on unless the entry's handler
 reads the board (step 8).
 
-``migrate_board`` moves boards saved before these fields existed (B7).
+``migrate_board`` moves boards saved before these fields existed.
 
-**Precedence (gap 18).** Where two parts of a board disagree, the higher
+**Precedence.** Where two parts of a board disagree, the higher
 wins; where the higher says nothing, the lower fills in:
 
 1. the hand-written brief (``briefOverride``), as is; no check runs on it;
@@ -90,7 +90,7 @@ OVERRIDE_LIMIT = 20000
 # Keep anyway and Leave out: at most this many colours in each list.
 COLOR_CHOICES_LIMIT = 24
 
-# What a board does when its words clash with a measured colour (gap 18, P1).
+# What a board does when its words clash with a measured colour.
 CLASH_MODES = ("leave-out", "flag", "no-measured", "keep-all")
 DEFAULT_CLASH_MODE = "leave-out"
 # The saved check's own shape; LEXICON_VERSION (in its basis) covers the rules.
@@ -123,7 +123,7 @@ _INSTRUCTION_FOLLOWING_PREFIXES = (
 )
 
 # A board at strength 0 is off for every node it's wired into, text included
-# (Q36 a, Justin 2026-10-20): no brief, Avoid, negatives or images. The
+# (Justin 2026-10-20): no brief, Avoid, negatives or images. The
 # node's "Send board images" switch is how to keep the text without images.
 BOARD_STRENGTH_ZERO_NOTE = "Board strength is 0: board not sent"
 
@@ -788,7 +788,7 @@ def with_brief(board: Any) -> Any:
     if isinstance(analysis, dict) and analysis.get("outdated") and not board_is_off(board):
         # The saved colours are out of date (moodboard_analysis.with_alpha_outdated):
         # this brief is built from them, and a run analyzes again and sends a
-        # new one. At strength 0 no run sends it, so nothing is said (GM r5).
+        # new one. At strength 0 no run sends it, so nothing is said (design).
         from services.moodboard_analysis import BRIEF_OUTDATED, BRIEF_OUTDATED_OVERRIDE
         override = board.get("briefOverride") if isinstance(board.get("briefOverride"), dict) else {}
         hand_written = bool(str(override.get("text") or "").strip())  # as compose() reads it
@@ -879,7 +879,7 @@ def apply_to_generator(
     rest):
 
     1. A board at strength 0 is taken out first, with the run note
-       ``BOARD_STRENGTH_ZERO_NOTE`` (Q36 a), so none of its text, negatives or
+       ``BOARD_STRENGTH_ZERO_NOTE``, so none of its text, negatives or
        images reach the node.
     2. The node's adapter entry is resolved for its params and the route the
        run takes (``api_keys`` pick it, as the dual-route handler does). A
@@ -943,7 +943,7 @@ def apply_to_generator(
     return new_inputs, new_params
 
 
-# -- migration (B7) ----------------------------------------------------------
+# -- migration ----------------------------------------------------------
 
 _OLD_COMMON_NEGATIVES = ("unrelated style drift", "conflicting palettes", "random artifacts")
 _OLD_MODE_NEGATIVES = {

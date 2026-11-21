@@ -1,7 +1,7 @@
 """`nebula keys`: which provider keys are set (MCP get_settings).
 
 The CLI is an agent surface and never holds the person token, so GET
-/api/settings answers it with a bare `***` for a set key (Justin, Q55 a:
+/api/settings answers it with a bare `***` for a set key (Justin:
 "Only the app (your person token) gets the endings. Everything else learns
 which providers are set, and nothing more"). It goes through
 project_client.get_settings, which turns every key into true or false

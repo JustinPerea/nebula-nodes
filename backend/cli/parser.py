@@ -1,6 +1,6 @@
 """The `nebula` argument parser: errors that point to the right option.
 
-GM's headless run (docs/agent-runs/2026-10-20-cli-headless.md) lost turns to
+A headless run (docs/agent-runs/2026-10-20-cli-headless.md) lost turns to
 argparse's bare "unrecognized arguments": an agent reads the error, then
 the whole help, then tries again. `NebulaArgumentParser` keeps argparse's
 behaviour and adds three things (plan v2.7, PR26, §5.10.1):
@@ -132,7 +132,7 @@ _NEGATIVE_SPOT = re.compile(r"^-(?:\d+\.?\d*|\.\d+),\s*-?(?:\d+\.?\d*|\.\d+)$")
 def _join_negative_spots(argv: list[str]) -> list[str]:
     """`--at -200,140` as `--at=-200,140`. argparse reads a dash-led word as an
     option unless it is a plain negative number, so a spot left of x=0 would
-    leave `--at` with no value (`nebula upload`, 2026-10-24 review)."""
+    leave `--at` with no value (`nebula upload`, 2026-10-24)."""
     out: list[str] = []
     index = 0
     while index < len(argv):

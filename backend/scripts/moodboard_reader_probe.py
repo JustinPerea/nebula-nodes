@@ -13,7 +13,7 @@ It measures what the plan leaves unconfirmed:
 - ``thoughtsTokenCount`` for the batch, to set the thinking allowance;
 - in a second request with ``includeThoughts: true``, whether thought
   summaries come back alongside the response schema on image batches, and
-  what they add to the output tokens (Q29 c sets Argon's ``thoughtSummaries``
+  what they add to the output tokens (sets Argon's ``thoughtSummaries``
   from this; above 10% more output, raise it with Justin first).
 
 Whether an aborted stream is billed is not probed (it would need a third

@@ -22,7 +22,7 @@ from services.saved_graph_upgrades import PARAMS_VERSION, stored_version, upgrad
 
 
 SHORT_ID_RE = re.compile(r"n([0-9]{1,9})")
-# What a Nebula node id is (PR #199 round 17): "n" and ASCII digits, never
+# What a Nebula node id is (PR #199): "n" and ASCII digits, never
 # Python's Unicode \d, as the tab's CLI_ID_RE. The live graph holds only
 # these (main._require_backend_node_ids; load renumbers any other).
 BACKEND_NODE_ID = re.compile(r"n([0-9]+)")
@@ -38,8 +38,7 @@ class ForeignNodeIdError(RuntimeError):
 
 
 def require_backend_ids(node_ids: Any) -> None:
-    """The live graph's invariant (PR #199 rounds 17 and 18, review 16
-    renumber-everywhere NIT-1), in one place: every id is a backend id
+    """The live graph's invariant (PR #199), in one place: every id is a backend id
     (``nN``), so every node's typing reaches the server. CLIGraph checks it
     on every write that adopts or persists nodes (``_save_state``,
     ``replace_with``, ``adopt``); only ``load()`` takes other ids, and it
@@ -57,7 +56,7 @@ def require_backend_ids(node_ids: Any) -> None:
 MAX_ID_JUMP = 1_000_000
 
 # The keys inside a node's data (its params included) whose value names
-# another canvas node by id (PR #199 round 17, review 15 NIT-2): a Remotion
+# another canvas node by id (PR #199): a Remotion
 # manifest's timeline items (``params.manifest.timeline[].sourceNodeId``),
 # the gate that skipped a node (``skipGateNodeId``), a Paper run's inputs
 # (``nodeId``), and ``targetNodeId``. A renumbering moves each with the node.
@@ -86,8 +85,8 @@ def moved_node_references(value: Any, mapping: Mapping[str, str]) -> Any:
     return value
 
 
-# Which project the live canvas is (state.json's ``projectId``, PR #199
-# review 1, H1). The catalog says which project is open; this says whose
+# Which project the live canvas is (state.json's ``projectId``, PR #199). The catalog says which
+# project is open; this says whose
 # graph the canvas holds, so nothing saves one project's canvas into another
 # (main._overlay_live_project) after a restore, or a crash between the two
 # files. A project id, None for the unfiled canvas, or:
@@ -153,7 +152,7 @@ class CLIGraph:
         # _protect_persons_canvas): {"of": the copy's id, "name", "agent"},
         # saved with it as ``projectCopy`` while ``owner`` is that id. So the
         # copy is named as the agent's whatever happens to the catalog's
-        # record of it (review 10 of PR #199, L-1). Inert once the owner changes.
+        # record of it (PR #199). Inert once the owner changes.
         self.copy_note: dict[str, Any] | None = None
         # Nodes whose params ``load`` upgraded (services/saved_graph_upgrades.py),
         # and whether the file was saved before ``PARAMS_VERSION`` (true even
@@ -165,8 +164,8 @@ class CLIGraph:
         self.renumbered_on_load: dict[str, str] = {}
         # A Cinema shot's run media (output, variations, its port's output)
         # kept after a write took the shot out, by (node id, shot id), so an
-        # Undo that brings the shot back brings its images too (fix round 9
-        # of PR #200, GM r13). Server-held only; never sent to clients. It
+        # Undo that brings the shot back brings its images too (PR #200, design).
+        # Server-held only; never sent to clients. It
         # belongs to this canvas: clone and replace_with carry it, clear and
         # load drop it.
         self.removed_shot_media: dict[tuple[str, str], dict[str, Any]] = {}
@@ -528,8 +527,8 @@ class CLIGraph:
         # part way leaves the previous graph whole (main keeps it on failure,
         # and the next save would write new nodes with old edges otherwise).
         nodes = {n["id"]: _current_default_label(_normalized_scene(_migrate_retired(n))) for n in migrated}
-        # A node with an id that isn't Nebula's (PR #199 round 17, review 15
-        # HIGH-1): a state.json saved before the live graph refused them (an
+        # A node with an id that isn't Nebula's (PR #199): a state.json saved before the live
+        # graph refused them (an
         # open loaded a duplicated or pasted node's tab-local id). Its typing
         # never reached the graph, so it gets a backend id here, with its
         # wires and the references to it; main moves the open project's copy
@@ -548,8 +547,8 @@ class CLIGraph:
                         edge[key] = renumbered[edge[key]]
             print(f"[cli_graph] gave {len(renumbered)} node(s) Nebula ids: {renumbered}", flush=True)
         # A shot that lost its id in the file was given a new one: the port
-        # it owned (its image) moves to its new id, with its wires (PR #198
-        # review 5, L3). A port no shot owns stays: a removed shot's late
+        # it owned (its image) moves to its new id, with its wires (PR #198). A port no shot owns
+        # stays: a removed shot's late
         # image, which an undo that brings the shot back takes.
         raw_params = {n["id"]: n.get("params") for n in migrated}
         for node_id, node in nodes.items():

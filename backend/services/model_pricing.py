@@ -644,7 +644,7 @@ def size_note(entry: Mapping[str, Any] | None, definition: Mapping[str, Any]) ->
     kind = sizing_kind(entry, definition)
     say = str(sizing.get("say") or "").strip()
     if kind == "audio":
-        # GM r118: its own sentence, with the curly apostrophe.
+        # Design: its own sentence, with the curly apostrophe.
         return f"{say if say.endswith('.') else say + '.'} Priced from your audio\u2019s length when you run it"
     return f"{say}; priced from your {kind}'s size when you run it"
 
@@ -747,10 +747,10 @@ def uses_krea_account(definition: Mapping[str, Any], params: Mapping[str, Any]) 
 
 # The cost classes of a node that calls a provider: what every cost surface
 # counts it as. "paid" is the only one in "N paid", the paid lead and the
-# figure; "plan" runs on the person's Krea plan ("1 on Krea plan"; GM, PR
-# #203 r19 item 1); "mayCost" may bill the person's own account with their
+# figure; "plan" runs on the person's Krea plan ("1 on Krea plan"; design, PR #203); "mayCost" may
+# bill the person's own account with their
 # key (Idol with a Hugging Face token); "free" is a key-billing route with no
-# key, or a sourced $0 (GM, PR #203 r18 item 1).
+# key, or a sourced $0 (design, PR #203).
 PAID = "paid"
 PLAN = "plan"
 MAY_COST = "mayCost"
@@ -980,11 +980,11 @@ def estimate_run(
     cantRun, awaitingInput, missingKey with the ``keys`` it needs, and
     leftOut with the ``plus`` its price leaves out, and plan for a run on
     the Krea plan, so the proposal bar's Accept chip writes the same reason
-    lines (GM, PR #203 r17 item 4, r19 item 1).
+    lines (design, PR #203).
 
     ``classes`` maps every node that calls a provider to its cost class
     (cost_class: paid, plan, mayCost or free); ``free`` lists the sourced $0
-    nodes, which are neither priced nor paid (GM, PR #203 r18 item 1), and
+    nodes, which are neither priced nor paid (design, PR #203), and
     ``sourcedZero`` is whether they are the run's only provider calls."""
     from services import node_route
 
@@ -1034,17 +1034,17 @@ def estimate_run(
         # The one cost class (cost_class). A route that is free unless the
         # person's key is set, and then may bill their own account
         # (mayBillWithKey: Idol), adds nothing to any estimate: not "$0",
-        # since past the allowance the cost is real, and not unpriced (GM, PR
-        # #203 r11 item 2: "Estimate line: show nothing for Idol"). One place
+        # since past the allowance the cost is real, and not unpriced (design, PR #203:
+        # "Estimate line: show nothing for Idol"). One place
         # for every caller: a proposal's estimate, the run's, and the
-        # placeholder confirm's (review 8, LOW-2).
+        # placeholder confirm's.
         cls = cost_class(definition, routed, api_keys)
         if cls in (MAY_COST, FREE):
             classes[node_id] = cls
             continue
         if cls == PLAN:
             # On the person's Krea plan: never paid, never in the figure, and
-            # its own reason line (GM, PR #203 r19 item 1; review 9, MEDIUM-1).
+            # its own reason line (design, PR #203).
             classes[node_id] = PLAN
             plan.append(node_id)
             plan_runs[node_id] = {"model": str(definition.get("id") or item.get("definitionId") or ""),
@@ -1082,7 +1082,7 @@ def estimate_run(
                 reasons[node_id] = {"kind": "noPrice"}
             continue
         if cost_class(definition, routed, api_keys, estimate) == FREE:
-            # A sourced $0 is free (GM, PR #203 r18 item 1): never paid, never
+            # A sourced $0 is free (design, PR #203): never paid, never
             # in the figure; a run of only these is a sourced "$0".
             classes[node_id] = FREE
             free.append(node_id)
@@ -1112,8 +1112,8 @@ def estimate_run(
         "classes": classes,
         "free": free,
         # Every provider call in the run is a sourced $0, so it is exact, not
-        # an estimate that rounds to zero: GM, PR #203 r11 item 4, "$0"
-        # against "~$0" (r18 item 1: such a node is free, never paid).
+        # an estimate that rounds to zero: design, PR #203, "$0"
+        # against "~$0" (such a node is free, never paid).
         "sourcedZero": bool(free) and not priced and not unpriced and not plan and not any(
             cls == MAY_COST for cls in classes.values()),
     }

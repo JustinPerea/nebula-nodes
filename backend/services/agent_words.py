@@ -3,10 +3,9 @@
 An agent reads Nebula through MCP tools (propose_change, describe_node, ...)
 or through the `nebula` CLI (`nebula propose`, `nebula info <id>`, ...). A
 refusal or a hint that tells the agent what to do next names the call in its
-reader's words, worded where it is written (review 9 of PR #203, keys
-MEDIUM-1): the CLI sends ``X-Nebula-Surface: cli`` on every request
-(cli/client.py), and anything else reads MCP words. Nothing rewrites a
-refusal on its way out.
+reader's words, worded where it is written (PR #203): the CLI sends
+``X-Nebula-Surface: cli`` on every request (cli/client.py), and anything
+else reads MCP words. Nothing rewrites a refusal on its way out.
 
 ``cli_words`` stays for data that arrives in MCP words and is printed by the
 CLI (describe_node's billing note, a find_nodes row's needsKeyFor): one
@@ -29,10 +28,9 @@ CLI = "cli"
 # call with the proposal's id as {id} (canvas_proposals.withdraw_call).
 # Every surface's words for these calls live here: main._start_node_notes,
 # project_client and canvas_proposals' READY_NODES_* and WITHDRAW_* read this
-# table (review 10 of PR #203, NIT-4).
+# table (PR #203).
 # graph_file_client's load notes name {size}, {apply}, {delete} and {open}
-# (a whole call with the project's id as {id}) from here too (review 11,
-# NIT-3): the fourth table it kept is gone.
+# (a whole call with the project's id as {id}) from here too: the fourth table it kept is gone.
 WORDS: dict[str, dict[str, str]] = {
     MCP: {"propose": "propose_change", "describe": "describe_node", "find": "find_nodes", "apply": "edit_canvas",
           "projects": "list_projects", "withdraw": 'withdraw_proposal(proposal_id="{id}")',
@@ -58,8 +56,8 @@ def surface(headers: Mapping[str, Any] | None, query_via: Any = None) -> str:
     """The surface a request comes from: CLI when it says so, else MCP.
 
     ``query_via`` is GET /api/agent/start's old ``?via=cli``, which a CLI
-    from before X-Nebula-Surface sends with no header (review 11 of PR #203,
-    LOW-1): it reads as the CLI only when the header is missing, so the
+    from before X-Nebula-Surface sends with no header (PR #203): it reads as the CLI
+    only when the header is missing, so the
     header stays the one signal wherever it is sent."""
     lower = {str(key).lower(): value for key, value in (headers or {}).items()}
     if SURFACE_HEADER.lower() not in lower:

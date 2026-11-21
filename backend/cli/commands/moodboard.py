@@ -147,7 +147,7 @@ def _print_brief(board: dict[str, Any]) -> None:
         return
     source = _OVERRIDE_AUTHOR[override["by"]] if override else "generated"
     if board_is_off(board):
-        # Q36 a: at 0 no node it's wired into gets any of it.
+        # At 0 no node it's wired into gets any of it.
         print(f"  Brief ({source}), not sent: board strength is 0, so no node it's connected to gets the board:")
     else:
         print(f"  Brief sent to generators ({source}):")
@@ -156,7 +156,7 @@ def _print_brief(board: dict[str, Any]) -> None:
     else:
         print(f"    Not built yet: `nebula moodboard analyze {board_id}`")
     if composed.get("outdated"):
-        # Right after the brief's text (GM r5): its saved colours are out of date.
+        # Right after the brief's text (design): its saved colours are out of date.
         print(f"    {composed['outdated']}")
     if override and override.get("stale"):
         if override["by"] == "agent":
@@ -402,7 +402,7 @@ def _money(amount: float) -> str:
 
 
 def _price_text(est: dict[str, Any]) -> str:
-    """"$0.04 to $0.31", or why there's no number (Q16)."""
+    """"$0.04 to $0.31", or why there's no number."""
     if est.get("unpriced"):
         return "No list price: the cost isn't known"
     text = f"{_money(est['low'])} to {_money(est['high'])}"
@@ -411,7 +411,7 @@ def _price_text(est: dict[str, Any]) -> str:
     return text
 
 
-# A reference the read leaves out because no pixel of it is seen (GM r5 on #208).
+# A reference the read leaves out because no pixel of it is seen (design, PR #208).
 TRANSPARENT_ESTIMATE_LINE = "Image {number} wasn’t read because it’s too transparent."
 
 

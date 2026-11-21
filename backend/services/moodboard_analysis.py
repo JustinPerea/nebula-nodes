@@ -163,14 +163,14 @@ ALL_SET_ASIDE_WARNING = "Every reference is set aside, so none of them shapes th
 # An image saved before board writes were checked that links to another site.
 OUTSIDE_IMAGE_WARNING = ("Image {number} is an image link from outside Nebula, so it wasn't analyzed and no generator "
                          "gets it. Replace it with an upload in Moodboard Studio.")
-# An image with no pixel at alpha 16 or above, clear or faint (GM r2 on #208).
+# An image with no pixel at alpha 16 or above, clear or faint (design, PR #208).
 TRANSPARENT_IMAGE_LINE = "Image {number} is too transparent to add colors."
 # A saved analysis from before alpha counted, on a board with an image that
 # has transparency (``with_alpha_outdated``).
 ALPHA_OUTDATED = "These colors counted transparent areas as dark. Analyze again to update them."
 # The Moodboard node's warning when it analyzes such a board again (handlers/moodboard.py).
 # Right after the brief's text while the saved colours are out of date
-# (GM r2 and r5 on #208): the brief shown is built from them, and a run
+# (design and on #208): the brief shown is built from them, and a run
 # analyzes again and sends a new one. A hand-written brief keeps its words,
 # so a run sends it with the new colours (BRIEF_OUTDATED_OVERRIDE). At
 # strength 0 nothing is sent, so neither shows.
@@ -492,8 +492,8 @@ def colours_current(moodboard: dict[str, Any], analysis: Any) -> bool:
 # at startup, off the event loop and outside the board lock); a client can't
 # send them (moodboard_store.IMAGE_KEYS). A use trusts them only while the
 # file's stat still matches (``current_alpha_facts``), so a file replaced in
-# place at the same path is read again rather than kept as opaque (review 3
-# L1): one stat per image, no decode while it matches. Missing facts mean
+# place at the same path is read again rather than kept as opaque:
+# one stat per image, no decode while it matches. Missing facts mean
 # unknown, which never marks a board out of date and is never decoded on a
 # read.
 HAS_TRANSPARENCY = "hasTransparency"
@@ -522,7 +522,7 @@ def predates_alpha(moodboard: dict[str, Any], analysis: Any) -> bool:
     those pixels hide was measured as a colour. A semi-transparent image
     with no clear pixel was counted in its real colour (only weighted
     fully), so it doesn't make the colours wrong; nor does an image the
-    analysis never measured (GM r5 on #208)."""
+    analysis never measured (design, PR #208)."""
     if not isinstance(analysis, dict):
         return False
     try:
@@ -541,8 +541,8 @@ def file_version(stat: Any) -> tuple[int, int, int, int]:
     ino, ctime_ns)``, as services/input_sizes.py keys its cache. mtime and
     size alone miss a same-size rewrite whose mtime was put back (``cp -p``,
     ``rsync -a``, tar, unzip, ``os.utime``) or a coarse clock; ``utime``
-    can't set ctime, and a replace by rename gives a new inode (review 4
-    L3). A chmod or a move changes ctime too: one extra decode, harmless."""
+    can't set ctime, and a replace by rename gives a new inode. A chmod or a move
+    changes ctime too: one extra decode, harmless."""
     return (int(stat.st_mtime_ns), int(stat.st_size), int(stat.st_ino), int(stat.st_ctime_ns))
 
 
@@ -611,7 +611,7 @@ def _file_alpha_facts(path: str, mtime_ns: int, size: int, ino: int,
     with Image.open(path) as pil:
         if not pil.has_transparency_data:  # cinema.color.has_transparency's own shortcut
             return ((HAS_TRANSPARENCY, False), (HAS_CLEAR_PIXELS, False))
-        # One pass gives both: the lowest alpha (review 3 N3).
+        # One pass gives both: the lowest alpha.
         low = as_rgba(pil).getchannel("A").getextrema()[0]
     return ((HAS_TRANSPARENCY, bool(low < 255)), (HAS_CLEAR_PIXELS, bool(low < ALPHA_MIN)))
 
@@ -632,9 +632,9 @@ def image_has_transparency(url: str) -> bool | None:
 
 def lacks_alpha_stamp(image: Any) -> bool:
     """Whether an entry has stored facts but no ``alphaFileStat`` of the
-    current form: stored before the stamp (round 3 dev builds), or stamped
-    ``[mtime_ns, size]`` before the inode and ctime were added (rounds 4-5,
-    review 4 L3). The startup pass stamps these on any board, so each is
+    current form: stored before the stamp (dev builds), or stamped
+    ``[mtime_ns, size]`` before the inode and ctime were added. The startup pass stamps
+    these on any board, so each is
     read again once, then trusted while its file holds."""
     if not isinstance(image, dict) or not any(key in image for key in ALPHA_FACTS):
         return False
@@ -706,7 +706,7 @@ def with_alpha_outdated(moodboard: dict[str, Any]) -> dict[str, Any]:
 
 
 # A summary's count: "1 reference image", "7 reference images", or the
-# "(s)" form saved before 2026-10-31 (GM r1 on #208).
+# "(s)" form saved before 2026-10-31 (design, PR #208).
 _COUNTED = re.compile(r"^(\d+) reference image(?:\(s\)|s)? analyzed as ")
 
 
@@ -892,8 +892,8 @@ def _measure(path: Path, thresholds: Thresholds) -> dict[str, Any]:
 def _measure_file(path: str, version: tuple[int, int, int, int], accent_min_chroma: float, accent_separation: float,
                   merge_delta_e: float) -> dict[str, Any]:
     """Measure one image file. The key's ``file_version`` re-measures a
-    changed file, a same-size rewrite with its mtime put back too (review 4
-    L3); the thresholds keep a dry run's measurement apart from the default."""
+    changed file, a same-size rewrite with its mtime put back too; the thresholds keep a
+    dry run's measurement apart from the default."""
     # Alpha is kept: a transparent pixel isn't a colour (Commons' measure
     # and _image_stats count it out). An opaque image reads as RGB, as before.
     with Image.open(path) as pil:

@@ -37,7 +37,7 @@ NONDURABLE_RECOVERY_MESSAGE = (
     "World Labs sent back the job's ID, but Nebula couldn't save it. Keep this tab open and use the ID "
     "shown here. Don't start the run again from another tab."
 )
-# A hold saved before round 3c keeps the words it was saved with; reading it
+# An older hold keeps the words it was saved with; reading it
 # gives today's, so the status bar never shows "paid start" again.
 _LEGACY_MESSAGES = {
     "World Labs may have accepted a paid start without returning a recovery ID. "
@@ -51,7 +51,7 @@ class ProviderStartConflictError(RuntimeError):
     """A fresh paid start is already active or held for acknowledgement.
 
     `reason` says which, for the person's line (main.py words it; the message
-    is the specific text agents keep, error copy round 3b): "active" (this
+    is the specific text agents keep): "active" (this
     node's start is still in flight), "busy" (another start holds the paid
     lifecycle), "ambiguity" (a start held until someone checks Marble and
     unlocks it), "capacity" (the journal is full; `limit` is its size),
@@ -68,7 +68,7 @@ class ProviderStartConflictError(RuntimeError):
         self.limit = limit
         # The labels of the ID fields that hold an ID (a list), for "params".
         self.fields = fields
-        # The held node's card title, for the person's line (round 13).
+        # The held node's card title, for the person's line.
         self.node = node
 
 
@@ -579,7 +579,7 @@ class ProviderStartGuard:
 
     def renumber_nodes(self, mapping: Mapping[str, str]) -> int:
         """Move each ambiguity hold whose node got a new id ({old: new}; a
-        renumber of tab-local ids, PR #199 review 18 handoff-reopen LOW-2)
+        renumber of tab-local ids, PR #199)
         to that id, its run and kind unchanged, in one write. A hold already
         at the new key is never overwritten. Answers how many moved."""
         if not mapping or self._path is None:

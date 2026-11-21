@@ -29,8 +29,8 @@ class ProviderRecoveryPersistenceError(RuntimeError):
 class ProviderRecoveryCapacityError(ProviderRecoveryPersistenceError):
     """Unresolved checkpoints have exhausted the bounded safety journal.
 
-    `limit` is the journal's size, for the person's line (main.py, error copy
-    round 3b); the message is the specific text agents keep."""
+    `limit` is the journal's size, for the person's line (main.py); the message is the
+    specific text agents keep."""
 
     def __init__(self, message: str = "", *, limit: int | None = None) -> None:
         super().__init__(message)
@@ -62,8 +62,8 @@ class ProviderRecoveryStore:
         self._max_records = max(1, max_records)
         self._lock = RLock()
         self._records: dict[tuple[str, str], dict[str, str | None]] = {}
-        # Where each record's run was when Nebula wrote it (PR #199 round 23,
-        # review 21 LOW-1): {(runId, nodeId): {"projectId", "nodeType"}}.
+        # Where each record's run was when Nebula wrote it (PR #199):
+        # {(runId, nodeId): {"projectId", "nodeType"}}.
         # Internal: never in list(), the export or anything an agent reads.
         # The delete guard releases a node only for a stamp naming another
         # project (main.py _recovery_record_holds_node).
@@ -442,8 +442,8 @@ class ProviderRecoveryStore:
                     for key, stamp in self._stamps.items() if key in self._records]
 
     def stamp_unstamped(self, placer: Any) -> int:
-        """The one-time pass for records saved before stamps (PR #199 round
-        23): each unstamped record gets ``placer(record)``'s project id when
+        """The one-time pass for records saved before stamps (PR #199): each unstamped
+        record gets ``placer(record)``'s project id when
         it answers one (unambiguous placement only; None leaves it unstamped,
         so it holds). One atomic write under the journal lock; idempotent (a
         stamped record is never restamped). Answers how many it stamped."""
@@ -486,8 +486,8 @@ class ProviderRecoveryStore:
             return self._storage_error is None
 
     def verify_writable(self) -> None:
-        """Prove the journal takes a real write now (round 15 of PR #114,
-        review 14's M4): under the journal lock, reload, write the current
+        """Prove the journal takes a real write now (PR #114): under the journal lock,
+        reload, write the current
         records back with a one-off probe mark (write, fsync, rename, folder
         fsync: the same path every save takes), then read the file back and
         check the mark and the records. It never consults the sticky health
@@ -560,7 +560,7 @@ class ProviderRecoveryStore:
 
     def renumber_nodes(self, mapping: Mapping[str, str]) -> int:
         """Move each checkpoint whose node got a new id ({old: new}; a renumber
-        of tab-local ids, PR #199 review 18 handoff-reopen LOW-2) to
+        of tab-local ids, PR #199) to
         ``(runId, new)``, its run and IDs unchanged, in one write: Run
         History's hydration still finds its run record (moved to the new id
         too) and the node's guards read it by its new id. A record already

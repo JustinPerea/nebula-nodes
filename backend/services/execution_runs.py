@@ -37,15 +37,15 @@ class ExecutionRunRecord:
     stopped_by: dict[str, Any] | None = None
     # The canvas the run registered on, as main.py notes it (the open project
     # and its id epoch): every write-back from the run checks it is still the
-    # one open (round 11 of PR #114). None: not noted (writes go through).
+    # one open (PR #114). None: not noted (writes go through).
     canvas: Any = None
 
 
 class ExecutionRunRegistry:
     """Own fire-and-forget graph tasks and expose truthful cancellation state."""
 
-    # A Stop for a run id this process hasn't registered (round 16 of PR #114,
-    # M2): the tab sends one when its status check answers 404 for a run whose
+    # A Stop for a run id this process hasn't registered (PR #114):
+    # the tab sends one when its status check answers 404 for a run whose
     # start answer it lost, and a start still being admitted under that id
     # (awaiting its input measurement) must not register later. The tombstone
     # is separate from the exact pre-admission record below, which the durable
@@ -62,14 +62,14 @@ class ExecutionRunRegistry:
         self._cancel_before_start: dict[str, None] = {}
         self._tombstones: OrderedDict[str, float] = OrderedDict()
         # Run ids whose start this process saw begin and that haven't
-        # registered (round 17 of PR #114, review 16 L1): only for these may
+        # registered (PR #114): only for these may
         # a Stop say the run never started. Bounded and expiring as the
         # tombstones are; a run that registers leaves it.
         self._admitting: OrderedDict[str, float] = OrderedDict()
         # Run ids stopped while their start was being admitted here (a Stop
         # with no record for an id in ``_admitting``): only for these may a
-        # refused start say it "was cancelled before it started" (review 17
-        # L4). Bounded and expiring as the tombstones are.
+        # refused start say it "was cancelled before it started".
+        # Bounded and expiring as the tombstones are.
         self._stopped_admitting: OrderedDict[str, float] = OrderedDict()
         self._clock = clock
         self._max_records = max_records
@@ -326,7 +326,7 @@ class ExecutionRunRegistry:
             self._records.pop(run_id, None)
 
 
-# -- who may stop a run (Justin, 2026-10-20, MCP parity Q61 a) -------------------
+# -- who may stop a run -------------------
 
 ANONYMOUS_STARTER: dict[str, Any] = {"kind": "anonymous"}
 

@@ -13,8 +13,8 @@ Some of the person's calls live on an asset or a project instead:
   ``NotesOptInProtected``). Decided in Moodboard Studio.
 - ``commons`` (a reference's asset id) ``{"correction" | "region" |
   "membership": {...}}`` or ``{"edits": [...]}``: curating the Commons,
-  which only the person may do (services/commons_proposals.py, Justin's
-  Q63 b). The body may also name the ``brand`` whose scope the agent works
+  which only the person may do (services/commons_proposals.py, Justin's call). The body may
+  also name the ``brand`` whose scope the agent works
   in. Decided in the Commons, on the reference's detail.
 
 Characters and Styles have nothing that needs the person's decision yet;
@@ -183,7 +183,7 @@ class AssetProposal:
     # The canvas book invalidates by node id; an asset proposal refers to none.
     references: frozenset[str] = frozenset()
     # kind project: the pin it was proposed against while that pin's image is
-    # gone ({url, by}; Q90 a), so the strip shows the automatic cover, never
+    # gone ({url, by}), so the strip shows the automatic cover, never
     # "You pinned" over a missing image. main refreshes it on every sweep.
     lost_pin: dict[str, Any] | None = None
     # kind project: the image the automatic cover would show now (the newest
@@ -191,7 +191,7 @@ class AssetProposal:
     # The same kind of URL list_project_covers lists (a /api/outputs path or
     # the image's own URL), so agents see it too.
     auto_cover: str | None = None
-    # The Update it posted (Q92 a): {"id": note id, "projectId": ...}, or None.
+    # The Update it posted: {"id": note id, "projectId": ...}, or None.
     update: dict[str, Any] | None = None
     # kind project: the node deletes whose sync closed it (its image went
     # with the node), removal id (rm_...) -> node id, from deletes in this
@@ -212,7 +212,7 @@ class AssetProposal:
 
 def summary(proposal: AssetProposal) -> str:
     """The change in one line, for the journal, the Agent log and the CLI: X in
-    "Asks to X" and "Withdrew its request to X" (GM, PR #202 r4)."""
+    "Asks to X" and "Withdrew its request to X" (design, PR #202)."""
     # A board's or a project's name is free text: cleaned as every line shows it.
     name = clean_name(proposal.target_name, 120, fallback=clean_name(proposal.target_id, 120), ellipsis=True)
     if proposal.kind == "commons":
@@ -227,7 +227,7 @@ def summary(proposal: AssetProposal) -> str:
 
 
 def update_text(proposal: AssetProposal) -> str:
-    """The Update an asset proposal posts (Justin's Q92 a), in the words of
+    """The Update an asset proposal posts (Justin's call), in the words of
     where the person decides it: the strip's and the Commons line's. Names
     only: never the agent's note, a board's notes or Commons text. The line
     never starts with the agent's name (design): every surface that shows it
@@ -248,17 +248,17 @@ def update_text(proposal: AssetProposal) -> str:
 
 def update_detail(proposal: AssetProposal) -> dict[str, Any]:
     """What the Update's ``proposal`` ref says about the change beyond its
-    target (GM, PR #200 follow-up 2): for a cover, which kind (``cover``:
+    target (design, PR #200): for a cover, which kind (``cover``:
     "automatic" or "image", never which image); for a Commons ask, how many
     edits (``changes``). A tab that isn't connected as the person sees only
     the Update, so its placeholder reads these, never the Update's text
-    (review 20 NIT-3: an agent's name could spoof a count parsed from text).
+    (an agent's name could spoof a count parsed from text).
     Never the image, the asset or any field value.
 
     Every kind also says when the ask was made (``since``: the view's
     createdAt, a timestamp only), so a held tab orders its placeholders and
     lines as the promoted cards and line do, even after the Update fell back
-    to an older ask (PR #202 review 2 LOW-A for Commons; review 3 LOW-1 for
+    to an older ask (PR #202 for Commons and for
     covers and moodboards)."""
     since = int(proposal.created_at * 1000)
     if proposal.kind == "project":
@@ -266,7 +266,7 @@ def update_detail(proposal: AssetProposal) -> dict[str, Any]:
     if proposal.kind == "commons":
         edits = proposal.change.get("edits") or []
         detail: dict[str, Any] = {"changes": len(edits)}
-        # GM, PR #202 r1: the held Commons line says what the promoted one says.
+        # Design, PR #202: the held Commons line says what the promoted one says.
         # An ask only to take a reference out of the inbox is worded so there
         # (update_text's own rule), so the ref says so too (``inbox``).
         membership = edits[0].get("membership") if len(edits) == 1 and isinstance(edits[0], dict) else None
@@ -277,7 +277,7 @@ def update_detail(proposal: AssetProposal) -> dict[str, Any]:
     return {"since": since}
 
 
-# An Update whose proposal was open when Nebula restarted (Justin's Q108 a,
+# An Update whose proposal was open when Nebula restarted (Justin,
 # 2026-10-21): proposals live in memory, Updates with the project. The agent
 # can ask again; a proposal that timed out still says "Expired".
 RESTART_OUTCOME = "Closed: Nebula restarted"

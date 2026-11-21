@@ -1,14 +1,14 @@
 """The push ledger: which of a session's deliberate pushes a reply answers.
 
-Review 4 of #225 (HIGH-1, MEDIUM-1, MEDIUM-4), coordinator decision
-2026-11-04, adversarially checked. A --channel listener (mcp_channel.py)
-pushes the person's messages and the answers to its questions to its
-Claude Code session, then reports each push (POST
-/api/agent/thread/accepted, with ``messageIds`` and ``questionIds``). Nebula
-records one push per report here, keyed by (agent id, raw session): never
-by a listener id or a cursor's session key, both HMACs under a secret each
-backend process makes, so a ledger keyed by them would lose a session's
-pushes to an eviction or a listener restart.
+Decided 2026-11-04 (PR #225) and adversarially checked. A --channel
+listener (mcp_channel.py) pushes the person's messages and the answers
+to its questions to its Claude Code session, then reports each push
+(POST /api/agent/thread/accepted, with ``messageIds`` and
+``questionIds``). Nebula records one push per report here, keyed by
+(agent id, raw session): never by a listener id or a cursor's session
+key, both HMACs under a secret each backend process makes, so a ledger
+keyed by them would lose a session's pushes to an eviction or a listener
+restart.
 
 A reply from session S answers S's OLDEST pickable push no reply has
 answered yet (the listener reports pushes while Claude is busy, and Claude
@@ -22,7 +22,7 @@ replies racing claim two different pushes.
 The cap mirrors the listener's (mcp_channel.DELIBERATE_SPAN_CAP; a test
 keeps them equal): pushes split into periods wherever the gap to the
 previous push is more than the cap. Only the latest period's pushes are
-pickable. The cap ends the listener's protected turn only (round 5c, LOW-1):
+pickable. The cap ends the listener's protected turn only:
 an unanswered push stays pickable for a late reply (an 11-minute edit still
 answers its message and lands in its project) for ``KEEP_SECONDS`` (24 h,
 long enough for any working session to come back, short enough that a

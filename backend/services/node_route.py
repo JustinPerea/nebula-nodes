@@ -384,7 +384,7 @@ def uses_krea_plan(definition: Mapping[str, Any], params: Mapping[str, Any] | No
 # a byte-order mark, zero-width spaces and joiners. The same characters, by
 # code point, as frontend directRoute KEY_EDGE (Python's str.strip and JS's
 # String.trim differ: JS strips a BOM, Python doesn't; neither strips a
-# zero-width space). Review 7 of PR #203, NIT-4.
+# zero-width space).
 KEY_EDGE = ("\t\n\v\f\r \u0085\u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007"
             "\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\u200b\u200c\u200d\u2060\ufeff")
 
@@ -838,15 +838,15 @@ def may_bill(definition: Mapping[str, Any] | None, params: Mapping[str, Any] | N
              api_keys: Mapping[str, Any]) -> bool:
     """Whether a run of this node with these params and keys can bill the key
     owner's own provider account: key_billing's "mayCost", the one cost class
-    every surface reads (GM, PR #203 r15 item 2; review 8, LOW-3). Its list
+    every surface reads (design, PR #203). Its list
     price is unchanged."""
     return key_billing(definition, params, api_keys) == MAY_COST
 
 
 def key_billing(definition: Mapping[str, Any] | None, params: Mapping[str, Any] | None,
                 api_keys: Mapping[str, Any]) -> str | None:
-    """How a run on a ``mayBillWithKey`` route is counted (GM, PR #203 r11
-    and r12): "mayCost" with one of its optional keys set (may_bill), "free"
+    """How a run on a ``mayBillWithKey`` route is counted (design, PR #203): "mayCost"
+    with one of its optional keys set (may_bill), "free"
     without one. None for any other route or node: it is counted as before
     (paid when it calls a provider). Never "paid": such a route has no list
     price beyond its sourced $0. frontend directRoute.keyBilling is the twin."""
@@ -875,7 +875,7 @@ def key_billing_host(definition: Mapping[str, Any] | None, params: Mapping[str, 
     """Where a key-billing run runs, as a provider id: "huggingface" for a
     Space route, else its route's provider. The CLI tags a free run with it,
     in the paid part's id style ("1 paid run (openai) and 1 free
-    (huggingface)"; GM, PR #203 r24 item 1), and key_billing_account names
+    (huggingface)"; design, PR #203), and key_billing_account names
     it. None for any other node."""
     if key_billing(definition, params, api_keys) is None:
         return None
@@ -888,8 +888,8 @@ def key_billing_host(definition: Mapping[str, Any] | None, params: Mapping[str, 
 
 def key_billing_label(cost_class: str, account: str) -> str:
     """A key-billing node's cost label, by the ghost-card convention ("free ·
-    runs locally"): "may cost · Hugging Face" or "free · Hugging Face" (GM,
-    PR #203 r15 item 1). frontend directRoute.keyBillingLabel is the twin."""
+    runs locally"): "may cost · Hugging Face" or "free · Hugging Face" (design, PR
+    #203). frontend directRoute.keyBillingLabel is the twin."""
     return f"{'may cost' if cost_class == MAY_COST else 'free'} · {account}"
 
 
@@ -1523,18 +1523,18 @@ _OWN_GATEWAY = re.compile(r"^(.*\S)\s+\(([^()]+)\)$")
 
 
 def name_on_route(definition: Mapping[str, Any], provider: Any) -> str:
-    """A node's model as a run on ``provider`` names it (GM - Design, round 15
-    item 3; round 16 (b), verbatim: "when the dialog builds the label, no
+    """A node's model as a run on ``provider`` names it (design, verbatim:
+    "when the dialog builds the label, no
     parens: "Grok Imagine 2.0 via xAI""). A display name that ends by naming
     its own gateway ("Grok Imagine 2.0 (Krea)", "Nano Banana (FAL)") names the
     route the run actually takes instead, by the card's label for it. On the
     gateway itself, or a name that names no provider, it is the display name;
-    except (GM - Design, round 19, review 18 L-A: "“Alt still” · Grok Imagine
+    except (design: "“Alt still” · Grok Imagine
     2.0 via Krea · price not listed") a node whose route depends on keys
     (:func:`canvas_title` strips its gateway) names the gateway route the same
     way, "Grok Imagine 2.0 via Krea", with no route given too (the gateway's,
     as the canvas's nameOnRoute reads ``provider ?? apiProvider``). Only the
-    canvas drops the route, when it couldn't read the keys (GM, round 19:
+    canvas drops the route, when it couldn't read the keys (design:
     "“Grok Imagine 2.0” · $0.06"); Nebula always reads them.
     frontend/src/lib/directRoute.ts nameOnRoute is the same."""
     name = str(definition.get("displayName") or "")
@@ -1572,7 +1572,7 @@ def route_depends_on_keys(definition: Mapping[str, Any]) -> bool:
 
 
 def canvas_title(definition: Mapping[str, Any]) -> str:
-    """A node's default title on the canvas (GM - Design, round 18, item 1,
+    """A node's default title on the canvas (design,
     verbatim: "Unnamed node: the default title drops the route", "Only for
     nodes whose route depends on keys"; canvas only, the library and search
     keep the catalog names): the display name without the gateway it names
@@ -1626,7 +1626,7 @@ def node_name(definition: Mapping[str, Any] | None, label: Any, fallback: str = 
     of its own, else the node's :func:`canvas_title` (an unnamed node: no
     label, or either form of the default title, :func:`is_default_title`),
     else ``fallback`` (the node's id or type when its definition is gone).
-    Review 18 M-D: agents see the same names as the canvas; the catalog
+    Agents see the same names as the canvas; the catalog
     (find_nodes, describe_node, search) keeps the catalog names."""
     if isinstance(label, str) and label.strip() and not (definition and is_default_title(definition, label)):
         return label
@@ -1674,7 +1674,7 @@ _SIZE_LABEL = re.compile(r"\d × \d")
 def _agent_value(param: Mapping[str, Any] | None, value: str) -> str:
     """A value as an agent sends it back, with its size after it when its
     option's label is a size the value doesn't spell: "768sq (768 × 768)"
-    (GM, PR #203 r39: agents get the value they send back; the size label in
+    (design, PR #203: agents get the value they send back; the size label in
     parens is fine in agent text). Any other value is sent as it is ("1k",
     "hd")."""
     label = _option_label(param, value)
@@ -1802,7 +1802,7 @@ def route_unavailable(
     }
 
 
-# The card's words for a route stop (error copy round 3f, GM: "A switch reads
+# The card's words for a route stop (design: "A switch reads
 # "{Node} can't run on {Provider} with “{Label}” on." Never "Draft true".
 # Listed values use the option's label as the field shows it, never its
 # value."): a setting by its label in quotes, a value by its option's label
@@ -1815,7 +1815,7 @@ def _plain(text: str) -> str:
 
 
 def _person_words(text: str) -> str:
-    """A rule's own label ("a video continuation longer than 15 s") in GM's rules."""
+    """A rule's own label ("a video continuation longer than 15 s") in the design's rules."""
     words = _plain(text)
     words = re.sub(r"\b(\d+(?:\.\d+)?) ?s\b", r"\1 seconds", words)
     return re.sub(r"\bwired\b", "connected", words)
@@ -1835,7 +1835,7 @@ def _person_setting(param: Mapping[str, Any] | None, key: str, value: Any) -> st
 
 
 def _hidden_fix_person(definition: Mapping[str, Any], param: str) -> str:
-    """_hidden_fix_sentence in GM's rules, as the action's first clause (no
+    """_hidden_fix_sentence in the design's rules, as the action's first clause (no
     period: person_line.route_action adds who can take the run): the label in
     quotes, the default by its option's label."""
     spec = param_definition(definition, param)
@@ -1888,9 +1888,9 @@ def _why_person(definition: Mapping[str, Any], route: Mapping[str, Any], block: 
 def _fix_person(definition: Mapping[str, Any], route: Mapping[str, Any], block: DirectBlock,
                 params: Mapping[str, Any] | None = None) -> Any:
     """What the person can change where the node is, as the action's first
-    clause (person_line.route_action names who else can take the run; GM, PR
-    #203 r31 item 3: never "or switch provider"), a person_line.Fix that says
-    how many options it lists (r32 item 1: "Pick A, B or C, or switch to …")."""
+    clause (person_line.route_action names who else can take the run; design, PR #203:
+    never "or switch provider"), a person_line.Fix that says
+    how many options it lists ("Pick A, B or C, or switch to …")."""
     from execution.person_line import Fix
 
     param = str(block.param or "")
@@ -1917,17 +1917,17 @@ def route_unavailable_line(
     definition: Mapping[str, Any], params: Mapping[str, Any] | None, api_keys: Mapping[str, Any],
     *, title: str | None = None, name: str | None = None,
 ) -> str | None:
-    """route_unavailable's message as the canvas card says it (error copy
-    round 3e, GM: no keys, ids or env-var names in what the person reads; a
-    key by its provider, a setting by its label; round 3f: GM's rules for
+    """route_unavailable's message as the canvas card says it (design: no keys, ids or
+    env-var names in what the person reads; a
+    key by its provider, a setting by its label: the design's rules for
     every card line). The message itself stays the agents' text. None when
     the run can start. ``title`` names the node as the line's reader sees it
     (the proposal bar's “Name”, node_readiness.instance_missing_line); the
     card names it by its type, in quotes (card_subject), and on Auto with no key set says
-    the missing-key line, "Add an OpenAI API key in Settings to run this node." (GM, PR #203 r29 item 1;
-    copy sweep item 12). ``name``:
+    the missing-key line, "Add an OpenAI API key in Settings to run this node." (design,
+    PR #203). ``name``:
     the node's own name when the person renamed it, quoted in place of its
-    type's (GM, PR #203 r39 item 8: the card and the bubble agree)."""
+    type's (design, PR #203: the card and the bubble agree)."""
     from execution.person_line import missing_key_line
 
     found = _unavailable_route(definition, params, api_keys)
@@ -1941,7 +1941,7 @@ def route_unavailable_line(
 
 def card_subject(definition: Mapping[str, Any]) -> str:
     """How a card's route line names its node: the type's name in quotes, as
-    the bar and the Agent log quote every name (GM, PR #203 r32: "“FLUX 3
+    the bar and the Agent log quote every name (design, PR #203: "“FLUX 3
     Image” is set to Replicate…"), or "This node" when it has none. A run's
     node carries no label, so the card names it by its type."""
     name = str(definition.get("displayName") or "").strip()
@@ -1954,8 +1954,7 @@ def route_unavailable_reason(
     """Why a route-table run can't start, for a list that names the node
     (person_line.NotReadyReason: the proposal bar, the Agent Log), or None
     when it can start. On Auto with no key set: "needs your Black Forest
-    Labs or fal.ai API key. Add one in Settings." (GM, PR #203 r29 item 1;
-    review 14, copy MEDIUM-1: the line named no node)."""
+    Labs or fal.ai API key. Add one in Settings." (design, PR #203: the line named no node)."""
     from execution.person_line import NotReadyReason, key_phrase
 
     found = _unavailable_route(definition, params, api_keys)
@@ -1982,8 +1981,8 @@ def _route_reason(definition: Mapping[str, Any], params: Mapping[str, Any] | Non
     others = [provider_label((route_by_id(definition, alt) or {}).get("provider")) for alt in alternatives]
     keyless_specs = [route_by_id(definition, alt) or {} for alt in keyless]
     keyless_labels = [provider_label(spec_.get("provider")) for spec_ in keyless_specs]
-    # GM, PR #203 r29 item 2: the key by its name, never "its key" (it read
-    # as the node's); r31 item 3: who can take the run is named in the
+    # Design, PR #203: the key by its name, never "its key" (it read
+    # as the node's); who can take the run is named in the
     # action ("… or switch to fal.ai"; "…, or add your fal.ai API key in
     # Settings and switch to fal.ai"), with no separate "can take it".
     keyless_phrase = key_phrase([key for spec_ in keyless_specs for key in keys(spec_.get("keys"))])

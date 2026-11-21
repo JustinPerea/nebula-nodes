@@ -6,7 +6,7 @@ path that writes a cinema-scene node's ``scene`` fills what's missing with
 the defaults the canvas uses for a new scene (frontend graphStore
 ``createDefaultScene``).
 
-Two readings (review 3, H1: a strict read on a project's open and save
+Two readings (a strict read on a project's open and save
 locked a saved project, and every paid result in it, out of the UI):
 
 - ``strict``: an agent-authored write (create, edit_canvas, a proposal, an
@@ -22,14 +22,14 @@ locked a saved project, and every paid result in it, out of the UI):
   to the same scene, so the ids an open gives are the ones the next save
   keeps. A new id is never one a ``shot_<id>`` port on the node still names
   (a removed shot's late image), so it never takes over that image or its
-  wires (review 4, L1; ``reserved``). A port whose image is a renumbered
+  wires (``reserved``). A port whose image is a renumbered
   shot's own (it lost its id) moves to that shot's new id instead, with its
-  wires (review 5, L3; ``claim_stray_ports``).
+  wires (``claim_stray_ports``).
 
 A shot's ``running`` status is the canvas's optimistic mark while a run is
 on its way. Nothing the backend stores is ever rendering (a run writes
 ``done`` or ``error``), so a stored ``running`` is settled: ``done`` when the
-shot has an image, else ``idle`` (review 2, M1: a scene saved with a running
+shot has an image, else ``idle`` (a scene saved with a running
 shot showed "Generating…" for good after a reload).
 """
 from __future__ import annotations
@@ -135,7 +135,7 @@ def _new_ids(count: int, taken: set[str]) -> list[str]:
 def shot_port_ids(outputs: Any) -> set[str]:
     """The shot ids a node's outputs hold a ``shot_<id>`` port for. A port
     whose shot is gone (a removed shot's late image) still names its id, so a
-    shot given a new id never takes it over (PR #198 review 4, L1)."""
+    shot given a new id never takes it over (PR #198)."""
     if not isinstance(outputs, dict):
         return set()
     return {port[5:] for port in outputs if is_shot_port(port)}
@@ -157,7 +157,7 @@ def is_shot_port(handle: Any) -> bool:
 
 def claim_stray_ports(raw_params: Any, params: Any, outputs: Any) -> dict[str, str]:
     """{stray ``shot_<id>`` port: the port of the shot that owns it} for a
-    scene read leniently (PR #198 review 5, L3).
+    scene read leniently (PR #198).
 
     A stray port is one no shot of the converted scene (``params``) owns. A
     shot that lost its id in the saved data (``raw_params``, as it was before

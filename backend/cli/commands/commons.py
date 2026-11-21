@@ -105,7 +105,7 @@ def run(client, args) -> None:
     elif verb == "status":
         _print(client.commons("GET", "/status"))
     elif verb in ("collections", "borrowings", "fidelity", "concentration"):
-        # The commons_* reads (Q63 b): the same routes, in your brand scope.
+        # The commons_* reads: the same routes, in your brand scope.
         params = {k: v for k, v in {"asset": getattr(args, "asset", None), "brand": args.brand}.items() if v}
         if verb == "fidelity":
             from urllib.parse import quote

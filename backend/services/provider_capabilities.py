@@ -16,8 +16,8 @@ GEMINI_OMNI_EXTENSION_ERROR = (
     "edit (for example, 'Change the lighting and keep everything else the same') "
     "or use Veo 3.1 for video extension."
 )
-# The card's line for the guardrail (error copy round 3f, GM's rules: no
-# parentheses, a whole sentence; round 3g, GM: "the period inside the quote
+# The card's line for the guardrail (the design's rules: no
+# parentheses, a whole sentence; "the period inside the quote
 # followed by a comma reads badly"). Agents keep the text above word for word.
 GEMINI_OMNI_EXTENSION_LINE = (
     "Gemini Omni can edit a video but can’t make it longer. Describe the change as an edit, like "

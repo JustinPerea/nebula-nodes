@@ -1,6 +1,6 @@
-"""Which delete of which node a removal record undoes (second review, 2026-10-23).
+"""Which delete of which node a removal record undoes (2026-10-23).
 
-GM - Design, item 1: "Make undo complete." Every node delete makes a removal
+Design: "Make undo complete." Every node delete makes a removal
 record ({id: "rm_...", nodeId, projectId, definitionId, pins, proposals},
 main._remove_side_effects), and the restore that brings the node back names
 it. Node ids are not unique over time: an import or a clear starts CLIGraph's

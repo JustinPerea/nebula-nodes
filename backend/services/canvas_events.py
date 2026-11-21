@@ -50,9 +50,9 @@ MAX_VALUE_CHARS = 160
 MAX_SUMMARY_CHARS = 200
 # A summary Nebula words itself around a path the person must find, cut
 # nowhere: settings.restored names where the replaced settings file is kept
-# (GM, PR #203 r36 item B6b), and the desktop app's state folder alone runs
+# (design, PR #203), and the desktop app's state folder alone runs
 # past 200 characters with the line. settings.not_restored names the path
-# that refuses the same way (review 18 of PR #203, settings LOW-2).
+# that refuses the same way (PR #203).
 SUMMARY_CHARS_BY_KIND = {"settings.restored": 1200, "settings.not_restored": 1200}
 MAX_LISTED_IDS = 50
 MAX_TRACKED_RUNS = 256
@@ -81,7 +81,7 @@ EVENT_KINDS = frozenset({
     "pin.resolved",
     "pin.removed",
     "pin.detached",
-    # The undo of a node's delete put the note back on it (GM, 2026-10-23):
+    # The undo of a node's delete put the note back on it (design, 2026-10-23):
     # data {pinId, text, anchor}.
     "pin.reattached",
     "proposal.created",
@@ -96,8 +96,8 @@ EVENT_KINDS = frozenset({
     # The undo of a node's delete put back what an invalidated proposal needs,
     # and it still fits, so it is open again (same id, same expiry).
     "proposal.reopened",
-    # Questions an agent asked the person (services/agent_questions.py; Q125
-    # item 1): data {questionId, agentId, count}. Never the questions' text
+    # Questions an agent asked the person (services/agent_questions.py): data {questionId,
+    # agentId, count}. Never the questions' text
     # and never the person's answers: those reach only the agent that asked.
     "question.asked",
     "question.answered",
@@ -119,7 +119,7 @@ EVENT_KINDS = frozenset({
     "board.cover",
     # The board's own fields changed (Direction, Avoid, pinned colours, its
     # notes, “Moodboard notes to generators”, strength...): data {boardId, boardName, scope,
-    # fields}, the field names only, never a value (Justin's Q91).
+    # fields}, the field names only, never a value (Justin's call).
     "board.fields",
     "board.sorted",
     "board.arranged",
@@ -143,10 +143,10 @@ EVENT_KINDS = frozenset({
     "edit.redone",
     # Projects outside the canvas graph: a cover pinned, changed or set back
     # to automatic, with data {projectId, projectName, cover} (main
-    # _set_project_cover; U16).
+    # _set_project_cover).
     "project.cover",
     # Commons curation, by the person or an accepted proposal (routes/commons.py
-    # curation_listeners; Q63 b): data {assetId, fieldPath, op} for a
+    # curation_listeners): data {assetId, fieldPath, op} for a
     # correction, {assetId, regionId, change} for a region, {assetId,
     # membershipId, collectionId, change} for a membership. Never Commons text.
     "commons.corrected",
@@ -290,8 +290,8 @@ def _size(data: Any) -> int:
 
 
 # A run.failed entry for a stop at a call only the person may make carries
-# Nebula's own words to the agent whole, so it learns to propose (review 19
-# of PR #203, LOW-2): those run past MAX_VALUE_CHARS.
+# Nebula's own words to the agent whole, so it learns to propose (PR #203): those run past
+# MAX_VALUE_CHARS.
 MAX_STOP_ERROR_CHARS = 600
 
 
@@ -354,7 +354,7 @@ def param_changes(before: Mapping[str, Any] | None, after: Mapping[str, Any] | N
 # the own-event filter still hides the listener's own edits from it.
 OWN_REPLY_KIND = "thread.replied"
 # Its own answer on a pin, kept the same way but only from the caller's own
-# session (round 5, D1): `nebula pin resolve` in the listening session's
+# session: `nebula pin resolve` in the listening session's
 # shell ends the span that pin's push opened, as resolve_pin does, and a
 # sibling session under the same token never does. The session is kept
 # beside the journal (``publish(session=...)``), never in an event.
@@ -436,7 +436,7 @@ class CanvasEventJournal:
         a "Recovered canvas" filed by GET /api/projects (no graph broadcast)
         was never tagged before, and a pin the person added between a
         switch's commit and its broadcast was tagged with the project left
-        (review 5 of PR #114, M1)."""
+        (PR #114)."""
         self._project_source = source
         self._project_known = True
 

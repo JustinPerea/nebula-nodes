@@ -142,7 +142,7 @@ def classify_error(raw: str | None, *, job_failure: bool = False) -> tuple[str, 
     the job, then reported it failed; execution/person_line.as_job_failure).
     The key already worked, so it is never ``auth``, whatever its text says
     ("unauthorized to fetch input" is about the job's input); its other
-    categories stay (round 3d, part 2). Callers pass
+    categories stay. Callers pass
     ``is_job_failure(exc)``.
     """
     try:

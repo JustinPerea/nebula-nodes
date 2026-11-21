@@ -1,6 +1,6 @@
 """`nebula status "<text>" [--node nX]`, `nebula status --clear`, `nebula agents`.
 
-The Agents panel (Q125 item 2): an agent says what it is working on, and
+The Agents panel: an agent says what it is working on, and
 reads who else is around. The MCP twins are set_status and list_agents; the
 person's panel (the top of Updates) reads the same roster. Counts only:
 nobody reads another agent's questions, answers or proposals here.

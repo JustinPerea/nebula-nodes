@@ -9,7 +9,7 @@ from services.wording import collapsed_owner, collapsed_summary, port_words
 from services.node_readiness import node_access  # noqa: F401 (re-exported for tests and callers)
 from services.agent_name_in_sentence import in_sentence
 from services.agent_params import ASSET_PARAM_TYPES
-from services.canvas_pins import agent_text, note_block, one_line  # an event is one line (PR #200 fix round 3, LOW-5)
+from services.canvas_pins import agent_text, note_block, one_line  # an event is one line (PR #200)
 from services.canvas_undo import UNDONE_VERBS, kept_lines, nothing_went_back
 from services.maker_sizes import rule_note
 from services.text_cut import clean_name
@@ -77,7 +77,7 @@ def format_agent_nodes(rows: list[dict[str, Any]], *, ranked: bool,
         lines.append("")
     # Who can be billed past a free allowance (a Hugging Face Space route's
     # `billing`, on a row that runs free here), as every other agent surface
-    # says it (review r4 LOW-1): once per distinct note, naming its nodes.
+    # says it: once per distinct note, naming its nodes.
     billed: dict[str, list[str]] = {}
     for row in rows:
         if row.get("runsWith") and row.get("billing"):
@@ -89,9 +89,8 @@ def format_agent_nodes(rows: list[dict[str, Any]], *, ranked: bool,
 
 def _cli_words(text: str) -> str:
     """describe_node's and find_nodes' MCP-worded data in `nebula` words: the
-    CLI names its own command, never the MCP tool (review 7 of PR #203,
-    LOW-1), from the one table (services/agent_words.cli_words; review 9,
-    keys MEDIUM-1). Refusals arrive already worded for the CLI."""
+    CLI names its own command, never the MCP tool (PR #203), from the one table
+    (services/agent_words.cli_words). Refusals arrive already worded for the CLI."""
     from services.agent_words import cli_words
 
     return cli_words(text)
@@ -420,8 +419,7 @@ def format_selection(selection: dict[str, Any]) -> str:
     """Format the bounded live canvas selection for human and agent callers."""
     nodes = selection.get("nodes", [])
     if not nodes:
-        # Only a duplicate or a paste selected (review 17 drops-locks-ui
-        # MEDIUM-1): the note still says so.
+        # Only a duplicate or a paste selected: the note still says so.
         if selection.get("tabOnlyNote"):
             return "No live canvas nodes selected.\n\n" + str(selection["tabOnlyNote"])
         return "No live canvas nodes selected."
@@ -455,7 +453,7 @@ def format_selection(selection: dict[str, Any]) -> str:
         lines.append("")
         lines.append("Ignored stale IDs: " + ", ".join(str(node_id) for node_id in missing))
     if selection.get("tabOnlyNote"):
-        # A duplicated or pasted node only the person's tab has (PR #199 round 18).
+        # A duplicated or pasted node only the person's tab has (PR #199).
         lines.append("")
         lines.append(str(selection["tabOnlyNote"]))
     return "\n".join(lines)
@@ -512,7 +510,7 @@ _RESTORE_ROWS = (
 def catalog_restore_lines(restore: dict[str, Any], *, canvas_block: bool = False) -> list[str]:
     """One line per kind of outcome a catalog restore reported, with names.
     ``canvas_block``: the CANVAS NOT SAVED block follows, so the waiting
-    canvas is left to it (GM r23 e on PR #199: said once)."""
+    canvas is left to it (design, PR #199: said once)."""
     lines = []
     for key, label in _RESTORE_ROWS:
         listed = [row for row in restore.get(key) or [] if isinstance(row, dict)]
@@ -525,10 +523,10 @@ def catalog_restore_lines(restore: dict[str, Any], *, canvas_block: bool = False
         more = count - len(rows)
         lines.append(f"  {label}: {names}{f' and {more} more' if more > 0 else ''}")
     if restore.get("kind") == "restored" and restore.get("damagedReadWhole") is False:
-        # GM r19 on PR #199, 6a: only unread project records may be missing.
+        # Design, PR #199: only unread project records may be missing.
         from services.catalog_recovery import restore_said_more
 
-        # GM r22 on PR #199, 1: "no project is missing" only when nothing
+        # Design, PR #199: "no project is missing" only when nothing
         # else is said (the person's rule), never beside a left-out project.
         if restore.get("damagedRecordsUnread") is False and restore_said_more(restore):
             lines.append("  Damaged file not read whole, after its project records: every record in it was read")
@@ -826,7 +824,7 @@ def _node_lines(node: dict[str, Any], *, open_on_canvas: bool = True) -> list[st
         # Why its last run failed, as the card says it.
         hint = f" ({node['errorHint']})" if node.get("errorHint") else ""
         # A stop at a call only the person may make says how to propose it in
-        # its last sentence: whole (review 19 of PR #203, NIT-5).
+        # its last sentence: whole (PR #203).
         error = node["error"] if node.get("stopped") else _brief(node["error"], 300)
         lines.append(f"        error: {error}{hint}")
     if node.get("fileName"):
@@ -879,7 +877,7 @@ def format_snapshot(snapshot: dict[str, Any]) -> str:
     selection = snapshot.get("selection") or []
     lines.append(f"SELECTED: {', '.join(selection) if selection else 'nothing'}")
     if snapshot.get("tabOnlyNote"):
-        # Nodes only the person's tab has (review 17 drops-locks-ui MEDIUM-1).
+        # Nodes only the person's tab has.
         lines.append(f"  {snapshot['tabOnlyNote']}")
 
     pins = [pin for pin in snapshot.get("pins") or [] if isinstance(pin, dict)]
@@ -993,12 +991,11 @@ def pin_line(head: str, text: Any, tail: str = "", indent: str = "    ", after: 
     """`head: "note"tail after` for a one-line note. A note of several lines
     goes under `head tail:`, each line indented the same (`indent`, two past
     the two-space row it sits in), blank lines empty: the lines the person
-    typed keep their shape, lists included (fix round 5 of PR #200, review 5
-    LOW-4, GM 2026-10-28 r7 answer 4). The channel push prints it the same
-    way. `after` (an answer) follows the note, as on one line: under it, on
-    its own line at the row's indent, where no line of the note can start
-    (fix round 6, review 6 N-3)."""
-    note = agent_text(text)  # an output path: no control byte (GM r15), no variation selector (GM r23)
+    typed keep their shape, lists included (PR #200, design 2026-10-28). The
+    channel push prints it the same way. `after` (an answer) follows the
+    note, as on one line: under it, on its own line at the row's indent,
+    where no line of the note can start."""
+    note = agent_text(text)  # an output path: no control byte, no variation selector (design)
     if "\n" not in note:
         return f"{head}: {quote_note(note)}{tail}{after}"
     block = f"{head}{tail}:\n" + note_block(note, indent)
@@ -1049,8 +1046,8 @@ def format_event(event: dict[str, Any]) -> str:
     data = event.get("data") or {}
     summary = str(event.get("summary") or kind)
     if kind == "canvas.replaced" and data.get("proposalsKept"):
-        # A reopen of the open project (GM r29 of PR #199, 3): its ids stay.
-        # GM r32 (6): "open proposals still open" only when any were open
+        # A reopen of the open project (design, PR #199, 3): its ids stay.
+        # Design: "open proposals still open" only when any were open
         # (an event from before the count says it as before), and the nodes
         # that got Nebula ids, counted.
         parts = ["node ids kept"]
@@ -1074,7 +1071,7 @@ def format_event(event: dict[str, Any]) -> str:
         summary = f"{summary}: {shown}"
     elif kind == "run.failed" and data.get("error"):
         # A stop at a call only the person may make says how to propose: whole
-        # (review 19 of PR #203, LOW-2).
+        # (PR #203).
         error = data["error"] if data.get("proposalNeeded") is True else _brief(data["error"], 100)
         summary = f"{summary}: {error}"
     elif kind == "run.skipped" and data.get("reason"):
@@ -1141,19 +1138,19 @@ def _cost_line(cost: dict[str, Any]) -> str:
     """What the proposed run spends, by cost class (model_pricing.cost_class,
     canvas_proposals.summarize_cost): paid runs with their providers and the
     list-price figure, runs that may bill the person's own account, runs on
-    their Krea plan, and free runs. GM, PR #203 r21 item 1: "up to 1 paid
+    their Krea plan, and free runs. Design, PR #203: "up to 1 paid
     run (fal) and 1 on the person's Krea plan, $0.03 at list prices". A plan
     run is never "free", never "runs locally" and never in the figure; a
     free run that calls a provider (a sourced $0, Idol without a token) says
-    which, never "runs locally" (review 10, MEDIUM-1)."""
+    which, never "runs locally"."""
     up_to = "up to " if cost.get("upTo") else ""
     paid = _count(cost.get("paidRuns"))
     may = _count(cost.get("mayCostRuns"))
     plan = _count(cost.get("planRuns"))
     free = _count(cost.get("freeRuns"))
     entries = [entry for entry in cost.get("nodes") or [] if isinstance(entry, dict)]
-    # Each part is tagged one way (GM, PR #203 r22 item 5, r24 items 1 and
-    # 2): by where its runs go, as ids, with a count per id once there's more
+    # Each part is tagged one way (design, PR #203): by where its runs go, as ids, with a count
+    # per id once there's more
     # than one: "1 paid run (openai) and 1 free (huggingface)", "3 paid runs
     # (2 anthropic, 1 krea) and 2 free (1 fal, 1 local)". A free run goes
     # where it runs (a Space's "huggingface", `runsOn`), else to its
@@ -1166,7 +1163,7 @@ def _cost_line(cost: dict[str, Any]) -> str:
         f" ({', '.join(cost.get('providers') or [])})" if cost.get("providers") else "")
     # A free run with no place runs locally, so every free run is counted
     # once; without an entry for each (an older backend's cost), none is
-    # tagged by place (review 13 of PR #203, copy LOW-2).
+    # tagged by place (PR #203).
     free_ids = ["local" if entry.get("label") == LOCAL_LABEL else str(entry.get("runsOn") or entry.get("provider") or "local")
                 for entry in entries if entry.get("kind") == "free"]
     # Entries that don't match the count, more or fewer: none is tagged,
@@ -1175,7 +1172,7 @@ def _cost_line(cost: dict[str, Any]) -> str:
     if len(free_ids) != free:
         free_ids = []
     # "run" goes on the first class only and carries through the rest, and
-    # a class that stands alone keeps it (GM, PR #203 r25 item 1): "1 paid
+    # a class that stands alone keeps it (design, PR #203): "1 paid
     # run (google), 1 on the person's Krea plan and 1 free (fal)", "1 run on
     # the person's Krea plan and 1 free (local)", "1 free run (fal)".
     runs = lambda count: f"run{'s' if count != 1 else ''}"  # noqa: E731
@@ -1193,8 +1190,7 @@ def _cost_line(cost: dict[str, Any]) -> str:
         if set(free_ids) <= {"local"}:
             # Every free run is local (or no entry says where): "(runs
             # locally)" when they are the whole run, else tagged as the
-            # paid part is, "1 paid run (openai) and 1 free (local)" (GM, PR
-            # #203 r27 item 5).
+            # paid part is, "1 paid run (openai) and 1 free (local)" (design, PR #203).
             where = "" if free_unsure else (" (runs locally)" if alone else (" (local)" if free_ids else ""))
         else:
             where = _tags(free_ids, free)
@@ -1272,7 +1268,7 @@ def ledger_hold_note(hold: Any, now: float | None = None) -> str:
     """" <sentence>" after a waiting proposal's line while the spend ledger's
     hold it waited in still holds (``ledgerHold``, agent_spend.hold_line),
     else "": the proposal's note never holds it, since its end time would go
-    stale (review of PR #242)."""
+    stale (PR #242)."""
     import time as _time
 
     from services.agent_spend import hold_line
@@ -1350,10 +1346,10 @@ def format_proposal(view: dict[str, Any], *, created: bool = False, now_ms: floa
 
 
 def saved_canvas_message(result: Any) -> str | None:
-    """GM's agent reply when Nebula saved the person's canvas as its own
-    project before this write (PR #199, GM's rule (a)): the reply's
+    """The design's agent reply when Nebula saved the person's canvas as its own
+    project before this write (PR #199, the design's rule (a)): the reply's
     `savedCanvas.message`, or None. Every printer of a canvas write prints it
-    after its action line (review 9, M-2), so an agent on the CLI learns
+    after its action line, so an agent on the CLI learns
     what the JSON says: a project was made, and where its write went."""
     saved = result.get("savedCanvas") if isinstance(result, dict) else None
     message = saved.get("message") if isinstance(saved, dict) else None
@@ -1361,7 +1357,7 @@ def saved_canvas_message(result: Any) -> str | None:
 
 
 def with_saved_canvas(line: str, result: Any) -> str:
-    """``line``, then GM's saved-canvas reply on its own line when there is one."""
+    """``line``, then the design's saved-canvas reply on its own line when there is one."""
     message = saved_canvas_message(result)
     return f"{line}\n{message}" if message else line
 
@@ -1386,7 +1382,7 @@ def format_applied(result: dict[str, Any], *, undo: bool = True) -> str:
                          f"out {', '.join(ports.get('outputs') or []) or '-'}")
     for node_id, note in (result.get("modelPortNotes") or {}).items():
         lines.append(f"  Ports of {node_id}: {note}")
-    # Placeholders (Q125 item 3): the nodes this apply made pending, or made ready.
+    # Placeholders: the nodes this apply made pending, or made ready.
     if result.get("pending"):
         lines.append(f"  Placeholders (runs skip them until ready): {', '.join(result['pending'])}. "
                      f"When they're ready: nebula apply --ready {' --ready '.join(result['pending'])}")
@@ -1418,7 +1414,7 @@ def format_undone(result: dict[str, Any]) -> str:
         lines = [f"Undone: {done}." if done else (
             "Undone: no change." if result.get("skipped") or result.get("undoId") else
             result.get("message") or "Undone: no change.")]
-    # What the edit's deletes removed, put back with the nodes (GM, 2026-10-23).
+    # What the edit's deletes removed, put back with the nodes (design, 2026-10-23).
     pins = result.get("reattached") or []
     if pins:
         lines.append(f"  Back on {'its node' if len(pins) == 1 else 'their nodes'}: {', '.join(pins)}")
@@ -1485,7 +1481,7 @@ def _commons_edit_line(edit: Any) -> str:
 def _asset_change_lines(view: dict[str, Any], where: str | None) -> list[str]:
     lines = [f"  asks   {view.get('summary') or 'a change'}"]
     if view.get("kind") == "commons":
-        # The summary names no reference (GM, PR #202 r4: it is the Agent log's
+        # The summary names no reference (design, PR #202: it is the Agent log's
         # words); the proposing agent's own view still says which one.
         target = (view.get("target") or {}).get("id")
         if target:
@@ -1612,7 +1608,7 @@ def format_project(view: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-# -- questions for the person (Q125 item 1) -----------------------------------------
+# -- questions for the person -----------------------------------------
 
 _QUESTION_STATUS = {
     "open": "waiting for the person",
@@ -1665,7 +1661,7 @@ def _seconds_ago(seconds: Any) -> str:
 
 
 def needs_you_line(counts: dict[str, Any]) -> str:
-    """'1 question', '2 proposals', '1 question, 1 proposal' (GM's count line)."""
+    """'1 question', '2 proposals', '1 question, 1 proposal' (the design's count line)."""
     parts = []
     for key, one, many in (("questions", "question", "questions"), ("proposals", "proposal", "proposals")):
         count = int(counts.get(key) or 0)
@@ -1711,7 +1707,7 @@ def format_agents(roster: dict[str, Any]) -> str:
             surface = (entry.get("cursor") or {}).get("surface")
             if isinstance(surface, dict) and isinstance(surface.get("target"), dict):
                 lines.append(f"    cursor on {_surface_words(surface['target'], surface.get('anchorNames'))}")
-            # Q125 item 3: what its runs are running now, and its placeholders.
+            # What its runs are running now, and its placeholders.
             for running in entry.get("running") or []:
                 seconds = int(float(running.get("secondsAgo") or 0))
                 lines.append(f"    Running {running.get('model') or running.get('nodeId')} ({running.get('nodeId')})"

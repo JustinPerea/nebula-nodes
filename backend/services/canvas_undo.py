@@ -18,7 +18,7 @@ name, position) and the wires it added or took away. ``plan_undo`` checks
 each part against how the edit left it (the "expect" side) and leaves a part
 someone changed since as it is, reporting it, as a moodboard restore does
 (services/moodboard_edits.py). A node someone ran since the edit counts as
-changed since (Q82): the book keeps who started each run and when (``mark``,
+changed since: the book keeps who started each run and when (``mark``,
 ``run_started``, ``node_ran``), and the undo leaves such a node whole, its
 params, name, position and the wires into it, unless the undoing agent
 started every one of those runs itself. main turns the plan into one restore (the
@@ -30,7 +30,7 @@ Memory-only and bounded: ``UNDO_TTL_SECONDS``, ``MAX_EDITS``,
 inverse (a token then gets 404). Clearing the canvas or loading a graph into
 the open project ends that project's tokens, because its node ids start
 again. Only the per-project id epochs (``epoch``) are kept across a restart,
-in ``persist_path`` (round 20 of PR #195): they are the canvas revision a tab
+in ``persist_path`` (PR #195): they are the canvas revision a tab
 holds, and PR #114's ``_graph_fence`` reads them too.
 
 Links: every edit id handed out (an agent's edit, an agent's undo, the
@@ -121,7 +121,7 @@ def capture_before(nodes: Mapping[str, dict[str, Any]], edges: list[dict[str, An
     is laid out on export), so undoing a move puts a node back where the
     person saw it. ``ready`` are the agent's placeholders the edit makes
     normal (``pending: false``): their flags, so an undo makes them
-    placeholders again, as the person's Cmd+Z does (Q125 item 3). A removed
+    placeholders again, as the person's Cmd+Z does. A removed
     node keeps its flag the same way. ``name_of`` is the name the canvas shows
     a node by (main._node_label): a removed node keeps it as ``name``, so an
     undo line can still name it once it is gone (design: names, never ids)."""
@@ -229,7 +229,7 @@ def _node_wires(node_id: str, edges: list[dict[str, Any]] | set[Wire]) -> list[l
 
 def _ready_state(node: Mapping[str, Any], node_id: str, edges: list[dict[str, Any]]) -> dict[str, Any]:
     """A node as an agent's ``pending: false`` left it: what the person
-    changing since would change (GM: "the person edits it (params, label,
+    changing since would change (design: "the person edits it (params, label,
     wiring, a real move)" turns it normal), so the agent's undo can tell."""
     return {
         "definitionId": str(node.get("definitionId") or ""),
@@ -258,7 +258,7 @@ def _ready_changed_since(ready: Mapping[str, Any], now: Mapping[str, Any], wires
 def _moved_far(before: Mapping[str, float], after: Mapping[str, float] | None) -> bool:
     """A real move, as the layout route counts one (main._moved_far_enough,
     MOVE_THRESHOLD_PX): a nudge under it isn't an edit, so it doesn't make
-    the node "changed since" (review 4, L4)."""
+    the node "changed since"."""
     if after is None:
         return True
     return math.hypot(after["x"] - before["x"], after["y"] - before["y"]) >= MOVE_THRESHOLD_PX
@@ -611,7 +611,7 @@ def plan_undo(
     # Placeholders the edit made ready turn placeholders again, unless the
     # node is one again already, someone else ran it since (a run makes a
     # placeholder normal for good), or it changed since: the person's edit
-    # made it theirs (GM: "turns normal ... on any edit by the person"), and
+    # made it theirs (design: "turns normal ... on any edit by the person"), and
     # undo never takes that back, as for params, names and moves.
     for ready in inverse.get("ready") or []:
         node_id = ready["id"]
@@ -902,12 +902,12 @@ class CanvasUndoBook:
         # Definition id to card type name, for the undo summary of an inverse
         # kept without node names (describe has no graph access).
         self._type_name = type_name
-        # Where the per-project id epochs are kept across restarts (round 20
-        # of PR #195, review 19 M2): the canvas revision a tab holds is this
+        # Where the per-project id epochs are kept across restarts (PR #195): the canvas revision
+        # a tab holds is this
         # epoch, so a restart that started it again at 0 read as an agent's
         # clear. None (tests, a state dir that can't be made): memory only.
         self.persist_path = persist_path
-        # Round 21 (the #114 merge, with review 20 L-4/L-5): when the epochs
+        # PR #114: when the epochs
         # can't be restored (the file unreadable, missing while a canvas was
         # saved before, or no file at all: memory only), every project's
         # epoch starts at ``unrestored_base`` (main passes a boot-unique
@@ -1091,7 +1091,7 @@ class CanvasUndoBook:
         undid), and only an item with exactly that id, in a kept edit of the
         record's own project, takes the new record. Never by the node id
         alone: an import, a clear or another project gives the same id to
-        another node (second review). main re-checks every id."""
+        another node. main re-checks every id."""
         fresh: dict[tuple[str | None, str], dict[str, Any]] = {}
         for item in removals:
             if isinstance(item, dict) and isinstance(item.get("replaces"), str) and item["replaces"]:
@@ -1136,10 +1136,10 @@ class CanvasUndoBook:
                since: int | None = None) -> None:
         """The canvas with no project these edits were made on was just saved
         as ``to_project`` and opened, the same canvas with the same node ids
-        (an agent's copy, PR #199 GM's rule (a)): its undo tokens and "ran
+        (an agent's copy, PR #199 the design's rule (a)): its undo tokens and "ran
         since" marks go with it, so the agent can still undo its edits there.
         ``since``: the book's mark when the copy was made; only edits from
-        then on are the copy's (review 9 of PR #199, nit 4), so an older
+        then on are the copy's (PR #199), so an older
         no-project edit stays where it was made. The node-run marks move only
         with no ``since`` (they belong to node ids, which the copy shares)."""
         for record in self._records.values():
@@ -1174,7 +1174,7 @@ class CanvasUndoBook:
             raw = json.loads(self.persist_path.read_text(encoding="utf-8"))
         except FileNotFoundError:
             # A first run has nothing a tab could hold; a canvas saved before
-            # without the file (deleted, or from before round 20) has.
+            # without the file (deleted, or from before) has.
             return self._start_unrestored() if self._prior_state else {}
         except (OSError, ValueError) as exc:
             print(f"[canvas_undo] could not read {self.persist_path}: {exc}; canvas revisions start again",
@@ -1210,7 +1210,7 @@ class CanvasUndoBook:
 
     def _save_epochs(self, epochs: Mapping[str | None, int], *, exact: Iterable[str | None] = ()) -> None:
         """Atomically (a temporary file, fsync, rename), best effort, and as a
-        merge (round 21 of PR #195, review 20 L-5): the file is read again
+        merge (PR #195): the file is read again
         and each project keeps the higher of the two, so another book's
         write on the same state dir never moves a revision backwards, and a
         corrupt file read at boot isn't rewritten with only the projects in

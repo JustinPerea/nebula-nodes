@@ -27,7 +27,7 @@ A Style's ``params`` can carry an image too (``_previewUrl``, or a ``file``
 param of its node); there only outside links are refused, since a local path
 in a param is the canvas's to check when it runs (``validate_file_references``).
 
-A moodboard's images follow the same rule (Q98, Justin 2026-10-21: "the same
+A moodboard's images follow the same rule (Justin 2026-10-21: "the same
 check, and the same placeholder for old boards"), without the shipped Style
 thumbnails: ``board_image_problem`` is what services/moodboard_store.py runs
 on every image a board write stores, with ``BOARD_ALLOWED`` as the answer;
@@ -52,7 +52,7 @@ ALLOWED = (
     "Outside links (http, https, data:) aren't accepted: upload the image first and use the url it returns."
 )
 
-# A moodboard's images (Q98, Justin 2026-10-21: "the same check"): the same
+# A moodboard's images (Justin 2026-10-21: "the same check"): the same
 # rule and answer, without the shipped Style thumbnails.
 BOARD_ALLOWED = (
     "Images on a moodboard must be Nebula's own files: an output or an upload as /api/outputs/<path> "

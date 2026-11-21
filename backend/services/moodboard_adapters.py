@@ -1,6 +1,6 @@
 """Moodboard adapters: how each node takes a wired Nebula moodboard.
 
-Moodboard canvas plan section 5.7 (decisions A1 to A5, B1 to B4); contract 07
+Moodboard canvas plan section 5.7; contract 07
 section 1.16. A node's ``moodboard`` input port is declared in the node
 definitions like any port. *How* the node takes a board lives here, in one
 table, not in the definitions (the TS and JSON registries drift, two video
@@ -19,7 +19,7 @@ An id in both files is refused. One entry (plan section 5.7.2)::
     "<nodeId>": {
       "channel": "weighted-style" | "style-object" | "refs" | "role-slots" | "views"
                  | "texture-style" | "music" | "text-only",
-      "default": "images" | "text" | "never",        # A1, for entries that take images
+      "default": "images" | "text" | "never",        # for entries that take images
       "handler": "reads-board",                       # Krea 2 until PR15
       "slots": [{"port": "images", "max": 16, "roles"?: {...}, "sharesLimitWith"?: ["style_images"]}],
       "needsWired"?: ["images"],    # must be wired first: the board never supplies image 1
@@ -51,7 +51,7 @@ become Krea's ``image_style_references`` (``handlers/krea.py``). A
 ``weight.schema`` names the vendor schema Nebula records for a native range
 (rule 13): today the pinned Krea catalog.
 
-:func:`table_problems` is the A5 contract (plan section 5.7.10), mirrored by
+:func:`table_problems` is the table contract (plan section 5.7.10), mirrored by
 ``scripts/check-node-contracts.mjs``; ``tests/test_moodboard_adapters.py``
 runs both. Rules 10 (the generated file) and 11 (maker routes that refuse a
 start image with references, run with HTTP mocked) live in that test.
@@ -86,7 +86,7 @@ CHANNELS = ("weighted-style", "style-object", "refs", "role-slots", "views", "te
 DEFAULTS = ("images", "text", "never")
 HANDLERS = ("reads-board",)
 TEXTS = ("brief", "music-direction")
-# Q21 b: which form of the board's weights each mode needs (section 5.7.4).
+# Which form of the board's weights each mode needs (section 5.7.4).
 WEIGHT_NORMALIZE = {"native": "sum-to-strength", "at-creation": "sum-to-one", "select": "rank", "global": None}
 COST_PER_REF = ("priced", "free", "plus", "unknown")
 FACE_POLICIES = ("block", "warn", "allow")
@@ -582,7 +582,7 @@ def _variant_problems(node_id: str, entry: Mapping[str, Any], definition: Mappin
                 if port_id in needs_wired:
                     out.append(f"collage can't go on an edit target ({port_id})")
 
-    # Rule 13: the weight form the node needs (Q21 b).
+    # Rule 13: the weight form the node needs.
     weight = entry.get("weight")
     if weight is not None:
         out.extend(_weight_problems(weight, ports, params, catalog, fixtures))
