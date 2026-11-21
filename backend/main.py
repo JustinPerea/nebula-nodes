@@ -2253,8 +2253,8 @@ def _catalog_read_in_flight(signature: tuple[int, int, int]) -> bool:
     """ProjectStore.read_in_flight: whether the shared off-loop read of this
     catalog file is running for a reader on this event loop. The reader then
     answers the last projection instead of parsing the file on the loop
-    (PR #199: the parse that finds a 102 MB file damaged held the loop 1.6
-    s). A worker thread (no running loop) reads it."""
+    (PR #199: the parse that finds a 102 MB file damaged held the loop
+    1.6 s). A worker thread (no running loop) reads it."""
     try:
         loop = asyncio.get_running_loop()
     except RuntimeError:
@@ -5640,7 +5640,7 @@ class ConnectionManager:
         """Whether a person's tab keeps unsaved edits now: a connected one, or
         one whose socket closed (or that a restart remembered) and whose
         grace hasn't run out. Graces that ran out go first, and the marker
-        follows (with another kept tab still connected, an expired grace
+        follows (before, with another kept tab still connected, an expired grace
         stayed counted, and a restart then held agents for a tab long
         gone)."""
         self._expire_graces()
@@ -5891,7 +5891,7 @@ class ConnectionManager:
     def _form(self, connection: WebSocket, base: dict[str, Any], forms: dict[tuple[Any, ...], str]) -> str:
         """`base` as this socket gets it, serialised once per form. An Updates message always
         goes through its reader's form (agent_notes.for_reader), whichever form a broadcast
-        hands this socket (PR #204, an `others=` form or a broadcast_others of Updates never
+        hands this socket (PR #204: an `others=` form or a broadcast_others of Updates never
         skips the filter)."""
         if base.get("type") == "agentNotes":
             view = self.share_view(connection)
@@ -6141,10 +6141,10 @@ async def _say_refused_run(errors: list[ValidationErrorDetail]) -> str | None:
         return line
     # The cursor quotes the node like every other bubble; the log has the
     # run's line, whole: Nebula's own line is never cut (design, PR #203).
-    # A needs stop keeps its own form (design); any other line is named once by
-    # the node's own name (_bubble_line, design). A needs or route
-    # bubble is its first sentence, which names what's needed or wrong; the
-    # action sentence is on the card and in the log (design, PR #203).
+    # A needs stop names the node by its quoted name, then what it needs (_bubble_needs; design);
+    # any other line is named once by the node's own name (_bubble_line, design). A needs or route
+    # bubble is its first sentence, which names what's needed or wrong; the action sentence is on
+    # the card and in the log (design, PR #203).
     needs = _bubble_needs(first, errors)
     bubble = (_first_sentence(f"{_quoted(_node_label(first))} {needs}") if needs
               else _bubble_line(first, person.get(first) or ""))
@@ -6263,7 +6263,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
             # On a timeout or failure it is closed and dropped; its tab reconnects.
             sync_text = json.dumps({"type": "graphSync", **export, "syncSeq": _next_graph_sync_seq(),
                                     "bootId": BACKEND_BOOT_ID, "bootStartedAt": BACKEND_BOOT_STARTED_AT,
-                                    # What this boot's renumbering adds (PR #199 rounds 17, 18).
+                                    # What this boot's renumbering adds (PR #199).
                                     **_boot_first_sync()})
             if not await manager._send_bounded(websocket, sync_text):
                 return
@@ -9109,7 +9109,7 @@ async def _settle_gone_listeners() -> None:
 
 async def _settle_gone_listeners_locked() -> None:
     # A store that fails mid-way gives the rest back (the failed one first) to
-    # be tried again shortly: taken items are never just lost (5d check).
+    # be tried again shortly: taken items are never just lost.
     lapsed_items = channel_book.take_lapsed()
     for index, (agent_id, session, listener_id) in enumerate(lapsed_items):
         try:
@@ -9322,7 +9322,7 @@ def _thread_listener_ids(identity: AgentIdentity, session: str | None) -> list[s
 
 def _listener_process(identity: AgentIdentity, session: str | None, nonce: str | None) -> None:
     """The inbox, accepted and held routes answer only the process that
-    holds this session's listener entry (the nonce bound the beat only, so a
+    holds this session's listener entry (before, the nonce bound the beat only, so a
     process refused there could still read the inbox and take a message
     meant for the live one). 409, as for a beat."""
     if channel_book.taken_by_another(identity, session, channel_listeners.parse_nonce(nonce)):
@@ -9527,14 +9527,13 @@ async def reply_to_person(body: Any = Body(None)) -> Any:
     shares its listener's session; a terminal started otherwise answers for
     the agent's one fresh listener, and with two or more Nebula won't guess:
     ``replyTo`` None and a ``note`` saying why). It goes to that push's
-    project's thread (design), with an Update on the open project when that
-    is another one (design: one per agent and project while unread). A reply
+    project's thread, with an Update on the open project when that is
+    another one (design: one per agent and project while unread). A reply
     that answers no push is a follow-up in the open project's thread, with
-    no Update; with no project open, 409 no_project (the design's line).
-    ``nodeId`` is checked against the open canvas only when the reply goes
-    there; for another project's thread it is ignored, with a ``note``, and
-    no cursor flies (design). The cursor that flies is the session's that
-    took the push (design)."""
+    no Update; with no project open, 409 no_project. ``nodeId`` is checked
+    against the open canvas only when the reply goes there; for another
+    project's thread it is ignored, with a ``note``, and no cursor flies
+    (design). The cursor that flies is the session's that took the push."""
     headers = current_request_headers()
     identity = identify_agent(headers)
     if identity is None and is_person(headers):
@@ -9605,8 +9604,8 @@ async def reply_to_person(body: Any = Body(None)) -> Any:
     if project_id != open_id:
         await _post_reply_elsewhere(identity, project_id, row["id"])
     # The cursor that flies is the session's that took the push (design: one
-    # Claude is one cursor), so a reply from its own shell never makes a "·
-    # 2"; with no push answered, the caller's own. Only on the canvas the
+    # Claude is one cursor), so a reply from its own shell never makes a "· 2";
+    # with no push answered, the caller's own. Only on the canvas the
     # reply is about (design): one saved in another project's thread flies
     # nothing, and the Update is the signal.
     cursor_session = (taker.session or None) if taker is not None and row.get("replyTo") else session
@@ -10576,15 +10575,13 @@ async def create_canvas_pin(body: dict[str, Any]) -> dict[str, Any]:
 
     Body: {text, nodeId} or {text, position: {x, y}}.
 
-    A graph write for the fence. A note's anchor
-    is a node id (or a spot) of the canvas it was written on, and ids restart
-    at n1 in every project and after a clear, so a note sent after an agent
-    opened another project, or cleared this one, would land on that canvas's
-    n1 and be journaled to the agent working there as the person's request.
-    The canvas tab sends the project and canvas the note was composed on
-    (X-Nebula-Workspace-Revision, X-Nebula-Canvas-Revision); the fence refuses
-    it (409, the canvas's out-of-date line) when either moved, or when a tab
-    sends none, before anything is pinned or journaled.
+    A graph write for the fence. A note's anchor is a node id (or a spot) of the canvas it was
+    written on, and ids restart at n1 in every project and after a clear, so a note sent after an
+    agent opened another project, or cleared this one, would land on that canvas's n1 and be
+    journaled to the agent working there as the person's request. The canvas tab sends the
+    project and canvas the note was composed on (X-Nebula-Workspace-Revision,
+    X-Nebula-Canvas-Revision); the fence refuses it (409, the canvas's out-of-date line) when
+    either moved, or when a tab sends none, before anything is pinned or journaled.
     """
     require_person(current_request_headers())
     try:
@@ -18233,8 +18230,8 @@ def _set_words(node_id: str, keys: list[str]) -> tuple[str, str]:
     unlabelled field by its key, labelled fields first in the card's order,
     then the raw keys (design: "Set “Aspect ratio”, “Seed” and seed_mode";
     four names, then "and N more"). The card's order is its definition's
-    fields, then a configured model's own (``dynamicParams``: a universal
-    node's fields were listed in key order). Returns (say, log)."""
+    fields, then a configured model's own (``dynamicParams``; universal
+    nodes' fields used to be listed in key order). Returns (say, log)."""
     node = cli_graph.nodes.get(node_id) or {}
     definition = node_registry.get(str(node.get("definitionId") or ""))
     order: dict[str, int] = {}
@@ -18958,7 +18955,7 @@ def _shared_id_delete_person(node_id: str, holding: Sequence[Mapping[str, Any]])
       "Nebula couldn’t delete “Delta brief” because it shares the ID n1 with
       a World Labs run from a project Nebula can’t identify. Check that run
       in Marble before you forget its ID in Run history, then try again.";
-    - a record nothing names (in the design's shape), which wins:
+    - a record nothing names (design), which wins:
       "Nebula couldn’t delete “Delta brief” because it has a saved World
       Labs recovery ID. Check the run in Marble, then forget that ID in Run
       History."
@@ -21854,7 +21851,7 @@ def _renumber_node_records(project_id: str | None, mapping: Mapping[str, str]) -
     Proposals, run approvals and pins never name a tab-local id (agents
     never see one; pins move with the project), and an agent's undo notes
     only runs, which an open waits for. Best effort: a journal that can't be
-    written keeps the old id (printed), as before."""
+    written keeps the old id (printed), as it did before."""
     if not mapping:
         return
     for name, store in (("World Labs recovery checkpoints", provider_recovery_store),
@@ -21886,7 +21883,7 @@ def _renumber_staged_project(project: dict[str, Any], candidate: CLIGraph) -> di
 
 
 def _require_backend_node_ids(snapshot: Mapping[str, Any]) -> None:
-    """The invariant (PR #199 rounds 16 and 17): Nebula's live graph, and a
+    """The invariant (PR #199): Nebula's live graph, and a
     copy the recover route writes, hold only backend node ids (``nN``), so
     every node's typing reaches the server. Checked just before each commit
     (recover, and every switch: _commit_project_workspace): a change that
@@ -22689,12 +22686,12 @@ _copy_filings: dict[str, dict[str, Any]] = {}
 # create, or (below the limit) an agent's clear or graph load replaces a waiting live canvas, it is
 # kept whole in its own file, projects/canvas-held/<projectId>.json (and its .bak), fsynced with its
 # folder, and only that copy is ever filed as the person's canvas (_file_held_canvases, on the next
-# listing with room), each on its own. (the store, the list).
+# listing with room), each on its own.
 _canvas_held_cache: tuple[Any, list[dict[str, Any]]] | None = None
 
-# Design, verbatim: an agent's clear or graph load while
-# the canvas waits at the project limit (409, code canvas_waiting), so no
-# second canvas with no project is left that couldn't be saved either.
+# Design, verbatim: an agent's clear or graph load while the canvas waits at the project limit
+# (409, code canvas_waiting), so no second canvas with no project is left that couldn't be saved
+# either.
 CANVAS_WAITING_REFUSAL = ("The project limit is reached, so a new canvas can't be saved. "
                           "Open an existing project to work in, or ask the person to delete a project.")
 # The size limit's line (design, verbatim).
@@ -22706,7 +22703,7 @@ CANVAS_WAITING_REFUSAL_STORAGE = ("Nebula's project list is full, so a new canva
 CANVAS_CHANGE_REFUSAL = ("The open canvas isn't saved as a project yet because the project limit is reached, so it "
                          "can't be changed. Open an existing project to work in, or ask the person to delete a project.")
 # Design: "Same shape for 'the project list is full'". Its way out is the size
-# cap's own, from the design's line above: only a delete for good frees it.
+# cap's own, from the size limit's line above (CANVAS_WAITING_REFUSAL_STORAGE): only a delete for good frees it.
 CANVAS_CHANGE_REFUSAL_STORAGE = ("The open canvas isn't saved as a project yet because Nebula's project list is full, "
                                  "so it can't be changed. Open an existing project to work in, or ask the person to "
                                  "permanently delete a project in Recently deleted.")
@@ -23311,8 +23308,8 @@ def _guard_waiting_canvas(action: str) -> dict[str, Any] | None:
     never taken back (PR #199): if the write fails, the
     copy equal to the live canvas goes at the next settle, by its digest.
 
-    An agent's write first files the person's canvas untouched (the design's rule
-    (a): _protect_persons_canvas); only a canvas that can't be filed for its
+    An agent's write first files the person's canvas untouched (the design's rule:
+    _protect_persons_canvas); only a canvas that can't be filed for its
     size is held aside, as before."""
     if not _is_person_request():
         note = _canvas_guard_note.get()
@@ -26613,9 +26610,8 @@ async def export_graph_for_frontend() -> dict:
         "nodes": rf_nodes,
         "edges": rf_edges,
         "empty": False,
-        # Each Cinema scene's key, which its next save sends
-        # back as ifSceneKey, and its revision, so a canvas
-        # can tell a late sync from a newer one (services/scene_keys.py);
+        # Each Cinema scene's key, which its next save sends back as ifSceneKey, and its
+        # revision, so a canvas can tell a late sync from a newer one (services/scene_keys.py);
         # none without a scene.
         **({"sceneKeys": keys, "sceneRevs": scene_keys.revisions_of(_scene_scope(), keys)}
            if (keys := scene_keys.keys_of(cli_graph.nodes)) else {}),
@@ -26762,7 +26758,7 @@ async def run_graph(request: Request, body: dict[str, Any] | None = None) -> dic
 
     async def announce() -> None:
         # The canvas says "Running X" / "Ran X" only for a run that started
-        # (one its fence refused still said it ran).
+        # (a run its fence refused used to say it ran).
         if target:
             await _show_agent({"nodeId": target}, shows="run", say=f"Running {_quoted(_node_label(target))}",
                               did=_did("Ran", target), nodes=[target])
