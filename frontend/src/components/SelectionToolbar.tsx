@@ -33,23 +33,23 @@ export function SelectionToolbar() {
   const nodes = useGraphStore((state) => state.nodes);
   const edges = useGraphStore((state) => state.edges);
   const isExecuting = useGraphStore((state) => state.isExecuting);
-  // A run waiting for its inputs counts as starting (review 15, M-B).
+  // A run waiting for its inputs counts as starting.
   const runStarting = useGraphStore((state) => state.runStarting);
-  // Offline is read-only (GM, round 15 of PR #114), and so is following an
-  // agent's switch (GM round 22, A: one state, lib/canvasLock): Run, Ask,
-  // Note, Duplicate, Arrange and Delete are disabled and look it, with "Wait
-  // for “<project>” to open." while following; Copy, Download and the
-  // node's Settings stay. While the canvas is kept after a restore (GM r16
-  // to r18 on PR #199) what writes to Nebula or spends is disabled, each
-  // with its own "You can … after you save it as a project."; Copy,
-  // Download, Settings, Duplicate, Arrange and Delete stay (they change only
-  // this tab, as typing does, and Undo takes them back: graphStore KeptStep).
+  // Offline is read-only (design, PR #114), and so is following an agent's
+  // switch (one state, lib/canvasLock): Run, Ask, Note, Duplicate, Arrange
+  // and Delete are disabled and look it, with "Wait for “<project>”
+  // to open." while following; Copy, Download and the node's Settings stay.
+  // While the canvas is kept after a restore (design, PR #199) what writes to
+  // Nebula or spends is disabled, each with its own "You can … after you save
+  // it as a project."; Copy, Download, Settings, Duplicate, Arrange and
+  // Delete stay (they change only this tab, as typing does, and Undo takes
+  // them back: graphStore KeptStep).
   const lock = useCanvasLock();
-  // A control this tab's own run also locks (#198's run lock): its reason
-  // wins over following's and offline's, in lib/canvasLock (GM r9 answer 3:
-  // run, follow, offline; the Next step its node portals here reads the same).
-  // Its line names the control's verb (GM r39 item 2, lib/runLock): "it" for
-  // one selected node, "them" for several.
+  // A control this tab's own run also locks (#198's run lock): its reason wins
+  // over following's and offline's, in lib/canvasLock (run, follow,
+  // offline; the Next step its node portals here reads the same). Its line
+  // names the control's verb (lib/runLock): "it" for one selected node,
+  // "them" for several.
   const runLocked = (running: boolean, verb: RunLockVerb, own: LockOwn) =>
     lock.act(own, { run: running, runTitle: runFinishesLine(verb) });
   const executeNode = useGraphStore((state) => state.executeNode);
@@ -67,7 +67,7 @@ export function SelectionToolbar() {
   const selectedNodes = useMemo(() => nodes.filter((node) => node.selected), [nodes]);
   const ids = useMemo(() => selectedNodeIds(nodes), [nodes]);
   // Every selected node a scene with a shot rendering: nothing to delete yet
-  // (GM, PR #198 r3 item 1). With others selected, Delete takes the rest.
+  // (design, PR #198). With others selected, Delete takes the rest.
   const sceneHeld = useGraphStore((state) => sceneDeleteDisabledTitle(state, ids));
   const outputCount = useMemo(
     () => collectDownloadableOutputs(selectedNodes).length,
@@ -80,8 +80,8 @@ export function SelectionToolbar() {
   const settingsLoaded = useUIStore((s) => s.settingsCache.loaded);
   // A node that can't run without its key (a keyed route's missing key), the
   // selection's or one feeding it: Run is locked with its line as the reason
-  // (GM, PR #203 r4), aria-disabled so it keeps its focus and tooltip, and the
-  // scope line it reads out is that line (r6 item 3).
+  // (design, PR #203), aria-disabled so it keeps its focus and tooltip, and
+  // the scope line it reads out is that line.
   const keyLock = useMemo(() => runKeyLockLine(nodes, edges ?? [],
     ids.length === 1 ? { kind: 'node', nodeId: ids[0] } : { kind: 'cluster', nodeIds: ids },
     { loaded: settingsLoaded, apiKeys }), [nodes, edges, ids, settingsLoaded, apiKeys]);
@@ -93,9 +93,9 @@ export function SelectionToolbar() {
   const sizeRefs = runScope.cost?.sizeRefs;
   useEffect(() => { if (sizeRefs?.length) requestSizes(sizeRefs); }, [sizeRefs, requestSizes]);
   const runChip = runChipLabel(runScope);
-  // GM r25 (3) on PR #199: while kept, Ask and Note say one line on any
-  // node (saving unlocks both). GM r26 (4): on a normal tab a duplicated or
-  // pasted node keeps a tab-local id until the project is next opened, so a
+  // Design, PR #199: while kept, Ask and Note say one line on any node
+  // (saving unlocks both). Design: on a normal tab a duplicated or pasted
+  // node keeps a tab-local id until the project is next opened, so a
   // selection holding one locks both with their own lines (lib/canvasLock
   // TAB_LOCAL_LINES). STOPGAP: the bulk-create PR deletes `tabLocal`. Note
   // always shows for one node, locked or not, so the bar never shifts when
@@ -104,7 +104,7 @@ export function SelectionToolbar() {
   const showNote = ids.length === 1;
   const runScopeId = useId();
   // The missing key first, then the run lock's line (run, following,
-  // offline): withKeyLock, one order for every Run (GM, PR #203 r11 item 3).
+  // offline): withKeyLock, one order for every Run (design, PR #203).
   const runProps = withKeyLock(runLocked(isExecuting || runStarting,
     itOrThem(ids.length, RUN_LOCK_VERBS.runIt, RUN_LOCK_VERBS.runThem),
     { title: `Run selected nodes. ${describeRunScope(runScope)}`, kept: 'run-nodes' }), keyLock, runScopeId);
@@ -115,7 +115,7 @@ export function SelectionToolbar() {
   useEffect(() => () => {
     if (focusTimer.current !== null) window.clearTimeout(focusTimer.current);
   }, []);
-  // GM r35 on PR #199: the toolbar never covers the selection (below the top
+  // Design, PR #199: the toolbar never covers the selection (below the top
   // stack, else flipped below the selection, else pinned; the camera never
   // moves: lib/bottomBar placeSelectionToolbar). Placed again whenever the
   // selection, the camera, the window or the top stack changes.
@@ -190,7 +190,7 @@ export function SelectionToolbar() {
 
   function removeSelection() {
     // A World Labs hold refuses, with its notice; otherwise it deletes at
-    // once and says "Deleted {n} nodes." with Undo (GM, 2026-10-23).
+    // once and says "Deleted {n} nodes." with Undo (design, 2026-10-23).
     if (useGraphStore.getState().allowCanvasDelete(ids)) deleteSelected();
   }
 

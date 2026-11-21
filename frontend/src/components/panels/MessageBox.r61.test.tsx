@@ -15,9 +15,9 @@ import { RequestFailedError } from '../../lib/errorCopy';
 import type { ChannelListener, ThreadRow } from '../../lib/personThread';
 import { NOT_CONNECTED_LINE } from '../../lib/personThreadBox';
 
-/** GM - Design r61 on #225: A (the run's fold), B (the locked look's
- * attributes; its CSS is tests/messageBoxLog.r61.test.tsx), 3 (session
- * names) and 4 (answered questions, answering from the composer). */
+/** Design, PR #225: the run's fold, the locked look's attributes (its CSS is
+ * tests/messageBoxLog.r61.test.tsx), session names and answered questions
+ * (answering from the composer). */
 
 const CLAUDE = { id: 'a1', name: 'Claude', color: '#E8825A', verified: true };
 const KEY = '0123456789ab';
@@ -72,7 +72,7 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe('r61 A: the working status row is the run’s fold header', () => {
+describe('The working status row is the run’s fold header', () => {
   it('while working, "› Claude is working · …" is the last row and opens to that run’s actions', () => {
     const at = Date.now() - 5_000;
     usePersonThreadStore.setState({ listeners: [listener()], activity: { [KEY]: { at: Date.now() - 500, line: 'Cooler sky' } } });
@@ -129,7 +129,7 @@ describe('r61 A: the working status row is the run’s fold header', () => {
   });
 });
 
-describe('r61 B: the locked composer', () => {
+describe('The locked composer', () => {
   it('locked: the row is marked locked; the field stays focusable, aria-disabled, described by the line', () => {
     render(<AgentLog />);
     const box = field();
@@ -149,7 +149,7 @@ describe('r61 B: the locked composer', () => {
   });
 });
 
-describe('r61 answer 3: a session by its cursor label', () => {
+describe('A session by its cursor label', () => {
   it('"Waiting for Claude · 2", then "Claude · 2 is working · …"', () => {
     usePersonThreadStore.setState({ listeners: [listener({ listenerId: 'ch_2', sessionKey: KEY2, session: TWO })] });
     receiveSync('p1', [message({ to: { listenerId: 'ch_2', agent: CLAUDE, session: TWO, sessionKey: KEY2 } })]);
@@ -192,7 +192,7 @@ function openSet(questions: { id: string; text: string; options: string[]; multi
   receiveSync('p1', [{ id: 'q', kind: 'question', at: Date.now(), questionId: 'q1', agent: CLAUDE, questions }]);
 }
 
-describe('r61 answer 4: questions', () => {
+describe('Questions', () => {
   const PALETTE = { id: 'x', text: 'Use the same palette on the other three shots?', options: ['All three', 'Only this one'], multiple: false, allowText: false };
 
   it('answered: the buttons go, a quiet "You chose “Only this one”." stays', () => {

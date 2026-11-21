@@ -24,7 +24,7 @@ import {
   withdrawnLine,
 } from '../../lib/personThreadBox';
 
-/** GM r89 on #225 review 2 (items 1, 3, 4, 5) and review 2's LOW-3 and LOW-4 (F4, F5, F13). */
+/** Design, PR #225. */
 
 const CLAUDE = { id: 'a1', name: 'Claude', color: '#E8825A', verified: true };
 const CLAUDE_CODE = { ...CLAUDE, name: 'Claude Code' };
@@ -99,8 +99,8 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('r89.1: the pill, the badge and the announcement agree on what counts as a reply', () => {
-  it('panel closed: a reply and a pin answer count and are spoken; the person’s echo, a pin, a question, a proposal, a note don’t (F5)', () => {
+describe('The pill, the badge and the announcement agree on what counts as a reply', () => {
+  it('panel closed: a reply and a pin answer count and are spoken; the person’s echo, a pin, a question, a proposal, a note don’t', () => {
     useUIStore.setState({ agentLogOpen: false });
     receiveSync('p1', [{ id: 'm0', kind: 'message', at: 1, text: 'hi' }]);
     const store = usePersonThreadStore.getState;
@@ -126,7 +126,7 @@ describe('r89.1: the pill, the badge and the announcement agree on what counts a
     expect(usePersonThreadStore.getState().unread).toBe(2);
   });
 
-  it('F4: replies a sync brings while the panel is open are read, never unread', () => {
+  it('replies a sync brings while the panel is open are read, never unread', () => {
     useUIStore.setState({ agentLogOpen: true });
     receiveSync('p1', [{ id: 'm0', kind: 'message', at: 1, text: 'hi' }]);
     receiveSync('p1', [{ id: 'm0', kind: 'message', at: 1, text: 'hi' }, ...rowsOfEveryKind(1_000)]);
@@ -147,7 +147,7 @@ describe('r89.1: the pill, the badge and the announcement agree on what counts a
   });
 });
 
-describe('review 2, LOW-3: a reply’s own say never becomes the working line, double spaces too', () => {
+describe('A reply’s own say never becomes the working line, double spaces too', () => {
   it('"Made  it warmer. Next." and its say "Made it warmer."', () => {
     receiveSync('p1', [{ id: 'r1', kind: 'reply', at: 1_000, text: 'Made  it warmer. Next.', nodeId: 'n1', agent: CLAUDE,
       session: SESSION, sessionKey: KEY }]);
@@ -159,7 +159,7 @@ describe('review 2, LOW-3: a reply’s own say never becomes the working line, d
   });
 });
 
-describe('r89.3: the question went while the person typed its answer', () => {
+describe('The question went while the person typed its answer', () => {
   function startAnswering(words = 'the warm one') {
     usePersonThreadStore.setState({ listeners: [listener()] });
     useAgentQuestionsStore.setState({ sets: { q1: { answerKey: 'k', view: setView('q1') } } });
@@ -243,7 +243,7 @@ describe('r89.3: the question went while the person typed its answer', () => {
     expect(usePersonThreadStore.getState().answerGone).toBeNull();
   });
 
-  it('F13 (GM r94.1): a set that dropped out of the store holds the first Enter with a line that claims no cause', async () => {
+  it('a set that dropped out of the store holds the first Enter with a line that claims no cause', async () => {
     startAnswering();
     act(() => useAgentQuestionsStore.getState().synced([]));
     expect(screen.queryByRole('button', { name: 'Stop answering' })).toBeNull();
@@ -260,7 +260,7 @@ describe('r89.3: the question went while the person typed its answer', () => {
     expect(describedText(field())).not.toContain(GONE_ELSEWHERE_LINE);
   });
 
-  it('F13: an answer whose set went from the store as it was sent holds the same way', async () => {
+  it('an answer whose set went from the store as it was sent holds the same way', async () => {
     startAnswering();
     apiRequest.mockImplementationOnce(async () => {
       useAgentQuestionsStore.getState().synced([]);
@@ -285,7 +285,7 @@ describe('r89.3: the question went while the person typed its answer', () => {
   });
 });
 
-describe('r89.4: the field names the agent as its rows and lock line do', () => {
+describe('The field names the agent as its rows and lock line do', () => {
   it('ready, stopped, not connected, offline', () => {
     usePersonThreadStore.setState({ listeners: [listener({ agent: CLAUDE_CODE })] });
     const { unmount } = render(<AgentLog />);
@@ -316,7 +316,7 @@ describe('r89.4: the field names the agent as its rows and lock line do', () => 
   });
 });
 
-describe('r89.5: the working fold cuts at a word and keeps its closing quote', () => {
+describe('The working fold cuts at a word and keeps its closing quote', () => {
   const rangeRect = Object.getOwnPropertyDescriptor(Range.prototype, 'getBoundingClientRect');
 
   /** 6 px a character; the fold's words have `room` px with whatever tail shows after them. */

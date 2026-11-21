@@ -20,9 +20,9 @@ export interface ChatModelPickerProps {
   agent: ChatAgentId;
   /** The person's own agents that are ready to start (Settings > Personal agents). */
   personalAgents?: PersonalAgent[];
-  /** PR #204 round 14 (GM r23 answer 6): the tab isn't connected as the person, past the held
-   * rule's 150 ms (usePersonView held). The person's own agents aren't listed, as on a tab that
-   * never connected (Settings > Personal agents does the same). */
+  /** Design, PR #204: the tab isn't connected as the person, past the held rule's 150 ms
+   * (usePersonView held). The person's own agents aren't listed, as on a tab that never
+   * connected (Settings > Personal agents does the same). */
   agentsHeld?: boolean;
   model: string | null;
   effort: string | null;
@@ -44,10 +44,10 @@ export function ChatModelPicker({ agent, personalAgents = [], agentsHeld = false
   onAgentChange, onModelChange, onEffortChange, onRetry }: ChatModelPickerProps) {
   const personal = isPersonalAgent(agent)
     ? personalAgents.find((item) => `personal:${item.id}` === agent) ?? null : null;
-  // GM r23 answer 6: on a tab that isn't connected as the person (held, demoted, or a stored
-  // token the backend no longer takes) the picker says why its agents aren't listed, under its
-  // heading. The person's words for them are "your agents" (Settings > Personal agents, "Your own
-  // agent" here). Offline comes first (answer 3): offline, only the offline notice shows.
+  // Design: on a tab that isn't connected as the person (held, demoted, or a stored token the
+  // backend no longer takes) the picker says why its agents aren't listed, under its heading. The
+  // person's words for them are "your agents" (Settings > Personal agents, "Your own agent"
+  // here). Offline comes first: offline, only the offline notice shows.
   const agentsLock = usePersonLock('pick your agents');
   const [open, setOpen] = useState(false);
   const [anchor, setAnchor] = useState({ x: 8, y: 8 });
@@ -99,8 +99,9 @@ export function ChatModelPicker({ agent, personalAgents = [], agentsHeld = false
     : selected?.label ?? model ?? (loading ? 'Loading models…' : 'Choose model');
   const effortLabel = effort ? offeredEffort?.label ?? 'Unavailable effort'
     : defaultEffort ? aside(defaultEffort.label, 'default') : 'CLI default';
-  // The backend's line for the code (services/chat_models.py), which ends in "try again" beside the Try again button
-  // (design). These are the lines when the catalog came with none.
+  // The backend's line for the code (services/chat_models.py), which ends in
+  // "try again" beside the Try again button (design). These are the lines when
+  // the catalog came with none.
   const unavailable = error ?? current?.error?.message ?? (ready && !models.length
     ? `Nebula couldn’t find any models in ${provider.label}. Try again.`
     : 'Nebula couldn’t get the model list. Try again.');
@@ -176,9 +177,9 @@ export function ChatModelPicker({ agent, personalAgents = [], agentsHeld = false
           aria-pressed={agent === item.id} onClick={() => { if (item.id !== agent) onAgentChange(item.id); }}>
           {item.label}
         </button>)}
-        {/* Round 18b (CI): the line and the list go together. The line shows the moment the tab is
-            held (usePersonLock), while agentsHeld waits the held rule's 150 ms: without its own
-            check there were 150 ms where the line said the agents weren't listed and they were. */}
+        {/* The line and the list go together. The line shows the moment the tab is held
+            (usePersonLock), while agentsHeld waits the held rule's 150 ms: without its own check
+            there were 150 ms where the line said the agents weren't listed and they were. */}
         {(agentsHeld || agentsLock.shown ? [] : personalAgents).filter((item) => item.status === 'ready').map((item) => {
           const id: ChatAgentId = `personal:${item.id}`;
           return <button key={id} type="button" data-chat-provider={id} aria-pressed={agent === id}

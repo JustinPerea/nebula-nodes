@@ -16,7 +16,7 @@ import type { AgentPresenceEvent } from '../../lib/wsClient';
 import type { ChannelListener, ThreadRow } from '../../lib/personThread';
 import { QUESTION_CLOSED_LINE, foldActions, withdrawnLine } from '../../lib/personThreadBox';
 
-/** GM r79 on #225 (items 1-6) and review 1's frontend LOWs. */
+/** Design, PR #225: the message box checks. */
 
 const CLAUDE = { id: 'a1', name: 'Claude', color: '#E8825A', verified: true };
 const KEY = '0123456789ab';
@@ -97,7 +97,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('r79.1: a reply’s own cursor say is never an action', () => {
+describe('a reply’s own cursor say is never an action', () => {
   it('foldActions leaves the echo out; another say from the session still folds', () => {
     const at = 10_000;
     const rows = [message({ at: 1_000 }), reply(at)];
@@ -127,7 +127,7 @@ describe('r79.1: a reply’s own cursor say is never an action', () => {
   });
 });
 
-describe('r79.2: the working line is the say, else the did line, never a terse form', () => {
+describe('the working line is the say, else the did line, never a terse form', () => {
   it('activityLine', () => {
     expect(activityLine(presence({ say: 'Cooler sky' }))).toEqual({ line: 'Cooler sky', nebula: false });
     expect(activityLine(presence({ say: 'changed 1', log: 'Changed “Prompt” on “Hero shot”' }))).toEqual({ line: 'Changed “Prompt” on “Hero shot”', nebula: true });
@@ -149,7 +149,7 @@ describe('r79.2: the working line is the say, else the did line, never a terse f
   });
 });
 
-describe('r79.3: every deliberate wake gets the working fold under it', () => {
+describe('every deliberate wake gets the working fold under it', () => {
   it('a pin note row', () => {
     const at = Date.now() - 5_000;
     usePersonThreadStore.setState({ listeners: [listener()], activity: { [KEY]: { at: Date.now() - 300, line: 'Cooler sky' } } });
@@ -195,7 +195,7 @@ describe('r79.3: every deliberate wake gets the working fold under it', () => {
   });
 });
 
-describe('r79.4: the new-row pill', () => {
+describe('the new-row pill', () => {
   it('names the newest unseen agent row and jumps to it; never for the person’s own rows', () => {
     const at = Date.now() - 50_000;
     receiveSync('p1', [message({ at, state: 'accepted' })]);
@@ -218,7 +218,7 @@ describe('r79.4: the new-row pill', () => {
     expect(screen.getByRole('button', { name: 'New note' })).toBeTruthy();
   });
 
-  it('a narrowing window keeps a bottom-read thread at the bottom (live-ux L2)', () => {
+  it('a narrowing window keeps a bottom-read thread at the bottom', () => {
     receiveSync('p1', [message()]);
     render(<AgentLog />);
     const thread = document.querySelector<HTMLElement>('.message-box__thread')!;
@@ -234,7 +234,7 @@ describe('r79.4: the new-row pill', () => {
   });
 });
 
-describe('r79.5: the answer is kept with the question', () => {
+describe('the answer is kept with the question', () => {
   it('after a reload with no set in the store, the row reads its outcome; unknown reads closed, no buttons', () => {
     receiveSync('p1', [
       questionRow('q1', 1_000, [PICK], { outcome: { status: 'answered', closedAt: 2_000, answers: [{ questionId: 'x', choices: ['Only this one'], text: null }] } }),
@@ -248,7 +248,7 @@ describe('r79.5: the answer is kept with the question', () => {
   });
 });
 
-describe('r79.6: withdrawn mid-typing', () => {
+describe('withdrawn mid-typing', () => {
   it('the chip goes, the draft stays, the line says what the next send does', () => {
     usePersonThreadStore.setState({ listeners: [listener()] });
     useAgentQuestionsStore.setState({ sets: { q1: { answerKey: 'k', view: setView('q1', [TYPED]) } } });
@@ -283,8 +283,8 @@ describe('r79.6: withdrawn mid-typing', () => {
   });
 });
 
-describe('review 1 LOWs', () => {
-  it('LOW-3: a reply that landed while the socket was down counts as unread', () => {
+describe('small message box fixes', () => {
+  it('a reply that landed while the socket was down counts as unread', () => {
     useUIStore.setState({ agentLogOpen: false });
     receiveSync('p1', [message()]);
     receiveSync('p1', [message(), reply(Date.now())]);
@@ -294,7 +294,7 @@ describe('review 1 LOWs', () => {
     expect(usePersonThreadStore.getState().unread).toBe(0);
   });
 
-  it('F10/F11: "Answer" from the composer only for one question with no options', () => {
+  it('"Answer" from the composer only for one question with no options', () => {
     usePersonThreadStore.setState({ listeners: [listener()] });
     useAgentQuestionsStore.setState({ sets: {
       a: { answerKey: 'k', view: setView('a', [PICK]) },
@@ -307,7 +307,7 @@ describe('review 1 LOWs', () => {
     expect(useAgentQuestionsStore.getState().formId).toBe('b');
   });
 
-  it('F12/F6: the You row never raises the pill, and a set shows one You row', () => {
+  it('the You row never raises the pill, and a set shows one You row', () => {
     const at = Date.now() - 50_000;
     const answered = { answerKey: undefined, view: setView('q1', [TYPED], { status: 'answered', closedAt: at + 5_000,
       answers: [{ questionId: 'x', answered: true, choices: [], text: 'warm' }] }) };
@@ -319,7 +319,7 @@ describe('review 1 LOWs', () => {
     expect(document.querySelector('.message-box__pill')).toBeNull();
   });
 
-  it('NIT-4: a reply clears only the message it followed and those before it', async () => {
+  it('a reply clears only the message it followed and those before it', async () => {
     const { repliedAfter } = await import('../../lib/personThreadBox');
     const first = message({ id: 'a', at: 1_000 });
     const second = message({ id: 'b', at: 2_000 });
@@ -328,10 +328,10 @@ describe('review 1 LOWs', () => {
     expect(repliedAfter(second, [first, second, answer])).toBe(false);
     expect(repliedAfter(second, [first, second, reply(3_000, { replyTo: 'b' })])).toBe(true);
     expect(repliedAfter(first, [first, reply(3_000, { replyTo: null })])).toBe(false);
-    expect(repliedAfter(first, [first, reply(3_000)])).toBe(true);  // a row from before round 3
+    expect(repliedAfter(first, [first, reply(3_000)])).toBe(true);  // a row from before replies carried replyTo
   });
 
-  it('NIT-2: the cut keeps a closing bracket whose opener it keeps', async () => {
+  it('the cut keeps a closing bracket whose opener it keeps', async () => {
     const { cutAtWord } = await import('../../lib/personThreadBox');
     expect(cutAtWord('Use (see n4) for the base, please', (c) => c.length <= 14)).toBe('Use (see n4)…');
     expect(cutAtWord('Hello, world and more', (c) => c.length <= 7)).toBe('Hello…');

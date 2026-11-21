@@ -18,11 +18,11 @@ import '../styles/noticeRegion.css';
 export type NoticeRegionScreen = 'canvas' | 'studio' | 'home';
 
 /**
- * The app's one notice region (GM - Design, 2026-10-23): "Put notices in one
+ * The app's one notice region (design, 2026-10-23): "Put notices in one
  * app-level region above every panel (above layer 10), bottom-centre,
  * sitting just above the bottom bar ... A notice with an action never sits
  * under anything, and the region never takes pointer events outside its
- * notices." Round 2: the proposal bar stacks above the notices, and "One
+ * notices." The proposal bar stacks above the notices, and "One
  * region, one stack, and nothing else draws toasts."
  *
  * App mounts it once, on every screen, beside the screens: outside
@@ -35,35 +35,36 @@ export type NoticeRegionScreen = 'canvas' | 'studio' | 'home';
  * notice's written lines, Projects (and the brand demo) only toasts, so a
  * canvas notice set there waits for the workspace, as before.
  *
- * The band: an empty box the tallest single notice (three lines, GM r13 2 of
- * PR #204) plus its gap tall, on the notices' bottom line, always there. Floating panels stop above it whether or not a notice
- * shows (lib/bottomBar.ts floatingBottomLimit; GM: "The panels never move
- * when a notice comes or goes, and a notice never covers Run / Duplicate /
- * Delete").
+ * The band: an empty box the tallest single notice (three lines, PR #204)
+ * plus its gap tall, on the notices' bottom line, always there. Floating
+ * panels stop above it whether or not a notice shows (lib/bottomBar.ts
+ * floatingBottomLimit; design: "The panels never move when a notice comes or
+ * goes, and a notice never covers Run / Duplicate / Delete").
  *
- * GM r25 (PR #200 fix round 16): it is its own child of <body>, on a layer
- * above every dialog's backdrop, so a modal that hides the page behind it
- * (inert) never hides the notices, and a click on one never reaches a
- * backdrop. lib/modalFocus.ts makes it the open dialog's second focus region,
- * and (fix round 18, GM r27) gives Escape on a notice one rule everywhere.
+ * Design, PR #200: it is its own child of <body>, on a layer above every
+ * dialog's backdrop, so a modal that hides the page behind it (inert) never
+ * hides the notices, and a click on one never reaches a backdrop.
+ * lib/modalFocus.ts makes it the open dialog's second focus region, and gives
+ * Escape on a notice one rule everywhere.
  *
- * GM r13 (2), PR #204 round 9: while a capped popover is open (lib/noticeWaiting), the band
- * shows only the newest item; the others wait (marked `data-notice-waiting`, drawn as nothing)
- * and come back when it goes or the popover closes. The region keeps each item's arrival, by
- * the element its slot gained.
+ * Design, PR #204: while a capped popover is open (lib/noticeWaiting),
+ * the band shows only the newest item; the others wait (marked
+ * `data-notice-waiting`, drawn as nothing) and come back when it goes or
+ * the popover closes. The region keeps each item's arrival, by the
+ * element its slot gained.
  */
 /**
- * Keeps the stack placed (lib/noticeStackPlace.ts; GM - Design, PR #216 r3):
- * beside the docked Agent log or, under 400 px of room, above it as one
- * stack, and the proposal card's height cap. Measured again whenever any of
- * its inputs moves: the region or the stack resizing (a notice comes or goes,
- * the card grows), the app's top bars resizing (the selection toolbar), the
- * root's variables (the log docking, moving or being dragged, the bottom
- * bar), the region's own bottom transition ending, and window resizes.
+ * Keeps the stack placed (lib/noticeStackPlace.ts; design, PR #216): beside
+ * the docked Agent log or, under 400 px of room, above it as one stack, and
+ * the proposal card's height cap. Measured again whenever any of its inputs
+ * moves: the region or the stack resizing (a notice comes or goes, the card
+ * grows), the app's top bars resizing (the selection toolbar), the root's
+ * variables (the log docking, moving or being dragged, the bottom bar), the
+ * region's own bottom transition ending, and window resizes.
  */
 function useStackPlace(regionRef: RefObject<HTMLDivElement | null>, stackRef: RefObject<HTMLDivElement | null>): () => void {
-  // The person unfolded the "more notices" row (GM r5 3); it folds again on
-  // its next click, or once the notices fit above the card.
+  // The person unfolded the "more notices" row; it folds again on its
+  // next click, or once the notices fit above the card.
   const expanded = useRef(false);
   const replace = useRef<() => void>(() => {});
   useLayoutEffect(() => {
@@ -78,17 +79,17 @@ function useStackPlace(regionRef: RefObject<HTMLDivElement | null>, stackRef: Re
       resized.observe(element);
     };
     let last: { place: StackPlace; logTop: number; floatTop: number } | null = null;
-    // GM r57 Q1: while the person holds a floating log in a drag, it rises
+    // Design: while the person holds a floating log in a drag, it rises
     // above the card and the stack holds still (no glide, no chasing); at
     // the drop it places once, on the layout spring.
     let held = false;
-    // GM r69 Q3: the region's sides as last placed, frozen inline for the
+    // Design: the region's sides as last placed, frozen inline for the
     // whole drag: a drag off the dock clears the log's clearance at once
     // (AgentLog), and the card would re-centre mid-drag with no spring. The
     // drop's place lifts them for its measure and writes its own (an inset,
     // or none: setInset), so nothing needs putting back.
     let sides: { left: number; right: number } | null = null;
-    // GM r69 Q5: from the drop, the log stays above the card until the
+    // Design: from the drop, the log stays above the card until the
     // card's glide rests; then the stacking drops back.
     let settling: ReturnType<typeof setTimeout> | null = null;
     const root = document.documentElement;
@@ -127,9 +128,8 @@ function useStackPlace(regionRef: RefObject<HTMLDivElement | null>, stackRef: Re
         root.setAttribute(LOG_SETTLING_ATTR, '');
       }
       // A layout switch (above the log or back, the log moved) lands with no
-      // spring; a notice coming or going keeps it (review 2 MEDIUM-1, GM r4);
-      // a give-way step glides from where each row was (GM r5).
-      // Review 3 MEDIUM-3: once a glide ends, it places again from where the
+      // spring; a notice coming or going keeps it; a give-way step glides from
+      // where each row was. Once a glide ends, it places again from where the
       // rows came to rest (a notice left showing as the card goes).
       const inFlight = applyNoticeStack(region, stack, next.place, stackJumps(last, next), dropped || stepChanged(last?.place ?? null, next.place), settled);
       // Nothing glides (reduced motion, nothing moved, or a newer place took
@@ -142,7 +142,7 @@ function useStackPlace(regionRef: RefObject<HTMLDivElement | null>, stackRef: Re
       const box = region.getBoundingClientRect();
       sides = { left: box.left, right: window.innerWidth - box.right };
       last = next;
-      // Step 4 (GM r7): the log collapses to its header for the card, and
+      // The log collapses to its header for the card, and
       // reopens when the card leaves; uiStore never undoes the person's own.
       useUIStore.getState().holdAgentLogForCard(next.place.collapse, next.place.mode !== null);
     }
@@ -150,7 +150,7 @@ function useStackPlace(regionRef: RefObject<HTMLDivElement | null>, stackRef: Re
       expanded.current = !expanded.current;
       place();
     };
-    // The same toggle for the count an Undo notice's row carries (GM r8).
+    // The same toggle for the count an Undo notice's row carries.
     setNoticeMoreToggle(() => replace.current());
     watch(region);
     watch(stack);
@@ -188,8 +188,8 @@ export function NoticeRegion({ screen }: { screen: NoticeRegionScreen }) {
     name, (element: HTMLDivElement | null) => setNoticeSlot(name, element),
   ])) as Record<NoticeSlot, (element: HTMLDivElement | null) => void>, []);
 
-  // GM r27 item 1: Escape on a notice closes that notice, in every dialog.
-  // Review 15 LOW-B: a replaced notice's focus goes back into the open dialog.
+  // Escape on a notice closes that notice, in every dialog. A replaced
+  // notice's focus goes back into the open dialog.
   const regionRef = useRef<HTMLDivElement>(null);
   const stackRef = useRef<HTMLDivElement>(null);
   const toggleMore = useStackPlace(regionRef, stackRef);
@@ -200,7 +200,7 @@ export function NoticeRegion({ screen }: { screen: NoticeRegionScreen }) {
     return () => { window.removeEventListener('keydown', noticeKeys, true); stopKeeping(); };
   }, []);
 
-  // PR #204 round 18 (GM r28 2): centred above the bar, clear of any open side panel
+  // PR #204: centred above the bar, clear of any open side panel
   // (lib/noticeSides.ts), measured only while a notice shows.
   useEffect(() => {
     const region = regionRef.current;
@@ -240,13 +240,13 @@ export function NoticeRegion({ screen }: { screen: NoticeRegionScreen }) {
   return createPortal(
     <div ref={regionRef} className="notice-region" data-notice-region="">
       <div className="notice-region__band" data-notice-band="" aria-hidden="true" />
-      {/* Round 3l (GM r69 a): what a decision did, said politely (lib/noticeSay.ts).
-          A live region with no role: the notices own the region's statuses. */}
+      {/* Design: what a decision did, said politely (lib/noticeSay.ts). A live
+          region with no role: the notices own the region's statuses. */}
       <div className="notice-region__say" aria-live="polite" aria-atomic="true" {...{ [SAY_ATTR]: '' }} />
       <div ref={stackRef} className="notice-region__stack">
-        {/* GM r5 3: the older notices folded into one row when there is no
-            room above the card for them all; its words and aria-expanded
-            are written with the place (lib/noticeStackPlace.ts). */}
+        {/* The older notices folded into one row when there is no room
+            above the card for them all; its words and aria-expanded are
+            written with the place (lib/noticeStackPlace.ts). */}
         <button type="button" className="notice-region__more" {...{ [MORE_ATTR]: '' }} hidden onClick={toggleMore} />
         {NOTICE_SLOTS.map((name) => (
           <div key={name} ref={refs[name]} className="notice-region__slot" data-notice-slot={name} />

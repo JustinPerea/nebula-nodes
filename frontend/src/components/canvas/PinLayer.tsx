@@ -27,10 +27,10 @@ function prefersReducedMotion(): boolean {
 function PinBadge({ pin, slot, zoom }: { pin: Pin; slot: number; zoom: number }) {
   const store = useStoreApi<Node<NodeData>>();
   const remove = useCanvasPinsStore((s) => s.remove);
-  // Round 23 (review 22, M-1): Delete note is a pin write, refused while
-  // following or offline (the store gates it too); opening a note only looks.
+  // Delete note is a pin write, refused while following or offline (the store
+  // gates it too); opening a note only looks.
   const lock = useCanvasLock();
-  // PR #204 round 10 (GM r15): deleting a note is the person's alone (DELETE /api/canvas/pins:
+  // Design, PR #204: deleting a note is the person's alone (DELETE /api/canvas/pins:
   // require_person), so Delete locks through the one lock, its line under it.
   const deleteLock = usePersonLock('delete notes');
   const wrapRef = useRef<HTMLDivElement | null>(null);

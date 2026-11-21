@@ -6,13 +6,13 @@ import { heldProposalLine, heldQuestionsLine } from '../../store/heldAssetPropos
 import { heldAsks } from './agentNeedsYou';
 
 /**
- * One rule for "this tab can't act on that ask yet" (GM, #204 r3 item 2; r5 item 2), used
- * by every surface that offers it: the Agents panel's Needs-you rows, an Update's own Review
- * or Answer button in the opened list and on its arrival card, and an open proposal's
- * Accept and Reject. A tab not confirmed as the person (held, demoted, or not answered yet)
- * keeps those where they are, greyed, with the lock reason as their tooltip, and they turn
- * on at the promote. Nothing moves. `holdsAskIn` is what the counts read: which asks this
- * tab knows only from their Updates.
+ * One rule for "this tab can't act on that ask yet" (design, PR #204), used by every surface
+ * that offers it: the Agents panel's Needs-you rows, an Update's own Review or Answer button
+ * in the opened list and on its arrival card, and an open proposal's Accept and Reject. A
+ * tab not confirmed as the person (held, demoted, or not answered yet) keeps those where
+ * they are, greyed, with the lock reason as their tooltip, and they turn on at the promote.
+ * Nothing moves. `holdsAskIn` is what the counts read: which asks this tab knows only from
+ * their Updates.
  */
 
 type Sets = Readonly<Record<string, { answerKey?: string | null }>>;
@@ -29,7 +29,7 @@ export { useLockPending, useTabHeld };
 
 /** The lock reason for an Update's ask while this tab isn't confirmed as the person, or null
  * when it can act on it (or the Update asks nothing). Every open ask locks, held or synced:
- * a demoted tab keeps the proposals it synced listed, but can't open them (GM r5 2b). */
+ * a demoted tab keeps the proposals it synced listed, but can't open them (design). */
 export function heldLockFor(note: AgentNote, tabHeld = true): string | null {
   if (!tabHeld) return null;
   const verb = heldVerbFor(note);
@@ -39,7 +39,7 @@ export function heldLockFor(note: AgentNote, tabHeld = true): string | null {
 
 const ANSWER = 'answer this';
 const REVIEW = 'review this';
-/** The lock verb for an Update's open ask (PR #204 round 10: the line comes from the one lock,
+/** The lock verb for an Update's open ask (PR #204: the line comes from the one lock,
  * components/PersonLock), or null when it asks nothing. */
 export function heldVerbFor(note: AgentNote): typeof ANSWER | typeof REVIEW | null {
   const [ask] = heldAsks([note], () => false);
@@ -54,7 +54,7 @@ export function useHeldLock(note: AgentNote): string | null {
   return heldLockFor(note, useTabHeld());
 }
 
-/** An Update's lock through the one lock (PR #204 round 10): its Review or Answer is
+/** An Update's lock through the one lock (PR #204): its Review or Answer is
  * aria-disabled with the line under the buttons, no tooltip. */
 export function useNoteLock(note: AgentNote): PersonLock {
   const verb = heldVerbFor(note);

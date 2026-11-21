@@ -40,7 +40,7 @@ export function PaperSourceNode({ id, data, selected }: NodeProps) {
   const source = nodeData.params._paperSource as PaperSourceRecord | undefined;
   const applyPaperSource = useGraphStore((state) => state.applyPaperSource);
   const [busy, setBusy] = useState<'selection' | 'export' | null>(null);
-  const lock = useCanvasLock(); // offline or following (GM round 22, A)
+  const lock = useCanvasLock(); // offline or following
   const readOnly = lock.locked;
   const [selection, setSelection] = useState<PaperSelection | null>(null);
   const [objectId, setObjectId] = useState('');
@@ -169,9 +169,9 @@ export function PaperSourceNode({ id, data, selected }: NodeProps) {
     : source?.state === 'unavailable' ? 'Paper unavailable'
     : source ? 'Connected' : 'Not linked';
   const lastGood = Boolean(snapshot && source?.state !== 'current');
-  // This session's line, else the record's: its line (lastErrorPerson,
-  // round 3e) or, for a record saved before it, GM's general line with the
-  // text agents read behind Details. lastError itself is never the line.
+  // This session's line, else the record's: its line (lastErrorPerson) or,
+  // for a record saved before it, the design's general line with the text
+  // agents read behind Details. lastError itself is never the line.
   const recordLine = source?.lastError
     ? oneLine({ heading: REFRESH_HEADING, reason: source.lastErrorPerson || refusedFallbackCopy() })
     : '';
@@ -247,7 +247,7 @@ export function PaperSourceNode({ id, data, selected }: NodeProps) {
       {displayedError && <p className="paper-source-node__error" role="alert"><LineText text={displayedError} />{snapshot && ' Last good artwork retained.'}</p>}
       {recordDetails && <ErrorDetails raw={recordDetails} className="paper-source-node__error-details nodrag nowheel" />}
       {notice && <p className="paper-source-node__note" role="status"><LineText text={notice} /></p>}
-      {/* The node's run error (error copy round 3e), apart from the source's own refresh and link errors above. */}
+      {/* The node's run error (error copy), apart from the source's own refresh and link errors above. */}
       <NodeRunError data={nodeData} className="paper-source-node__run-error nodrag nopan" />
       <p className="paper-source-node__note">Refresh exports artwork only. Run the saved recipe separately.</p>
       {source && source.snapshots.length > 0 && (

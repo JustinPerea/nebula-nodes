@@ -83,7 +83,7 @@
 }
 
 /* On the preview's top edge: its bottom edge carries the app's notices (the
-   transport publishes its top edge, GM round 4b), and a readout under a
+   transport publishes its top edge, per the design), and a readout under a
    notice can't be read. */
 .editor-preview__hud {
   position: absolute;
@@ -91,7 +91,7 @@
   left: 50%;
   transform: translateX(-50%);
   /* The timecode and its "Rendered" tag are two spans: without a gap they
-     read "00:00:05:00Rendered" (GM, round 4b). */
+     read "00:00:05:00Rendered" (per the design). */
   display: flex;
   align-items: center;
   gap: 8px;

@@ -18,40 +18,39 @@ export function PromptDialog({ request, onDone, maxLength, cap, revealCounter = 
   /** Optional cap passed to the input (e.g. 280 for notes to agents). */
   maxLength?: number;
   /** A cap the field can't count itself (the note's: only what shows counts,
-   * PR #200 fix round 11). An edit that would pass it is refused whole, a
-   * paste too (never cut to fit), with the caret kept; a neutral "N left"
-   * shows under the field from `showAt` left, and at once, whatever is
-   * left, after a refused edit (GM r20 note 1 and its addendum). GM r23
-   * item 3: the next edit that leaves more than `showAt` hides it again, with
-   * the row's fade. GM r23 item 4: screen readers hear it politely at 30, 10
-   * and 0 left only (the visible counter is not a live region). */
+   * PR #200). An edit that would pass it is refused whole, a paste too (never
+   * cut to fit), with the caret kept; a neutral "N left" shows under the
+   * field from `showAt` left, and at once, whatever is left, after a refused
+   * edit (design). The next edit that leaves more than `showAt` hides it
+   * again, with the row's fade. Screen readers hear it politely at 30, 10 and
+   * 0 left only (the visible counter is not a live region). */
   cap?: { max: number; count: (value: string) => number; showAt: number };
-  /** Each change turns the counter on as a refused edit does (review 13
-   * NIT-3: the backend refused the note as too long). */
+  /** Each change turns the counter on as a refused edit does (the
+   * backend refused the note as too long). */
   revealCounter?: number;
-  /** Each change of the text (the note dialog keeps it: round 23 of PR #195). */
+  /** Each change of the text (the note dialog keeps it: PR #195). */
   onChange?: (value: string) => void;
   /** The OK button's state when something else decides it (the canvas lock's
    * `act()`: disabled, its marks and tooltip). Enter does nothing then. */
-  /** `aria-disabled` with `data-held-pending`: a lock in its first moment (GM r5 2a), which keeps
-   * the button's look and does nothing on a press. */
+  /** `aria-disabled` with `data-held-pending`: a lock in its first moment
+   * (design), which keeps the button's look and does nothing on a press. */
   confirm?: ActProps & { 'aria-disabled'?: true; 'data-held-pending'?: ''; 'aria-describedby'?: string; 'data-person-lock'?: string };
   /** Enter or OK pressed while `confirm` is disabled. */
   onRefused?: () => void;
-  /** A text that may run to several lines (the note for agents, fix round 1
-   * of PR #200, GM bug 2): a textarea that grows to about 4 lines, then
-   * scrolls; it opens with the caret at the end and nothing selected, so
-   * typing adds to a kept note instead of replacing it (review L-1). Enter
-   * sends, Shift+Enter starts a new line. */
+  /** A text that may run to several lines (the note for agents, design,
+   * PR #200): a textarea that grows to about 4 lines, then scrolls; it opens
+   * with the caret at the end and nothing selected, so typing adds to a kept
+   * note instead of replacing it. Enter sends, Shift+Enter starts a new
+   * line. */
   multiline?: boolean;
   /** The confirm button's words ("Send note" for the note). */
   confirmLabel?: string;
-  /** What the field's label shows, when more than `request.label` (GM r29
-   * item 1: the note dialog names its node). */
+  /** What the field's label shows, when more than `request.label`
+   * (design: the note dialog names its node). */
   heading?: ReactNode;
   /** The dialog's name for `heading` (its text, the node's full title). */
   headingLabel?: string;
-  /** A line under the buttons (PR #204 round 10: Send note's lock line, components/PersonLock). */
+  /** A line under the buttons (PR #204: Send note's lock line, components/PersonLock). */
   footer?: ReactNode;
   /** Where focus goes on close when nothing usable had it on open (a pointer
    *  opened the dialog with <body> active): never <body> (design). */
@@ -87,7 +86,7 @@ export function PromptDialog({ request, onDone, maxLength, cap, revealCounter = 
   }, [multiline]);
 
   // After a refused edit the counter shows whatever is left, until an edit
-  // leaves more than `showAt` (GM r23 item 3).
+  // leaves more than `showAt` (design).
   const [refused, setRefused] = useState(false);
   const [revealed, setRevealed] = useState(revealCounter);
   if (revealed !== revealCounter) {
@@ -111,7 +110,7 @@ export function PromptDialog({ request, onDone, maxLength, cap, revealCounter = 
       onChange?.(typed);
       return;
     }
-    // Over the cap: refused whole (GM r20 note 1), never cut to fit. React
+    // Over the cap: refused whole (design), never cut to fit. React
     // puts the controlled value back once this handler returns, which moves
     // the caret to the end, so the caret goes back where the edit began in a
     // microtask after that.
@@ -128,8 +127,8 @@ export function PromptDialog({ request, onDone, maxLength, cap, revealCounter = 
   if (counter !== null && counter !== lastCounter) setLastCounter(counter);
   const counterId = useId();
   const described = counter !== null ? counterId : undefined;
-  // GM r23 item 4: one polite announcement as the note reaches 30, 10 and 0
-  // left (the count then, should a paste jump past one), never each key.
+  // Design: one polite announcement as the note reaches 30, 10 and 0 left
+  // (the count then, should a paste jump past one), never each key.
   const [announced, setAnnounced] = useState('');
   const [leftBefore, setLeftBefore] = useState(left);
   if (leftBefore !== left) {
@@ -137,12 +136,12 @@ export function PromptDialog({ request, onDone, maxLength, cap, revealCounter = 
     if (cap && left < leftBefore && ANNOUNCE_AT.some((mark) => leftBefore > mark && left <= mark)) {
       setAnnounced(`${left} ${left === 1 ? 'character' : 'characters'} left`);
     } else if (cap && left > cap.showAt && announced) {
-      // Review 14 NIT-3: back above 30 left, the old words go at once.
+      // Back above 30 left, the old words go at once.
       setAnnounced('');
     }
   }
-  // Review 14 NIT-3: once spoken, the hidden region empties, so a virtual
-  // cursor never lands on a count that is no longer true.
+  // Once spoken, the hidden region empties, so a virtual cursor never
+  // lands on a count that is no longer true.
   useEffect(() => {
     if (!announced) return;
     const clear = window.setTimeout(() => setAnnounced(''), ANNOUNCE_CLEAR_MS);
@@ -164,7 +163,7 @@ export function PromptDialog({ request, onDone, maxLength, cap, revealCounter = 
       <form ref={form} className="prompt-dialog__card" onSubmit={submit} onKeyDown={(event) => {
         if (event.key === 'Enter' && composing(event)) {
           // The input method's Enter ends its composition (Safari: keyCode
-          // 229 after compositionend, review 2 L-1): it never sends.
+          // 229 after compositionend): it never sends.
           event.preventDefault();
         } else if (event.key === 'Escape') {
           event.preventDefault();
@@ -218,7 +217,7 @@ export function PromptDialog({ request, onDone, maxLength, cap, revealCounter = 
   );
 }
 
-/** Where screen readers hear "N left" (GM r23 item 4). */
+/** Where screen readers hear "N left" (design). */
 const ANNOUNCE_AT = [30, 10, 0];
 /** How long an announcement stays in the hidden region: long enough for a
  * polite one to be read after the key that caused it. */

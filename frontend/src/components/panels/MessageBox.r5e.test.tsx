@@ -15,8 +15,8 @@ import { useGraphStore } from '../../store/graphStore';
 import { noteBackendConnection } from '../../lib/backendConnection';
 import type { ChannelListener, ThreadRow } from '../../lib/personThread';
 
-/** Round 5e (GM r117): a row's status line changing text moves the row's
- * height on the box's layout spring, never a jump; reduced motion jumps. */
+/** Design: a row's status line changing text moves the row's height on the
+ * box's layout spring, never a jump; reduced motion jumps. */
 
 const CLAUDE = { id: 'a1', name: 'Claude', color: '#E8825A', verified: true };
 const KEY = '0123456789ab';
@@ -59,7 +59,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe('the status line wrapper springs the row’s height (GM r117)', () => {
+describe('the status line wrapper springs the row’s height', () => {
   it('the wrapper carries the layout spring, 420 ms, on height', () => {
     const rules = rulesFor(css, '.message-box__status-wrap');
     expect(rules.length).toBeGreaterThan(0);

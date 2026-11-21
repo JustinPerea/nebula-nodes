@@ -4,15 +4,15 @@ import { wsClient, type AgentRunEvent, type AgentStatusEvent } from '../../lib/w
 import type { RosterAgent, RosterCursor, RosterRun, RosterStatus } from './agentRosterModel';
 
 /**
- * What the Agents panel (Q125 item 2) knows that no other store holds: each
- * agent's status line, and the cursors the roster read reported (a cursor
- * that moved before this tab loaded has no event here). Kept live from the
+ * What the Agents panel knows that no other store holds: each agent's
+ * status line, and the cursors the roster read reported (a cursor that
+ * moved before this tab loaded has no event here). Kept live from the
  * `agentStatus` socket events, read again when the socket reconnects (a
  * restart clears every status) and when the canvas's graph is replaced (a
  * project switch). No polling.
  *
- * It also keeps the nodes agents' runs are running now (Q125 item 3), from
- * `agentRun` events and the roster's `running`, for the mark on each node
+ * It also keeps the nodes agents' runs are running now, from `agentRun`
+ * events and the roster's `running`, for the mark on each node
  * (components/canvas/AgentNodeMarkLayer.tsx, which reads the roster when it
  * mounts, so a tab that loads mid-run has them).
  *
@@ -132,7 +132,8 @@ export const useAgentRosterStore = create<AgentRosterState>((set) => ({
             verb: entry.lastAction.verb,
             nodeId: typeof entry.lastAction.nodeId === 'string' ? entry.lastAction.nodeId : null,
             label: typeof entry.lastAction.label === 'string' && entry.lastAction.label ? entry.lastAction.label : null,
-            // The action's own time, not the cursor's (GM's review: a click keeps the action before it).
+            // The action's own time, not the cursor's (the design's review: a click keeps the
+            // action before it).
             at: fetchedAt - seconds(entry.lastAction.secondsAgo) * 1000,
           }
           : null;

@@ -58,12 +58,12 @@ export function Settings() {
   const setupTarget = useUIStore((s) => s.settingsProviderTarget);
   const saved = useSettingsDraftStore((s) => s.saved);
   const tab = useSettingsDraftStore((s) => s.tab);
-  // Offline is read-only (GM, round 15 of PR #114): the panel still opens
-  // and shows the values it last loaded, with every field disabled.
+  // Offline is read-only (design, PR #114): the panel still opens and
+  // shows the values it last loaded, with every field disabled.
   const offline = useBackendOffline();
   const [loadState, setLoadState] = useState<'loading' | 'ready' | 'error'>(() => (saved ? 'ready' : 'loading'));
-  // What the first load's failure says (GM, error-copy round 2): the heading
-  // and the short reason, since "Try again" sits beside it.
+  // What the first load's failure says (design, error copy): the heading and
+  // the short reason, since "Try again" sits beside it.
   const [loadFailure, setLoadFailure] = useState<FailureCopy | null>(null);
   const [retryLoad, setRetryLoad] = useState(0);
   const loadRequest = useRef(0);
@@ -105,9 +105,9 @@ export function Settings() {
       setLoadState('ready');
     }).catch((error: unknown) => {
       if (cancelled || request !== loadRequest.current) return;
-      // Keep showing what we last confirmed; only a first load with nothing to show is an error.
-      // GM, round 16 of PR #114: with no answer, the unified line in full
-      // ("…, then try again."), beside Try again.
+      // Keep showing what we last confirmed; only a first load with nothing to show is an
+      // error. Design, PR #114: with no answer, the unified line in full ("…, then try
+      // again."), beside Try again.
       setLoadFailure(isNoAnswer(error)
         ? { heading: 'Couldn’t load your API keys.', reason: NEBULA_NOT_ANSWERING_COPY }
         : failureCopy(error, { heading: 'Couldn’t load your API keys.', short: true }));
@@ -117,14 +117,13 @@ export function Settings() {
   }, [visible, retryLoad]);
 
   // A change made elsewhere (a second window, the desktop app, a script)
-  // reaches an open panel in place (GM, PR #203 r19 item 6; review 9, keys
-  // LOW-3): it reads the settings again, as an open does. Drafts live apart
-  // (keyDrafts) and are never touched; a row the person is in stays where it
-  // stands until they leave it (ProvidersTab).
-  // A change made elsewhere while this tab's own write is in flight is read
-  // once the writes settle: a read now would be dropped for the write's newer
-  // confirmation, and the change would never reach the panel
-  // (design, PR #203).
+  // reaches an open panel in place (design, PR #203): it reads the
+  // settings again, as an open does. Drafts live apart (keyDrafts) and are
+  // never touched; a row the person is in stays where it stands until they
+  // leave it (ProvidersTab). A change made elsewhere while this tab's own
+  // write is in flight is read once the writes settle: a read now would be
+  // dropped for the write's newer confirmation, and the change would never
+  // reach the panel (design, PR #203).
   useEffect(() => {
     if (!visible) return;
     const heard = (event: Event) => {
@@ -192,8 +191,8 @@ export function Settings() {
         ) : (
           <div role="tabpanel" id={`settings-panel-${tab}`} aria-labelledby={`settings-tab-${tab}`} className="settings__tabpanel" key={tab}>
             {/* A disabled fieldset disables every control in the tab at once,
-                from React state: reconnect simply re-renders it. Providers
-                has its own, below its search, which stays usable (GM, r16). */}
+                from React state: reconnect simply re-renders it. Providers has
+                its own, below its search, which stays usable (design). */}
             <fieldset className="settings__fieldset" disabled={offline && tab !== 'providers'}
               {...offlineMark(offline && tab !== 'providers')}>
               <TabLoadBoundary>

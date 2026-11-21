@@ -14,7 +14,7 @@ import { curledWithCodeSpans } from '../../lib/codeSpans';
 /** How long a notice with Undo or Redo stays up. Long enough to reach the button. */
 export const UNDO_NOTICE_MS = NOTICE_HOLD_MS;
 
-/** A kept step's button with its stack empty (GM r19 on PR #199, 5). */
+/** A kept step's button with its stack empty (design, PR #199). */
 export const NOTHING_TO_UNDO = 'Nothing to undo';
 export const NOTHING_TO_REDO = 'Nothing to redo';
 
@@ -24,11 +24,12 @@ const isShownNotice = (id: number) => useGraphStore.getState().undoNotice?.id ==
  * A short line when someone else's edit changes this canvas: "Claude changed
  * the canvas." with Undo when an agent's edit lands, "Undid Claude’s edit."
  * with Redo after Cmd-Z. The person's own delete says "Deleted the node."
- * with Undo, and its undo "Restored the node." with Redo (GM, 2026-10-23). The button acts only while that edit is next in
- * line on the undo (or redo) stack, so it never undoes something else.
+ * with Undo, and its undo "Restored the node." with Redo (design,
+ * 2026-10-23). The button acts only while that edit is next in line on the
+ * undo (or redo) stack, so it never undoes something else.
  * Rendered in the app's notice region (NoticeRegion), above every panel.
  *
- * Round 3f (GM): "Every error alert becomes a canvas notice (non-blocking,
+ * Design: "Every error alert becomes a canvas notice (non-blocking,
  * dismissable)". A notice with tone 'error' (graphStore.notify) is
  * announced as role="alert"; Dismiss is a button, so the keyboard reaches
  * it. `messagesOnly`: the studio screens (StudioNotice) show the written
@@ -40,18 +41,19 @@ const isShownNotice = (id: number) => useGraphStore.getState().undoNotice?.id ==
  */
 export function CanvasUndoNotice({ messagesOnly = false }: { messagesOnly?: boolean } = {}) {
   const stored = useGraphStore((state) => state.undoNotice);
-  // Off the canvas, an agent edit's Undo stays on the canvas; the person's
-  // own "Deleted the node." (Create Studio's result delete) keeps its Undo.
-  // PR #204 round 14 (GM r23 3): offline comes first. A not-connected line (a refused save says
-  // why in the because form) waits while Nebula is offline; any other notice shows.
+  // Off the canvas, an agent edit's Undo stays on the canvas; the person's own
+  // "Deleted the node." (Create Studio's result delete) keeps its Undo. PR
+  // #204: offline comes first. A not-connected line (a refused save says why
+  // in the because form) waits while Nebula is offline; any other notice
+  // shows.
   const lineShown = useOfflineFirstBecause(stored?.text ?? null);
   const notice = (messagesOnly && stored?.offer && (!stored.entry || isForeignEdit(stored.entry))) || lineShown === null ? null : stored;
   const dismiss = useGraphStore((state) => state.dismissUndoNotice);
-  // While the canvas is kept in this tab (GM r18 on PR #199), the button
-  // acts on the kept tab's own step only; a notice for a step of the history
+  // While the canvas is kept in this tab (design, PR #199), the button acts
+  // on the kept tab's own step only; a notice for a step of the history
   // Nebula saved shows no button then, since a kept tab never steps into it.
   const kept = useKeptCanvas();
-  // GM r19 (5): a kept step's button shows while its notice does; with the
+  // Design: a kept step's button shows while its notice does; with the
   // step no longer on top of its stack (the stack empty, or a newer edit
   // took Redo away) it reads disabled, as any empty stack.
   const keptOffer = useGraphStore((state) => kept && Boolean(state.undoNotice?.offer && state.undoNotice.keptStep));
@@ -69,12 +71,11 @@ export function CanvasUndoNotice({ messagesOnly = false }: { messagesOnly?: bool
   });
 
   const holdHandlers = useNoticeHold(notice, isShownNotice, dismiss, 'notice');
-  // Round 23 (review 22, L-3): Undo and Redo edit the canvas (the store
-  // refuses both while following), so they take the canvas lock. Dismiss and
-  // Open copy only look.
+  // Undo and Redo edit the canvas (the store refuses both while following),
+  // so they take the canvas lock. Dismiss and Open copy only look.
   const lock = useCanvasLock();
 
-  // It leaves as it entered (fix round 7 of PR #200, GM r11 answer 2).
+  // It leaves as it entered (design, PR #200).
   const leave = useLeave(notice);
   if (!leave.shown) return null;
   const shown = leave.shown;
@@ -103,7 +104,7 @@ export function CanvasUndoNotice({ messagesOnly = false }: { messagesOnly?: bool
           {shown.offer === 'undo' ? 'Undo' : 'Redo'}
         </button>
       )}
-      {/* GM r8: the fold's count rides in this row, after Undo. */}
+      {/* Design: the fold's count rides in this row, after Undo. */}
       {actionable && <NoticeMoreInline />}
       {shown.copy && <OpenCopyButton projectId={shown.copy.projectId} onOpen={dismiss} />}
       <button type="button" className="canvas-undo-notice__close" aria-label="Dismiss" onClick={dismiss}>

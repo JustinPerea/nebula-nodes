@@ -21,8 +21,8 @@ export function AgentCursorLayer() {
   const everyone = useAgentPresenceStore((s) => s.agents);
   // This layer draws the cursors on the canvas; one on a surface beside it
   // (a moodboard) is the screen layer's (lib/agentCursorLayerOf.ts).
-  // One flying back from a panel is the screen layer's until it lands
-  // (GM r137), and then this layer's arrival is dated by the landing.
+  // One flying back from a panel is the screen layer's until it lands, and
+  // then this layer's arrival is dated by the landing.
   const handoff = useSyncExternalStore(subscribeHandoff, handoffVersion);
   const agents = useMemo(() => {
     const own: typeof everyone = {};
@@ -49,7 +49,7 @@ export function AgentCursorLayer() {
   // layer's life.
   const storeApi = useStoreApi<Node<NodeData>>();
   const space = useMemo(() => canvasSpace(storeApi), [storeApi]);
-  // Dev only (GM r49): ?cursorStates=1 plays each state in turn for tuning.
+  // Dev only: ?cursorStates=1 plays each state in turn for tuning.
   // Behind import.meta.env.DEV, so the production build drops the import and
   // its chunk (scripts/check-dev-only-code.mjs checks dist).
   useEffect(() => {

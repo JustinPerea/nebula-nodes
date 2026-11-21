@@ -5,7 +5,7 @@ import type { SaveState } from './CharacterStudioView';
 
 interface CharacterStudioToolbarProps {
   saveState: SaveState;
-  /** Try again redoes the failure: a save's own (round 3). Hidden for any other line. */
+  /** Try again redoes the failure: a save's own. Hidden for any other line. */
   canRetry?: boolean;
   saveError: string | null;
   onRetry: () => void;

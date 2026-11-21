@@ -73,8 +73,9 @@ let chatRefSeq = 0;
 type ModelSelection = { model: string | null; effort: string | null };
 const NO_MODEL: ModelSelection = { model: null, effort: null };
 const PERSONAL_AGENT_RE = /^personal:[a-z0-9-]{1,32}$/;
-// /clear's canvas clear refused (a run going): GM's line, with the refusal
-// under Clear's heading as the notice (lib/chatClear.ts has the lines).
+// /clear's canvas clear refused (a run going): the design's line, with
+// the refusal under Clear's heading as the notice (lib/chatClear.ts
+// has the lines).
 const CLEAR_CANVAS = "Couldn’t clear the canvas.";
 type ChatSelection = { agent: ChatAgent; claude: ModelSelection; codex: ModelSelection };
 const CHAT_SELECTION_KEY = 'nebula:chat-selection';
@@ -157,15 +158,15 @@ type SystemLine = {
   text: string;
   tone?: 'neutral' | 'error' | 'success';
   /** Text behind a collapsed Details toggle under the line: a person-only
-   * refusal's own words, written for agents (GM, Q116 a). */
+   * refusal's own words, written for agents (design). */
   details?: string;
   /** Its only reason was this tab not being connected as the person: it goes
-   * when the tab is promoted (GM, #204 r3; lib/clearsOnPromote). */
+   * when the tab is promoted (design, PR #204; lib/clearsOnPromote). */
   personGate?: true;
 };
 
-/** The transcript without its lines that said only "this tab isn't connected as you" (GM, #204 r3);
- * a message left with nothing to say goes too. */
+/** The transcript without its lines that said only "this tab isn't connected as you"
+ * (design, PR #204); a message left with nothing to say goes too. */
 function withoutPersonGateLines(messages: ChatMessage[]): ChatMessage[] {
   let changed = false;
   const kept: ChatMessage[] = [];
@@ -327,11 +328,11 @@ export function AssistantBubble({ message, agentName, onPermission }: {
   onPermission: (requestId: string, decision: 'allow' | 'deny') => void;
 }) {
   const [expandedTools, setExpandedTools] = useState<Record<string, boolean>>({});
-  // Apply writes the canvas: it takes the canvas lock (disabled, marked,
-  // GM's tooltip while following; offline too). Once the canvas its node id
-  // was read on is replaced (that id may name another node now) it stays,
-  // disabled, and its tooltip says why (fix round 1 of PR #200, GM answer 4:
-  // never remove an action without saying why).
+  // Apply writes the canvas: it takes the canvas lock (disabled, marked, the
+  // design's tooltip while following; offline too). Once the canvas its node
+  // id was read on is replaced (that id may name another node now) it stays,
+  // disabled, and its tooltip says why (design, PR #200: never remove an
+  // action without saying why).
   const lock = useCanvasLock();
   const canvasNow = useSyncExternalStore(subscribeCanvasReplaced, canvasReplacements, canvasReplacements);
   const projectName = useProjectStore((state) => state.activeProject?.name ?? null);
@@ -376,8 +377,8 @@ export function AssistantBubble({ message, agentName, onPermission }: {
                         type="button"
                         className="chat__codeblock-apply"
                         onClick={() => applyToTarget(seg.content)}
-                        // Offline: when it works again (review 2 N-6), unless
-                        // the canvas it was written for has gone for good.
+                        // Offline: when it works again, unless the canvas it
+                        // was written for has gone for good.
                         {...lock.act({ disabled: replacedSince, title: applyTitle, offline: replacedSince ? undefined : true, kept: 'live' })}
                       >
                         {applyLabel}
@@ -492,10 +493,10 @@ function insertAtCaret(target: HTMLTextAreaElement, token: string): void {
 }
 
 export function ChatPanel() {
-  // r50: while a terminal session listens (the Message box's), this chat's
+  // While a terminal session listens (the Message box's), this chat's
   // separate Claude reads "Personal agent".
   const panelTitle = usePersonThreadStore(terminalListening) ? 'Personal agent' : 'Chat';
-  // Offline is read-only (round 15 of PR #114): Send is disabled.
+  // Offline is read-only (PR #114): Send is disabled.
   const offline = useBackendOffline();
   const commonsEnabled = useUIStore((s) => s.commonsEnabled);
   const visible = useUIStore((s) => s.panels.chat.visible);
@@ -591,8 +592,8 @@ export function ChatPanel() {
     catch { /* Browsing without persistent storage still works. */ }
   }, [selection]);
 
-  // PR #204 round 11: the list of personal agents is the person's to read. A tab that isn't
-  // connected as the person doesn't ask (it would only be refused); it reads on the promote.
+  // PR #204: the list of personal agents is the person's to read. A tab that isn't connected
+  // as the person doesn't ask (it would only be refused); it reads on the promote.
   const { ready: personReady, held: personHeld } = usePersonView();
   useEffect(() => {
     if (!visible || !personReady) return;
@@ -709,7 +710,7 @@ export function ChatPanel() {
     };
   }, [agent]);
 
-  // PR #204 round 10 (GM r15): the ChatGPT sign-in is the person's alone (require_person).
+  // Design, PR #204: the ChatGPT sign-in is the person's alone (require_person).
   const codexLock = usePersonLock('sign in to Codex');
   const handleStartCodexChatGPTLogin = useCallback(async (deviceAuth = false) => {
     setCodexLoginBusy(true);
@@ -721,7 +722,7 @@ export function ChatPanel() {
     } catch (err) {
       const line = failureMessage(err, "Couldn’t start the ChatGPT sign-in.");
       setCodexLoginError(line);
-      clearSetterOnPromote(err, setCodexLoginError, line, null); // clears-on-promote: chat.codex-login (GM, #204 r3)
+      clearSetterOnPromote(err, setCodexLoginError, line, null); // clears-on-promote: chat.codex-login (design, PR #204)
     } finally {
       setCodexLoginBusy(false);
     }
@@ -752,7 +753,7 @@ export function ChatPanel() {
         if (cancelled) return;
         const line = failureMessage(err, "Couldn’t check the ChatGPT sign-in.");
         setCodexLoginError(line);
-        clearSetterOnPromote(err, setCodexLoginError, line, null); // clears-on-promote: chat.codex-login-check (GM, #204 r3)
+        clearSetterOnPromote(err, setCodexLoginError, line, null); // clears-on-promote: chat.codex-login-check (design, PR #204)
         retryTimer = window.setTimeout(poll, 2500);
       }
     };
@@ -898,10 +899,10 @@ export function ChatPanel() {
   }, [brand, busy]);
 
   const wsRef = useRef<WebSocket | null>(null);
-  // Review 4 NIT-2, review 5 NIT-1 (round 7): each message the gate can refuse goes out with
-  // its own `ref` and the promote count it was sent under; the backend echoes the ref on its
-  // person_required error, so the refusal is stamped with its own message's count (and a
-  // refused permission answer is known by its request).
+  // Each message the gate can refuse goes out with its own `ref` and the promote count it
+  // was sent under; the backend echoes the ref on its person_required error, so the
+  // refusal is stamped with its own message's count (and a refused permission answer is
+  // known by its request).
   const sentRefs = useRef(new Map<string, SentRef>());
   const stampedRef = useCallback((extra: Omit<SentRef, 'sentAt'>): string => {
     const ref = `r${++chatRefSeq}`;
@@ -942,8 +943,8 @@ export function ChatPanel() {
 
   const uploadFile = useCallback(
     async (file: File, chipId: string) => {
-      // Round 20 (M1): no node is added to a canvas that's about to go away;
-      // the chip goes, as the drop did nothing.
+      // No node is added to a canvas that's about to go away; the chip goes,
+      // as the drop did nothing.
       if (refuseEditWhileFollowing()) {
         setPendingImages((prev) => {
           const prior = prev.find((p) => p.id === chipId);
@@ -955,16 +956,16 @@ export function ChatPanel() {
       const form = new FormData();
       form.append('file', file);
       form.append('create_node', 'true');
-      // Offline is read-only (GM, round 14 of PR #114): nothing is sent.
+      // Offline is read-only (design, PR #114): nothing is sent.
       if (refuseEditWhileOffline()) {
         setPendingImages((prev) => prev.filter((p) => p.id !== chipId));
         return;
       }
       // The upload adds a node to the canvas: one undo step, taken before the
-      // backend's graphSync can add it, owning only that node (round 14 of PR
-      // #114: an agent's node its echo brings isn't this step's).
+      // backend's graphSync can add it, owning only that node (PR #114: an
+      // agent's node its echo brings isn't this step's).
       const undoStep = useGraphStore.getState().beginUndoStep();
-      // The node the upload adds, which comes with its echo (review 11, L-2).
+      // The node the upload adds, which comes with its echo.
       let arrives: string[] = [];
       try {
         const resp = await apiFetch('/api/uploads', { method: 'POST', body: form });
@@ -1037,7 +1038,7 @@ export function ChatPanel() {
         });
       } finally {
         // The step was cancelled, or it settles once its node is on the canvas:
-        // an undo pressed meanwhile then acts (review 10, L-2; review 11, L-2).
+        // an undo pressed meanwhile then acts.
         useGraphStore.getState().endUndoStep(undoStep, { arrives });
       }
     },
@@ -1274,15 +1275,15 @@ export function ChatPanel() {
           }
           if (type === 'error') {
             const errText = String(event.message ?? 'unknown error');
-            // A person-only refusal says GM's line, by its code; the backend's
-            // words, written for agents, go behind Details (Q116 a).
+            // A person-only refusal says the design's line, by its code; the
+            // backend's words, written for agents, go behind Details.
             const personRequired = event.code === PERSON_REQUIRED_CODE;
             let personRequiredLine = '';
             if (personRequired) {
-              // One stamp and one check (review 4 NIT-2): an answer to what went out before the
-              // promote is the old state's; it holds nothing, and its line goes at once.
-              // Its own message's stamp, by the ref the backend echoes; an error with no ref (an
-              // older backend) has no stamp, so it holds the tab and its line waits for the promote.
+              // One stamp and one check: an answer to what went out before the promote is the old
+              // state's; it holds nothing, and its line goes at once. Its own message's stamp, by
+              // the ref the backend echoes; an error with no ref (an older backend) has no stamp, so
+              // it holds the tab and its line waits for the promote.
               const sent = typeof event.ref === 'string' ? sentRefs.current.get(event.ref) : undefined;
               // The line says what this tab was doing: a send starts a chat, the rest answer or close an agent.
               // An error with no ref of ours (an older backend) keeps the general line.
@@ -1290,8 +1291,8 @@ export function ChatPanel() {
               if (typeof event.ref === 'string') sentRefs.current.delete(event.ref);
               const refusal = personRefusalSentAt(sent?.sentAt ?? null);
               if (!refusal.sentBeforePromote) reportPersonRequired();
-              // Review 5 MEDIUM-2 (GM r9 1): a refused answer to a permission puts its card back
-              // to waiting, so the person can answer after the promote; the agent's own timeout runs on.
+              // A refused answer to a permission puts its card back to waiting, so the
+              // person can answer after the promote; the agent's own timeout runs on.
               if (sent?.permission) {
                 const requestId = sent.permission;
                 upsertAssistant((msg) => ({ ...msg, parts: msg.parts.map((part) => part.kind === 'permission'
@@ -1361,7 +1362,7 @@ export function ChatPanel() {
               return;
             }
             const active = Boolean(event.active);
-            // The backend's text is for the console; the person reads GM's line.
+            // The backend's text is for the console; the person reads the design's line.
             console.warn('[nebula] chat stop failed:', event.message);
             const notice = chatCancellationNotice('failed');
             applyCancellationEvent({ type: 'failed', active });
@@ -1599,12 +1600,12 @@ export function ChatPanel() {
       setInput('');
       return;
     }
-    // Offline is read-only (round 15 of PR #114): a message isn't sent (its
-    // turn would edit the canvas); it stays typed and the banner pulses.
+    // Offline is read-only (PR #114): a message isn't sent (its turn would
+    // edit the canvas); it stays typed and the banner pulses.
     if (refuseEditWhileOffline()) return;
     if (raw === '/clear') {
-      // Offline is read-only (GM, round 14 of PR #114): the clear is refused
-      // whole, chat and canvas, and the banner pulses; the command stays typed.
+      // Offline is read-only (design, PR #114): the clear is refused whole,
+      // chat and canvas, and the banner pulses; the command stays typed.
       // Following an agent's switch the same (the canvas lock, follow-up to
       // PR #195): the project bar pulses.
       if (refuseCanvasEdit()) return;
@@ -1621,15 +1622,15 @@ export function ChatPanel() {
       ]);
       setInput('');
       // The session is this tab's own and always clears; the canvas clear is
-      // the backend's and can be refused (a run going: round 11 of PR #114)
-      // or go unanswered (bounded), so the line says only what is known (GM).
-      // A refusal also shows under Clear's heading.
+      // the backend's and can be refused (a run going: PR #114) or go
+      // unanswered (bounded), so the line says only what is known (design). A
+      // refusal also shows under Clear's heading.
       const outcome = await clearCanvasFromChat({
         onRefused: async (response) => {
           const refused = await requestError(CLEAR_CANVAS, response);
           const line = failureMessage(refused, CLEAR_CANVAS);
           setNotice(line);
-          clearSetterOnPromote(refused, setNotice, line, null); // clears-on-promote: chat.clear-canvas (GM, #204 r3)
+          clearSetterOnPromote(refused, setNotice, line, null); // clears-on-promote: chat.clear-canvas (design, PR #204)
         },
       });
       said(outcome === 'cleared' ? CHAT_CLEARED_CANVAS
@@ -1650,9 +1651,10 @@ export function ChatPanel() {
     authorityPendingRef.current = true;
     if (commonsEnabled) setAuthorizing(true);
     try { authority = await chatAuthority(ws.url, commonsEnabled, brand); }
-    // The session line on its own (a FailureNotice with no heading, GM round 2).
+    // The session line on its own (a FailureNotice with no heading, design).
     catch (error) {
-      // No person token for the turn: its only reason is this tab, so it goes on the promote (GM, #204 r3).
+      // No person token for the turn: its only reason is this tab, so it goes on the promote
+      // (design, PR #204).
       const line = oneLine(failureCopy(error));
       setNotice(line);
       reportPersonRequired();
@@ -1725,8 +1727,8 @@ export function ChatPanel() {
   }, [send]);
 
   const choosePersonalOption = useCallback((configId: string, value: string) => {
-    // Round 16 (L5): an agent option (its model or mode) changes what the
-    // agent may do, so offline it's refused like an edit (the banner pulses).
+    // An agent option (its model or mode) changes what the agent may do, so
+    // offline it's refused like an edit (the banner pulses).
     if (refuseEditWhileOffline()) return;
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN || !sessionId) return;
@@ -1739,12 +1741,12 @@ export function ChatPanel() {
   }, [sessionId, stampedRef]);
 
   const answerPermission = useCallback((requestId: string, decision: 'allow' | 'deny') => {
-    // Round 16 (L5): "Allow once" lets the agent act while the person's own
-    // edits are blocked, so offline it's refused and the request stays
-    // pending until Nebula answers. Deny only reduces, so it always goes.
+    // "Allow once" lets the agent act while the person's own edits are
+    // blocked, so offline it's refused and the request stays pending until
+    // Nebula answers. Deny only reduces, so it always goes.
     if (decision === 'allow' && refuseEditWhileOffline()) return;
-    // Review 5 MEDIUM-2 (GM r9 1): an ask with a decision on it waits while this tab isn't
-    // connected as the person (the card's buttons lock in place; this is the same rule).
+    // An ask with a decision on it waits while this tab isn't connected as the
+    // person (the card's buttons lock in place; this is the same rule).
     if (personUnconfirmed()) return;
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN) return;

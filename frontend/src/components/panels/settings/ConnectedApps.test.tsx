@@ -129,8 +129,8 @@ describe('Connect your agent', () => {
   });
 
   it('shows a failed color change and keeps the picker open', async () => {
-    // Round 3e: a refusal arrives as the API's typed error (apiRequest), not a plain Error,
-    // whose own text no surface shows any more.
+    // A refusal arrives as the API's typed error (apiRequest), not a plain Error, whose own
+    // text no surface shows any more.
     setConnectedAppColor.mockRejectedValue(new RequestFailedError("Couldn't save the app color.", 422, { reason: 'color must be #RRGGBB or null' }));
     render(<ConnectedApps view={VIEW} loadError={null} onChanged={() => {}} />);
     const row = screen.getByTestId('settings-app-row');

@@ -3,8 +3,8 @@ import type { QuestionSetView } from '../../lib/agentQuestions';
 /**
  * An answered set's closed view, under its Update in the list: each
  * question with what the person answered, or "No answer." for one they
- * skipped (Q125 item 1, GM's copy). A set closed any other way shows
- * nothing here; its Update's outcome line says how it ended.
+ * skipped (the design's copy). A set closed any other way shows nothing
+ * here; its Update's outcome line says how it ended.
  */
 export function AgentQuestionsAnswers({ view }: { view: QuestionSetView }) {
   if (view.status !== 'answered' || !view.answers) return null;

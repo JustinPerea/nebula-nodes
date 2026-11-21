@@ -16,8 +16,8 @@ export function PersonalAgentWarning({ agentName, onAccept, onCancel }: {
   onCancel: () => void;
 }) {
   const [busy, setBusy] = useState(false);
-  // PR #204 round 10 (GM r15): the acknowledgement is the person's alone
-  // (POST /api/personal-agents/acknowledge-warning: require_person).
+  // Design, PR #204: the acknowledgement is the person's alone (POST
+  // /api/personal-agents/acknowledge-warning: require_person).
   const lock = usePersonLock('use your agents');
   const [error, setError] = useState<string | null>(null);
   const card = useRef<HTMLDivElement>(null);
@@ -38,7 +38,7 @@ export function PersonalAgentWarning({ agentName, onAccept, onCancel }: {
     } catch (exc) {
       const line = failureMessage(exc, "Couldn’t save your answer.");
       setError(line);
-      clearSetterOnPromote(exc, setError, line, null); // clears-on-promote: settings.agent-warning (GM, #204 r3)
+      clearSetterOnPromote(exc, setError, line, null); // clears-on-promote: settings.agent-warning (design, PR #204)
       setBusy(false);
     }
   };

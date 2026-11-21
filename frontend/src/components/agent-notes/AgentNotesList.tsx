@@ -18,13 +18,13 @@ export interface AgentNotesListSection {
 }
 
 /**
- * The opened Updates list, as GM's still draws it (stills/updates-open.png):
- * a header with the count, the read state and where the list is kept; every
- * update newest first with its author's dot, name, label and clock
- * time; each update's own buttons; and a footer that explains Not now and
- * links to the Agent log.
+ * The opened Updates list, as the design's still
+ * (stills/updates-open.png) draws it: a header with the count, the read state
+ * and where the list is kept; every update newest first with its author's
+ * dot, name, label and clock time; each update's own buttons; and a footer
+ * that explains Not now and links to the Agent log.
  *
- * In Moodboard Studio with the board's own Updates (Justin's Q113 c) it is
+ * In Moodboard Studio with the board's own Updates (Justin's choice) it is
  * two sections in one list, "This board" first, then the project's: the
  * header keeps the count of both and the read state, and each section's
  * heading says where it is kept. With one section it is exactly the list
@@ -49,7 +49,7 @@ export function AgentNotesList({
   /** Updates that arrived while this list was open ("· 1 new"). */
   newCount: number;
   /** The server's count of unread Updates in these lists: "all read" only once it is 0
-   * (GM, #204 r3 item 1), so a read the server refused never shows as done. */
+   * (design, PR #204), so a read the server refused never shows as done. */
   unread?: number;
   now: number;
   onClose: (returnFocus: boolean) => void;
@@ -61,12 +61,12 @@ export function AgentNotesList({
   onHover: (note: AgentNote | null) => void;
   /** The last thing that failed (a dismiss the server refused), if any. */
   error: string | null;
-  /** What sits above the updates, under the header: the Agents panel (Q125 item 2). */
+  /** What sits above the updates, under the header: the Agents panel. */
   top?: ReactNode;
 }) {
   const today = new Date(now);
   const total = sections.reduce((sum, section) => sum + section.notes.length, 0);
-  // GM, #204 r4 item 1: "2 · all unread" mirrors "2 · all read"; "5 · 2 unread" when some
+  // Design, PR #204: "2 · all unread" mirrors "2 · all read"; "5 · 2 unread" when some
   // are. The count is always the server's, never what the tab hopes.
   const state = unread > 0 ? (unread >= total ? 'all unread' : `${unread} unread`)
     : newCount > 0 ? `${newCount} new` : 'all read';
@@ -141,8 +141,8 @@ export function AgentNotesList({
     >
       <div className="agent-notes-panel__head">
         <span className="agent-notes-panel__title">Updates</span>
-        {/* Review 4 NIT-3 (round 6): its changes ("2 · all unread" to "2 · all read" on the
-            promote) are read out politely, once each, as one phrase. */}
+        {/* Its changes ("2 · all unread" to "2 · all read" on the promote) are read out
+            politely, once each, as one phrase. */}
         <span className="agent-notes-panel__count" role="status" aria-live="polite" aria-atomic="true">{`${total} · ${state}`}</span>
         {single && <span className="agent-notes-panel__kept">{single.adapter.keptWith}</span>}
       </div>

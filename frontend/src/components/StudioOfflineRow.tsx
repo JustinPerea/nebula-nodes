@@ -4,12 +4,13 @@ import { useOfflinePulse } from '../hooks/useOfflinePulse';
 import { OFFLINE_LINE } from './BackendConnectionStatus';
 import { noteOfflineRowShown, STUDIO_OFFLINE_LINE_ID } from '../lib/useBackendOffline';
 
-/** How long Nebula is offline before a studio's row opens (GM, PR #198 r2:
- * "keep the existing offline delay"). The app had none: the canvas's banner
- * shows on the first failed probe. A row that opens moves the whole studio
- * down, so a blip (one probe lost while the backend reloads) must not open
- * it; 1 s is under the 3 s probe interval, so a real outage still shows on
- * the first failed probe's answer plus a second. Builder's value, for GM. */
+/** How long Nebula is offline before a studio's row opens (design,
+ * PR #198: "keep the existing offline delay"). The app had none: the
+ * canvas's banner shows on the first failed probe. A row that opens moves
+ * the whole studio down, so a blip (one probe lost while the backend
+ * reloads) must not open it; 1 s is under the 3 s probe interval, so a
+ * real outage still shows on the first failed probe's answer plus a
+ * second. Builder's value, still open for review. */
 export const STUDIO_BANNER_DELAY_MS = 1_000;
 
 /** The close runs on --workspace-dock-spring (420ms); the line stays in the
@@ -17,7 +18,7 @@ export const STUDIO_BANNER_DELAY_MS = 1_000;
 const CLOSE_MS = 420;
 
 /**
- * The offline banner on every screen but the canvas (GM, PR #198 r2): a row
+ * The offline banner on every screen but the canvas (design, PR #198): a row
  * of the studio's own layout, right under its top header, centred with 8px
  * above and below, that pushes the studio's content down instead of floating
  * over it. It opens and closes on the panel spring (App.css
@@ -62,7 +63,7 @@ export function StudioOfflineRow() {
     };
   }, []);
 
-  // Round 18l (review 17 LOW-1): a control locked offline points at the line only while it shows.
+  // A control locked offline points at the line only while it shows.
   useEffect(() => {
     noteOfflineRowShown(open);
     return () => noteOfflineRowShown(false);

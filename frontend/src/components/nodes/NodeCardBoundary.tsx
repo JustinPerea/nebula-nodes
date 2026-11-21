@@ -9,7 +9,7 @@ import '../../styles/node-card-boundary.css';
 
 /** The data check, which never throws: a check that can't read the data
  * calls it damaged (it can't say the data is fine), and can't tell missing
- * from damaged (GM r6 item 4: "missing or damaged" only then). */
+ * from damaged (design: "missing or damaged" only then). */
 function dataProblem(data: unknown): DataProblem | null {
   try { return nodeDataProblem(data); } catch { return { field: 'data', state: 'unknown' }; }
 }
@@ -34,23 +34,23 @@ interface NodeCardBoundaryProps {
 }
 
 /**
- * One canvas card that throws while it draws (a scene whose data is damaged,
- * PR #198 review 3, L4) shows GM's boundary line at card size instead of
- * taking the whole canvas down to a white screen. GM r4: the card keeps its
- * header (icon and label) and only its body is replaced. Its wires stay (its
- * handles are drawn from the node's definition and the ports its data
- * lists), and the card tries again as soon as its data changes (an undo, an
- * agent's fix).
+ * One canvas card that throws while it draws (a scene whose data is
+ * damaged, PR #198) shows the design's boundary line at card size instead
+ * of taking the whole canvas down to a white screen. Design: the card
+ * keeps its header (icon and label) and only its body is replaced. Its
+ * wires stay (its handles are drawn from the node's definition and the
+ * ports its data lists), and the card tries again as soon as its data
+ * changes (an undo, an agent's fix).
  *
- * Review 4, L3: "missing or damaged" only when the data check
+ * The line says "missing or damaged" only when the data check
  * (nodeDataProblem) finds what's wrong, and the Agent log names that field.
- * Data that checks out reads GM r5's neutral line, and the Agent log names
- * the error ("Couldn’t draw “X”, node n4. <error message>").
+ * Data that checks out reads the design's neutral line, and the Agent log
+ * names the error ("Couldn’t draw “X”, node n4. <error message>").
  *
- * Review 5, L5: the card retries on every data change, and a running node's
- * data changes with each progress event, so the Agent log gets each
- * distinct line once while the card keeps failing (`logged`), not once per
- * retry. A card that draws again forgets them: its next failure is news.
+ * The card retries on every data change, and a running node's data changes
+ * with each progress event, so the Agent log gets each distinct line once
+ * while the card keeps failing (`logged`), not once per retry. A card that
+ * draws again forgets them: its next failure is news.
  */
 export class NodeCardBoundary extends Component<NodeCardBoundaryProps, { failed: boolean }> {
   state = { failed: false };
@@ -92,7 +92,7 @@ export class NodeCardBoundary extends Component<NodeCardBoundaryProps, { failed:
     try { handles = handleIds(data); } catch { /* a card with no handles still says why */ }
     const definition = typeof data.definitionId === 'string' ? NODE_DEFINITIONS[data.definitionId] : undefined;
     return (
-      // GM r7 item 2: one selection style, in the card's category colour.
+      // Design: one selection style, in the card's category colour.
       <div className={`node-card-boundary${this.props.card.selected ? ' node-card-boundary--selected' : ''}`}
         style={{ ['--node-category-color' as string]: (definition && CATEGORY_COLORS[definition.category]) ?? '#424242' }}
         role="alert" data-node-card-boundary="">

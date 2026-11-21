@@ -40,7 +40,7 @@ function available(element: HTMLElement): boolean {
 export function ResultComparison({ items, onClose, onReuseSettings }: ResultComparisonProps) {
   const [results] = useState(() => structuredClone(items));
   const overlayRef = useRef<HTMLDivElement>(null);
-  // Review 6 MEDIUM-3: the panel stops above the notice band.
+  // The panel stops above the notice band.
   const clearance = useNoticeClearance();
   const panelRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef(onClose);
@@ -58,21 +58,21 @@ export function ResultComparison({ items, onClose, onReuseSettings }: ResultComp
     // first) has made the page behind inert and noted the opener for close.
     focusClose();
     // The page behind, the proposal bar with it, is inert while it is open:
-    // ModalPortal does that for every modal dialog (PR #203 round 7).
+    // ModalPortal does that for every modal dialog (PR #203).
     const containFocus = (event: FocusEvent) => {
       // A closing dialog's focus return (ModalPortal) is no slip.
       if (isReturningFocus()) return;
       // A modal dialog opened over the comparison keeps its own focus.
       if (keyBlockedByModal(panel)) return;
-      // The app's notices are the trap's second region (GM r25).
+      // The app's notices are the trap's second region.
       if (event.target instanceof Node && !overlay.contains(event.target) && !inNoticeAboveDialogs(event.target)) focusClose();
     };
     const containKey = (event: KeyboardEvent) => {
-      // A modal dialog opened over the comparison owns the keys (review 8, L-d).
+      // A modal dialog opened over the comparison owns the keys.
       if (keyBlockedByModal(panel)) return;
-      // Review 15 LOW-A (fix round 18): a notice's keys are its own (Enter
-      // and Space press its button, Tab and Shift+Tab: lib/modalFocus; Escape:
-      // GM r27, noticeKeys), never the comparison's.
+      // A notice's keys are its own (Enter and Space press its button, Tab
+      // and Shift+Tab: lib/modalFocus; Escape: noticeKeys), never the
+      // comparison's.
       if (inNoticeAboveDialogs(event.target)) return;
       // Keep global Canvas shortcuts out of the modal, including a body-level
       // event after browser focus loss. Native video/disclosure defaults remain.

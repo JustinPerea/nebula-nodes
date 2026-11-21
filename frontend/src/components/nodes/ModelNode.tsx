@@ -76,8 +76,8 @@ async function downloadOutput(url: string, filename: string): Promise<void> {
   } catch (err) {
     console.error('[nebula] output download', err);
     // "Couldn’t download the output. <reason>" (downloadWorldAsset's own
-    // lines keep their reason; anything else reads GM's general line).
-    // A canvas notice, not a window.alert (round 3f).
+    // lines keep their reason; anything else reads the design's general
+    // line). A canvas notice, not a window.alert.
     showNotice(failureMessage(err, "Couldn’t download the output."), 'error', err);
   }
 }
@@ -99,14 +99,14 @@ function portLabels(definition: { outputPorts: Array<{ id: string; label: string
 
 function ModelNodeComponent({ id, data, selected }: NodeProps) {
   const nodeData = data as unknown as NodeData;
-  // Offline or following an agent's switch: one read-only state (GM round 22, A).
+  // Offline or following an agent's switch: one read-only state (design).
   const lock = useCanvasLock();
   const readOnly = lock.locked;
   const batchPreview = useBatchPreview(id, nodeData);
-  // An input card's name may come from Nebula's upload record (GM r48 Q1).
+  // An input card's name may come from Nebula's upload record (design).
   useUploadNames();
   const actionSlot = useSelectionActionSlot(id);
-  // GM r107: the card's width springs when its own content widens it.
+  // Design: the card's width springs when its own content widens it.
   const cardRef = useRef<HTMLDivElement | null>(null);
   useCardWidthSpring(cardRef, useNodeRemeasure(id));
   const previewOutputs = batchPreview.outputs;
@@ -301,9 +301,9 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
   const isMaskPainter = nodeData.definitionId === 'mask-painter';
   const imageInputPreview = isImageInput && nodeData.params._previewUrl ? String(nodeData.params._previewUrl) : null;
   // Every input card names the file it holds, an image under its picture
-  // (GM - Design, 2026-10-24: similar images are hard to tell apart).
-  // The name the Inspector shows too, never a bare content hash (GM r48 Q1
-  // on #222: lib/fileName.ts fileParamName).
+  // (design, 2026-10-24: similar images are hard to tell apart). The name
+  // the Inspector shows too, never a bare content hash (design, PR #222:
+  // lib/fileName.ts fileParamName).
   const inputFile = INPUT_FILE_CARDS.has(nodeData.definitionId)
     ? fileParamName(nodeData.params, 'filePath')
     : null;
@@ -430,7 +430,7 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
           aria-label="Show node settings"
           onClick={handleInspectorButtonClick}
           onMouseDown={(e) => e.stopPropagation()}
-          // Live while kept (GM r17 on PR #199): it opens the Inspector, where a
+          // Live while kept (design, PR #199): it opens the Inspector, where a
           // param edit stays on this tab as typing does; its writes are gated.
           title="Show node settings"
         >
@@ -475,10 +475,10 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
         {nodeData.keyStatus === 'missing' && !switchable && <span className="model-node__badge model-node__badge--warning"
           title={usesKreaAccount(definition, nodeData.params) ? 'Krea sign-in required' : missingKeyTitle(definition, nodeData.params)}>&#x26A0;</span>}
         <NodeWaitSwap nodeId={id} wait={nodeWait}>
-          {/* GM r23 (b) on PR #199: a node with a tab-local id (added while the
-              canvas is kept) has no id an agent can address yet, so the slot
-              stays empty, keeping its space (nodes.css) so the header doesn't
-              shift when the saved id arrives. Nothing to drag into the chat. */}
+          {/* Design, PR #199: a node with a tab-local id (added while the canvas
+              is kept) has no id an agent can address yet, so the slot stays
+              empty, keeping its space (nodes.css) so the header doesn't shift
+              when the saved id arrives. Nothing to drag into the chat. */}
           {isBackendNodeId(id) ? (
             <span
               className="model-node__id-chip nodrag"
@@ -563,8 +563,8 @@ function ModelNodeComponent({ id, data, selected }: NodeProps) {
         <div className="model-node__source-stale nodrag nopan" role="status">
           <strong>Out of date — source updated</strong>
           {nodeData.outputFreshness.outOfDateReasons.map((reason) => <span key={reason}>{reason}</span>)}
-          {/* A run: it takes the canvas lock (fix round 1 of PR #200: the ratchet's new control check found it), in
-            canvasLock's order (PR #198 review 7, L5; GM r19 on PR #199: kept, then the run, following, offline). */}
+          {/* A run: it takes the canvas lock (PR #200: the ratchet's new control check found it), in canvasLock's
+            order (design, PR #198, PR #199: kept, then the run, following, offline). */}
           {nodeData.outputFreshness.runId && <button type="button"
             {...lock.act({ disabled: !latestPaperSourceReady, offline: 'rerun', kept: 'rerun',
               title: latestPaperSourceReady ? 'Reuse the saved recipe with the latest exported artwork' : 'Refresh or reconnect the Paper source first' },

@@ -12,11 +12,11 @@ import { leaveChipFocus, panToTarget } from '../../lib/agentChipPress';
 import '../../styles/agentEdgeChips.css';
 
 /**
- * The canvas's edge chips (PR #233 slice 9; GM - Design 7 and 8): for a
- * canvas cursor off screen, a chip at the visible pane's edge (or just
- * outside the panel it is under) with its colour dot, name and a chevron
- * toward it. Pressing a chip pans the canvas to the cursor's target: the
- * person's action, and the only pan in the cursor code (lib/agentChipPress.ts;
+ * The canvas's edge chips (PR #233 slice 9): for a canvas cursor off
+ * screen, a chip at the visible pane's edge (or just outside the panel it
+ * is under) with its colour dot, name and a chevron toward it. Pressing a
+ * chip pans the canvas to the cursor's target: the person's action, and the
+ * only pan in the cursor code (lib/agentChipPress.ts;
  * tests/agentCursorNoOpen.test.ts). Nothing here moves the canvas on its own.
  *
  * Placement is lib/agentEdgeChips.ts (pure). It is worked out when the view

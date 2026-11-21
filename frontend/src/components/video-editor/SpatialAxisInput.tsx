@@ -5,7 +5,7 @@ interface SpatialAxisInputProps {
   label: string;
   value: number;
   onValueChange: (value: number) => void;
-  /** The canvas lock (its fieldset disables it too; review 4 LOW-4 asks each control to carry it). */
+  /** The canvas lock (its fieldset disables it too; each control carries it as well). */
   disabled?: boolean;
 }
 

@@ -6,7 +6,7 @@ let opened = 0;
 
 /** Each open portal's openers, nearest first: the control that opened it,
  * then, when that control sits in another dialog, that dialog's own, and so
- * up the chain (GM, PR #203 r15 item 5). */
+ * up the chain (design, PR #203). */
 const openersOf = new WeakMap<Element, HTMLElement[]>();
 
 function openerChain(opener: HTMLElement | null): HTMLElement[] {
@@ -21,7 +21,7 @@ function openerChain(opener: HTMLElement | null): HTMLElement[] {
  * dialog that closes on a press closes inside it, so its close knows the
  * press is still going: the press's own default would then move focus (to
  * <body>, or to whatever lies under the pointer once the backdrop is gone)
- * after focus went back to the opener (GM, PR #203 r15 item 4).
+ * after focus went back to the opener (design, PR #203).
  */
 let press: Event | null = null;
 let pressWatchers = 0;
@@ -79,7 +79,7 @@ function keepPressFromMovingFocus(): void {
 const contain = (event: SyntheticEvent) => event.stopPropagation();
 
 /**
- * Every modal dialog in the app renders through this (review 9, M-1 and M-2).
+ * Every modal dialog in the app renders through this.
  *
  * - On document.body, so it covers the window whatever opened it: a modal
  *   rendered inside a panel takes that panel's box as its own when the panel
@@ -97,20 +97,20 @@ const contain = (event: SyntheticEvent) => event.stopPropagation();
  *   document listener in the app reads those three from inside a modal.
  * - `data-modal-layer`: the order modals opened, so the one on top is the last
  *   opened wherever it sits on the page (keyBlockedByModal).
- * - GM r25 (PR #200 fix round 16): the app's notices stay above the backdrop
- *   and in the dialog's focus trap, as a second region (lib/modalFocus.ts
+ * - Design, PR #200: the app's notices stay above the backdrop and in the
+ *   dialog's focus trap, as a second region (lib/modalFocus.ts
  *   holdNoticeTabbing), for every modal alike.
- * - GM, PR #203 r13 item 1: while it holds an `aria-modal="true"` dialog,
- *   the page behind it is inert and aria-hidden (lib/modalFocus hideBehind):
- *   the canvas, every panel and the proposal bar's slot, so a control behind
- *   the scrim can't be focused or pressed (round 6 review, stacking LOW-1:
- *   a focused Accept accepted on Enter under the palette). The notices stay
- *   usable, a modal opened over this one too. On close it puts every
- *   attribute back and, when focus was left on nothing (in the dialog that
- *   is going, or on <body>), returns it to the control that opened it. A
- *   dialog's own focus return runs after this, so it wins where it has one.
- * - GM r25 (4) on PR #199: an aria-modal dialog puts the notices already on
- *   the page under its scrim (inert and dimmed: lib/modalFocus
+ * - Design, PR #203: while it holds an `aria-modal="true"` dialog, the page
+ *   behind it is inert and aria-hidden (lib/modalFocus hideBehind): the
+ *   canvas, every panel and the proposal bar's slot, so a control behind the
+ *   scrim can't be focused or pressed (a focused Accept used to accept on
+ *   Enter under the palette). The notices stay usable, a modal opened over
+ *   this one too. On close it puts every attribute back and, when focus was
+ *   left on nothing (in the dialog that is going, or on <body>), returns it
+ *   to the control that opened it. A dialog's own focus return runs after
+ *   this, so it wins where it has one.
+ * - Design, PR #199: an aria-modal dialog puts the notices already on the
+ *   page under its scrim (inert and dimmed: lib/modalFocus
  *   holdNoticesUnderModal) as it opens, and gives them back as it closes;
  *   one that arrives while it is open stays above, live.
  */
@@ -145,7 +145,7 @@ export function ModalPortal({ children, fallbackFocus }: {
     if (!root) return;
     openersOf.set(root, openers);
     // The same portal set up again before its queued return ran (StrictMode's
-    // second mount in dev: review 7 of PR #203, NIT-1): it isn't closing.
+    // second mount in dev): it isn't closing.
     if (pendingReturn.current) pendingReturn.current.cancelled = true;
     pendingReturn.current = null;
     let restore: (() => void) | null = null;
@@ -164,13 +164,13 @@ export function ModalPortal({ children, fallbackFocus }: {
     return () => {
       watch.disconnect();
       restore?.();
-      // A press that closed it doesn't then move focus (GM, PR #203 r15 item 4).
+      // A press that closed it doesn't then move focus (design, PR #203).
       keepPressFromMovingFocus();
       // A microtask on, once the commit is over: React hears no events
-      // during a commit, so the opener's own onFocus would miss a return made
-      // here (review 7 of PR #203, NIT-5); a dialog's own return, in its later
-      // effects, wins where it has one; and a portal set up again first (its
-      // StrictMode remount) cancels it.
+      // during a commit, so the opener's own onFocus would miss a return
+      // made here; a dialog's own return, in its later effects, wins where it
+      // has one; and a portal set up again first (its StrictMode remount)
+      // cancels it.
       const ticket = { cancelled: false };
       pendingReturn.current = ticket;
       queueMicrotask(() => {
@@ -179,10 +179,10 @@ export function ModalPortal({ children, fallbackFocus }: {
         const active = document.activeElement;
         const lost = !active || active === document.body || active === document.documentElement || root.contains(active);
         if (!lost) return;
-        // The nearest opener still on the page, up the chain of dialogs
-        // that opened this one (GM, PR #203 r15 item 5), else the dialog's
-        // fallback. A dialog's own focus trap still listening ignores this
-        // move (modalFocus isReturningFocus); the opener's onFocus hears it.
+        // The nearest opener still on the page, up the chain of dialogs that
+        // opened this one (design, PR #203), else the dialog's fallback. A
+        // dialog's own focus trap still listening ignores this move
+        // (modalFocus isReturningFocus); the opener's onFocus hears it.
         for (const target of [...openers, fallback.current?.() ?? null]) {
           if (!target || target === document.body || target === document.documentElement || !canTakeFocus(target)) continue;
           returnFocusTo(target);

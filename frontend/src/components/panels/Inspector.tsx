@@ -62,12 +62,12 @@ import { aside } from '../../lib/labelAside';
 
 type InspectorParamDefinition = ParamDefinition | DynamicParamDefinition;
 
-// The name of the file each upload into a file param is sending, by its
-// run key (usePaletteExtracts' paletteRunKey): the newest pick's, read by the
-// file row while "Uploading “name”…" shows (GM r46 on #222).
+// The name of the file each upload into a file param is sending, by its run
+// key (usePaletteExtracts' paletteRunKey): the newest pick's, read by the
+// file row while "Uploading “name”…" shows (design, PR #222).
 const uploadNames = new Map<string, string>();
-// GM r48 bug 2 on #222: a dropped-upload line goes on any change to its
-// param's value, whatever made it (fileDropNotes.ts).
+// Design, PR #222: a dropped-upload line goes on any change to its param's
+// value, whatever made it (fileDropNotes.ts).
 watchFileDropNotes();
 
 type InspectorProps = {
@@ -101,16 +101,15 @@ export function LastRunNotes({ notes }: { notes: readonly string[] }) {
 }
 
 export function Inspector({ embedded = false }: InspectorProps) {
-  // Offline is read-only (round 15 of PR #114), and so is following an
-  // agent's switch (GM round 22, A: one state, lib/canvasLock): every field
-  // and action that edits renders disabled from this, so the end of either
-  // just re-renders. Run, Duplicate and Delete say "Wait for “<project>” to
-  // open." while following.
+  // Offline is read-only (PR #114), and so is following an agent's switch
+  // (design, one state, lib/canvasLock): every field and action that edits
+  // renders disabled from this, so the end of either just re-renders. Run,
+  // Duplicate and Delete say "Wait for “<project>” to open." while following.
   const lock = useCanvasLock();
   const readOnly = lock.locked;
   // A file picker is a <label> around a hidden input: the input is disabled,
-  // and the label carries the lock's look and reason (follow, then offline;
-  // GM r9 answer 3: "You can choose a file when Nebula reconnects.").
+  // and the label carries the lock's look and reason (follow, then offline,
+  // the design's line being "You can choose a file when Nebula reconnects.").
   const lockedPicker = (title: string | undefined, offline: string) => ({
     ...lock.mark,
     title: lock.title({ title, offline }),
@@ -130,18 +129,17 @@ export function Inspector({ embedded = false }: InspectorProps) {
   const deleteNode = useGraphStore((s) => s.deleteNode);
   const configureOpenRouterModel = useGraphStore((s) => s.configureOpenRouterModel);
   const fetchReplicateSchemaAndConfigure = useGraphStore((s) => s.fetchReplicateSchemaAndConfigure);
-  // PR #204 round 10 (GM r15, r17 items 1 and 5): a universal node's model picker and Fetch
-  // Schema set the model through POST /api/graph/node/{id}/model, and a favorite is PUT
-  // /api/settings, both the person's alone. The pickers lock as one group with one line; the
-  // star has its own.
+  // Design, PR #204: a universal node's model picker and Fetch Schema set the model through
+  // POST /api/graph/node/{id}/model, and a favorite is PUT /api/settings, both the person's
+  // alone. The pickers lock as one group with one line; the star has its own.
   const modelLock = usePersonLock('change the model');
-  // Replicate's Fetch schema has its own line (GM, 2026-11-05): the Model ID field stays
-  // editable like any param, so only the fetch is the person's.
+  // Replicate's Fetch schema has its own line (design, 2026-11-05): the Model ID field
+  // stays editable like any param, so only the fetch is the person's.
   const schemaLock = usePersonLock('fetch the schema');
   const favoriteLock = usePersonLock('save favorites');
   const dragRef = useRef<{ startX: number; startY: number; panelX: number; panelY: number } | null>(null);
   const pinned = useUIStore((s) => s.inspectorPinned);
-  // Embedded, a pinned one stays with no node: its empty state (GM PR #205 r10).
+  // Embedded, a pinned one stays with no node: its empty state (design, PR #205).
   const visible = embedded ? selectedNodeId !== null || pinned : panelVisible;
   const { shouldRender, exiting } = useDelayedUnmount(visible, 500);
 
@@ -157,14 +155,14 @@ export function Inspector({ embedded = false }: InspectorProps) {
   // have more than one 'palette' control): the line, its timing, the status
   // region, the can't-run line and a dropped palette's line, kept outside
   // this Inspector, one per project, graph and node (usePaletteExtracts;
-  // GM r22 Q2 on #208). This re-renders on each change.
+  // design, PR #208). This re-renders on each change.
   usePaletteExtracts();
-  // A file param's name may come from Nebula's upload record (GM r48 Q1).
+  // A file param's name may come from Nebula's upload record (design).
   useUploadNames();
-  // GM r22 Q1: a dropped palette's line is said once. The notes this
-  // Inspector showed for its node go when it leaves the node.
-  // By note key, the node it was shown on and the note itself (a newer
-  // note for the key since is the next one, not this).
+  // Design: a dropped palette's line is said once. The notes this
+  // Inspector showed for its node go when it leaves the node. By note
+  // key, the node it was shown on and the note itself (a newer note
+  // for the key since is the next one, not this).
   const shownPaletteNotes = useRef(new Map<string, { node: string; note: PaletteDropNote }>());
   // The clearing waits for the next run of this effect, so StrictMode's
   // re-run (the same node, still open) keeps a note the person hasn't left;
@@ -197,7 +195,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
       notesClearing.current = { node, run, timer };
     };
   }, [selectedNodeId, visible]);
-  // GM r22 Q3/Q4 on #208: focus kept across an extract (see paletteFocus).
+  // Design, PR #208: focus kept across an extract (see paletteFocus).
   useLayoutEffect(() => { applyPaletteFocus(); scrollPaletteSlot(); });
 
   // Quiver Arrow dynamic model list (cached for the session). Loaded on
@@ -217,7 +215,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
   // Favorites state
   const [favorites, setFavorites] = useState<Record<string, string[]>>({});
   const [favoriteError, setFavoriteError] = useState<string | null>(null);
-  // PR #204 round 14 (GM r23 3): offline comes first for a not-connected line.
+  // Design, PR #204: offline comes first for a not-connected line.
   const shownFavoriteError = useOfflineFirstBecause(favoriteError);
 
   // Load favorites from settings
@@ -229,11 +227,12 @@ export function Inspector({ embedded = false }: InspectorProps) {
 
   // The canvas's selection (each node's `selected`), as the selection bar
   // counts it: Shift-click, a drag-select, a Paste of several, Select all
-  // (GM PR #205 r12). One selected node is the node shown (the store keeps
-  // selectedNodeId on it); from 2, none is.
+  // (design, PR #205). One selected node is the node shown (the store
+  // keeps selectedNodeId on it); from 2, none is.
   const canvasSelectedCount = useMemo(() => nodes.reduce((count, node) => count + (node.selected ? 1 : 0), 0), [nodes]);
-  // The canvas selection decides (GM #205 r12): one selected node is the
-  // node shown, whatever the UI store last named; none falls back to it.
+  // The canvas selection decides (design, PR #205): one selected
+  // node is the node shown, whatever the UI store last named; none
+  // falls back to it.
   const selectedNode = canvasSelectedCount >= 2
     ? undefined
     : canvasSelectedCount === 1
@@ -259,10 +258,10 @@ export function Inspector({ embedded = false }: InspectorProps) {
   const settingsCache = useUIStore((s) => s.settingsCache);
   const nodeParams = nodeData?.params;
   const renderNodeId = renderNode?.id;
-  // A scene with a shot rendering can't be deleted yet (GM, PR #198 r3 item 1).
+  // A scene with a shot rendering can't be deleted yet (design, PR #198).
   const sceneHeld = useGraphStore((s) => (renderNodeId ? sceneDeleteDisabledTitle(s, [renderNodeId]) : null));
   // This tab's own run locks Run, Duplicate and Delete, and its line wins
-  // (PR #198 review 6, N2: as the selection toolbar and the context menu).
+  // (PR #198: as the selection toolbar and the context menu).
   const runLocked = useGraphStore((s) => s.isExecuting);
   const runStarting = useGraphStore((s) => s.runStarting);
   const wiredKey = useMemo(() => (renderNodeId ? nodeWiredPorts(renderNodeId, edges).join('\n') : ''), [renderNodeId, edges]);
@@ -272,8 +271,8 @@ export function Inspector({ embedded = false }: InspectorProps) {
     return paramDefinitionsForRun(definition, routed, settingsCache.loaded ? settingsCache.apiKeys : {}, { seedOptIn: false });
   }, [definition, nodeParams, wiredKey, settingsCache.loaded, settingsCache.apiKeys]);
   // A node that can't run without its key (a keyed route's missing key), this
-  // one or one feeding it: Run is locked with its line as the reason (GM, PR
-  // #203 r4), aria-disabled so it keeps its focus and tooltip, and it reads
+  // one or one feeding it: Run is locked with its line as the reason (design,
+  // PR #203), aria-disabled so it keeps its focus and tooltip, and it reads
   // the line out (keyLockedProps).
   const keyLock = useMemo(() => {
     if (!renderNodeId) return null;
@@ -442,10 +441,10 @@ export function Inspector({ embedded = false }: InspectorProps) {
 
   if (!shouldRender) return null;
 
-  // A pinned Inspector whose node went (several came back, or an Undo, a
-  // Delete or a reopen took it off) shows this, its pin kept (GM PR #205 r10
-  // items 2-3). Over several selected nodes it says so, counted from the
-  // canvas's selection (GM PR #205 r11 item 3): "No node selected" is for none.
+  // A pinned Inspector whose node went (several came back, or an Undo, a Delete
+  // or a reopen took it off) shows this, its pin kept (design, PR #205). Over
+  // several selected nodes it says so, counted from the canvas's selection
+  // (design, PR #205): "No node selected" is for none.
   const emptyBody = (
     <div className="panel__body panel__body--empty" key="inspector-empty">
       <div className="inspector__empty" data-inspector-empty="true"
@@ -459,7 +458,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
         ) : (
           <>
             <span className="inspector__empty-title">No node selected</span>
-            {/* Decoration; the title says it (GM PR #205 r13 item 6). */}
+            {/* Decoration; the title says it (design, PR #205). */}
             <span className="inspector__empty-status" aria-hidden="true">standby</span>
           </>
         )}
@@ -538,9 +537,9 @@ export function Inspector({ embedded = false }: InspectorProps) {
   // Params written over the node's params as they are now, not as this
   // render saw them: for a write that lands after an await (Extract's
   // palette, a file upload), so an edit made meanwhile, by the person or an
-  // agent, stays (review 7 M1). `key` is the param the person edited; the
-  // node's own definition and provider snap run as on any edit. One store
-  // update, so one undo step. A node that is gone gets nothing.
+  // agent, stays. `key` is the param the person edited; the node's own
+  // definition and provider snap run as on any edit. One store update, so
+  // one undo step. A node that is gone gets nothing.
   function writeParamsNow(nodeId: string, key: string, patch: Record<string, unknown>, drop: readonly string[] = []) {
     const current = useGraphStore.getState().nodes.find((n) => n.id === nodeId)?.data.params;
     if (!current) return;
@@ -554,12 +553,12 @@ export function Inspector({ embedded = false }: InspectorProps) {
     writeParamsNow(nodeId, key, { [key]: value });
   }
 
-  // A file picked into a file param (#208 round 8c): the upload's answer
-  // lands over the node's params as they are then (writeParamsNow), so an
-  // edit made while it uploaded, the person's or an agent's, stays, and the
+  // A file picked into a file param (PR #208): the upload's answer lands
+  // over the node's params as they are then (writeParamsNow), so an edit
+  // made while it uploaded, the person's or an agent's, stays, and the
   // provider snap runs as on any edit. It runs as Extract's palette does
-  // (usePaletteExtracts, the same one per project, graph and node: GM r46 on
-  // #222), so it shares its timing and its dropped line:
+  // (usePaletteExtracts, the same one per project, graph and node: design,
+  // PR #222), so it shares its timing and its dropped line:
   // - "Uploading “name”…" replaces the file's name once the upload has run
   //   PALETTE_PENDING_DELAY_MS, and stays at least PALETTE_LINE_MIN_MS; the
   //   control stays live, and the newest pick into the param wins (an older
@@ -577,7 +576,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
     const definitionId = picked?.data.definitionId;
     if (!definitionId) return;
     // The value the dropped line stands over: any change to it clears the
-    // line (GM r48 bug 2, fileDropNotes.ts).
+    // line (design, fileDropNotes.ts).
     const valueAtPick = picked?.data.params?.[paramKey] ?? '';
     const runKey = paletteRunKey(project, generation, nodeId, paramKey);
     const noteKey = paletteNoteKey(project, nodeId, paramKey);
@@ -585,8 +584,8 @@ export function Inspector({ embedded = false }: InspectorProps) {
     uploadNames.set(runKey, file.name);
     const formData = new FormData();
     formData.append('file', file);
-    // GM, error-copy round 2: "Couldn’t upload {filename}." then the
-    // reason, in the canvas notice (as a canvas drop says it).
+    // Design: "Couldn’t upload {filename}." then
+    // the reason, in the canvas notice (as a canvas drop says it).
     const heading = `Couldn’t upload ${quoted(shownFileName(file.name))}.`;
     type Uploaded = { ok: true; filePath: string; url: string; previewSize?: unknown } | { ok: false; error: unknown };
     startPaletteExtract<Uploaded>(
@@ -622,7 +621,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
         // /api/uploads keeps it for a node it creates.
         const kept = paramKey === 'filePath' ? fileNameParam(uploaded.filePath, file.name) : null;
         // The image's size as shown (backend services/preview_size.py), so the
-        // preview has its height before it decodes (#226, GM r82); a file
+        // preview has its height before it decodes (design, PR #226); a file
         // without one drops the last file's (merged from main, 2026-11-05).
         const size = previewSize(uploaded.previewSize);
         writeParamsNow(nodeId, paramKey, {
@@ -640,14 +639,14 @@ export function Inspector({ embedded = false }: InspectorProps) {
   // result is dropped, null). A worker that can't load or start is the
   // client's business: the page does it, and nothing new shows. Only when
   // the extraction's own code can't load does a line say so, with Try again
-  // (GM r20 on #208).
+  // (design, PR #208).
   //
-  // Review 8 MEDIUM-1 / GM r22 Q1: the palette is written only to the canvas
-  // it was made for. The project, the graph generation and the node's
-  // definition are read now; when it lands, a change to any of them, or a
-  // locked canvas, drops the write. A palette dropped for a switch (the
-  // person's or a follow) or a lock is said on the node when the person is
-  // back on it; a node deleted or redefined meanwhile hears nothing.
+  // Design: the palette is written only to the canvas it was made for. The
+  // project, the graph generation and the node's definition are read now;
+  // when it lands, a change to any of them, or a locked canvas, drops the
+  // write. A palette dropped for a switch (the person's or a follow) or a
+  // lock is said on the node when the person is back on it; a node deleted
+  // or redefined meanwhile hears nothing.
   function extractPalette(nodeId: string, paramKey: string, file: File, retry = false) {
     const project = getProjectContext()?.id ?? null;
     const generation = canvasGeneration();
@@ -658,7 +657,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
     const notify = (text: string) => useGraphStore.getState().notify(text, 'error');
     setPaletteDropNote(noteKey, null);
     // A retry keeps the can't-run line and Try again, mounted, until it
-    // lands (GM r22 Q4).
+    // lands (design).
     if (!retry) setPaletteCantRun(runKey, null);
     startPaletteExtract(
       runKey,
@@ -689,15 +688,15 @@ export function Inspector({ embedded = false }: InspectorProps) {
         if (colors) {
           const lock = canvasLockNow();
           if (lock.locked) {
-            // A follow switch is the project changing (GM r22 Q1); offline,
+            // A follow switch is the project changing (design); offline,
             // the lock's own reason and what unlocks it.
             setPaletteDropNote(noteKey, { text: lock.following ? PALETTE_PROJECT_CHANGED : PALETTE_OFFLINE_DROPPED, definitionId });
             planPaletteFocus(runKey, null);
             return '';
           }
           planPaletteFocus(runKey, colors.length);
-          // Only the palette, over the node's params as they are when it
-          // lands (review 7 M1).
+          // Only the palette, over the node's params as they are
+          // when it lands.
           writeParamNow(nodeId, paramKey, colors);
           return paletteStatus(colors.length);
         }
@@ -830,8 +829,8 @@ export function Inspector({ embedded = false }: InspectorProps) {
                 const newFavorites = { ...favorites, [universalProvider]: updated };
                 const before = favorites;
                 setFavorites(newFavorites);
-                // Review of the sweep (GM r17 item 5): a refused save no longer drops silently. The
-                // star goes back and the line says why (the same rule as every other setting).
+                // Design: a refused save no longer drops silently. The star
+                // goes back and the line says why (the same rule as every other setting).
                 setFavoriteError(null);
                 updateSettings({ favorites: newFavorites }).catch((exc: unknown) => {
                   setFavorites(before);
@@ -974,26 +973,26 @@ export function Inspector({ embedded = false }: InspectorProps) {
       const swatches: string[] = Array.isArray(raw)
         ? raw.filter((s): s is string => typeof s === 'string')
         : [];
-      // GM r22 Q2 on #208: one extract per project, graph and node, so an
+      // Design, PR #208: one extract per project, graph and node, so an
       // Inspector opened again shows the one running.
       const project = getProjectContext()?.id ?? null;
       const extractKey = paletteRunKey(project, canvasGeneration(), activeNode.id, param.key);
       const noteKey = paletteNoteKey(project, activeNode.id, param.key);
-      // GM r17/r18 on #208: nothing changes for a quick extract; once the
+      // Design, PR #208: nothing changes for a quick extract; once the
       // line shows, the old swatches are read-only (Strength and Method
       // stay live) and the Add / Extract row waits under the line.
       const { working, shown, status: extractStatus, cantRun: cantRunFile } = paletteExtractView(extractKey);
-      // GM r22 Q4: a retry keeps the can't-run line (never the pending one).
+      // Design: a retry keeps the can't-run line (never the pending one).
       const pendingShown = shown && !cantRunFile;
       const retrying = working && Boolean(cantRunFile);
-      // GM r22 Q1: a palette dropped while away, said once on this node
+      // Design: a palette dropped while away, said once on this node
       // (not on a node redefined since), until the next Extract or edit.
       const storedNote = paletteDropNote(noteKey);
       const dropNote = storedNote && storedNote.definitionId === activeNodeData.definitionId
         && !working && !cantRunFile ? storedNote.text : null;
       if (dropNote && storedNote) shownPaletteNotes.current.set(noteKey, { node: activeNode.id, note: storedNote });
       const pendingId = `palette-pending-${activeNode.id}-${param.key}`;
-      // GM r22 Q3: read-only while the line shows, focus kept (aria-disabled,
+      // Design: read-only while the line shows, focus kept (aria-disabled,
       // the house pattern); the lock still disables outright.
       const held = pendingShown && !readOnly;
       const heldProps = held ? { 'aria-disabled': true as const, 'aria-describedby': pendingId } : {};
@@ -1026,8 +1025,9 @@ export function Inspector({ embedded = false }: InspectorProps) {
                       data-swatch-part="color"
                       data-swatch-index={idx}
                       value={safeHex}
-                      // GM r20 on #208: the chip is the content, always at
-                      // its full colour, disabled too; only its edge dims.
+                      // Design, PR #208: the chip is the content,
+                      // always at its full colour, disabled too; only
+                      // its edge dims.
                       style={{ backgroundColor: safeHex }}
                       disabled={readOnly} {...lock.mark} {...heldProps}
                       aria-label={`Swatch ${idx + 1} color`}
@@ -1069,9 +1069,9 @@ export function Inspector({ embedded = false }: InspectorProps) {
                       data-swatch-part="remove"
                       data-swatch-index={idx}
                       aria-label={`Remove swatch ${idx + 1}`}
-                      // Fix round 5 of PR #200 (review 5 LOW-2, GM r7): the
-                      // lock's own tooltip, the follow reason first, then
-                      // offline's verb; "Remove swatch" when live.
+                      // Design, PR #200: the lock's own tooltip, the
+                      // follow reason first, then offline's verb;
+                      // "Remove swatch" when live.
                       {...lock.act({ title: held ? undefined : 'Remove swatch', offline: 'remove swatches', kept: 'live' })}
                       {...heldProps}
                       onClick={() => writeSwatches(swatches.filter((_, i) => i !== idx))}
@@ -1090,19 +1090,19 @@ export function Inspector({ embedded = false }: InspectorProps) {
             </div>
           )}
           {dropNote && (
-            // GM r22 Q1: neutral, in the line's slot, above the row.
+            // Design: neutral, in the line's slot, above the row.
             <p className="inspector__palette-note" aria-hidden="true">{dropNote}</p>
           )}
           {cantRunFile && (
-            // GM r20/r22 Q6 on #208: only when Extract can't run at all;
+            // Design, PR #208: only when Extract can't run at all;
             // neutral, the because form, in the line's slot, then the row
             // with Try again where Extract is.
             <p className="inspector__palette-cant-run" aria-hidden="true">{PALETTE_CANT_RUN}</p>
           )}
           {pendingShown ? (
-            // GM r16 on #208: one plain line in the Add / Extract row's place;
-            // the swatches above stay until the new palette replaces them.
-            // Focus moves here from the row it replaced (GM r22 Q3).
+            // Design, PR #208: one plain line in the Add / Extract row's
+            // place; the swatches above stay until the new palette replaces
+            // them. Focus moves here from the row it replaced (design).
             <p id={pendingId} className="inspector__palette-pending" aria-hidden="true" tabIndex={-1} data-palette-part="pending">
               Extracting colors…
             </p>
@@ -1112,9 +1112,9 @@ export function Inspector({ embedded = false }: InspectorProps) {
               type="button"
               className="inspector__action-button"
               data-palette-part="add"
-              // Fix round 6 of PR #200 (review 6 LOW-1, GM r8): the lock's
-              // reason, not "Add a swatch", while it can't add.
-              // While the line shows, Add waits under it with Extract.
+              // Design, PR #200: the lock's reason, not "Add a swatch",
+              // while it can't add. While the line shows, Add waits under
+              // it with Extract.
               {...lock.act({ title: 'Add a swatch', offline: 'add swatches', kept: 'live' })}
               onClick={() => writeSwatches([...swatches, '#808080'])}
             >
@@ -1128,8 +1128,8 @@ export function Inspector({ embedded = false }: InspectorProps) {
               <span>Add</span>
             </button>
             {cantRunFile ? (
-              // GM r22 Q4: mounted through a retry, aria-disabled while it
-              // runs (focus stays), the same element after a second failure.
+              // Design: mounted through a retry, aria-disabled while it runs
+              // (focus stays), the same element after a second failure.
               <button
                 type="button"
                 className="inspector__action-button"
@@ -1145,10 +1145,9 @@ export function Inspector({ embedded = false }: InspectorProps) {
               </button>
             ) : (
             /* A <label> can't be disabled: locked, it says so itself (the
-                shared grey, the lock's reason, no hover; fix round 6 of PR
-                #200, review 6 LOW-1, GM r9 answer 3). Its input is visually
-                hidden, not display: none, so Extract is in the Tab order
-                (GM r22, folded). */
+                shared grey, the lock's reason, no hover; design, PR #200).
+                Its input is visually hidden, not display: none, so Extract
+                is in the Tab order (design). */
             <label className="inspector__file-button" {...lockedPicker('Extract a palette from an image', 'extract a palette')}>
               <Upload
                 className="inspector__action-icon"
@@ -1157,7 +1156,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
                 aria-hidden="true"
                 focusable="false"
               />
-              {/* GM r23 on #208: "Extract" (the full name can't fit the
+              {/* Design, PR #208: "Extract" (the full name can't fit the
                   Inspector's normal width beside Add); the input carries
                   the full name, the label its title. */}
               <span className="inspector__palette-extract-label">Extract</span>
@@ -1170,9 +1169,9 @@ export function Inspector({ embedded = false }: InspectorProps) {
                 disabled={readOnly}
                 {...lock.mark}
                 onChange={(e) => {
-                  // Fix round 7 of PR #200 (review 7 N-2): refused here too, so
-                  // a file set on the input from outside, or picked just before
-                  // the lock, uploads nothing (no orphan in output/).
+                  // PR #200: refused here too, so a file set on the input from
+                  // outside, or picked just before the lock, uploads nothing
+                  // (no orphan in output/).
                   if (refuseCanvasEdit()) { e.target.value = ''; return; }
                   const file = e.target.files?.[0];
                   if (!file) return;
@@ -1185,7 +1184,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
             )}
           </div>
           )}
-          {/* GM r18 4 on #208: always mounted, so a screen reader hears each
+          {/* Design, PR #208: always mounted, so a screen reader hears each
               change: "Extracting colors…", then "Extracted N colors." or the
               failure's own line. The visible line is the same words. */}
           <span className="inspector__palette-status" role="status" aria-live="polite">{extractStatus || dropNote || ''}</span>
@@ -1196,7 +1195,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
     if (param.type === 'file') {
       const fileValue = String(value);
       // The name it was uploaded with, else the path's own name, never a
-      // bare content hash (GM r48 Q1: lib/fileName.ts fileParamName).
+      // bare content hash (design: lib/fileName.ts fileParamName).
       const loadedFilename = fileValue ? fileParamName(activeNodeData.params, param.key) : null;
       const isVideoNode = activeNodeData.definitionId === 'video-input' || activeNodeData.definitionId === 'audio-input';
       const isDocNode = activeNodeData.definitionId === 'document-input';
@@ -1205,20 +1204,21 @@ export function Inspector({ embedded = false }: InspectorProps) {
         : isVideoNode
           ? 'video/*,audio/*'
           : 'image/*,video/*,audio/*';
-      // GM r46 on #222: an upload on its way says so in the row, in place of
-      // the name (uploadIntoParam); a dropped one says why under it, once.
+      // Design, PR #222: an upload on its way says so in the row, in
+      // place of the name (uploadIntoParam); a dropped one says why
+      // under it, once.
       const project = getProjectContext()?.id ?? null;
       const uploadKey = paletteRunKey(project, canvasGeneration(), activeNode.id, param.key);
       const uploadView = paletteExtractView(uploadKey);
       const uploadingName = uploadView.shown ? uploadNames.get(uploadKey) ?? null : null;
       const uploading = uploadingName ? shownFileName(uploadingName) : null;
-      // GM r48 bug 1: while an upload is in flight (from the pick, not only
+      // Design: while an upload is in flight (from the pick, not only
       // once its row shows), never "No preview": a preview the param holds
       // stays until the new one lands, and with none nothing shows.
       const inFlight = uploadView.working;
       const noteKey = paletteNoteKey(project, activeNode.id, param.key);
       const storedNote = paletteDropNote(noteKey);
-      // GM r48 bug 2: never over a value changed since the pick.
+      // Design: never over a value changed since the pick.
       const dropNote = storedNote && storedNote.definitionId === activeNodeData.definitionId && !uploading
         && !fileDropNoteStale(storedNote, activeNodeData.params[param.key])
         ? storedNote.text : null;
@@ -1249,7 +1249,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
               aria-describedby={uploading ? rowId : undefined}
               className="inspector__file-input"
               onChange={(e) => {
-                // Review 7 N-2: refused here too (see Extract's onChange).
+                // Refused here too (see Extract's onChange).
                 if (refuseCanvasEdit()) { e.target.value = ''; return; }
                 const file = e.target.files?.[0];
                 // Emptied, so the same file chosen again (the dropped line
@@ -1261,13 +1261,12 @@ export function Inspector({ embedded = false }: InspectorProps) {
             />
           </label>
           {dropNote && (
-            // GM r46 Q1: neutral, no button. GM r67: directly under the row
-            // it describes, above the preview (under it, the sticky footer
-            // hid it).
+            // Design: neutral, no button, directly under the row it describes,
+            // above the preview (under it, the sticky footer hid it).
             <p className="inspector__palette-note" aria-hidden="true">{dropNote}</p>
           )}
           {showsPreview && fileValue && !previewUrl && !inFlight && (
-            // GM r46 Q2: neutral, nothing failed (the run reads the file).
+            // Design: neutral, nothing failed (the run reads the file).
             <span className="inspector__file-no-preview">{NO_PREVIEW}</span>
           )}
           {showsPreview && <FilePreviewFrame src={previewUrl} size={activeNodeData.params._previewSize} />}
@@ -1427,7 +1426,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
 
       {missingApiKeys.length > 0 && (
         // A missing key is something to do, not a failure: the run error's
-        // line, in the neutral notice (copy sweep item 12).
+        // line, in the neutral notice (copy sweep).
         <div className="inspector__notice inspector__notice--key" role="status">
           {missingKeyLine([...new Set(missingApiKeys)])}
         </div>
@@ -1611,9 +1610,9 @@ export function Inspector({ embedded = false }: InspectorProps) {
           const dynData = nodeData as unknown as DynamicNodeData;
           const hasDynamicParams = dynData?.isDynamic && dynData.dynamicParams?.length > 0;
           if (!hasDynamicParams) return null;
-          // A provider setting's label is its key in sentence case (GM, PR
-          // #198 r1 item 7), as the agent's cursor names it; a node saved
-          // before that keeps a Title Case label in its data.
+          // A provider setting's label is its key in sentence case
+          // (design, PR #198), as the agent's cursor names it; a node
+          // saved before that keeps a Title Case label in its data.
           return dynData.dynamicParams.map((param) => renderParamSection({ ...param, label: universalSettingLabel(param.key) }, 'dynamic'));
         })()}
 
@@ -1626,7 +1625,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
         </div>
 
         {/* Actions: in the floating Inspector's foot, outside its scrolling
-            body, so the row is always whole (GM - Design, 2026-10-23). */}
+            body, so the row is always whole (design, 2026-10-23). */}
         <InspectorFoot>
         <div className="inspector__section inspector__actions">
           <button
@@ -1667,7 +1666,7 @@ export function Inspector({ embedded = false }: InspectorProps) {
             {...lock.act({ disabled: sceneHeld !== null, title: sceneHeld ?? 'Delete this node', kept: 'live' }, { run: runLocked, runTitle: runFinishesLine(RUN_LOCK_VERBS.deleteIt) })}
             onClick={() => {
               // A World Labs hold refuses, with its notice; otherwise it deletes at
-              // once and says "Deleted the node." with Undo (GM, 2026-10-23).
+              // once and says "Deleted the node." with Undo (design, 2026-10-23).
               if (useGraphStore.getState().allowCanvasDelete([renderNode.id])) deleteNode(renderNode.id);
             }}
           >

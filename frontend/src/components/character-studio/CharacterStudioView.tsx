@@ -403,13 +403,13 @@ export function CharacterStudioView() {
   // whatever scope it was opened with (a node's Open button guesses, and a
   // draft kept from an earlier visit loads without a fetch). The rail opens
   // on that scope, and says so when it's another project's Character.
-  /** Try again is a save, so it shows only beside a save's own failure (GM,
-   * error-copy round 3: "A Try again that does something else is a defect."). */
+  /** Try again is a save, so it shows only beside a save's own failure (design,
+   * error-copy: "A Try again that does something else is a defect."). */
   const canRetry = Boolean(saveError) && retry === 'save';
   /** A failed save that another line (no project open) replaced is still
    * owed: Error, dirty, and autosave waits while it says Error. The toolbar
    * keeps its Try again (a save) for it; the notice's line, which no save
-   * redoes, keeps its own words and no Try again (round 3 review). */
+   * redoes, keeps its own words and no Try again. */
   const toolbarCanRetry = saveState === 'error' && (retry === 'save' || (retry == null && dirty));
 
   const characterProjectName = useProjectName(draft.projectId);
@@ -449,7 +449,7 @@ export function CharacterStudioView() {
       <main className="character-studio-view__main">
         {loading ? (
           <div className="character-studio-view__loading">
-            {/* As in the board's Studio (round 3b): no Try again with no project open. */}
+            {/* As in the board's Studio: no Try again with no project open. */}
             {shownLoadError ? <div id={loadLineId} role="alert"><FailureLines failure={shownLoadError} retry={projectReady} /></div> : 'Loading character…'}
             {shownLoadError && projectReady && <button type="button" className="character-studio-view__retry"
               aria-describedby={loadLineId} onClick={() => patch({ loadError: null, revision: revision + 1 })}>Try again</button>}

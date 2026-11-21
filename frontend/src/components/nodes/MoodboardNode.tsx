@@ -61,7 +61,7 @@ export function MoodboardNode({ id, data, selected }: NodeProps) {
       <div className="moodboard-node__name">{name}</div>
       <div className="moodboard-node__preview">
         {/* Only Nebula's own files are loaded (lib/storedImage.ts): an old
-            board's link to another site gets the placeholder (Q98). */}
+            board's link to another site gets the placeholder. */}
         {thumb.src ? (
           <img src={thumb.src} alt="" draggable={false} />
         ) : thumb.outside ? <OutsideImageNote /> : (

@@ -1,6 +1,6 @@
 /**
  * Palette focus and scroll for the Inspector's Extract from reference
- * (#208 round 8e, GM r22 Q3/Q4/Q6).
+ * (design, PR #208).
  *
  * While "Extracting colors…" shows, a focused swatch keeps focus (its
  * controls are aria-disabled, not disabled). When the palette lands, focus
@@ -13,8 +13,8 @@ type PaletteFocusPlan = { key: string; part: string | null; index: number; count
 let paletteFocusPlan: PaletteFocusPlan | null = null;
 /** The palette control a person last focused in (its key and part). */
 let lastPaletteFocus: { key: string; part: string } | null = null;
-/** GM r23: the row control (Add or Extract) focus left for the line, so it
- *  goes back to that control when the palette lands. */
+/** Design: the row control (Add or Extract) focus left for the line, so it
+ * goes back to that control when the palette lands. */
 let lineFrom: { key: string; part: string } | null = null;
 
 function paletteStackOf(key: string): HTMLElement | null {
@@ -84,8 +84,8 @@ export function notePaletteFocus(key: string, target: EventTarget | null): void 
   lastPaletteFocus = { key, part: target.dataset.palettePart ?? target.dataset.swatchPart ?? 'other' };
 }
 
-/** GM r22 Q6: the can't-run slot, scrolled into the Inspector by the least
- *  that shows all of it (smooth; a jump under reduced motion). */
+/** Design: the can't-run slot, scrolled into the Inspector by the least
+ * that shows all of it (smooth; a jump under reduced motion). */
 let paletteScrollKey: string | null = null;
 
 export function setPaletteScrollKey(key: string): void {

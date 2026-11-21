@@ -22,33 +22,30 @@ import { useOfflineFirstBecause } from '../../hooks/useOfflineFirstBecause';
 
 /** The "Note for agents" dialog, opened from the context menu or the selection toolbar.
  *
- * Round 23 of PR #195 (review 22, M-1): part of the canvas's read-only
- * state. Its OK takes the canvas lock (lib/canvasLock: disabled, marked,
- * "Wait for “X” to open." while following); offline the dialog stays open
- * with the text, as before. A follow or a replacement closes it (its target
- * is a node of the canvas that went), and what was typed comes back in a
- * notice with a Copy button, never pinned to the canvas that replaced it.
- * Follow-up (GM, 2026-10-27): opening Note again starts with that text.
- * Fix round 2 of PR #200 (GM 2026-10-28 answer 1): on its own project only.
- * On another project the dialog starts empty and the notice stays (it is
- * shown beside the open dialog too) until its × drops it.
- * Fix round 3 (review 3 M-2, GM's round 3 answer, verbatim): one note per
- * project. Notices stack, newest at the bottom, each with its own Copy note
- * and ×; on another project each names its own ("Your note for “Alpha”
- * wasn’t sent because …"). A failed send's error shows on its own project
- * only (review 3 N-3): elsewhere it would be about a note the person can't
- * see; the note waits there as its draft.
- * Fix round 4 (review 4 LOW-1, N-3, N-5, N-6; GM round 5 answers 2 and 5):
- * the newest two show, with "Show 7 more" (the real count) opening the
- * whole list, which scrolls inside a cap so it never reaches the project bar
- * or the selection toolbar; each note keeps its line breaks, clamped to 2
- * lines (blank-line runs collapsed), and names its project as it is called
- * now; a failed send's error goes once the person leaves its project. */
+ * PR #195: part of the canvas's read-only state. Its OK takes the canvas lock
+ * (lib/canvasLock: disabled, marked, "Wait for “X” to open." while
+ * following); offline the dialog stays open with the text, as before. A
+ * follow or a replacement closes it (its target is a node of the canvas that
+ * went), and what was typed comes back in a notice with a Copy button, never
+ * pinned to the canvas that replaced it. Follow-up (design, 2026-10-27):
+ * opening Note again starts with that text. PR #200 (design, 2026-10-28): on
+ * its own project only. On another project the dialog starts empty and the
+ * notice stays (it is shown beside the open dialog too) until its × drops it.
+ * The approved line, verbatim: one note per project. Notices stack, newest at
+ * the bottom, each with its own Copy note and ×; on another project each
+ * names its own ("Your note for “Alpha” wasn’t sent because …"). A failed
+ * send's error shows on its own project only: elsewhere it would be about a
+ * note the person can't see; the note waits there as its draft. Design: the
+ * newest two show, with "Show 7 more" (the real count) opening the whole
+ * list, which scrolls inside a cap so it never reaches the project bar or the
+ * selection toolbar; each note keeps its line breaks, clamped to 2 lines
+ * (blank-line runs collapsed), and names its project as it is called now; a
+ * failed send's error goes once the person leaves its project. */
 /** The note's cap in the dialog: 280 shown characters, counted as the
- * backend counts them; "N left" from 30 left (GM r20 note 1). */
+ * backend counts them; "N left" from 30 left. */
 const NOTE_CAP = { max: MAX_PIN_TEXT, count: noteLength, showAt: 30 };
-/** GM r27 item 4: how long a pin_node_gone refusal holds Send note while the
- * canvas still shows the node and no sync has named it. */
+/** How long a pin_node_gone refusal holds Send note while the canvas still
+ * shows the node and no sync has named it. */
 const NODE_GONE_RECHECK_MS = 5000;
 
 export function PinComposer() {
@@ -65,29 +62,29 @@ export function PinComposer() {
   const targetRemoved = useCanvasPinsStore((s) => s.targetRemoved);
   const tooLongRefusals = useCanvasPinsStore((s) => s.tooLongRefusals);
   const errorPersonGate = useCanvasPinsStore((s) => s.errorPersonGate);
-  // GM r30 item 3 (fix round 20): Send note waits for a note. A field that is
-  // empty, or holds only what the counter doesn't count (spaces, line breaks,
-  // characters that draw nothing), can't be sent.
+  // Send note waits for a note. A field that is empty, or holds only
+  // what the counter doesn't count (spaces, line breaks, characters
+  // that draw nothing), can't be sent.
   const noteEmpty = useCanvasPinsStore((s) => noteIsEmpty(s.draft));
-  // GM r24: while the person-gate banner shows (it was up as the dialog
-  // opened, or came up while it was open), Send note waits, disabled in the
-  // shared style with its reason; a refused send's toast then leaves the fix
-  // to the banner.
-  // GM r27 item 2: and after the banner's ×, while the tab still isn't
-  // connected as the person (× hides the banner, not the condition).
+  // While the person-gate banner shows (it was up as the dialog opened, or came
+  // up while it was open), Send note waits, disabled in the shared style with
+  // its reason; a refused send's toast then leaves the fix to the banner, and
+  // so after the banner's ×, while the tab still isn't connected as the person
+  // (× hides the banner, not the condition).
   const bannerUp = useSyncExternalStore(subscribePersonBanner, personBannerShown);
-  // GM r7 (3): the one held state (useTabHeld: held, demoted, or not answered yet), with the
-  // same lock and the 150 ms rule as every other ask (useLockPending), never a second flag.
-  // PR #204 round 10 (GM r15): through the one lock (components/PersonLock): aria-disabled with
-  // its line under the buttons, no tooltip. The banner being up locks it at once.
+  // The one held state (useTabHeld: held, demoted, or not answered yet), with
+  // the same lock and the 150 ms rule as every other ask (useLockPending),
+  // never a second flag. Since PR #204 it goes through the one lock
+  // (components/PersonLock): aria-disabled with its line under the buttons, no
+  // tooltip. The banner being up locks it at once.
   const sendLock = usePersonLock('send notes');
   const tabHeld = sendLock.locked;
   const heldPending = tabHeld && !sendLock.shown && !bannerUp;
   const lock = useCanvasLock();
-  // PR #204 round 14 (GM r23 3): offline comes first; the general notice's Send line waits too.
+  // PR #204: offline comes first; the general notice's Send line waits too.
   const gateBanner = (bannerUp && !lock.offline) || sendLock.shown;
-  // Review 13 L-2: the dialog counts only once the Unicode data is in (its
-  // own chunk, fetched as lib/canvasPins loads; a few milliseconds at most).
+  // The dialog counts only once the Unicode data is in (its own chunk,
+  // fetched as lib/canvasPins loads; a few milliseconds at most).
   const [textReady, setTextReady] = useState(pinTextSettled);
   useEffect(() => {
     if (textReady) return;
@@ -95,25 +92,24 @@ export function PinComposer() {
     void pinTextSettling().then(() => { if (live) setTextReady(true); });
     return () => { live = false; };
   }, [textReady]);
-  // PR #218 review 1 LOW-1: the data can land after the dialog is up: a
-  // failed chunk loaded again (compose retries it), with textReady already
-  // true from the failure. Everything here that reads the data is worked out
-  // as it draws ("N left" and Send note's empty check over the draft, each
-  // kept note's text), so one more render shows it all in the full form at
-  // once, not at the next keystroke or store change.
+  // PR #218: the data can land after the dialog is up: a failed chunk loaded
+  // again (compose retries it), with textReady already true from the
+  // failure. Everything here that reads the data is worked out as it draws
+  // ("N left" and Send note's empty check over the draft, each kept note's
+  // text), so one more render shows it all in the full form at once, not at
+  // the next keystroke or store change.
   const [, setTextLoads] = useState(0);
   useEffect(() => onPinTextLoaded(() => setTextLoads((loads) => loads + 1)), []);
-  // GM r23 item 2: the node the dialog is for left the canvas (the person
-  // or an agent removed it): Send note is disabled with the line as its
-  // reason, and the line shows once; Cancel and the typed text stay.
-  // A node the canvas had for this dialog and then lost: never one it
-  // hasn't loaded yet.
+  // The node the dialog is for left the canvas (the person or an agent removed
+  // it): Send note is disabled with the line as its reason, and the line shows
+  // once; Cancel and the typed text stay. A node the canvas had for this dialog
+  // and then lost: never one it hasn't loaded yet.
   const targetNode = composer && 'nodeId' in composer ? composer.nodeId : null;
   const nodeHere = useGraphStore((s) => targetNode !== null && s.nodes.some((node) => node.id === targetNode));
   const sawNode = useRef<string | null>(null);
-  // Review 14 LOW-2: the node this dialog lost, so its return (Undo, an
-  // agent's restore, a sync) makes Send note live again; only a real
-  // missing -> present change, never a refusal while the canvas still has it.
+  // The node this dialog lost, so its return (Undo, an agent's restore, a sync)
+  // makes Send note live again; only a real missing -> present change, never a
+  // refusal while the canvas still has it.
   const lostNode = useRef<string | null>(null);
   const targetReturned = useCanvasPinsStore((s) => s.targetReturned);
   useEffect(() => {
@@ -126,10 +122,10 @@ export function PinComposer() {
       targetRemoved();
     }
   }, [targetNode, nodeHere, targetGone, targetRemoved, targetReturned]);
-  // GM r27 item 4 (review 15 NIT 3): Nebula refused with pin_node_gone while
-  // the canvas still shows the node (its sync not in yet). Send note comes
-  // back on the next sync that names the node, or after 5 s, whichever is
-  // first; a sync that drops it leaves it disabled under the rule above.
+  // Nebula refused with pin_node_gone while the canvas still shows the node
+  // (its sync not in yet). Send note comes back on the next sync that names the
+  // node, or after 5 s, whichever is first; a sync that drops it leaves it
+  // disabled under the rule above.
   useEffect(() => {
     if (!targetGone || !nodeHere || targetNode === null || lostNode.current === targetNode) return;
     const timer = window.setTimeout(() => {
@@ -150,12 +146,11 @@ export function PinComposer() {
   const hidden = Math.max(0, kept.length - KEPT_SHOWN);
   const open = showAll && hidden > 0;
   const shown = open ? kept : kept.slice(-KEPT_SHOWN);
-  // Fix round 6 (GM r9 answer 2, motion by kind): a note kept while the stack
-  // is already showing is content inside that surface, so its row expands
-  // into place (noticeRegion.css notice-row-in); the stack's first note is
-  // the surface arriving, which scales in. Rows "Show 7 more" reveals were
-  // already kept, so they don't expand. A row stays marked until its own
-  // expand ends, so a re-render mid-spring never cuts it short.
+  // A note kept while the stack is already showing is content inside that
+  // surface, so its row expands into place (noticeRegion.css notice-row-in);
+  // the stack's first note is the surface arriving, which scales in. Rows "Show
+  // 7 more" reveals were already kept, so they don't expand. A row stays marked
+  // until its own expand ends, so a re-render mid-spring never cuts it short.
   const [keptBefore, setKeptBefore] = useState(kept);
   const [entering, setEntering] = useState<ReadonlySet<string>>(() => new Set());
   if (keptBefore !== kept) {
@@ -171,30 +166,28 @@ export function PinComposer() {
     next.delete(project);
     return next;
   });
-  // Fix round 7 (GM r10 and r11 answer 2): the reverse. A note that goes
-  // collapses in place, and the rows around it close up; when the last one
-  // goes, the stack scales out as a surface, with its last note still in it
-  // (lib/noticeLeave.ts). The open list re-sizes after a collapse ends (its
-  // row count changes then), never at its start.
+  // The reverse of that: a note that goes collapses in place, and the
+  // rows around it close up; when the last one goes, the stack scales
+  // out as a surface, with its last note still in it
+  // (lib/noticeLeave.ts). The open list re-sizes after a collapse ends
+  // (its row count changes then), never at its start.
   const stackLeave = useLeave(kept.length > 0 ? true : null);
   const { rows, rowProps } = useLeavingRows(shown, (note) => note.project, { hold: stackLeave.leaving });
-  // A refusal is one neutral line (GM r20 Q1), beside the dialog it leaves
-  // open, or alone after a failed delete.
-  // GM r24: a send the person gate refused says only "Your note wasn’t
-  // added." while the banner (which says how to fix it) shows; the full
-  // Q116a line when it doesn't.
-  // The toast defers to the banner only while the banner shows (GM r24); once
-  // it's dismissed, a refused send's toast says the full Q116a line (GM r27
-  // item 2: "keep the full Q116a line"), and Send note stays held (gateBanner).
-  // GM r30 item 2 (fix round 20): a refused delete, the same rule: "Your note
-  // wasn’t deleted." while the banner shows, the full line once it's gone,
-  // short again if it comes back. Review 17 LOW-1: the server promoting the
-  // tab clears either (canvasPinsStore), so neither turns into the full line
-  // as the banner leaves.
+  // A refusal is one neutral line, beside the dialog it leaves open, or
+  // alone after a failed delete. A send the person gate refused says only
+  // "Your note wasn’t added." while the banner (which says how to fix it)
+  // shows; the full refusal line when it doesn't. The toast defers to the
+  // banner only while the banner shows; once it's dismissed, a refused
+  // send's toast says the full refusal line, as the design called for, and
+  // Send note stays held (gateBanner). A refused delete follows the same
+  // rule: "Your note wasn’t deleted." while the banner shows, the full
+  // line once it's gone, short again if it comes back. The server
+  // promoting the tab clears either (canvasPinsStore), so neither turns
+  // into the full line as the banner leaves.
   const errorLine = errorPersonGate && bannerUp
     ? (errorPersonGate === 'delete' ? PIN_REFUSAL_COPY.notDeleted : PIN_REFUSAL_COPY.notAdded) : error;
-  // Round 17 (review 13 LOW-3): offline first, the toast with it. A because line hidden offline
-  // (hooks/useOfflineFirstBecause) leaves nothing in the toast but its ×, so the toast doesn't show.
+  // Offline first, the toast with it. A because line hidden offline (hooks/useOfflineFirstBecause)
+  // leaves nothing in the toast but its ×, so the toast doesn't show.
   const errorShown = useOfflineFirstBecause(errorLine);
   const errorLeave = useLeave(errorShown && (errorProject === null || errorProject === here) ? errorShown : null);
   // Going offline it goes at once: a leave would draw the toast with its words already hidden.
@@ -205,18 +198,16 @@ export function PinComposer() {
   useEffect(() => {
     if (hidden === 0 && showAll) setShowAll(false);
   }, [hidden, showAll]);
-  // The whole list opens on its newest note (at the bottom), and its top
-  // edge never cuts a note (fix round 5 of PR #200, review 5 LOW-1, GM r7
-  // answer 3: snap). Its height is the newest notes that fit the cap, whole,
-  // so its last scroll position is a row's top, and the rows snap to their
-  // tops (canvasPins.css), so every position it rests at starts on a note.
-  // A note cut at the bottom edge while it rests mid-list is accepted by
-  // design (fix round 6, GM r9 answer 1: it's the usual sign there's more
-  // below); it is sized once on open, when a note arrives and after a
-  // note's collapse ends, never after a scroll, so it never jumps under the
-  // person's wheel. A note arriving while it is open fades in place (fix
-  // round 7, GM r11 answer 1), and this runs in the same layout pass, so the
-  // list rests on whole rows in the very frame the note appears.
+  // The whole list opens on its newest note (at the bottom), and its top edge
+  // never cuts a note (PR #200). Its height is the newest notes that fit the
+  // cap, whole, so its last scroll position is a row's top, and the rows snap
+  // to their tops (canvasPins.css), so every position it rests at starts on a
+  // note. A note cut at the bottom edge while it rests mid-list is accepted in
+  // the design (it's the usual sign there's more below); it is sized once on open,
+  // when a note arrives and after a note's collapse ends, never after a scroll,
+  // so it never jumps under the person's wheel. A note arriving while it is
+  // open fades in place, and this runs in the same layout pass, so the list
+  // rests on whole rows in the very frame the note appears.
   useLayoutEffect(() => {
     const list = listRef.current;
     if (!open || !list) return;
@@ -249,9 +240,9 @@ export function PinComposer() {
     return () => window.removeEventListener('resize', place);
   }, [open, rows.length]);
 
-  // Review 5 N-1 (GM r7): the × of a kept note moves focus to the next note's
-  // ×, or the previous one's when it was the last, or, once none is left, back
-  // to whatever had focus before the person came into the notes (the canvas
+  // The × of a kept note moves focus to the next note's ×, or the
+  // previous one's when it was the last, or, once none is left, back to
+  // whatever had focus before the person came into the notes (the canvas
   // when nothing did). Never to <body>.
   const stackRef = useRef<HTMLDivElement | null>(null);
   const openerRef = useRef<HTMLElement | null>(null);
@@ -262,7 +253,7 @@ export function PinComposer() {
     const neighbour = shown[index + 1] ?? shown[index - 1] ?? kept.find((note) => note.project !== project) ?? null;
     focusAfter.current = stackHasFocus ? (neighbour ? neighbour.project : '') : null;
     if (stackHasFocus && !neighbour && openModalDialog()) {
-      // GM r25: a dialog is open: back to its field.
+      // A dialog is open: back to its field.
       dialogStart(openModalDialog())?.focus({ preventScroll: true });
       focusAfter.current = null;
     } else if (stackHasFocus && !neighbour) {
@@ -282,9 +273,9 @@ export function PinComposer() {
     row?.querySelector<HTMLElement>('button[aria-label="Dismiss"]')?.focus({ preventScroll: true });
   }, [kept]);
 
-  // Review 4 N-6: a failed send's error belongs to the visit it failed on.
-  // Leaving its project clears it, so it never comes back much later; the
-  // note waits there as its draft.
+  // A failed send's error belongs to the visit it failed on. Leaving its
+  // project clears it, so it never comes back much later; the note waits
+  // there as its draft.
   const lastHere = useRef(here);
   useEffect(() => {
     const left = lastHere.current;
@@ -292,23 +283,22 @@ export function PinComposer() {
     if (left !== here && useCanvasPinsStore.getState().errorProject === left) clearError();
   }, [here, clearError]);
 
-  // The dialog starts with the kept note, or the draft × or Esc left (GM,
-  // 2026-10-27), of this project only (2026-10-28): compose put it in
-  // `draft` as it opened.
-  // GM r29 item 1 (fix round 19): the heading names the node, by the title
-  // its card shows: "Note for agents on “Text Input”". Another node with the
-  // same title adds this one's bare id, styled like the card's id chip, so the
-  // heading points to one node. A long title stays one line (the full name in
-  // the tooltip). A note on a spot, or a node the canvas hasn't loaded, keeps
-  // "Note for agents".
+  // The dialog starts with the kept note, or the draft × or Esc left
+  // (2026-10-27), of this project only (2026-10-28): compose put it in `draft`
+  // as it opened.
+  // The heading names the node, by the title its card shows: "Note for agents
+  // on “Text Input”". Another node with the same title adds this one's bare id,
+  // styled like the card's id chip, so the heading points to one node. A long
+  // title stays one line (the full name in the tooltip). A note on a spot, or a
+  // node the canvas hasn't loaded, keeps "Note for agents".
   const targetTitle = useGraphStore((s) => {
     if (targetNode === null) return '';
     return nodeCardTitle(s.nodes.find((node) => node.id === targetNode));
   });
   const titleShared = useGraphStore((s) => targetTitle !== ''
     && s.nodes.some((node) => node.id !== targetNode && nodeCardTitle(node) === targetTitle));
-  // GM r30 item 1 (fix round 20): a name too long for the line is cut inside
-  // its quotes by grapheme, in JS (NoteHeading), the closing quote kept.
+  // A name too long for the line is cut inside its quotes by grapheme, in JS
+  // (NoteHeading), the closing quote kept.
   const headingText = targetTitle ? noteHeading(targetTitle) : 'Note for agents';
   const heading = targetTitle ? <NoteHeading title={targetTitle} nodeId={titleShared ? targetNode : null} /> : undefined;
 
@@ -326,13 +316,13 @@ export function PinComposer() {
       {request && textReady && (
         <PromptDialog
           request={request}
-          // Only what shows counts (GM r12 answer 3), as the backend counts it;
-          // a neutral "N left" from 30 left (GM r20 note 1).
+          // Only what shows counts, as the backend counts it; a neutral
+          // "N left" from 30 left.
           cap={NOTE_CAP}
-          // Review 13 NIT-3: a note_too_long refusal turns "N left" on.
+          // A note_too_long refusal turns "N left" on.
           revealCounter={tooLongRefusals}
-          // GM bug 2 (fix round 1 of PR #200): a textarea that grows, the
-          // caret at the end of a kept note, and "Send note".
+          // A textarea that grows, the caret at the end of a kept note,
+          // and "Send note" (PR #200).
           multiline
           heading={heading}
           headingLabel={titleShared ? `${headingText} ${targetNode}` : headingText}
@@ -354,7 +344,7 @@ export function PinComposer() {
           }}
         />
       )}
-      {/* In the app's notice region, like every toast (GM - Design, 2026-10-23). */}
+      {/* In the app's notice region, like every toast (design, 2026-10-23). */}
       {errorLeave.shown && !errorHiddenOffline && (
         <InNoticeRegion slot="pin">
           <div className="canvas-pin-toast canvas-pin-toast--notice" role="status" data-line-box="" {...errorLeave.props}>
@@ -364,7 +354,7 @@ export function PinComposer() {
         </InNoticeRegion>
       )}
       {/* Kept notes, one per project, oldest first (newest at the bottom);
-          beside the open dialog too (GM 2026-10-28 answer 1). */}
+          beside the open dialog too (design, 2026-10-28). */}
       {stackLeave.shown && (
         <InNoticeRegion slot="pin">
           <div className="canvas-pin-kept-stack" data-open={open || undefined}
@@ -392,9 +382,8 @@ export function PinComposer() {
                   }}>
                   <span className="canvas-pin-toast__text">
                     {keptNoteLine(note, here, nameOf(note.project))}
-                    {/* GM r24 and round 5 answer 5: the note on its own line, in
-                        quotes, with its line breaks, clamped to 2 lines with "…";
-                        Copy note copies all of it. */}
+                    {/* The note on its own line, in quotes, with its line breaks,
+                        clamped to 2 lines with "…"; Copy note copies all of it. */}
                     <q className="canvas-pin-toast__note" title={pinDisplayText(note.text, { fold: false })}>{keptNoteDisplay(note.text)}</q>
                   </span>
                   <button type="button" className="canvas-pin-toast__copy" onClick={() => copyKept(note)}>{NOTE_KEPT_COPY}</button>
@@ -410,10 +399,10 @@ export function PinComposer() {
   );
 }
 
-/** The dialog's heading for a node (GM r29 item 1, GM r30 item 1): the name
- * in quotes, cut by grapheme to the line's width with the closing quote kept,
- * the full heading in the tooltip and in the field's name; the node's bare id
- * after it when another node has the same title. */
+/** The dialog's heading for a node: the name in quotes, cut by grapheme to
+ * the line's width with the closing quote kept, the full heading in the
+ * tooltip and in the field's name; the node's bare id after it when another
+ * node has the same title. */
 function NoteHeading({ title, nodeId }: { title: string; nodeId: string | null }) {
   const whole = noteHeading(title);
   const [shown, setShown] = useState(whole);
@@ -448,8 +437,8 @@ function NoteHeading({ title, nodeId }: { title: string; nodeId: string | null }
   }, [title, whole, nodeId]);
   return (
     <span ref={boxRef} className="prompt-dialog__heading">
-      {/* GM r33 (review 18 LOW-1): the name and its "…" in a <bdi>, the curly
-          quotes outside it, so a Hebrew or Arabic name ends in its "…". */}
+      {/* The name and its "…" in a <bdi>, the curly quotes outside it, so
+          a Hebrew or Arabic name ends in its "…". */}
       <span className="prompt-dialog__heading-text" title={whole} aria-hidden="true">
         {HEADING_START}<bdi>{shown.slice(HEADING_START.length, shown.length - HEADING_END.length)}</bdi>{HEADING_END}
       </span>

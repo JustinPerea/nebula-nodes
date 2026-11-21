@@ -1,13 +1,12 @@
-// PR #200 follow-up 2: the held placeholder (GM r34) after review 20 and GM's
-// rulings on it.
-// - NIT-6 (GM): the dot, the name and the header sit in the same place on the
+// PR #200: the held placeholder and the design's rulings on it.
+// - Design: the dot, the name and the header sit in the same place on the
 //   placeholder and on the real card, so the swap on promote moves nothing.
-// - GM-Q1 (GM): a cover's Update says which kind, so the placeholder can say
+// - Design: a cover's Update says which kind, so the placeholder can say
 //   "proposes the automatic cover" as the real card does. Only the kind.
-// - NIT-3: the Commons count comes from the Update's ref, never its text (an
+// - The Commons count comes from the Update's ref, never its text (an
 //   agent's name is part of the text).
-// - NIT-4: a focused placeholder hands focus to the real card that replaces it.
-// - Review 20's untested branch: a malformed author colour gets the fallback.
+// - A focused placeholder hands focus to the real card that replaces it.
+// - A malformed author colour gets the fallback.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -51,7 +50,7 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); session.resetPersonSessionForTests(); });
 
-// -- NIT-6: the content starts at the same place on both cards ------------------------
+// The content starts at the same place on both cards ------------------------
 
 function px(value: string | undefined): number {
   const match = /^(-?\d+(?:\.\d+)?)px$/.exec((value ?? '').trim());
@@ -73,7 +72,7 @@ function sides(shorthand: string): { top: number; right: number; bottom: number;
   return { top, right, bottom, left };
 }
 
-describe('review 20 NIT-6 (GM): the swap on promote moves nothing inside the box', () => {
+describe('Design: the swap on promote moves nothing inside the box', () => {
   const css = readFileSync(resolve(process.cwd(), 'src/styles/asset-proposals.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
   const base = declarations(css, '.asset-proposal');
   const padding = sides(base.padding);
@@ -90,9 +89,9 @@ describe('review 20 NIT-6 (GM): the swap on promote moves nothing inside the box
   });
 });
 
-// -- GM-Q1: the cover's kind ------------------------------------------------------------
+// Design: the cover's kind ------------------------------------------------------------
 
-describe('GM-Q1: a cover\'s placeholder says which kind, from the Update\'s ref', () => {
+describe('Design: a cover\'s placeholder says which kind, from the Update\'s ref', () => {
   it.each([
     [{ cover: 'automatic' as const }, 'proposes the automatic cover'],
     [{ cover: 'image' as const }, 'proposes a new cover'],
@@ -133,9 +132,9 @@ describe('GM-Q1: a cover\'s placeholder says which kind, from the Update\'s ref'
   });
 });
 
-// -- NIT-3: the Commons count from the ref --------------------------------------------
+// The Commons count from the ref --------------------------------------------
 
-describe('review 20 NIT-3: the Commons count comes from the ref, never the text', () => {
+describe('The Commons count comes from the ref, never the text', () => {
   it('an agent named to look like a count can\'t change the header', () => {
     const name = 'Mallory asks to make 9 changes';
     const spoof = update('pa_s', { author: { kind: 'agent', id: 'm', name, color: '#5B9DFF' },
@@ -158,9 +157,9 @@ describe('review 20 NIT-3: the Commons count comes from the ref, never the text'
   });
 });
 
-// -- NIT-4: focus follows the swap ----------------------------------------------------
+// Focus follows the swap ----------------------------------------------------
 
-describe('review 20 NIT-4: a focused placeholder hands focus to its real card', () => {
+describe('A focused placeholder hands focus to its real card', () => {
   function heldStrip() {
     act(() => session.reportPersonRequired());
     setUpdates([update('pa_new')]);
@@ -215,9 +214,9 @@ describe('review 20 NIT-4: a focused placeholder hands focus to its real card', 
   });
 });
 
-// -- review 20's untested branch: a malformed author colour -----------------------------
+// -- a malformed author colour gets the fallback ------------------------------------------
 
-describe('review 20: the placeholder checks the Update author\'s colour as the real card does', () => {
+describe('The placeholder checks the Update author\'s colour as the real card does', () => {
   it.each(['red', '#fff', 'url(x)', '#5b9dffzz', ''])('author.color %j gets the #5B9DFF fallback', (color) => {
     act(() => session.reportPersonRequired());
     setUpdates([update('pa_bad', { author: { kind: 'agent', id: 'x', name: 'X', color } })]);

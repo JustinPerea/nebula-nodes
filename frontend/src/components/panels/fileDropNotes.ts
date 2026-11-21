@@ -3,7 +3,7 @@ import { getProjectContext } from '../../lib/projectContext';
 import { paletteDropNotes, setPaletteDropNote, type PaletteDropNote } from './usePaletteExtracts';
 
 /**
- * GM r48 bug 2 on #222: the dropped-upload line ("Nebula couldn’t add
+ * Design, PR #222: the dropped-upload line ("Nebula couldn’t add
  * “sunset.png” … Choose the file again.") is stale over a file that has
  * since been replaced. It goes on ANY change to that param's value: a
  * person's pick, an agent's set over MCP or the CLI (a graphSync, through

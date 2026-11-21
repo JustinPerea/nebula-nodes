@@ -28,7 +28,7 @@ const STATUS: Record<KreaConnectionState['status'], { label: string; tone: RowTo
 /** Krea's plans, loaded on request. Links open Krea's own pricing or checkout
  * pages in the browser; nothing here charges or changes the subscription. */
 function KreaPlans() {
-  // PR #204 round 10 (GM r15): the trial is the person's alone (krea_connector person_only).
+  // Design, PR #204: the trial is the person's alone (krea_connector person_only).
   const trialLock = usePersonLock('start a trial');
   const [plans, setPlans] = useState<KreaPlans | null>(null);
   const [trialUrl, setTrialUrl] = useState<string | null>(null);
@@ -42,7 +42,7 @@ function KreaPlans() {
     catch (value) {
       const line = failureMessage(value, "Couldn’t load the Krea plans.");
       setError(line);
-      // The trial and the plans are person-only (krea_connector person_only): gone on the promote (#204 r4).
+      // The trial and the plans are person-only (krea_connector person_only): gone on the promote (PR #204).
       clearSetterOnPromote(value, setError, line, null); // clears-on-promote: krea.plans
     }
     finally { setBusy(false); }
@@ -113,9 +113,9 @@ export function KreaSignInRow({ krea, mode, lock }: { krea: KreaController; mode
   const signedIn = status === 'connected';
   const started = !!status && status !== 'disconnected';
   const trigger = useRef<HTMLButtonElement>(null);
-  // PR #204 round 10 (GM r15, r17 item 1): sign-in, check, disconnect and the default for new
-  // nodes are the person's alone. Round 11 (GM r18 a): they lock with the providers' one lock
-  // (ProvidersTab), whose line sits under the group's heading.
+  // Design, PR #204: sign-in, check, disconnect and the default for new nodes are the
+  // person's alone. Design: they lock with the providers' one lock (ProvidersTab), whose line
+  // sits under the group's heading.
   const setOpen = (on: boolean) => useSettingsDraftStore.setState({ openRow: on ? { id: KREA_ROW, mode: 'manage' } : null });
   const authUrl = connection?.authorizationUrl && isKreaAuthorizationUrl(connection.authorizationUrl)
     ? connection.authorizationUrl : null;

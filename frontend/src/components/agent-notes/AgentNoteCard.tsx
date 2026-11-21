@@ -16,9 +16,10 @@ interface HoldHandlers {
 }
 
 /**
- * One update, dropped from the chip into the corner for about 4 s (GM's
- * mockup v5.2). Hover or focus holds it. A click on it, or on one of its
- * actions, reads it; × dismisses it; leaving by itself leaves it unread.
+ * One update, dropped from the chip into the corner for about 4 s (the
+ * design's mockup v5.2). Hover or focus holds it. A click on it, or on
+ * one of its actions, reads it; × dismisses it; leaving by itself
+ * leaves it unread.
  */
 export function AgentNoteCard({
   note,
@@ -42,10 +43,10 @@ export function AgentNoteCard({
   onShow: (anchor?: HTMLElement) => void;
 }) {
   const label = noteLabel(note);
-  // PR #204 round 10 (GM r15): dismissing is the person's alone (POST .../agent-notes/{id}/dismiss:
-  // require_person), so × locks through the one lock. Round 11 (GM r19 item 3): a card with an
-  // open ask has one lock for both, "You can review (or answer) or dismiss this…", its line under
-  // the ask's buttons and both described by it; with no ask, ×'s own line sits right under it.
+  // Design, PR #204: dismissing is the person's alone (POST .../agent-notes/{id}/dismiss:
+  // require_person), so × locks through the one lock. A card with an open ask has one lock for
+  // both, "You can review (or answer) or dismiss this…", its line under the ask's buttons and
+  // both described by it; with no ask, ×'s own line sits right under it.
   const askVerb = heldVerbFor(note);
   const sharedLock = usePersonLock(`${askVerb === 'answer this' ? 'answer' : 'review'} or dismiss this`, askVerb !== null);
   const ownDismissLock = usePersonLock('dismiss updates', askVerb === null);

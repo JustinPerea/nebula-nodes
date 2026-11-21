@@ -48,7 +48,7 @@ function personalAgentBusy(agent: PersonalAgent): boolean {
 type Run = (work: () => Promise<unknown>, switching?: Switching) => Promise<void>;
 
 /** A switch whose own change is being saved, and the position the person
- * gave it (GM, PR #205 r1 answer 6: shown at once, held while it saves). */
+ * gave it (design, PR #205: shown at once, held while it saves). */
 type Switching = { id: string; field: 'enabled' | 'useNebulaKey'; to: boolean };
 
 /** One switch of the section: the person's new position while its own save
@@ -149,13 +149,13 @@ export function PersonalAgentsSection() {
   const [busy, setBusy] = useState(false);
   const [switching, setSwitching] = useState<Switching | null>(null);
   const [draft, setDraft] = useState({ id: '', displayName: '', command: '', args: '' });
-  // PR #204 round 10 (GM r15, r17 item 4): every route here is the person's alone. A listed
-  // agent's switches, Remove and Antigravity's download and sign-in lock as a group, with one
-  // line under the heading; Add has its own line (GM's words).
+  // Design, PR #204: every route here is the person's alone. A listed agent's switches,
+  // Remove and Antigravity's download and sign-in lock as a group, with one line under the
+  // heading; Add has its own line (the design's words).
   const rowLock = usePersonLock('change your agents');
   const addLock = usePersonLock('add an agent');
-  // GM r17 item 6 (b): a held or demoted tab shows what a tab that never connected shows.
-  // PR #204 round 11: the list is read only on a tab connected as the person (usePersonView).
+  // Design, PR #204: a held or demoted tab shows what a tab that never connected
+  // shows. The list is read only on a tab connected as the person (usePersonView).
   const { held: demoted, ready, epoch, readsOnPromote } = usePersonView();
 
   // Returns the read, so a change's hold lasts until the list answers (run).
@@ -163,23 +163,23 @@ export function PersonalAgentsSection() {
     return fetchPersonalAgents()
       .then((next) => { setList(next); setError(null); })
       .catch((exc: unknown) => {
-        // GM r6 (2): what retries on the promote says why in the "because" form.
+        // Design: what retries on the promote says why in the "because" form.
         const line = isPersonRefusal(exc) ? notConnectedBecause('load your agents') : failureMessage(exc, "Couldn’t load your agents.");
         setError(line);
-        // GM, #204 r3 and r6: refused only because this tab isn't connected as you: on the
+        // Design, PR #204: refused only because this tab isn't connected as you: on the
         // promote the line goes and the read runs again, through retryOnPromote.
         clearSetterOnPromote(exc, setError, line, null); // clears-on-promote: settings.agents-load
-        // Round 13 (review 10 NIT-1): unless the held view settled, whose promote reads it anyway.
+        // Retried unless the held view settled, whose promote reads it anyway.
         retryOnPromote(exc, 'settings.agents-load', () => { if (!readsOnPromote.current) readAgain(); }); // clears-on-promote: settings.agents-load-retry
       });
   }, [readsOnPromote]);
 
   useReadAsPerson(load, ready, epoch);
-  // Round 11 (review 9 MEDIUM-3, GM r19 2): a demote that takes away the focused row moves focus
-  // to the section's line, not to the page.
+  // Design: a demote that takes away the focused row moves focus to the section's
+  // line, not to the page.
   const sectionRef = useRef<HTMLElement>(null);
-  // Round 18h (review 16 MEDIUM-1): work in flight disables the row's buttons in place, which
-  // drops focus to the page in Chrome; it goes to the heading and back once the work answers.
+  // Work in flight disables the row's buttons in place, which drops focus to the page in
+  // Chrome; it goes to the heading and back once the work answers.
   const handoverChange = useMemo(() => ({ demoted, busy }), [demoted, busy]);
   const handover = useFocusHandover(handoverChange, () => sectionRef.current,
     () => document.getElementById('settings-personal-agents-heading'));
@@ -207,7 +207,7 @@ export function PersonalAgentsSection() {
     } catch (exc) {
       const line = failureMessage(exc, "Couldn’t update your agents.");
       setError(line);
-      clearSetterOnPromote(exc, setError, line, null); // clears-on-promote: settings.agents (GM, #204 r3)
+      clearSetterOnPromote(exc, setError, line, null); // clears-on-promote: settings.agents (design, PR #204)
     } finally {
       setBusy(false);
       setSwitching(null);
@@ -223,8 +223,8 @@ export function PersonalAgentsSection() {
   });
 
   const agents = demoted ? [] : (list?.agents ?? []);
-  // Round 14 (GM r23 answer 3): offline comes first, so the held view's not-connected line waits
-  // until Nebula is back.
+  // Design: offline comes first, so the held view's not-connected line waits until
+  // Nebula is back.
   const shownError = useOfflineFirstBecause(demoted ? notConnectedBecause('load your agents') : error);
   return (
     <section aria-labelledby="settings-personal-agents-heading" data-testid="settings-personal-agents" ref={sectionRef} onFocus={handover.onFocus}>
@@ -235,7 +235,7 @@ export function PersonalAgentsSection() {
         canvas tools and counts their runs in the budget for agents outside Nebula&rsquo;s chats. The agent keeps its
         own shell, network and files, and Nebula doesn&rsquo;t sandbox it. See docs/PERSONAL-AGENTS.md.
       </p>
-      {/* Round 11 (GM r18 c): the section's own line, in the shared box (components/LineBox). */}
+      {/* Design: the section's own line, in the shared box (components/LineBox). */}
       <LineBox text={shownError} />
       <div className="settings-list">
         {agents.map((agent) => (

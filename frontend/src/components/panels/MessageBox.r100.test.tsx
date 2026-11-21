@@ -14,8 +14,8 @@ import { useAgentQuestionsStore } from '../../store/agentQuestionsStore';
 import { useGraphStore } from '../../store/graphStore';
 import { noteBackendConnection } from '../../lib/backendConnection';
 
-/** GM r100.2 on #225 (the person's own send scrolls to the sent row) and
- * review 3's live LOW-1 (the first resize drag tracks the pointer). */
+/** Design, PR #225 (the person's own send scrolls to the sent row), and a live
+ * check that the first resize drag tracks the pointer. */
 
 const CLAUDE = { id: 'a1', name: 'Claude', color: '#E8825A', verified: true };
 const KEY = '0123456789ab';
@@ -61,7 +61,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe('r100.2: the person’s own send brings the thread to the sent row', () => {
+describe('The person’s own send brings the thread to the sent row', () => {
   it('from far up, under reduced motion a jump; no pill for their own row', () => {
     reduced(true);
     const at = Date.now() - 50_000;
@@ -101,7 +101,7 @@ describe('r100.2: the person’s own send brings the thread to the sent row', ()
   });
 });
 
-describe('r100.2: the spring’s own scroll events never unpin the thread', () => {
+describe('The spring’s own scroll events never unpin the thread', () => {
   it('a scroll event mid-spring, then the landing: an agent row after it shows with no pill', () => {
     reduced(false);
     const frames: FrameRequestCallback[] = [];
@@ -123,7 +123,7 @@ describe('r100.2: the spring’s own scroll events never unpin the thread', () =
   });
 });
 
-describe('review 3 live LOW-1: the first drag tracks the pointer past half the viewport', () => {
+describe('The first drag tracks the pointer past half the viewport', () => {
   it('the press marks the log as resizing, and resizing lifts the 50vh cap like a sized log', () => {
     render(<AgentLog />);
     const log = document.querySelector<HTMLElement>('.agent-log')!;
@@ -149,7 +149,7 @@ describe('review 3 live LOW-1: the first drag tracks the pointer past half the v
   });
 });
 
-describe('GM r112.4: a press with no movement never changes the height', () => {
+describe('Design: a press with no movement never changes the height', () => {
   function measured(log: HTMLElement, height: number, top: number) {
     Object.defineProperty(log, 'offsetHeight', { configurable: true, get: () => height });
     Object.defineProperty(log, 'clientHeight', { configurable: true, get: () => height });
@@ -188,7 +188,7 @@ describe('GM r112.4: a press with no movement never changes the height', () => {
   });
 });
 
-describe('r100.2: after a reduced-motion jump the thread is the person’s again', () => {
+describe('After a reduced-motion jump the thread is the person’s again', () => {
   it('scrolling up after the jump still raises the pill for an agent row', () => {
     reduced(true);
     const at = Date.now() - 50_000;

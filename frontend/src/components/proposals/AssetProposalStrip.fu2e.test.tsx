@@ -1,10 +1,9 @@
-// PR #202 review 3 (round 5). LOW-1: a held tab's cover and moodboard
-// placeholders order by the Update ref's `since` (when each ask was made, as
-// the backend now sends for every kind), as the promoted cards order by
-// createdAt, so they keep their places on the promote after an Update fell
-// back to the agent's older ask. NIT-1: two asks made in the same
-// millisecond sort by proposal id held and promoted, on the strip and the
-// Commons line. NIT-2: agentNameList counts unique names.
+// PR #202. A held tab's cover and moodboard placeholders order by the Update
+// ref's `since` (when each ask was made, as the backend now sends for every
+// kind), as the promoted cards order by createdAt, so they keep their places
+// on the promote after an Update fell back to the agent's older ask. Two
+// asks made in the same millisecond sort by proposal id held and promoted,
+// on the strip and the Commons line. AgentNameList counts unique names.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, render } from '@testing-library/react';
 import type { AgentNote } from '../../lib/agentNotes';
@@ -66,7 +65,7 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); session.resetPersonSessionForTests(); });
 
-describe('review 3 LOW-1: cover and moodboard placeholders keep their places on the promote', () => {
+describe('Cover and moodboard placeholders keep their places on the promote', () => {
   it.each([
     ['a project cover', 'project' as const, 'dusk'],
     ['a moodboard', 'moodboard' as const, 'board_1'],
@@ -86,7 +85,7 @@ describe('review 3 LOW-1: cover and moodboard placeholders keep their places on 
   });
 });
 
-describe('review 3 NIT-1: asks made in the same millisecond sort by proposal id, held and promoted', () => {
+describe('Asks made in the same millisecond sort by proposal id, held and promoted', () => {
   it('the shared order: time, then id', () => {
     expect(askedOrder({ at: 1, id: 'pa_b' }, { at: 2, id: 'pa_a' })).toBeLessThan(0);
     expect(askedOrder({ at: 2, id: 'pa_a' }, { at: 2, id: 'pa_b' })).toBeLessThan(0);
@@ -134,7 +133,7 @@ describe('review 3 NIT-1: asks made in the same millisecond sort by proposal id,
   });
 });
 
-describe('review 3 NIT-2: agentNameList counts unique names', () => {
+describe('AgentNameList counts unique names', () => {
   it.each([
     [['A', 'A', 'B', 'B', 'C'], 'A, B and C'],
     [['A', 'A', 'A', 'A'], 'A'],

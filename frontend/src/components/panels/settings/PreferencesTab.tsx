@@ -15,9 +15,9 @@ function usd(value: number) {
 /** Preferences apply the moment they change. Most live in this browser; the
  * run-cost threshold is saved to settings.json, because it limits agents too. */
 export function PreferencesTab() {
-  // PR #204 round 10 (GM r15): the run-cost threshold is PUT /api/settings, the person's alone.
-  // Round 11 (GM r18 b): Job notifications live in this browser only (lib/jobNotifications,
-  // localStorage), so only this row locks, its line inside the box right under it.
+  // Design, PR #204: the run-cost threshold is PUT /api/settings, the person's alone.
+  // Job notifications live in this browser only (lib/jobNotifications, localStorage), so only
+  // this row locks, its line inside the box right under it.
   const costLock = usePersonLock('change this');
   // Selected one by one: the UI store changes constantly while the canvas is in use.
   const ui = {

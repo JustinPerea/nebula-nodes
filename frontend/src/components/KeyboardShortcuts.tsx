@@ -7,10 +7,10 @@ import { DeferredKeyboardShortcutsDialog } from '../lib/deferredChunks';
 /**
  * "?" on the canvas, or "Keyboard shortcuts" in the command palette.
  *
- * Review 8, L-c: it is a modal dialog, so it keeps focus like the paid
- * placeholder dialog (a click on its text, which takes no focus, brings focus
- * back to Close), and while it is open Escape or "?" close it wherever focus
- * is, the page included, unless another modal dialog is open on top of it.
+ * It is a modal dialog, so it keeps focus like the paid placeholder dialog (a
+ * click on its text, which takes no focus, brings focus back to Close), and
+ * while it is open Escape or "?" close it wherever focus is, the page
+ * included, unless another modal dialog is open on top of it.
  */
 export function KeyboardShortcuts() {
   const [open, setOpen] = useState(false);

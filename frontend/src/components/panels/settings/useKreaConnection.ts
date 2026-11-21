@@ -25,8 +25,8 @@ export function useKreaConnection() {
     getKreaConnection().then((state) => {
       if (!cancelled && requestVersion.current === version) setConnection(state);
     }).catch((value: unknown) => {
-      // Round 3f (GM): no answer reads "Nebula's server isn't answering. …";
-      // an answer reads its own reason (errorCopy), under this row's heading.
+      // Design: no answer reads "Nebula's server isn't answering. …"; an
+      // answer reads its own reason (errorCopy), under this row's heading.
       if (!cancelled && requestVersion.current === version) setError(failureUnder(value, "Couldn’t check Krea."));
     });
     return () => { cancelled = true; };
@@ -58,8 +58,8 @@ export function useKreaConnection() {
     catch (value) {
       const line = failureMessage(value, "Couldn’t update the Krea connection.");
       setError(line);
-      // PR #204 round 4 (review 2 MEDIUM): connect, check and disconnect are person-only
-      // (routes/krea_connector.py person_only); refused only for this tab, the line goes on the promote.
+      // PR #204: connect, check and disconnect are person-only (routes/krea_connector.py person_only);
+      // refused only for this tab, the line goes on the promote.
       clearSetterOnPromote(value, setError, line, null); // clears-on-promote: krea.connection
     }
     finally { setBusy(false); }

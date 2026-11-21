@@ -23,12 +23,12 @@ interface WorkspaceHeaderProps {
   className?: string;
   navigation?: ReactNode;
   children?: ReactNode;
-  /** Keep room at the end for the Updates chip (Q107 a). The canvas's pill
-   * leaves it out: there the chip has its own corner. */
+  /** Keep room at the end for the Updates chip. The canvas's pill leaves
+   * it out: there the chip has its own corner. */
   updatesSlot?: boolean;
   /** The offline banner as a row of the layout right under this header
-   * (GM, PR #198 r2; StudioOfflineRow). Every studio has it; the canvas's
-   * header leaves it out (the canvas keeps its floating banner). */
+   * (design, PR #198; StudioOfflineRow). Every studio has it; the
+   * canvas's header leaves it out (the canvas keeps its floating banner). */
   offlineRow?: boolean;
 }
 

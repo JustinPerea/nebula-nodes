@@ -13,15 +13,15 @@ function prefersReducedMotion(): boolean {
 
 /**
  * The header's right side. While a run waits, "Waiting for your OK" (one
- * label for one proposal or several: the count is in the description, GM
- * - Design r3 item 1) replaces what is there (the model chip), in the same
+ * label for one proposal or several: the count is in the description, per
+ * the design) replaces what is there (the model chip), in the same
  * box: both sit in one grid cell and crossfade on the opacity
  * spring (SOFT), so the node never changes size. The title truncates before
  * the label does. Under reduced motion it changes at once.
  *
  * The label is short ("Waiting") when the full one would cut the title to
- * fewer than 8 characters, ellipsis included (GM r6 item 2): the two crossfade
- * on the same springs, the tooltip and the description keep the full words
+ * fewer than 8 characters, ellipsis included: the two crossfade on the same
+ * springs, the tooltip and the description keep the full words
  * (lib/nodeWaitLabel.ts).
  *
  * The count and the reason lines are not drawn here: the bar ("1 of 2") and

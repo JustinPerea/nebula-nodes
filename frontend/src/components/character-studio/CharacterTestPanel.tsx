@@ -38,8 +38,7 @@ export function CharacterTestPanel({
   const exitCharacterEditor = useUIStore((s) => s.exitCharacterEditor);
   const [prompt, setPrompt] = useState('');
   const [pending, setPending] = useState(false);
-  // Round 23 (review 22, L-3): Test on canvas adds a node, so it takes the
-  // canvas lock.
+  // Test on canvas adds a node, so it takes the canvas lock.
   const lock = useCanvasLock();
   const mounted = useRef(true);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);

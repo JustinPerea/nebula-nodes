@@ -33,9 +33,11 @@ import { useSlotWaiting } from '../../lib/noticeWaiting';
 
 type AssetKind = 'moodboard' | 'character' | 'style';
 
-/** The thing is a "moodboard" in every person line, counted or not (GM, copy sweep item 21, which overrides the
- *  earlier "boards" for the lines that don't count): "Recently deleted moodboards", "Delete this moodboard for
- *  good?", "Delete all 4 moodboards for good?". `counted` is the noun after a number (#210 round 6q). */
+/** The thing is a "moodboard" in every person line, counted or not (a design
+ * copy sweep, which overrides the earlier "boards" for the lines that don't
+ * count): "Recently deleted moodboards", "Delete this moodboard for good?",
+ * "Delete all 4 moodboards for good?". `counted` is the noun after a number
+ * (PR #210). */
 const NOUNS: Record<AssetKind, { one: string; many: string; counted: string }> = {
   moodboard: { one: 'moodboard', many: 'moodboards', counted: 'moodboards' },
   character: { one: 'character', many: 'characters', counted: 'characters' },
@@ -45,7 +47,7 @@ const NOUNS: Record<AssetKind, { one: string; many: string; counted: string }> =
 export const UNDO_VISIBLE_MS = 8000;
 
 /** A deleted item's picture, only when it is one of Nebula's own files
- *  (lib/storedImage.ts): a Character's and, since Q98, a board's. */
+ *  (lib/storedImage.ts): a Character's and, since a later change, a board's. */
 function thumbnailOf(item: TrashedItem): string | null {
   return storedImageView(item.thumbnail).src;
 }
@@ -69,7 +71,7 @@ function ConfirmInline({ label, confirmLabel, prompt, title, busy, onConfirm, lo
   const trigger = useRef<HTMLButtonElement>(null);
   const disarm = () => { setArmed(false); requestAnimationFrame(() => trigger.current?.focus()); };
   if (!armed) {
-    // It arms a Delete forever or an Empty: red on hover (GM r13), neutral at rest.
+    // It arms a Delete forever or an Empty: red on hover (design), neutral at rest.
     return <button type="button" ref={trigger} className="asset-trash__button asset-trash__trigger--danger" disabled={busy}
       {...lock.control()} onClick={() => { if (!lock.locked) setArmed(true); }}>{label}</button>;
   }
@@ -91,18 +93,20 @@ export interface RecentlyDeletedAssetsProps {
   /** Change it to list again (after a delete in the Studio). */
   refreshKey?: unknown;
   onRestored?: (item: TrashedItem) => void;
-  /** A Restore in this list was pressed, before its request goes (a Studio leaves that board to it: PR #210 round 6p). */
+  /** A Restore in this list was pressed, before its request goes (a Studio leaves that board to it: PR #210). */
   onRestoring?: (item: TrashedItem) => void;
   /** Something came into or left this list (often an agent's delete or
    * restore elsewhere), so the library above it should list again. */
   onTrashChanged?: () => void;
-  /** A new `n` opens the list (a Studio line's Restore for several boards, round 6j), and focus goes to the
-   *  Restore button of the first of `focus` it lists, with the keyboard ring only when `keyboard` (round 6k, GM r19 3). */
+  /** A new `n` opens the list (a Studio line's Restore for several boards),
+   * and focus goes to the Restore button of the first of `focus` it lists,
+   * with the keyboard ring only when `keyboard` is set. */
   openRequest?: TrashOpenRequest;
-  /** The list starts open (a Studio's several-board Restore, kept open across a remount: round 6l, review 10 NIT-3). */
+  /** The list starts open (a Studio's several-board Restore, kept open across a remount). */
   defaultOpen?: boolean;
-  /** What deleting these items for good would also lose (a Studio's unsaved edits, GM r21 Q2): a sentence the
-   *  confirm adds, with the full names in its title; null when nothing. */
+  /** What deleting these items for good would also lose (a Studio's unsaved
+   * edits): a sentence the confirm adds, with the full names in its title;
+   * null when nothing. */
   atStake?: (items: readonly TrashedItem[]) => { text: string; title: string } | null;
   /** Items deleted for good from this list (its Delete forever or Empty, once it succeeded). */
   onPurged?: (ids: readonly string[]) => void;
@@ -128,13 +132,13 @@ export function RecentlyDeletedAssets({ kind, scope, refreshKey, onRestored, onR
   }
   const focusDone = useRef<TrashOpenRequest | null>(null);
   const list = useRef<HTMLUListElement | null>(null);
-  // PR #204 round 10 (GM r15, r17 items 1 and 3): deleting for good is the person's alone (DELETE
-  // /api/trash/{kind}/{id}, POST /api/trash/empty: require_person). Empty and every Delete
-  // forever lock as one group with one line under the heading.
+  // Design, PR #204: deleting for good is the person's alone (DELETE
+  // /api/trash/{kind}/{id}, POST /api/trash/empty: require_person). Empty and
+  // every Delete forever lock as one group with one line under the heading.
   const purgeLock = usePersonLock('delete items for good');
   const [busy, setBusy] = useState(false);
-  // A failed load's line, and a failed Restore or delete's own (round 6k: the list read again after an
-  // action, as it always is, clears only a load's line, so an action's refusal stays until the next action).
+  // A failed load's line, and a failed Restore or delete's own (the list read again after an action, as it
+  // always is, clears only a load's line, so an action's refusal stays until the next action).
   const [loadError, setLoadError] = useState<string | null>(null);
   const [actError, setActError] = useState<string | null>(null);
   const error = actError ?? loadError;
@@ -145,7 +149,7 @@ export function RecentlyDeletedAssets({ kind, scope, refreshKey, onRestored, onR
   const projectId = scope === 'project' ? openProjectId : null;
   const noProject = scope === 'project' && !projectId;
   const where = `${scope}:${projectId ?? ''}`;
-  // A refusal is about the list it came from: another tab or project's list doesn't show it (review 10 NIT-2).
+  // A refusal is about the list it came from: another tab or project's list doesn't show it.
   const [actErrorFor, setActErrorFor] = useState(where);
   if (actErrorFor !== where) {
     setActErrorFor(where);
@@ -204,10 +208,10 @@ export function RecentlyDeletedAssets({ kind, scope, refreshKey, onRestored, onR
       await work();
       after?.();
     } catch (err) {
-      // A request's own line; never another error's message (round 3b).
+      // A request's own line; never another error's message.
       const line = failureMessage(err, '');
       setActError(line);
-      clearSetterOnPromote(err, setActError, line, null); // clears-on-promote: trash (GM, #204 r3)
+      clearSetterOnPromote(err, setActError, line, null); // clears-on-promote: trash (design, PR #204)
     } finally {
       setBusy(false);
       setReload((value) => value + 1);
@@ -274,8 +278,8 @@ export function RecentlyDeletedAssets({ kind, scope, refreshKey, onRestored, onR
 export interface UndoDeleteToastProps {
   name: string;
   busy?: boolean;
-  /** Undo's own failure, one line (GM: "Couldn’t {verb} {object}. {reason}"
-   * in one string), short: the Undo beside it redoes it (round 3b). */
+  /** Undo's own failure, one line (design: "Couldn’t {verb} {object}.
+   * {reason}" in one string), short: the Undo beside it redoes it. */
   error?: string | FailureCopy | null;
   onUndo: () => void;
   onDismiss: () => void;
@@ -286,14 +290,14 @@ export interface UndoDeleteToastProps {
 /** "Moved “X” to Recently deleted · Undo", for a few seconds after a delete. */
 export function UndoDeleteToast({ name, busy = false, error = null, onUndo, onDismiss, leave }: UndoDeleteToastProps) {
   const [paused, setPaused] = useState(false);
-  // Waiting behind a capped popover (GM r13 2): its timer holds, so it isn't lost.
+  // Waiting behind a capped popover (design): its timer holds, so it isn't lost.
   const waiting = useSlotWaiting('asset-trash');
   useEffect(() => {
     if (paused || busy || error || waiting) return;
     const timer = window.setTimeout(onDismiss, UNDO_VISIBLE_MS);
     return () => window.clearTimeout(timer);
   }, [paused, busy, error, waiting, onDismiss]);
-  // In the app's notice region, like every toast (GM - Design, 2026-10-23).
+  // In the app's notice region, like every toast (design, 2026-10-23).
   return (
     <InNoticeRegion slot="asset-trash">
       <div className="asset-trash__toast" role="status" aria-live="polite" {...leave}

@@ -10,30 +10,30 @@ import { sayTopStackChanged } from '../lib/bottomBar';
 
 export const BACKEND_PROBE_INTERVAL_MS = 3_000;
 
-/** GM - Design, round 14 of PR #114 ("Blocking it is"): offline is read-only.
- * Round 13 read "Nebula is offline. Reconnecting…"; GM keeps "Reconnecting…"
- * for a day when edits really queue, which they don't. */
+/** Design, PR #114: offline is read-only; edits are blocked, not queued. An
+ * earlier version read "Nebula is offline. Reconnecting…"; the design keeps
+ * "Reconnecting…" for a day when edits really queue, which they don't. */
 export const OFFLINE_LINE = 'Nebula is offline. Editing is paused until it reconnects.';
 /** The offline row's id: a control locked while offline names it as its describedby (the Message box's composer). */
 export const OFFLINE_LINE_ID = 'nebula-offline-line';
 
 /**
- * The offline banner (GM, round 14): role=status, so it is announced once
- * when it appears; it sits below the project bar so it covers nothing; on
- * reconnect it just leaves (no "Back online" toast). A blocked edit pulses
- * it once, at most once a second: a small scale nudge on a tuned spring
- * (app.css --backend-offline-spring), or with reduced motion a brief colour
- * flash. The pulse restarts a CSS animation on the same element, so the live
- * region is never re-added and never announced again.
+ * The offline banner (design): role=status, so it is announced once when it
+ * appears; it sits below the project bar so it covers nothing; on reconnect
+ * it just leaves (no "Back online" toast). A blocked edit pulses it once, at
+ * most once a second: a small scale nudge on a tuned spring (app.css
+ * --backend-offline-spring), or with reduced motion a brief colour flash.
+ * The pulse restarts a CSS animation on the same element, so the live region
+ * is never re-added and never announced again.
  *
  * Each health probe is numbered as it starts and an answer older than the
- * newest one applied is ignored (review 13, L4).
+ * newest one applied is ignored.
  */
 export function BackendConnectionStatus({ placement = 'workspace', bannerHidden = false }: {
-  /** GM r17 (C): on the home screen the banner sits right under its top bar
-   * (the workspace's place, below both bars, covered the heading there).
-   * GM, PR #198 r2: every other screen but the canvas is a studio, and there
-   * the banner is a row of the studio's own layout, under its header
+  /** Design: on the home screen the banner sits right under its top bar (the
+   * workspace's place, below both bars, covered the heading there). Design,
+   * PR #198: every other screen but the canvas is a studio, and there the
+   * banner is a row of the studio's own layout, under its header
    * (StudioOfflineRow, rendered by WorkspaceHeader); this keeps probing and
    * pulsing but shows nothing of its own. */
   placement?: 'workspace' | 'home' | 'studio';
@@ -51,14 +51,14 @@ export function BackendConnectionStatus({ placement = 'workspace', bannerHidden 
       try {
         const response = await apiFetch('/api/health', { cache: 'no-store' });
         if (!response.ok) throw new Error(`Backend health failed: ${response.status}`);
-        // Which backend process answered (round 16, M4): a new one restarted.
-        // The answer alone means online; a body that can't be read only
-        // leaves the boot id unknown.
+        // Which backend process answered: a new one restarted. The answer
+        // alone means online; a body that can't be read only leaves the
+        // boot id unknown.
         let body: { bootId?: unknown; bootStartedAt?: unknown } | null = null;
         try { body = await response.json() as { bootId?: unknown; bootStartedAt?: unknown } | null; } catch { body = null; }
         if (!cancelled) {
-          // Review 11, L-4: with when it started, so a late answer from an
-          // older process never takes the newer one's place.
+          // With when it started, so a late answer from an older process
+          // never takes the newer one's place.
           noteBackendBootId(body?.bootId, body?.bootStartedAt);
           noteProbeAnswer(seq, 'online');
         }
@@ -79,7 +79,7 @@ export function BackendConnectionStatus({ placement = 'workspace', bannerHidden 
 
   // A press on a control disabled because Nebula is offline (OFFLINE_MARK),
   // or on a port of the read-only canvas, pulses the banner. One listener on
-  // the document; nothing watches the DOM (review 14, H1).
+  // the document; nothing watches the DOM.
   useEffect(() => {
     if (!offline) return;
     const pressed = (event: PointerEvent) => {
@@ -92,7 +92,7 @@ export function BackendConnectionStatus({ placement = 'workspace', bannerHidden 
 
   const pulse = useOfflinePulse(banner, offline);
   // On the canvas the banner is part of the top stack the selection toolbar
-  // reads (GM r35 on PR #199): a toolbar flipped below a selection stays
+  // reads (design, PR #199): a toolbar flipped below a selection stays
   // below it too. Said when it comes and goes.
   const inStack = offline && placement === 'workspace';
   useEffect(() => {
@@ -100,8 +100,8 @@ export function BackendConnectionStatus({ placement = 'workspace', bannerHidden 
     return inStack ? sayTopStackChanged : undefined;
   }, [inStack]);
 
-  // The banner is part of the top line the proposal card stays under (GM -
-  // Design, PR #216 r4 7): it marks the root while it shows, so the notice
+  // The banner is part of the top line the proposal card stays under
+  // (design, PR #216): it marks the root while it shows, so the notice
   // region places its stack again (lib/bottomBar.ts noticeTopLimit).
   const shown = offline && placement !== 'studio' && !bannerHidden;
   useEffect(() => {

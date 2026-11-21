@@ -16,7 +16,7 @@ const MENU_EDGE = 8;
 
 interface MenuItem {
   label: string;
-  /** Its line while the canvas is kept, or 'live' (GM r17 on PR #199). */
+  /** Its line while the canvas is kept, or 'live' (design, PR #199). */
   kept: KeptAction | 'live';
   shortcut?: string;
   danger?: boolean;
@@ -24,19 +24,19 @@ interface MenuItem {
   /** Why it is disabled, when that isn't offline; e.g. why Run is disabled. */
   title?: string;
   /** This tab's run locks it now: the run's line wins (lib/canvasLock),
-   * by the row's verb plus "it" (GM r39 item 2, lib/runLock). */
+   * by the row's verb plus "it" (lib/runLock). */
   run?: { held: boolean; verb: RunLockVerb };
   /** Locked by a missing key, when nothing else holds it (withKeyLock). */
   keyLock?: string | null;
-  /** GM r26 (4), a stopgap the bulk-create PR deletes: it acts on a node
-   * with a tab-local id (lib/canvasLock TAB_LOCAL_LINES). */
+  /** A stopgap the bulk-create PR deletes: it acts on a node with a
+   * tab-local id (lib/canvasLock TAB_LOCAL_LINES). */
   tabLocal?: 'note';
   action: () => void;
 }
 
 export function ContextMenu() {
   const { visible, position, nodeId, flowPosition } = useUIStore((s) => s.contextMenu);
-  // Stops at the band (lib/bottomBar floatingBottomLimit): one notice while it is open (GM r13 2).
+  // Stops at the band (lib/bottomBar floatingBottomLimit): one notice while it is open.
   useCappedPopover(visible);
   const composeNote = useCanvasPinsStore((s) => s.compose);
   const hideContextMenu = useUIStore((s) => s.hideContextMenu);
@@ -44,14 +44,13 @@ export function ContextMenu() {
   const duplicateNode = useGraphStore((s) => s.duplicateNode);
   const deleteNode = useGraphStore((s) => s.deleteNode);
   const isExecuting = useGraphStore((s) => s.isExecuting);
-  // A scene with a shot rendering can't be deleted yet (GM, PR #198 r3 item 1).
+  // A scene with a shot rendering can't be deleted yet (design, PR #198).
   const sceneHeld = useGraphStore((s) => (nodeId ? sceneDeleteDisabledTitle(s, [nodeId]) : null));
-  // A run waiting for its inputs counts as starting (review 15, M-B).
+  // A run waiting for its inputs counts as starting.
   const runStarting = useGraphStore((s) => s.runStarting);
-  // Offline is read-only (round 15 of PR #114), and so is following an
-  // agent's switch (GM round 22, A: one state, lib/canvasLock): every item
-  // here edits, so each is disabled and looks it, with "Wait for “<project>”
-  // to open." while following.
+  // Offline is read-only (PR #114), and so is following an agent's switch
+  // (one state, lib/canvasLock): every item here edits, so each is disabled
+  // and looks it, with "Wait for “<project>” to open." while following.
   const lock = useCanvasLock();
   const graphNodes = useGraphStore((s) => s.nodes);
   const graphEdges = useGraphStore((s) => s.edges);
@@ -61,7 +60,7 @@ export function ContextMenu() {
   const [place, setPlace] = useState<{ left: number; top: number } | null>(null);
 
   // Opened at the pointer, then kept whole: inside the window and above the
-  // canvas's bottom bar (the Inspector's bug, GM - Design 2026-10-23), so its
+  // canvas's bottom bar (the Inspector's bug; design, 2026-10-23), so its
   // last item (Delete) is never cut off or under the bar.
   useLayoutEffect(() => {
     if (!visible) return;
@@ -90,7 +89,7 @@ export function ContextMenu() {
     }
 
     function handleKeyDown(e: KeyboardEvent) {
-      // A modal dialog over the menu owns Escape (review 8, L-d).
+      // A modal dialog over the menu owns Escape.
       if (e.key === 'Escape' && !keyBlockedByModal(menuRef.current)) {
         hideContextMenu();
       }
@@ -136,7 +135,8 @@ export function ContextMenu() {
     {
       label: 'Run this node',
       kept: 'run',
-      // The missing key after kept (which comes first of all), then the run lock's line (M2): run, follow, offline: withKeyLock.
+      // The missing key after kept (which comes first of all), then the run
+      // lock's line: run, follow, offline: withKeyLock.
       keyLock,
       run: { held: isExecuting || runStarting, verb: RUN_LOCK_VERBS.runIt },
       action: () => {
@@ -148,8 +148,8 @@ export function ContextMenu() {
       label: 'Leave a note for agents…',
       kept: 'note',
       // Agents only see nodes the backend knows (ids like n4): a duplicated
-      // or pasted node waits for the project's next open (GM r26, 4; a
-      // stopgap the bulk-create PR deletes).
+      // or pasted node waits for the project's next open (a stopgap the
+      // bulk-create PR deletes).
       tabLocal: isTabLocalNode(nodeId) ? 'note' : undefined,
       action: () => {
         composeNote({ nodeId });
@@ -158,7 +158,7 @@ export function ContextMenu() {
     },
     {
       label: 'Duplicate',
-      // Its copy stays on this tab while the canvas is kept (GM r17).
+      // Its copy stays on this tab while the canvas is kept (design).
       kept: 'live',
       shortcut: 'Ctrl+D',
       run: { held: isExecuting, verb: RUN_LOCK_VERBS.duplicateIt },
@@ -169,7 +169,7 @@ export function ContextMenu() {
     },
     {
       label: 'Delete',
-      // While kept, a delete on this tab that Undo brings back (GM r18).
+      // While kept, a delete on this tab that Undo brings back (design).
       kept: 'live',
       shortcut: 'Del',
       danger: true,
@@ -178,7 +178,7 @@ export function ContextMenu() {
       title: sceneHeld ?? undefined,
       action: () => {
         // A World Labs hold refuses, with its notice; otherwise it deletes at
-        // once and says "Deleted the node." with Undo (GM, 2026-10-23).
+        // once and says "Deleted the node." with Undo (design, 2026-10-23).
         if (useGraphStore.getState().allowCanvasDelete([nodeId])) deleteNode(nodeId);
         hideContextMenu();
       },

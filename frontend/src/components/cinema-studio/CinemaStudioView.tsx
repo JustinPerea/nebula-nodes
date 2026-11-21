@@ -31,10 +31,10 @@ export function CinemaStudioView() {
   const nodes = useGraphStore((s) => s.nodes);
   const panelRef = useRef<HTMLDivElement>(null);
 
-  // Cmd/Ctrl+Z and Shift+Cmd/Ctrl+Z step the canvas history here too (fix
-  // round 9 of PR #200, GM r13): a shot's × is neutral because Undo puts the
-  // shot back, and this view replaces the canvas, whose keys aren't mounted.
-  // Text fields keep their own undo; a dialog keeps its keys.
+  // Cmd/Ctrl+Z and Shift+Cmd/Ctrl+Z step the canvas history here too
+  // (design, PR #200): a shot's × is neutral because Undo puts the shot
+  // back, and this view replaces the canvas, whose keys aren't mounted. Text
+  // fields keep their own undo; a dialog keeps its keys.
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented || isModalDialogOpen()) return;
@@ -57,8 +57,8 @@ export function CinemaStudioView() {
 
   // A node with no scene yet (dragged from the library before the Studio
   // seeded it), or one saved without its base or aspect, reads through the
-  // defaults a new scene has (lib/cinemaScene; PR #198 review 2, M2). License
-  // guard (spec §10): the default base is commercial-OK, never FLUX.1-dev.
+  // defaults a new scene has (lib/cinemaScene; PR #198). License guard (spec
+  // §10): the default base is commercial-OK, never FLUX.1-dev.
   const rawScene = (node?.data as { params?: { scene?: unknown } } | undefined)?.params?.scene;
   const scene: CinemaSceneSpec = useMemo(() => normalizeCinemaScene(rawScene), [rawScene]);
 
@@ -139,7 +139,7 @@ export function CinemaStudioView() {
   };
 
   return (
-    // The shared selected style for the film look and the variation too (review 2 L-4).
+    // The shared selected style for the film look and the variation too.
     <div className="cinema-studio-view" style={{ ['--node-category-color' as string]: CINEMA_CATEGORY_COLOR }}>
       <CinemaStudioToolbar cinemaNodeId={cinemaNodeId} />
 

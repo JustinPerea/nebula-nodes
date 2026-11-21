@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { previewSizeAttributes } from '../../lib/previewSize';
 
 /**
- * The image under a file param's control (GM r46 Q2 on #222). With no
+ * The image under a file param's control (design, PR #222). With no
  * preview (an agent set a file Nebula can't show) the frame collapses on
  * the layout spring, never an empty box; it jumps under reduced motion
  * (panels.css). The last image stays inside while it collapses, so the
@@ -21,7 +21,7 @@ export function FilePreviewFrame({ src, size }: { src: string | null; size?: unk
           alt={src ? 'Preview' : ''}
           aria-hidden={src ? undefined : true}
           className="inspector__file-preview"
-          // Its aspect ratio before it decodes (#226, GM r82).
+          // Its aspect ratio before it decodes (design, PR #226).
           {...previewSizeAttributes(size)}
         />
       </div>

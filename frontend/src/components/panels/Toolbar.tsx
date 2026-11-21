@@ -63,14 +63,14 @@ export function Toolbar() {
   const executeGraph = useGraphStore((s) => s.executeGraph);
   const cancelExecution = useGraphStore((s) => s.cancelExecution);
   const isExecuting = useGraphStore((s) => s.isExecuting);
-  // A run waiting for its inputs counts as starting (review 15, M-B).
+  // A run waiting for its inputs counts as starting.
   const runStarting = useGraphStore((s) => s.runStarting);
   const isImportingGraph = useGraphStore((s) => s.isImportingGraph);
   const isCancelling = useGraphStore((s) => s.isCancelling);
-  // Offline is read-only (GM, round 15 of PR #114), and so is following an
-  // agent's switch (GM round 22, A: one state, lib/canvasLock): Run and the
-  // canvas actions that edit are disabled and look it; Save graph (a
-  // download), zoom and Reset panels stay.
+  // Offline is read-only (design, PR #114), and so is following an agent's
+  // switch (design, one state, lib/canvasLock): Run and the canvas actions
+  // that edit are disabled and look it; Save graph (a download), zoom and
+  // Reset panels stay.
   const lock = useCanvasLock();
   const offline = lock.offline;
   const following = lock.following;
@@ -93,10 +93,10 @@ export function Toolbar() {
   useEffect(() => { if (sizeRefs?.length) requestSizes(sizeRefs); }, [sizeRefs, requestSizes]);
   const runChip = runChipLabel(runScope);
   const runScopeId = useId();
-  // GM, PR #203 r6 item 1: a node that can't run without its key (a keyed
-  // route's missing key) locks the whole canvas's Run, in the
-  // following look (aria-disabled: focusable, with its tooltip), and the
-  // scope line it reads out is the lock reason (r6 item 3).
+  // Design, PR #203: a node that can't run without its key (a keyed
+  // route's missing key) locks the whole canvas's Run, in the following
+  // look (aria-disabled: focusable, with its tooltip), and the scope line
+  // it reads out is the lock reason.
   const settingsLoaded = useUIStore((s) => s.settingsCache.loaded);
   // Over exactly what a graph run runs (agents' placeholders skipped), the
   // same line Cmd+Enter and the palette refuse with (runKeyLockLine).
@@ -111,12 +111,11 @@ export function Toolbar() {
   const importFitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const actionsId = useId();
   const blockedId = useId();
-  // The panel's one line for the group (GM r39 item 2's pattern; each
-  // control's tooltip names its own verb, lib/runLock). GM PR #205 r1: the
-  // preparation and the import say what unlocks them the same way.
-  // Review 1 of PR #205 (NIT-4): each control's true reason; this tab's run
-  // first (its lock line wins on each control, canvasLock), then a Create
-  // launch's preparation, then an import.
+  // The panel's one line for the group (each control's tooltip names its own
+  // verb, lib/runLock). Design, PR #205: the preparation and the import say
+  // what unlocks them the same way. Each control gets its true reason: this
+  // tab's run first (its lock line wins on each control, canvasLock), then a
+  // Create launch's preparation, then an import.
   const filesWait: LockWait = isExecuting ? 'run' : isPreparing ? 'preparing' : isImportingGraph ? 'import' : 'run';
   const loadBlockedReason = lockLine(FILES_VERB, filesWait);
   const filesLine = (verb: string) => lockLine(verb, filesWait);
@@ -146,10 +145,10 @@ export function Toolbar() {
     };
   }, []);
 
-  // Where the bar starts, its open Canvas actions panel included, for the
-  // notices above it and the floating panels that end above it (GM - Design,
-  // 2026-10-23). Measured again whenever the bar, its panel or the window
-  // changes size.
+  // Where the bar starts, its open Canvas actions panel included, for
+  // the notices above it and the floating panels that end above it
+  // (design, 2026-10-23). Measured again whenever the bar, its panel or
+  // the window changes size.
   const barRoot = useRef<HTMLDivElement>(null);
   const actionsPanel = useRef<HTMLElement>(null);
   useBottomBarClearance([barRoot, actionsPanel], actionsOpen);
@@ -181,7 +180,7 @@ export function Toolbar() {
         event.preventDefault();
         const graph = useGraphStore.getState();
         const permitted = key === 's' ? canSaveGraph(graph) : canLoadGraph(graph);
-        // GM PR #205 r4 item 4: a wait's line, as the same keys say it on the canvas.
+        // Design, PR #205: a wait's line, as the same keys say it on the canvas.
         const line = permitted ? null : fileKeyLockLine(key, graph);
         if (line) graph.sayRunLocked(line);
         if (permitted) {
@@ -201,9 +200,9 @@ export function Toolbar() {
   };
 
   const handleClear = useCallback(async () => {
-    // Offline is read-only (GM, round 14 of PR #114): no confirm, no request.
+    // Offline is read-only (design, PR #114): no confirm, no request.
     if (refuseEditWhileOffline()) return;
-    // Kept in this tab (GM r18 on PR #199): the clear is this tab's own,
+    // Kept in this tab (design, PR #199): the clear is this tab's own,
     // one step that Undo brings back; nothing is sent.
     if (isCanvasKept()) {
       const count = useGraphStore.getState().nodes.length;
@@ -221,7 +220,7 @@ export function Toolbar() {
     if (refuseEditWhileFollowing()) return;
     if (!window.confirm(msg)) return;
     if (!canLoadGraph(useGraphStore.getState())) return;
-    // Round 20 (M1): an agent's switch seen while the confirm was up.
+    // An agent's switch seen while the confirm was up.
     if (refuseEditWhileFollowing()) return;
     // Confirm the backend clear before replacing the local graph. The backend
     // rejects this while any tracked execution owns provider lifecycle state.
@@ -230,10 +229,10 @@ export function Toolbar() {
     const undoStep = useGraphStore.getState().beginUndoStep({ clear: true });
     try {
       // force: the person just confirmed, and a project with nodes needs it
-      // (the backend refuses a clear without it, 409).
-      // GM, error-copy round 2: "Couldn’t clear the canvas." then the reason.
+      // (the backend refuses a clear without it, 409). Design: "Couldn’t clear
+      // the canvas." then the reason.
       const response = await apiRequest(CLEAR_CANVAS, '/api/graph?force=true', { method: 'DELETE' });
-      // The canvas Nebula holds now (round 19): writes to it carry it.
+      // The canvas Nebula holds now: writes to it carry it.
       await adoptCanvasRevisionFrom(response);
       // A successful backend clear proves no provider safety record remains;
       // unlike ordinary snapshot hydration, this is authoritative removal.
@@ -243,7 +242,7 @@ export function Toolbar() {
       useGraphStore.getState().cancelUndoStep(undoStep);
       showNotice(failureMessage(error, CLEAR_CANVAS), 'error', error);
     } finally {
-      // An undo pressed while the clear was on its way now undoes it (review 10, L-2).
+      // An undo pressed while the clear was on its way now undoes it.
       useGraphStore.getState().endUndoStep(undoStep);
     }
   }, []);
@@ -272,7 +271,7 @@ export function Toolbar() {
   }, [resetPanelLayout]);
 
   const handleImportCLI = useCallback(async () => {
-    // Round 22 (review 21): it replaces the canvas, so it waits for a follow too.
+    // It replaces the canvas, so it waits for a follow too.
     if (refuseEditWhileFollowing() || !canLoadGraph(useGraphStore.getState())) return;
     try {
       const data = await fetchCLIGraph();
@@ -281,12 +280,11 @@ export function Toolbar() {
         showNotice('The CLI canvas is empty. Build one with the nebula CLI first.', 'info');
         return;
       }
-      // Checked as a file being opened is (review 6 of PR #205, lines-limits
-      // MEDIUM-1), so a canvas Save couldn't save never comes in unseen: its
-      // nodes hold their params as deep as Save's file does. GM r13 item 2's
-      // lines: it isn't a file. Measured as the file Save will write
-      // (serializeGraph, with its root fields and viewport), so the count is
-      // Save's own (review 7 of PR #205, limits MEDIUM-3).
+      // Checked as a file being opened is (PR #205), so a canvas Save couldn't
+      // save never comes in unseen: its nodes hold their params as deep as
+      // Save's file does. The design's lines for it say it isn't a file.
+      // Measured as the file Save will write (serializeGraph, with its root
+      // fields and viewport), so the count is Save's own.
       try {
         const projects = useProjectStore.getState();
         const file = serializeGraph(data.nodes as Node<NodeData>[], data.edges as Edge[], getViewport(),
@@ -317,8 +315,8 @@ export function Toolbar() {
     }
   }, [fitView, getViewport]);
 
-  // The bottom Run while the canvas is kept (PR #199, GM r16, 4), first, as
-  // lib/canvasLock orders it (GM r19, 4): its mark and line in place of
+  // The bottom Run while the canvas is kept (design, PR #199), first, as
+  // lib/canvasLock orders it (design): its mark and line in place of
   // following's or offline's.
   const runKept = lock.kept;
   // Spread after `lock.mark`: kept's mark, with following's and offline's
@@ -335,7 +333,7 @@ export function Toolbar() {
       : runStarting ? runFinishesLine(RUN_LOCK_VERBS.runCanvas)
       : isImportingGraph ? lockLine(RUN_LOCK_VERBS.runCanvas, 'import')
         // The Run chip's own tooltip text (describeRunScope reads
-        // runChipTitle; GM, PR #203 r19 item 2).
+        // runChipTitle; design, PR #203).
         : `Run canvas. ${describeRunScope(runScope)} (${displayKey('Mod')}${displayKey('Enter')})`),
   }, keyLock, runScopeId);
   // A kept canvas holds the control first and shows its own line: the missing
@@ -351,13 +349,13 @@ export function Toolbar() {
           className="toolbar__button toolbar__button--primary toolbar__button--executing"
           onClick={() => void cancelExecution()}
           // Stop only reduces spend: enabled and normal-looking offline, and
-          // it goes through the network gate (round 16 of PR #114, M1).
+          // it goes through the network gate (PR #114).
           disabled={isCancelling}
           aria-busy={isCancelling}
           title={isCancelling ? 'Stopping the run…' : 'Stop the run'}
         >
-          {/* GM r17 (A): the running dots take the icon's slot, a fixed box
-              left of the label, so "Stop" never moves and is never covered. */}
+          {/* Design: the running dots take the icon's slot, a fixed box left of
+              the label, so "Stop" never moves and is never covered. */}
           <span className="toolbar__icon-slot" aria-hidden="true"><ToolbarIcon name="stop" /></span>
           <span className="toolbar__label">{isCancelling ? 'Stopping…' : 'Stop'}</span>
         </button>
@@ -365,12 +363,12 @@ export function Toolbar() {
         <button
           type="button"
           className={`toolbar__button toolbar__button--primary${following || runKeyLocked ? ' toolbar__button--waiting' : ''}`}
-          // Round 20 (GM follow-up 3): disabled while the tab follows an
-          // agent's switch, with its tooltip (aria-disabled keeps the tooltip
-          // and the focus; a click only pulses the project bar). Offline it
-          // is disabled outright (round 15 of PR #114). A missing key comes
-          // first, as on every Run surface (withKeyLock, GM PR #203 r11 item
-          // 3): key-locked, a click sends nothing and pulses nothing.
+          // Design: disabled while the tab follows an agent's switch, with its
+          // tooltip (aria-disabled keeps the tooltip and the focus; a click
+          // only pulses the project bar). Offline it is disabled outright (PR
+          // #114). A missing key comes first, as on every Run surface
+          // (withKeyLock, design, PR #203): key-locked, a click sends nothing
+          // and pulses nothing.
           onClick={() => { if (runKeyLocked) return; if (refuseEditWhileFollowing()) return; void executeGraph(); }}
           aria-describedby={nodeCount > 0 ? runScopeId : undefined}
           {...runProps}
@@ -399,9 +397,9 @@ export function Toolbar() {
             {canLoad && !canSave && providerStartAmbiguities.length > 0 && (
               <p className="toolbar__blocked" id={blockedId} role="status">{saveBlockedReason}</p>
             )}
-            {/* PR #198 review 6, M2: this tab's run locks Load, Import, Clear and
-                Arrange too, and its line wins over following's and offline's
-                (lib/canvasLock), as Save graph and the line above say. */}
+            {/* PR #198: this tab's run locks Load, Import, Clear and Arrange too,
+                and its line wins over following's and offline's (lib/canvasLock),
+                as Save graph and the line above say. */}
             <div className="toolbar__action-group" role="group" aria-label="Canvas files">
               <h2 className="toolbar__action-heading">Canvas</h2>
               <button type="button" className="toolbar__action" disabled={!canSave}

@@ -15,11 +15,11 @@ import { springCssVars } from '../../lib/springs';
 import { CARD_WIDTH_SPRING_ATTR, CARD_WIDTH_SPRINGS_ATTR } from '../../lib/cardWidthSpring';
 import { facingPortEdge } from '../../lib/facingPort';
 
-/** The gap to the card on a side with no port (GM r104, r111). */
+/** The gap to the card on a side with no port (design). */
 const POPOVER_GAP = 10;
 const POPOVER_WIDTH = 260;
 const POPOVER_MIN_WIDTH = 228;
-/** The floating Inspector's floor: a short body keeps this height (GM r68). */
+/** The floating Inspector's floor: a short body keeps this height (design). */
 const POPOVER_MIN_HEIGHT = 300;
 const PINNED_WIDTH = 300;
 const PINNED_MIN_WIDTH = 260;
@@ -56,7 +56,7 @@ function focusCanvasOnceCardLeaves(card: Element): () => void {
   return () => cancelAnimationFrame(frame);
 }
 
-/** The springs the foot row's "more below" hairline comes and goes on (GM r87). */
+/** The springs the foot row's "more below" hairline comes and goes on (design). */
 const FOOT_SPRINGS = springCssVars() as CSSProperties;
 
 type PopoverFrame = {
@@ -78,7 +78,7 @@ function getInspectorAnchor(nodeId: string) {
 }
 
 /**
- * Where the node is (GM r92): the React Flow node's own box and the canvas's
+ * Where the node is (design): the React Flow node's own box and the canvas's
  * transform, never its card's box. A card's top shifts inside a node that
  * hasn't moved when its preview lands (an Image Input's padding grows), which
  * is growth, not a move. A node with no React Flow box (none in some tests)
@@ -117,16 +117,16 @@ function frameEquals(a: PopoverFrame | null, b: PopoverFrame) {
 }
 
 /**
- * The height the panel needs to show its whole body (GM r68: "It grows to fit
- * its content"), or null before it is laid out. What the panel holds besides
- * its body's viewport (the header, the foot row, the borders: the panel's
- * height less the viewport's) plus the body's padding and its content's own
- * height. The content box (`__content`, a flow root, so its sections'
- * margins stay inside it) has its own height whatever the panel's, so a body
- * that gets shorter reads shorter, and the read holds while the layout spring
- * runs the panel's height (both heights move together). Layout sizes only
- * (offsetHeight, clientHeight), never a transformed box, so the panel's enter
- * scale doesn't read as a change.
+ * The height the panel needs to show its whole body (design:
+ * "It grows to fit its content"), or null before it is laid out. What the
+ * panel holds besides its body's viewport (the header, the foot row, the
+ * borders: the panel's height less the viewport's) plus the body's padding
+ * and its content's own height. The content box (`__content`, a flow root, so
+ * its sections' margins stay inside it) has its own height whatever the
+ * panel's, so a body that gets shorter reads shorter, and the read holds
+ * while the layout spring runs the panel's height (both heights move
+ * together). Layout sizes only (offsetHeight, clientHeight), never a
+ * transformed box, so the panel's enter scale doesn't read as a change.
  */
 function contentFitHeight(popover: HTMLElement | null): number | null {
   if (!popover || popover.offsetHeight <= 0) return null;
@@ -143,28 +143,28 @@ function contentFitHeight(popover: HTMLElement | null): number | null {
 export const CONTENT_RESIZE_MS = 400;
 
 /**
- * How long an open may last at most (GM r82): from the panel's mount, its
+ * How long an open may last at most (design): from the panel's mount, its
  * content settling (an image decoding, the first late layout) counts as
  * placing it, until every image in it is complete and its height has held
  * for OPEN_STABLE_FRAMES frames, or this long, whichever comes first. After
- * that, a change in its content holds its top (GM r72).
+ * that, a change in its content holds its top (design).
  */
 export const OPEN_SETTLE_CAP_MS = 300;
 export const OPEN_STABLE_FRAMES = 2;
 
 /**
- * Where the floating Inspector stands beside its node: right of it, else left,
- * else under it, flipped above it when under would cross the bottom line (GM -
- * Design, 2026-10-23: "When there's no room below the node, flip it up or
- * shift it, so its foot row is always whole"). Every placement stays between
- * two measured lines (lib/bottomBar.ts): 12 px under the floating top chrome
- * and 12 px over the notice region's reserved band (GM r68, r72). Runs every
- * frame while open, so a pan, a zoom or the toolbar coming or going moves it
- * at once.
+ * Where the floating Inspector stands beside its node: right of it, else
+ * left, else under it, flipped above it when under would cross the bottom
+ * line (design, 2026-10-23: "When there's no room below the node, flip it up
+ * or shift it, so its foot row is always whole"). Every placement stays
+ * between two measured lines (lib/bottomBar.ts): 12 px under the floating top
+ * chrome and 12 px over the notice region's reserved band (design). Runs
+ * every frame while open, so a pan, a zoom or the toolbar coming or going
+ * moves it at once.
  *
  * `panelNeed`: the height the panel needs to show its whole body
  * (contentFitHeight), or null when not yet known (300 px until then).
- * `heldTop`: where its top stays while its content changes height (GM r68:
+ * `heldTop`: where its top stays while its content changes height (design:
  * "anchored at the top, so the file row doesn't move under the pointer"), or
  * null to place it afresh beside its node.
  */
@@ -177,14 +177,14 @@ function measurePopoverFrame(nodeId: string, anchor: HTMLElement, panelNeed: num
   // toolbar, whichever is lower): lib/bottomBar.ts floatingChromeTopLine, the
   // only source for that line.
   const topLimit = floatingChromeTopLine(VIEWPORT_GUTTER);
-  // GM r111, r114: the edge facing the node stands clear of the port on that
-  // side (right: its outputs; left: its inputs): the farthest of 8 px past
-  // its dot, 2 px past its hit target and 2 px past its hover circle
-  // (lib/facingPort.ts), so no part of a port is under the panel at any
-  // zoom; with no port there, 10 px clear of the card. Never nearer the card
-  // than those 10 px (a port's dot at a far zoom-out sits inside them). Every placement beside the node (the open,
-  // a held top, a window resize's re-place, the follow of a springing card)
-  // comes through here.
+  // Design: the edge facing the node stands clear of the port on that side
+  // (right: its outputs; left: its inputs): the farthest of 8 px past its dot,
+  // 2 px past its hit target and 2 px past its hover circle (lib/facingPort.ts),
+  // so no part of a port is under the panel at any zoom; with no port there,
+  // 10 px clear of the card. Never nearer the card than those 10 px (a port's
+  // dot at a far zoom-out sits inside them). Every placement beside the node
+  // (the open, a held top, a window resize's re-place, the follow of a
+  // springing card) comes through here.
   const { right: rightPort, left: leftPort } = ports;
   const rightEdge = Math.max(rect.right + POPOVER_GAP, rightPort === null ? -Infinity : rightPort);
   const leftEdge = Math.min(rect.left - POPOVER_GAP, leftPort === null ? Infinity : leftPort);
@@ -209,10 +209,10 @@ function measurePopoverFrame(nodeId: string, anchor: HTMLElement, panelNeed: num
 
   // 12 px above the notice region's reserved band, which stands on the bar
   // across the whole width, and above the Canvas actions panel only where it
-  // is over that panel (lib/bottomBar.ts). GM r72: "Cap to the BAND line, not
+  // is over that panel (lib/bottomBar.ts). Design: "Cap to the BAND line, not
   // the bar: the reserved notice band wins; a notice covering
-  // Run/Duplicate/Delete is the overlap r57 rules out" (154-754 at 1440x900,
-  // 600 px measured live; r68's bar line gave 662).
+  // Run/Duplicate/Delete is the overlap to rule out" (154-754 at 1440x900,
+  // 600 px measured live; the bar line gave 662).
   const bottomLimit = floatingBottomLimit(VIEWPORT_GUTTER, viewportHeight, { left, right: left + width },
     FLOATING_CHROME_CLEARANCE);
   // Its whole body, never under 300 px, up to the room between the lines:
@@ -224,14 +224,13 @@ function measurePopoverFrame(nodeId: string, anchor: HTMLElement, panelNeed: num
   // node, the node moved, the window resized), a node low on the screen
   // shifts it up instead.
   //
-  // The order (GM r68's "anchored at the top, so the file row doesn't move
-  // under the pointer", confirmed in r72): "don't move what's under the
-  // pointer" comes before the fit. Shift-up happens only on placement (the
-  // open, until its content is stable, GM r82; another node; the node moving;
-  // a window resize, r82); after a content change the top holds and the
-  // extra scrolls, even on a low node that a fresh placement would shift.
-  // Under or over its node (no room beside it) it follows the node, so it
-  // never holds a top.
+  // The order (design: "anchored at the top, so the file row doesn't move
+  // under the pointer", confirmed later by "don't move what's under the
+  // pointer") comes before the fit. Shift-up happens only on placement (the
+  // open, until its content is stable; another node; the node moving; a window
+  // resize); after a content change the top holds and the extra scrolls, even
+  // on a low node that a fresh placement would shift. Under or over its node
+  // (no room beside it) it follows the node, so it never holds a top.
   if (heldTop !== null && placement !== 'bottom') {
     const top = clamp(heldTop, topLimit, bottomLimit);
     const held = Math.max(0, Math.min(own, bottomLimit - top));
@@ -332,20 +331,20 @@ export function NodeInspectorPopover() {
   const setInspectorPinned = useUIStore((s) => s.setInspectorPinned);
   const [frame, setFrame] = useState<PopoverFrame | null>(null);
   // Closed: its frame goes with it, so a reopen never paints the last open's
-  // frame first (review 2 LOW-2: it showed for a frame, and for good when
-  // the node had no card on screen, past every line). Set while rendering,
-  // so the closed render is the one React commits.
+  // frame first (it used to show for a frame, and for good when the node had
+  // no card on screen, past every line). Set while rendering, so the closed
+  // render is the one React commits.
   if ((!visible || (!selectedNodeId && !pinned)) && frame !== null) setFrame(null);
-  // The node whose open has settled (GM r92 Q3): until then the popover
-  // carries data-opening and the foot's "more below" hairline waits, so a
-  // body that overflows only while its content settles never shows it.
-  // Reset as it closes or another node opens (set while rendering, as above).
+  // The node whose open has settled (design): until then the popover carries
+  // data-opening and the foot's "more below" hairline waits, so a body that
+  // overflows only while its content settles never shows it. Reset as it
+  // closes or another node opens (set while rendering, as above).
   const [settledFor, setSettledFor] = useState<string | null>(null);
   const [openFor, setOpenFor] = useState<string | null>(null);
-  // The foot's "more below" hairline (GM r87), decided here and drawn by
+  // The foot's "more below" hairline (design), decided here and drawn by
   // data-more-below on the foot (styles/slava-restraint.css). Off through the
-  // open (GM r92 Q3). GM r98: while a height spring runs it holds the state
-  // it had when the spring started (on stays on, off stays off; the body's
+  // open (design). While a height spring runs it holds the state it
+  // had when the spring started (on stays on, off stays off; the body's
   // overflow mid-spring is the spring's lag, not the content), and when the
   // spring rests it is read again and springs to the new state.
   const [line, setLine] = useState(false);
@@ -365,30 +364,30 @@ export function NodeInspectorPopover() {
   const popoverRef = useRef<HTMLDivElement | null>(null);
   const pinnedPreferenceRef = useRef<PinnedPreference | null>(null);
   const dragRef = useRef<{ startX: number; startY: number; left: number; top: number } | null>(null);
-  // GM r68: a height change from the content (an upload landing, "No
-  // preview" collapsing, a section opening) runs on the layout spring, anchored
-  // at the top. So do the open's own settling (GM r82), the held top let go by
-  // a window resize (r82) and its card growing while it stands under or over
-  // the node (r82, NIT-2). Only then (review 7 M2 on #208): a pan, zoom or
-  // drag moves the panel with its node at once.
+  // Design: a height change from the content (an upload landing, "No preview"
+  // collapsing, a section opening) runs on the layout spring, anchored at the
+  // top. So do the open's own settling (design), the held top let go by a
+  // window resize and its card growing while it stands under or over the
+  // node. Only then (on PR #208): a pan, zoom or drag moves the panel with
+  // its node at once.
   const [contentResizing, setContentResizing] = useState(false);
-  // GM r107: while the card's own width springs (lib/cardWidthSpring.ts), the
+  // Design: while the card's own width springs (lib/cardWidthSpring.ts), the
   // panel's edge follows the card's edge as it is on screen, in the same
-  // frame, so the gap between them holds every frame. Its left then rides
-  // no spring of its own (panels.css).
+  // frame, so the gap between them holds every frame. Its left then rides no
+  // spring of its own (panels.css).
   const [followsCard, setFollowsCard] = useState(false);
   const followsCardRef = useRef(false);
   const needRef = useRef<{ nodeId: string; need: number | null } | null>(null);
   const resizeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // GM r22 Q5 on #208: rigid wins. A pan or drag that starts mid-spring
-  // ends the spring at its end layout at once (the transition goes with the
+  // Design, PR #208: rigid wins. A pan or drag that starts mid-spring ends
+  // the spring at its end layout at once (the transition goes with the
   // attribute, so the panel jumps to where it was going), then tracks 1:1.
   const resizingRef = useRef(false);
   const anchorAtRef = useRef<string | null>(null);
   // The node card's size and its offset in the node, so its growing (a
   // preview landing, its top shifting inside the node) is told from a move.
   const anchorSizeRef = useRef<string | null>(null);
-  // Where the ports' dots sit against the card's edges (GM r111).
+  // Where the ports' dots sit against the card's edges (design).
   const portsAtRef = useRef<string | null>(null);
   // The frame the card starts springing in was placed by the port's step alone (below).
   const heldForSpringRef = useRef(false);
@@ -401,9 +400,9 @@ export function NodeInspectorPopover() {
   // The top held while the content changes height, until the node moves, another
   // node opens or the window resizes.
   const heldTopRef = useRef<{ nodeId: string; top: number } | null>(null);
-  // The open (GM r82): until its content is stable (every image complete,
-  // then OPEN_STABLE_FRAMES frames at one height) or OPEN_SETTLE_CAP_MS from
-  // the mount, a settle is placement: it may shift the panel up, on the spring.
+  // The open (design): until its content is stable (every image complete, then
+  // OPEN_STABLE_FRAMES frames at one height) or OPEN_SETTLE_CAP_MS from the
+  // mount, a settle is placement: it may shift the panel up, on the spring.
   const openRef = useRef<{ nodeId: string; settled: boolean; stable: number; last: number | null } | null>(null);
   const openTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // One measuring step, also run straight after each render (below), so the
@@ -422,9 +421,9 @@ export function NodeInspectorPopover() {
     // Every open decides its line afresh, with no spring held over.
     lineRef.current = null;
     lineHeldRef.current = null;
-    // Closed: the next open measures afresh (the frame state is cleared
-    // as it closes, above). A pinned one stays open with no node: its empty
-    // state (GM PR #205 r10 items 2-3), so the screen agrees with the store.
+    // Closed: the next open measures afresh (the frame state is cleared as
+    // it closes, above). A pinned one stays open with no node: its empty
+    // state (design, PR #205), so the screen agrees with the store.
     if (!visible || (!selectedNodeId && !pinned)) {
       frameRef.current = null;
       needRef.current = null;
@@ -446,8 +445,8 @@ export function NodeInspectorPopover() {
     const open = { nodeId: selectedNodeId ?? '', settled: false, stable: 0, last: null };
     openRef.current = open;
 
-    // The hairline (GM r92 Q3, r98): off until the open has settled; then the
-    // state held by a running spring, else whether the body has more below.
+    // The hairline (design): off until the open has settled; then the state
+    // held by a running spring, else whether the body has more below.
     const updateLine = () => {
       const body = popoverRef.current?.querySelector<HTMLElement>('.node-inspector-popover__body');
       const next = open.settled && openRef.current === open
@@ -476,8 +475,8 @@ export function NodeInspectorPopover() {
 
     const startSpring = () => {
       // Reduced motion: the panel jumps (panels.css), so no spring runs and
-      // nothing waits for one; the line reads the body at once (review 4
-      // NIT-1). A spring already running is ended with it.
+      // nothing waits for one; the line reads the body at once. A spring
+      // already running is ended with it.
       if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
         if (resizeTimer.current) clearTimeout(resizeTimer.current);
         resizeTimer.current = null;
@@ -495,7 +494,7 @@ export function NodeInspectorPopover() {
         setContentResizing(false);
         releaseLine();
       }, CONTENT_RESIZE_MS);
-      // GM r98: the line keeps what it shows as this spring starts. A
+      // Design: the line keeps what it shows as this spring starts. A
       // spring restarted mid-run shows the held state, so it keeps it too.
       lineHeldRef.current = lineRef.current ?? false;
       resizingRef.current = true;
@@ -542,24 +541,24 @@ export function NodeInspectorPopover() {
           frameRef.current = nextFrame;
           setFrame(nextFrame);
         }
-        // Its open settles the same way (GM r92 Q2, Q3: the same hairline,
-        // after the same settle), on its content's own height.
+        // Its open settles the same way (design: the same hairline, after
+        // the same settle), on its content's own height.
         const popover = popoverRef.current;
         advanceOpen(popover, popover?.querySelector<HTMLElement>('.node-inspector-popover__content')?.offsetHeight ?? null,
           tick);
       } else if (selectedNodeId) {
         const anchor = getInspectorAnchor(selectedNodeId);
         if (anchor) {
-          // Where the node is, from its own box and the canvas's transform
-          // (GM r92): its card growing or its top shifting inside it (a
-          // preview landing) is not a move.
+          // Where the node is, from its own box and the canvas's transform: its
+          // card growing or its top shifting inside it (a preview landing) is
+          // not a move (design).
           const cardBox = anchor.getBoundingClientRect();
           const { at, card: size } = nodePlace(selectedNodeId, anchor, cardBox);
           const moved = anchorAtRef.current !== null && at !== anchorAtRef.current;
-          // GM r111: the ports' dots, and where they sit against the card's
+          // Design: the ports' dots, and where they sit against the card's
           // edges. A port that shifts against a node that hasn't moved (an
-          // Image Input's card drops its 1 px border as its preview lands,
-          // so its output port steps 1 px out) is followed in the same frame,
+          // Image Input's card drops its 1 px border as its preview lands, so
+          // its output port steps 1 px out) is followed in the same frame,
           // like a springing card: the panel's edge keeps its 8 px to the
           // dot, never springing after it. Not in a frame where the card's
           // width changes afresh (it wasn't springing): its spring starts
@@ -596,13 +595,13 @@ export function NodeInspectorPopover() {
           anchorSizeRef.current = size;
           viewportRef.current = viewport;
           const wasHeld = heldTopRef.current?.nodeId === selectedNodeId;
-          // Placed afresh beside it: moved, another node, or the window
-          // resized (GM r82: "a window resize re-places and drops the held
-          // top").
+          // Placed afresh beside it: moved, another node, or the
+          // window resized (design: "a window resize re-places and
+          // drops the held top").
           if (moved || resized || !wasHeld) heldTopRef.current = null;
-          // Still opening (GM r82): its content settling is placement.
+          // Still opening (design): its content settling is placement.
           const opening = openRef.current?.nodeId === selectedNodeId && !openRef.current.settled;
-          // The height its whole body needs (GM r68), read from the panel
+          // The height its whole body needs (design), read from the panel
           // as it is on screen; it holds while the spring runs (see
           // contentFitHeight), so the panel settles in one step and never
           // runs on past its content.
@@ -621,21 +620,20 @@ export function NodeInspectorPopover() {
             && Math.ceil(need) !== Math.ceil(seen.need) && shown?.nodeId === selectedNodeId
             && shown.placement !== 'pinned-left';
           // So does the card growing in a node that hasn't moved, beside it
-          // (GM r92: a preview landing shifts the card's top inside the
-          // node), so the panel doesn't follow the card's top. Under or over
-          // the node it follows the card (r82).
+          // (a preview landing shifts the card's top inside the node; design),
+          // so the panel doesn't follow the card's top. Under or over the node
+          // it follows the card.
           const besideGrew = grew && shown?.nodeId === selectedNodeId
             && (shown.placement === 'left' || shown.placement === 'right');
           if ((contentChanged || besideGrew) && !opening && !heldTopRef.current) {
             heldTopRef.current = { nodeId: selectedNodeId, top: Number(shown!.style.top) };
           }
           let nextFrame = measurePopoverFrame(selectedNodeId, anchor, need, heldTopRef.current?.top ?? null, ports);
-          // GM r111, r114: the frame a card starts springing is painted at its
-          // old width (its spring starts after this step), so a port that
-          // steps in that same frame (1 px as a preview lands) is followed
-          // by that step alone, in this frame: the panel's edge keeps its
-          // distance to the port, never springing after it. The next frame
-          // follows the card.
+          // Design: the frame a card starts springing is painted at its old
+          // width (its spring starts after this step), so a port that steps in
+          // that same frame (1 px as a preview lands) is followed by that step
+          // alone, in this frame: the panel's edge keeps its distance to the
+          // port, never springing after it. The next frame follows the card.
           const facingStep = shown?.placement === 'right' ? portStep.right : portStep.left;
           // The measure straight after this frame's commit (before its paint)
           // is the same frame: it keeps that placement.
@@ -651,10 +649,10 @@ export function NodeInspectorPopover() {
           }
           // What springs, never a move: a content change; the held top let
           // go by a resize, and the resize after it while that glide runs,
-          // so it follows the resize live (GM r82); the card growing, which
-          // moves a panel under the node or flips it above (r82).
+          // so it follows the resize live (design); the card growing, which
+          // moves a panel under the node or flips it above.
           const glide = resized && !moved && (wasHeld || resizingRef.current);
-          // GM r104: the edge facing the card follows it on the same spring,
+          // Design: the edge facing the card follows it on the same spring,
           // so a card widening beside the panel (an Image Input's preview
           // landing) moves its left edge on the spring, never in one frame.
           const shifts = shown?.nodeId === selectedNodeId && shown.placement !== 'pinned-left'
@@ -760,10 +758,10 @@ export function NodeInspectorPopover() {
 
   // A confirmed next-step picker unmounts its focused choice. Resume keyboard
   // work in the Inspector only then (it asks: resumeInspectorFocus), and only
-  // when focus was lost; preserve an active control. Never for a node an
-  // Undo or a Redo brought back, or any other way the shown node changed
-  // (review 6 of PR #205, inspector-pin MEDIUM-1; GM r13 item 5: focus stays
-  // on the canvas, and the Inspector updates without taking it).
+  // when focus was lost; preserve an active control. Never for a node an Undo
+  // or a Redo brought back, or any other way the shown node changed (PR #205,
+  // inspector-pin; design: focus stays on the canvas, the Inspector updates
+  // without taking it).
   const hasFrame = Boolean(frame);
   useLayoutEffect(() => {
     if (!visible || !selectedNodeId || !hasFrame || frame?.suspended
@@ -775,22 +773,22 @@ export function NodeInspectorPopover() {
   }, [visible, selectedNodeId, hasFrame, frame?.suspended]);
   // A node left the canvas (a Delete, an Undo, an agent's delete) and its
   // card took focus with it. Focus goes to the canvas, never to the page, so
-  // the next Cmd+Z or Cmd+Shift+Z is the canvas's (review 6, inspector-pin
-  // MEDIUM-1; GM r13 item 5). The Inspector naming none (an unpinned one
-  // closing took focus from its field): the same.
+  // the next Cmd+Z or Cmd+Shift+Z is the canvas's (inspector-pin; design).
+  // The Inspector naming none (an unpinned one closing took focus from its
+  // field): the same.
   const shownBefore = useRef(selectedNodeId);
   useLayoutEffect(() => {
     const previous = shownBefore.current;
     shownBefore.current = selectedNodeId;
     if (previous !== null && selectedNodeId === null) focusCanvasFromPage();
   }, [selectedNodeId]);
-  // Any focused card whose node left, whichever node the Inspector shows or
-  // names after (review 8, lines-inspector LOW-1: an agent's delete of the
-  // shown card while another node stays selected names that one, never none,
-  // and a card the Inspector doesn't show can hold focus too). React Flow
-  // removes the card a render after the node goes (it copies the nodes into
-  // its own store), so while focus is still in the leaving card, wait for the
-  // card to go, then move it (review 7 LOW-1).
+  // Any focused card whose node left, whichever node the Inspector shows
+  // or names after (lines-inspector: an agent's delete of the shown card
+  // while another node stays selected names that one, never none, and a card
+  // the Inspector doesn't show can hold focus too). React Flow removes the
+  // card a render after the node goes (it copies the nodes into its own
+  // store), so while focus is still in the leaving card, wait for the card
+  // to go, then move it.
   useEffect(() => {
     let stop: (() => void) | undefined;
     const unsubscribe = useGraphStore.subscribe((state, before) => {
@@ -877,8 +875,8 @@ export function NodeInspectorPopover() {
         </ScrollFade>
       </InspectorFootContext.Provider>
       {/* Its top edge shows a hairline while the body can scroll further
-          down (GM r87), on the house springs (styles/slava-restraint.css),
-          held through a height spring (GM r98, updateLine above). */}
+          down (design), on the house springs (styles/slava-restraint.css),
+          held through a height spring (design, updateLine above). */}
       <div ref={setFoot} className="node-inspector-popover__foot" style={FOOT_SPRINGS}
         data-more-below={line ? '' : undefined} />
     </div>,

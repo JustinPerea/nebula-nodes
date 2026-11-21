@@ -5,8 +5,8 @@ import type { LockProps } from '../../PersonLock';
 /**
  * Settings' switch: a real checkbox with role="switch".
  *
- * GM, PR #205 r1 answer 6: a switch saving its own change follows the held
- * rule (useHeldLook). The caller shows the person's new position at once
+ * Design, PR #205: a switch saving its own change follows the held rule
+ * (useHeldLook). The caller shows the person's new position at once
  * (`checked` is the value being saved) and passes `saving`; the switch keeps
  * its enabled look for the first 150 ms (data-held-pending), so a quick save
  * never flashes grey, and if the save is still out after that it takes the
@@ -53,7 +53,7 @@ export function SwitchRow({ title, description, checked, disabled, saving, neste
   description?: string;
   checked: boolean;
   disabled?: boolean;
-  /** This switch's own change is being saved (GM PR #205 r1: the held rule). */
+  /** This switch's own change is being saved (design, PR #205: the held rule). */
   saving?: boolean;
   nested?: boolean;
   onChange: (checked: boolean) => void;

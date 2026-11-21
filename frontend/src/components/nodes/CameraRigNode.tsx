@@ -190,7 +190,7 @@ function FrameView({ rig }: { rig: CameraRigBundle }) {
 
 export function CameraRigNode({ id, data, selected }: NodeProps) {
   const updateNodeData = useGraphStore((s) => s.updateNodeData);
-  const lock = useCanvasLock(); // offline or following (GM round 22, A)
+  const lock = useCanvasLock(); // offline or following (design)
   const readOnly = lock.locked;
   const params = (data as CameraRigNodeData).params ?? {};
   const rig = readRig(params);

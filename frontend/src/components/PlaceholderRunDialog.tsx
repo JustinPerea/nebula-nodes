@@ -6,53 +6,50 @@ import '../styles/placeholder-run-dialog.css';
 import { ModalPortal } from './ModalPortal';
 
 /**
- * Q133 (Justin, 2026-10-25): before the person's direct run makes an agent's
- * paid placeholder normal, Nebula always asks, whatever "Ask before costly
- * runs" says. GM - Design's copy and layout, verbatim (lib/placeholderRunConfirm.ts
- * builds the words): the heading, the line under it, one row per paid
- * placeholder with its agent's dot (a ring when it named itself), the free
- * ones in one line, the whole run's total, then Cancel and "Run for $X".
+ * Justin, 2026-10-25: before the person's direct run makes an agent's paid
+ * placeholder normal, Nebula always asks, whatever "Ask before costly runs" says.
+ * The approved copy and layout, verbatim (lib/placeholderRunConfirm.ts builds the
+ * words): the heading, the line under it, one row per paid placeholder with its
+ * agent's dot (a ring when it named itself), the free ones in one line, the whole
+ * run's total, then Cancel and "Run for $X".
  *
  * The app's own dialog, never window.confirm: focus on Cancel (Enter never
  * spends by accident), Escape is Cancel, Tab stays inside. Loaded only when
  * it is needed (askPlaceholderRun.tsx, lib/deferredChunks.ts placeholderRunDialogModule).
  *
- * GM - Design, round 5 (review 4, M3): a dialog back because the run changed
- * (`changed`) says so above the rows, and Run takes no click for 500 ms after
- * it opens or after a row, the total or the button changes while it is open,
- * so a click already on its way can't confirm a price it didn't see. Focus
- * stays where it was (the same buttons re-render in place).
+ * Design: a dialog back because the run changed (`changed`) says so above the
+ * rows, and Run takes no click for 500 ms after it opens or after a row, the
+ * total or the button changes while it is open, so a click already on its way
+ * can't confirm a price it didn't see. Focus stays where it was (the same
+ * buttons re-render in place).
  *
- * GM - Design, round 6: the line also shows once anything it says changes in
- * place after it first showed (note 2), and stays; a screen reader hears it
- * through a polite live region at each such change (review 5, L7). A paid
- * node of the run that is no placeholder has a muted row with no dot (item
- * 3). Run hands back the words it was showing when it was clicked (review 5,
- * L6), so the run sends what the person saw, not what was about to be drawn.
+ * Design: the line also shows once anything it says changes in place after it first
+ * showed, and stays; a screen reader hears it through a polite live region at each
+ * such change. A paid node of the run that is no placeholder has a muted row with
+ * no dot. Run hands back the words it was showing when it was clicked, so the run
+ * sends what the person saw, not what was about to be drawn.
  *
- * Review 6, M1 (GM - Design: "rows scroll with everything else pinned: yes.
- * The scroll area must be reachable by keyboard, and initial focus stays on
- * Cancel."): with many paid nodes the rows scroll inside the card, which
- * never grows past the window (placeholder-run-dialog.css), so the heading,
- * the changed line, the total, the footnotes and the buttons stay on screen.
- * A list that scrolls is a Tab stop named by the heading; one that fits isn't.
- * Review 6, L-b: the line for placeholders that left the run sits under the intro.
- * GM - Design on review 8 L-b: on a replay still being set up, the line that
- * says the replay uses the saved settings sits between them.
- * Review 7, M-1: focus never leaves it while it is open (the rows that stop
- * scrolling hand focus to Cancel; a slip to the page comes back to Cancel),
- * and no canvas shortcut acts behind it (lib/canvasShortcutScope.ts
- * isModalDialogOpen: it is aria-modal).
+ * Approved: rows scroll with everything else pinned, the scroll area reachable
+ * by keyboard, initial focus on Cancel. With many paid nodes the rows scroll
+ * inside the card, which never grows past the window
+ * (placeholder-run-dialog.css), so the heading, the changed line, the total, the
+ * footnotes and the buttons stay on screen. A list that scrolls is a Tab stop
+ * named by the heading; one that fits isn't. The line for placeholders that left
+ * the run sits under the intro. Design: on a replay still being set up, the line
+ * that says the replay uses the saved settings sits between them. Focus never
+ * leaves it while it is open (the rows that stop scrolling hand focus to Cancel;
+ * a slip to the page comes back to Cancel), and no canvas shortcut acts behind
+ * it (lib/canvasShortcutScope.ts isModalDialogOpen: it is aria-modal).
  *
- * GM - Design, round 17 (1): an update in place names the nodes whose route
- * or price moved, in the re-ask's form ("“Alt still” changed while this was
- * open."), in place of round 6's line, and keeps every node that moved since
- * it opened (as it reads now). A node joining or leaving the run adds no
- * changed line: the other lines cover it. A re-ask's own moved nodes
- * (`moved`) are in the same line; a re-ask with none keeps round 5's line.
+ * Design: an update in place names the nodes whose route or price moved, in
+ * the re-ask's form ("“Alt still” changed while this was open."), in place of
+ * CHANGED_LINE, and keeps every node that moved since it opened (as it reads
+ * now). A node joining or leaving the run adds no changed line: the other
+ * lines cover it. A re-ask's own moved nodes (`moved`) are in the same line;
+ * a re-ask with none keeps CHANGED_LINE.
  */
 export const CHANGED_LINE = 'This run changed since you last reviewed it.';
-/** How long Run ignores clicks after the dialog's numbers change (GM: "~500 ms"). */
+/** How long Run ignores clicks after the dialog's numbers change (design: "~500 ms"). */
 export const RUN_CLICK_GUARD_MS = 500;
 
 /** What the person reads before Run: a change to any of it holds Run back. */
@@ -81,11 +78,10 @@ function useScrolls(list: RefObject<HTMLUListElement | null>, rows: number): boo
 }
 
 /**
- * A row's segments (rowSegments), each one unit on the line (GM - Design,
- * round 12): the row wraps only between them, never inside "Grain model:
- * gaussian" or “Name”. The " ·" stays with the segment before it, so a
- * wrapped line starts with a segment, at the row's indent. The agent's dot
- * leads the first segment, with the name.
+ * A row's segments (rowSegments), each one unit on the line: the row wraps only
+ * between them, never inside "Grain model: gaussian" or “Name”. The " ·" stays with
+ * the segment before it, so a wrapped line starts with a segment, at the row's
+ * indent. The agent's dot leads the first segment, with the name.
  */
 function RowSegments({ row }: { row: PlaceholderRunRow }) {
   const [name, ...rest] = rowSegments(row);
@@ -107,11 +103,10 @@ export function PlaceholderRunDialog({ model, changed = false, moved, onDone }: 
   model: PlaceholderRunConfirm;
   /** Asked again because the run changed since the person last saw it. */
   changed?: boolean;
-  /** GM - Design, round 16 (a): asked again because a route or price moved:
-   * these nodes, named in one line at the top of the body ("“Hero still”
-   * changed while this was open."), in place of the round-5 line. Run is
-   * held for its first 500 ms (`changed`) and focus stays on Cancel, as for
-   * any re-ask. */
+  /** Design: asked again because a route or price moved: these nodes, named
+   * in one line at the top of the body ("“Hero still” changed while this was
+   * open."), in place of CHANGED_LINE. Run is held for its first 500 ms
+   * (`changed`) and focus stays on Cancel, as for any re-ask. */
   moved?: readonly string[];
   /** `shown`: the words on screen when Run or Cancel was clicked. */
   onDone: (ok: boolean, shown: PlaceholderRunConfirm) => void;
@@ -133,8 +128,8 @@ export function PlaceholderRunDialog({ model, changed = false, moved, onDone }: 
   if (track.last !== current) {
     const movedNow = movedRowIds(track.model, model);
     const all = [...new Set([...track.moved, ...movedNow])];
-    // Review 17: every line the update brings, in the body's order: the
-    // nodes that moved, then a node joining or leaving (the left line); else the total.
+    // Every line the update brings, in the body's order: the nodes that moved, then a
+    // node joining or leaving (the left line); else the total.
     const lines = [movedNow.length > 0 ? movedNodesLine(model.rows, all, model.canvasOrder) : null,
       model.leftLine !== track.model.leftLine ? model.leftLine : null].filter((line): line is string => Boolean(line));
     const says = lines.length > 0 ? lines.join(' ') : model.totalLine ?? '';
@@ -144,9 +139,8 @@ export function PlaceholderRunDialog({ model, changed = false, moved, onDone }: 
   const { changes } = seen;
   const movedLine = movedNodesLine(model.rows, [...(moved ?? []), ...seen.moved], model.canvasOrder);
   // Before any click can land: a layout effect runs in the same task as the commit.
-  // GM - Design, round 19 (verbatim): "focus moves to Cancel ONLY when the run
-  // button's price changes in place": the button's own words, never the
-  // amount behind them alone.
+  // Design (verbatim): "focus moves to Cancel ONLY when the run button's price
+  // changes in place": the button's own words, never the amount behind them alone.
   const price = model.runLabel;
   const shownPrice = useRef(price);
   useLayoutEffect(() => {
@@ -154,8 +148,8 @@ export function PlaceholderRunDialog({ model, changed = false, moved, onDone }: 
     const opening = shown.current === null;
     shown.current = current;
     if (!opening || changed) heldUntil.current = Date.now() + RUN_CLICK_GUARD_MS;
-    // Review 17 (nit), GM round 19: the run button's price changing in place
-    // moves focus to Cancel; every other in-place update keeps it where it was.
+    // Design: the run button's price changing in place moves focus to Cancel;
+    // every other in-place update keeps it where it was.
     if (!opening && price !== shownPrice.current) cancel.current?.focus();
     shownPrice.current = price;
   }, [current, changed, price]);
@@ -170,10 +164,10 @@ export function PlaceholderRunDialog({ model, changed = false, moved, onDone }: 
     cancel.current?.focus();
     return () => { if (previous instanceof HTMLElement && previous.isConnected) previous.focus(); };
   }, []);
-  // Review 7, M-1: focus never falls out of the open dialog. The rows that
-  // stop scrolling (an agent deleted placeholders, the window grew) leave the
-  // Tab order; if they had focus, it moves to Cancel before the browser can
-  // drop it on the page, where Cmd+Enter would run the graph behind the dialog.
+  // Focus never falls out of the open dialog. The rows that stop scrolling (an
+  // agent deleted placeholders, the window grew) leave the Tab order; if they
+  // had focus, it moves to Cancel before the browser can drop it on the page,
+  // where Cmd+Enter would run the graph behind the dialog.
   const scrolled = useRef(false);
   useLayoutEffect(() => {
     const was = scrolled.current;
@@ -191,7 +185,7 @@ export function PlaceholderRunDialog({ model, changed = false, moved, onDone }: 
       event.stopPropagation();
       onDone(false, model);
     } else if (event.key === 'Tab') {
-      // The Tab stops: the rows when they scroll (review 6, M1), then the buttons.
+      // The Tab stops: the rows when they scroll, then the buttons.
       const stops = card.current?.querySelectorAll<HTMLElement>('button, [tabindex="0"]');
       if (!stops?.length) return;
       const first = stops[0];

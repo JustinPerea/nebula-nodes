@@ -4,9 +4,9 @@ import { useLayoutEffect, useRef } from 'react';
 export const UPDATES_SLOT_EVENT = 'nebula:updates-slot';
 
 /**
- * The room a screen's header keeps for the Updates chip (Q107 a): the chip
- * (mounted once by App, components/agent-notes) sits over it, so it never
- * covers that screen's own controls. It takes room only while the chip shows
+ * The room a screen's header keeps for the Updates chip: the chip (mounted
+ * once by App, components/agent-notes) sits over it, so it never covers that
+ * screen's own controls. It takes room only while the chip shows
  * (layouts.css). It tells the chip when it appears or changes size, since a
  * studio's header can arrive after the chip did (its chunk loads later).
  */

@@ -27,13 +27,13 @@ import './agentRoster.css';
 const TICK_MS = 15_000;
 
 /**
- * The Agents panel (Q125 item 2, Justin 2026-10-24: "Yes, all four, in that
- * order"), at the top of the opened Updates list. Collapsed it is one line:
- * "Agents", then "Needs you" and "Working" with how many agents are in each
- * (a group with none is left out; with no agents at all, so is the panel).
- * Open, it lists the two groups: Needs you (longest wait first) and Working
- * (most recent first). Only the person opens it: a new question never does.
- * Copy is GM - Design's, 2026-10-25.
+ * The Agents panel (approved by Justin, 2026-10-24), at the top of the
+ * opened Updates list. Collapsed it is one line: "Agents", then "Needs
+ * you" and "Working" with how many agents are in each (a group with none
+ * is left out; with no agents at all, so is the panel). Open, it lists
+ * the two groups: Needs you (longest wait first) and Working (most recent
+ * first). Only the person opens it: a new question never does. Copy is
+ * the design's, 2026-10-25.
  */
 export function AgentRoster({
   projectId,
@@ -143,7 +143,7 @@ export function AgentRoster({
           {needsYou.length > 0 && (
             <span className="agent-roster__group-count">
               {NEEDS_YOU}
-              {/* GM: the filled pill, the chip's too; one badge counts several agents, so no agent's colour. */}
+              {/* Design: the filled pill, the chip's too; one badge counts several agents, so no agent's colour. */}
               <span className="agent-notes-needs-badge">{needsYou.length}</span>
             </span>
           )}
@@ -199,7 +199,7 @@ function RosterRowView({ row, onFlyTo, onOpen }: {
   const lineId = useId();
   const lockId = useId();
   const needsYou = row.group === 'needsYou';
-  // GM r5 2a: before the socket's first answer, the lock's first moment keeps the row's look.
+  // Before the socket's first answer, the lock's first moment keeps the row's look.
   const pending = useLockPending(Boolean(row.locked));
   const content = (
     <>
@@ -208,7 +208,7 @@ function RosterRowView({ row, onFlyTo, onOpen }: {
         <span className="agent-roster__name agent-name" title={row.agent.name} aria-label={row.agent.name}>{row.agent.name}</span>
         {needsYou && <span className="agent-roster__count">{row.countLine}</span>}
         {row.line && <span id={lineId} className="agent-roster__line" title={row.line}>{row.line}</span>}
-        {/* PR #204 round 10: a locked row's reason is a line, not a tooltip (the one lock's form). */}
+        {/* PR #204: a locked row's reason is a line, not a tooltip (the one lock's form). */}
         {row.locked && !pending && (
           <span id={lockId} className="agent-roster__line agent-roster__held-line"><LineText text={row.locked} /></span>
         )}
@@ -218,7 +218,8 @@ function RosterRowView({ row, onFlyTo, onOpen }: {
   // A Working agent with no place on the canvas: a plain row, no tooltip.
   if (!row.tooltip || !row.ariaLabel) return <div className="agent-roster__row agent-roster__row--static">{content}</div>;
   const click = (event: MouseEvent<HTMLButtonElement>) => {
-    // GM, 2026-10-29: known only from its Update, the ask can't open here yet; the tooltip says why.
+    // Design, 2026-10-29: known only from its Update, the ask can't open here yet; the
+    // tooltip says why.
     if (row.locked) return;
     if (row.next) onOpen(row.next, event.currentTarget);
     else if (row.flyTo) onFlyTo(row.flyTo, row.agent.color, event.currentTarget);

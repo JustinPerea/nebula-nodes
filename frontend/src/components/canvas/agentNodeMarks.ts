@@ -1,29 +1,29 @@
 import type { RosterAgent, RosterRun, RosterStatus } from '../agent-notes/agentRosterModel';
 
 /**
- * The agent's mark on a node (Q125 item 3), worked out from what the roster
- * store holds: each agent's status line (when it names a node) and the nodes
- * its runs are running now. Pure, so the rules are tested apart from the
- * layer that draws them (AgentNodeMarkLayer.tsx).
+ * The agent's mark on a node, worked out from what the roster store holds:
+ * each agent's status line (when it names a node) and the nodes its runs are
+ * running now. Pure, so the rules are tested apart from the layer that draws
+ * them (AgentNodeMarkLayer.tsx).
  *
- * GM - Design, 2026-10-25, verbatim: "For runs: “Running FLUX.2 [pro] ·
- * 0:41” (provider's model name; m:ss elapsed)." "Two or more agents on one
- * node: one full pill for the most recent agent, then a “+1” chip." "Below
- * 60%, collapse to the dot alone."
+ * Design, 2026-10-25, verbatim: "For runs: “Running FLUX.2 [pro] · 0:41”
+ * (provider's model name; m:ss elapsed)." "Two or more agents on one node:
+ * one full pill for the most recent agent, then a “+1” chip."
+ * "Below 60%, collapse to the dot alone."
  */
 
 export const LOW_ZOOM = 0.6;
 
 /**
- * Below 60% only (GM, 2026-10-25: "at exactly 60% the full pill shows"),
- * read at the whole percent the toolbar shows (Toolbar.tsx rounds), so a
- * zoom React Flow holds as 0.5999… still counts as 60%.
+ * Below 60% only (design, 2026-10-25: "at exactly 60% the full pill
+ * shows"), read at the whole percent the toolbar shows (Toolbar.tsx
+ * rounds), so a zoom React Flow holds as 0.5999… still counts as 60%.
  */
 export function isLowZoom(zoom: number): boolean {
   return Math.round(zoom * 100) < LOW_ZOOM * 100;
 }
 
-/** A run's pill shows only once it has been going this long (GM: instant local runs never flash a pill). */
+/** A run's pill shows only once it has been going this long (design: instant local runs never flash a pill). */
 export const RUN_MARK_DELAY_MS = 1000;
 
 /** m:ss, from milliseconds. */
@@ -93,8 +93,8 @@ export function markTitle(mark: Pick<NodeMark, 'agent' | 'text'>): string {
 
 /**
  * The pill's accessible name, in the Agents panel's "{agent}, {status}" form
- * (GM - Design, 2026-10-25, verbatim: "Codex, Writing the hero prompt";
- * an agent that named itself: "Codex, unverified, Writing the hero prompt").
+ * (design, 2026-10-25, verbatim: "Codex, Writing the hero prompt"; an agent
+ * that named itself: "Codex, unverified, Writing the hero prompt").
  */
 export function markLabel(mark: Pick<NodeMark, 'agent' | 'text'>): string {
   return `${mark.agent.name}, ${mark.agent.verified ? '' : 'unverified, '}${mark.text}`;
@@ -106,10 +106,10 @@ function sentence(text: string): string {
 
 /**
  * The "+N" chip's accessible name: the count, then each other agent as its
- * own sentence (GM, verbatim: "2 more agents. Codex, Writing the hero
+ * own sentence (design, verbatim: "2 more agents. Codex, Writing the hero
  * prompt. Claude Code, Checking the crop."; "1 more agent." for one). It
- * starts with the chip's visible "+2" (WCAG 2.5.3, review 3), so a voice
- * user who says what they see reaches it.
+ * starts with the chip's visible "+2" (WCAG 2.5.3), so a voice user who
+ * says what they see reaches it.
  */
 export function othersLabel(marks: Array<Pick<NodeMark, 'agent' | 'text'>>): string {
   const count = `${moreLabel(marks.length)} more ${marks.length === 1 ? 'agent' : 'agents'}.`;

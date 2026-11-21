@@ -156,7 +156,7 @@ function ProposalGhosts({ entry }: { entry: ProposalEntry }) {
   const cache = useUIStore((s) => s.settingsCache);
   const notReady = useProposalNotReady(entry);
   // Each card's "free" or "may cost" from the keys set now, as the run's
-  // counts read it (GM, PR #203 r15 item 1).
+  // counts read it (design, PR #203).
   const live = useLiveProposalEntry(entry) ?? entry;
   const liveCost = new Map(live.view.nodes.map((node) => [node.ref, node.cost]));
   const apply = useRef<() => void>(() => {});

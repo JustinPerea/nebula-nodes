@@ -15,15 +15,15 @@ export function CinemaStudioToolbar({ cinemaNodeId }: CinemaStudioToolbarProps) 
   const exitCinemaEditor = useUIStore((s) => s.exitCinemaEditor);
   const executeNode = useGraphStore((s) => s.executeNode);
   const isExecuting = useGraphStore((s) => s.isExecuting);
-  // A run waiting for its inputs counts as starting (review 15, M-B).
+  // A run waiting for its inputs counts as starting.
   const runStarting = useGraphStore((s) => s.runStarting);
   const isImportingGraph = useGraphStore((s) => s.isImportingGraph);
   const activeRuns = useGraphStore((s) => s.activeRuns);
   const cancelRun = useGraphStore((s) => s.cancelRun);
-  // Round 23 (review 22, L-3): Generate all acts, so it takes the canvas
-  // lock (following, offline); offline it reads GM's verb line and drops
-  // its accent (PR #198). Run history only looks and Stop scene stops a run
-  // already going (a stop is never refused), so both stay enabled.
+  // Generate all acts, so it takes the canvas lock (following, offline);
+  // offline it reads the verb line from the design and drops its accent (PR
+  // #198). Run history only looks and Stop scene stops a run already going (a
+  // stop is never refused), so both stay enabled.
   const lock = useCanvasLock();
   useCinemaUploadStore((state) => state.uploads);
   const referenceIssue = getCinemaUploadIssue(cinemaNodeId, undefined, true, 'generate all');
@@ -56,10 +56,11 @@ export function CinemaStudioToolbar({ cinemaNodeId }: CinemaStudioToolbarProps) 
         onClick={() => {
           if (!getCinemaUploadIssue(cinemaNodeId, undefined, true)) executeNode(cinemaNodeId, { verb: 'Generate' });
         }}
-        // M2: this tab's run says its line first (lib/canvasLock's order).
+        // This tab's run says its line first (lib/canvasLock's order).
         {...lockedAction(lock, {
           disabled: isImportingGraph || Boolean(referenceIssue),
-          // GM PR #205 r1: an import's lock says what unlocks it too.
+          // Design, PR #205: an import's lock says what
+          // unlocks it too.
           title: isImportingGraph ? lockLine(RUN_LOCK_VERBS.generateShots, 'import')
             : referenceIssue ?? 'Generate every shot using the current scene settings',
           kept: 'generate',

@@ -7,13 +7,13 @@ import { usePersonLock } from '../../hooks/usePersonLock';
 import { LineText } from '../LineText';
 
 /**
- * The answer form (Q125 item 1): a popover from the Updates corner, at the
- * list's width, opened by an Update's Answer. GM's copy, verbatim. Each
- * question is its own group; options are toggle buttons (one, or any for a
- * multiple question); a typed answer sits beside them as "Other", or alone.
- * Send is on once one question has an answer. Escape closes without
- * dismissing: what the person typed stays (the store's draft) until Send
- * or Dismiss. Deferred: the corner loads it the first time it opens.
+ * The answer form: a popover from the Updates corner, at the list's width,
+ * opened by an Update's Answer. The design's copy, verbatim. Each question
+ * is its own group; options are toggle buttons (one, or any for a multiple
+ * question); a typed answer sits beside them as "Other", or alone. Send is
+ * on once one question has an answer. Escape closes without dismissing:
+ * what the person typed stays (the store's draft) until Send or Dismiss.
+ * Deferred: the corner loads it the first time it opens.
  */
 export function AgentQuestionsForm({
   setId,
@@ -34,11 +34,11 @@ export function AgentQuestionsForm({
   const setText = useAgentQuestionsStore((s) => s.setText);
   const bodyRef = useRef<HTMLDivElement | null>(null);
   const headingId = useId();
-  // GM r7 (1): a form open when the tab stops being confirmed as the person (demoted, or held)
+  // Design: a form open when the tab stops being confirmed as the person (demoted, or held)
   // stays open with its draft and caret, and typing stays live; Send and Dismiss lock where
   // they are (aria-disabled, still focusable, the 150 ms rule) and unlock in place on the
-  // promote. The store refuses them too (agentQuestionsStore). GM r10 (1): the reason shows
-  // on its own row under the buttons, as on the permission card, and they point at it.
+  // promote. The store refuses them too (agentQuestionsStore). Design: the reason shows on its
+  // own row under the buttons, as on the permission card, and they point at it.
   const lock = usePersonLock('answer this');
   const tabHeld = lock.locked;
   const lockProps = lock.control();

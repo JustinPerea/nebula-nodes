@@ -33,10 +33,10 @@ const BASE_MODELS: Array<{ id: string; label: string }> = [
 const ASPECT_RATIOS = ['16:9', '2.39:1', '4:5', '1:1', '9:16'];
 
 export function CinemaSharedControls({ cinemaNodeId, scene: given, connectedRefs = [], onChange }: CinemaSharedControlsProps) {
-  // Read through the defaults, so a scene saved without its base still shows
-  // (PR #198 review 2, M2).
+  // Read through the defaults, so a scene saved without its base still
+  // shows (PR #198).
   const scene = normalizeCinemaScene(given);
-  // Round 23 (review 22, L-3): the scene's settings edit the canvas: the lock.
+  // The scene's settings edit the canvas: the lock.
   const lock = useCanvasLock();
   const controlId = useId();
   const refInputRef = useRef<HTMLInputElement>(null);
@@ -89,8 +89,8 @@ export function CinemaSharedControls({ cinemaNodeId, scene: given, connectedRefs
         </summary>
         <div className="cinema-shared-controls cinema-scene-settings__body">
           {/* Every setting here writes the scene, so one fieldset locks them
-              offline (GM - Design, PR #198 round 5) and while following an
-              agent's switch (the canvas lock, #195 round 23). */}
+              offline (design, PR #198) and while following an agent's switch
+              (the canvas lock, PR #195). */}
           <fieldset className="cinema-offline-lock" disabled={lock.locked} {...lock.mark}
             title={lockedAction(lock, { kept: 'live' }).title}>
           <section className="cinema-shared-controls__section">
@@ -131,7 +131,7 @@ export function CinemaSharedControls({ cinemaNodeId, scene: given, connectedRefs
               <button type="button" className="cinema-shared-controls__ref-add" onClick={() => refInputRef.current?.click()}
                 aria-label="Attach character references" {...lock.act({ kept: 'scene', offline: true })}>+</button>
               <input ref={refInputRef} type="file" accept="image/png,image/jpeg,image/gif,image/webp"
-                // Its + takes the lock; the field itself too, so nothing opens it while locked (review 2 L-5).
+                // Its + takes the lock; the field itself too, so nothing opens it while locked.
                 aria-label="Character reference images" multiple hidden disabled={lock.locked} onChange={(event) => {
                   handleFiles(event.target.files);
                   event.target.value = '';

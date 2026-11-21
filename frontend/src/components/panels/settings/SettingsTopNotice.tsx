@@ -8,9 +8,9 @@ import { PersonLockLine } from '../../PersonLock';
 import { DISMISS_FAILED, dismissSettingsNotice, getSettingsNotice, noticeParts, type SettingsNotice } from '../../../lib/settingsNotice';
 
 /**
- * Nebula restored the settings at start: the person sees B6b's line once, at
- * the top of Settings, until they dismiss it (GM, PR #203 r38 item 5's
- * fallback while Updates takes no system card). Neutral, not an error.
+ * Nebula restored the settings at start: the person sees its line once, at
+ * the top of Settings, until they dismiss it. This is the fallback (design,
+ * PR #203) while Updates takes no system card. Neutral, not an error.
  */
 export function SettingsTopNotice({ visible }: { visible: boolean }) {
   const [notice, setNotice] = useState<SettingsNotice | null>(null);
@@ -46,12 +46,12 @@ export function SettingsTopNotice({ visible }: { visible: boolean }) {
         const shown = notice;
         setNotice(null);
         setDismissFailed(false);
-        // Not dismissed: the line comes back with why (GM, PR #203 r40 item 4).
+        // Not dismissed: the line comes back with why (design, PR #203).
         void dismissSettingsNotice().catch((error: unknown) => {
           setNotice(shown);
           setDismissFailed(true);
           // A dismissal refused only because this tab isn't connected as the person: the line goes
-          // when the server promotes it (GM, PR #204 round 3).
+          // when the server promotes it (design, PR #204).
           clearRefusedOnPromote(error, () => setDismissFailed(false)); // clears-on-promote: settings.notice
         });
       })}>Dismiss</button>

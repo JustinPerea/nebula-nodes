@@ -20,13 +20,12 @@ import '../styles/canvasProposals.css';
  * above the canvas notice, a restore's late count (CanvasLateNotice), a
  * written line with no Undo or Redo (its slot's place: lib/noticeSlots.ts);
  * above that, a line that arrived while the canvas notice offers Undo or Redo
- * (CanvasMessageNotice, review 7 L3); below it, a Cinema scene's clash
- * prompt, which stays until the person chooses (SceneClashNotices), and
- * the scenes' stop lines, a state that stays until the stop ends (GM r28,
- * SceneStopLines).
- * The canvas kept in this tab after a restore, with [Save as a project]
- * (GM r15 on PR #199). A project over the save limit: its one
- * notice, and the "what's large" panel it and the header open.
+ * (CanvasMessageNotice); below it, a Cinema scene's clash prompt, which stays
+ * until the person chooses (SceneClashNotices), and the scenes' stop lines, a
+ * state that stays until the stop ends (design, SceneStopLines). The canvas
+ * kept in this tab after a restore, with [Save as a project] (design,
+ * PR #199). A project over the save limit: its one notice, and the
+ * "what's large" panel it and the header open.
  */
 export function RegionNotices({ canvas }: { canvas: boolean }) {
   return (

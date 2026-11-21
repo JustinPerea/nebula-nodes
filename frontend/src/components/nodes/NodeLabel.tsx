@@ -12,32 +12,32 @@ interface NodeLabelProps {
   label: string;
   /** The model's own name; shown as a hint once the node has a custom one. */
   displayName?: string;
-  /** GM - Design, round 18, item 1: the title an unnamed node shows on the
-   * canvas (directRoute canvasTitle: "Grok Imagine 2.0" for "Grok Imagine
-   * 2.0 (Krea)"). Defaults to the display name. */
+  /** Design: the title an unnamed node shows on the canvas (directRoute
+   * canvasTitle: "Grok Imagine 2.0" for "Grok Imagine 2.0 (Krea)").
+   * Defaults to the display name. */
   defaultTitle?: string;
 }
 
 /** A node's title. Double-click to rename; Enter or clicking away saves,
  * Escape cancels, and an empty name goes back to the model's name.
  *
- * Offline (round 15 of PR #114, review 14 L5; GM: "no line. The draft keeps
- * its text and shows the same disabled styling as other fields"): a rename
- * can't start, and one being typed when the connection drops stays open with
- * its draft, disabled, until reconnect. Losing focus then doesn't save or
- * drop it; after reconnect Enter saves it and Escape cancels it.
+ * Offline (design, PR #114: "no line. The draft keeps its text and shows the
+ * same disabled styling as other fields"): a rename can't start, and one
+ * being typed when the connection drops stays open with its draft, disabled,
+ * until reconnect. Losing focus then doesn't save or drop it; after
+ * reconnect Enter saves it and Escape cancels it.
  *
- * Round 16 (review 15 nit): on reconnect the draft gets focus back, unless an
- * agent renamed the node meanwhile. Then the draft is dropped, so the
- * agent's name isn't overwritten, and GM's toast says so (no refocus). */
+ * On reconnect the draft gets focus back, unless an agent renamed the node
+ * meanwhile. Then the draft is dropped, so the agent's name isn't
+ * overwritten, and the design's toast says so (no refocus). */
 export function NodeLabel({ nodeId, label, displayName, defaultTitle }: NodeLabelProps) {
-  // Unnamed: the saved label is either form of the default title (GM - Design,
-  // round 18), the catalog name or the canvas title; it shows the canvas title.
-  // The rule is lib/cardTitles.ts shownNodeTitle, which the frame uses too.
+  // Unnamed: the saved label is either form of the default title (design), the
+  // catalog name or the canvas title; it shows the canvas title. The rule is
+  // lib/cardTitles.ts shownNodeTitle, which the frame uses too.
   const { shown, custom, fallback } = shownNodeTitle(label, displayName, defaultTitle);
   const renameNode = useGraphStore((state) => state.renameNode);
   const noteRenameDraft = useGraphStore((state) => state.noteRenameDraft);
-  // Offline or following an agent's switch: one read-only state (GM round 22, A).
+  // Offline or following an agent's switch: one read-only state (design).
   const lock = useCanvasLock();
   const readOnly = lock.offline;
   const [draft, setDraft] = useState<string | null>(null);
@@ -48,10 +48,10 @@ export function NodeLabel({ nodeId, label, displayName, defaultTitle }: NodeLabe
   const wasReadOnly = useRef(readOnly);
   const begin = () => { startedFrom.current = label; setDraft(shown); };
 
-  // Round 22 (review 21, L-c): a draft open when an agent switched project
-  // was handed off into the project left (graphStore.beginAgentSwitch saves
-  // it as clicking away would have). It goes here, so the next canvas's
-  // node with the same id never gets it.
+  // A draft open when an agent switched project was handed off into the
+  // project left (graphStore.beginAgentSwitch saves it as clicking away
+  // would have). It goes here, so the next canvas's node with the same id
+  // never gets it.
   const following = lock.following;
   useEffect(() => {
     if (following) setDraft(null);
@@ -71,10 +71,10 @@ export function NodeLabel({ nodeId, label, displayName, defaultTitle }: NodeLabe
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [readOnly]);
 
-  // Round 20 (GM: "A rename draft counts as "Name""): the store knows a name
-  // typed here and not yet saved, so an agent's clear names it and an agent's
-  // switch saves it into the project left. A draft that still reads the
-  // shown title is no change.
+  // A rename draft counts as "Name" (design): the store knows a
+  // name typed here and not yet saved, so an agent's clear names it and an
+  // agent's switch saves it into the project left. A draft that still reads
+  // the shown title is no change.
   useEffect(() => {
     noteRenameDraft(nodeId, draft !== null && draft !== shown ? draft : null);
   }, [nodeId, draft, shown, noteRenameDraft]);

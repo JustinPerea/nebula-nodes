@@ -23,17 +23,17 @@ const LazyWorldEnvironmentViewer = lazy(() =>
   import('./WorldEnvironmentViewer').then((module) => ({ default: module.WorldEnvironmentViewer })),
 );
 
-/** GM's lines (PR #203 r1 to r3) for a splat the viewer can't show, centred
+/** The design's lines (PR #203) for a splat the viewer can't show, centred
  * in the stage in place of the splat (never beside a generic one). */
-// GM, PR #203 r6 item 10. The heading is what the download's own failure
-// logs under; the dialog shows the line.
+// Design, PR #203. The heading is what the download's own failure logs
+// under; the dialog shows the line.
 const SPLAT_DOWNLOAD_HEADING = 'Nebula couldn’t download the splat.';
 export const SPLAT_DOWNLOAD_FAILED = 'Nebula couldn’t download the splat. Try again.';
 export const SPLAT_DAMAGED_LINE = 'Nebula can’t open this splat. Download it to try a desktop 3D viewer.';
 export const SPLAT_TOO_LARGE_LINE = 'This splat is too large to open in the browser. '
   + 'Download it to open in a desktop 3D viewer.';
 export const IDOL_SPLAT_GONE_LINE = 'This splat’s file is gone. Run Idol again to make a new one.';
-/** The same for a splat another node made (GM r3, k). */
+/** The same for a splat another node made. */
 export const SPLAT_GONE_LINE = 'This splat’s file is gone. Run the node that made it again.';
 export const SPLAT_NO_WEBGL_LINE = 'This browser can’t show 3D previews. '
   + 'Download the splat to open it in a desktop 3D viewer.';
@@ -49,7 +49,7 @@ function failureLine(failure: WorldViewerFailure, world: WorldValueV2): string {
   return SPLAT_DAMAGED_LINE;
 }
 
-/** A file that is gone, or didn't load, has nothing to download (GM r2, r3). */
+/** A file that is gone, or didn't load, has nothing to download. */
 function failureKeepsDownload(failure: WorldViewerFailure): boolean {
   return failure !== 'missing' && failure !== 'load';
 }
@@ -62,9 +62,9 @@ export interface WorldSplatPreviewProps {
 /** The "Explore in 3D" button on a World v2 card, and the viewer it opens:
  * the World viewer (WorldEnvironmentViewer, Spark) on the value's splat, PLY
  * or SPZ, turned by its coordinate system and framed as an object from a 3/4
- * view. Orbit only: Fly is for World Labs scenes (GM, PR #203 r1). Loaded on
- * first use (lib/deferredChunks.ts); the viewer and Spark load only when the
- * dialog opens. */
+ * view. Orbit only: Fly is for World Labs scenes (design, PR #203). Loaded
+ * on first use (lib/deferredChunks.ts); the viewer and Spark load only when
+ * the dialog opens. */
 function WorldSplatPreviewComponent({ world, compact = false }: WorldSplatPreviewProps) {
   const splat = previewSplat(world);
   const [open, setOpen] = useState(false);
@@ -114,9 +114,9 @@ function WorldSplatPreviewComponent({ world, compact = false }: WorldSplatPrevie
     } catch (error) {
       if (controller.signal.aborted) return;
       if (downloadRef.current === controller) {
-        // GM, PR #203 r6 item 10: one line, whatever the reason (the
-        // reason is logged where the request failed). Offline says nothing:
-        // the banner already pulsed.
+        // Design, PR #203: one line, whatever the reason (the reason is
+        // logged where the request failed). Offline says nothing: the
+        // banner already pulsed.
         setDownload({ status: 'error', message: isOfflineRefusal(error) ? '' : SPLAT_DOWNLOAD_FAILED });
       }
     } finally {
@@ -127,7 +127,7 @@ function WorldSplatPreviewComponent({ world, compact = false }: WorldSplatPrevie
   const gaussians = gaussianCountText(splat.pointCount);
   const failed = status === 'error';
   const failureKind: WorldViewerFailure = failure ?? 'other';
-  // GM r2: the toolbar's status slot stays empty while the stage says why.
+  // The toolbar's status slot stays empty while the stage says why.
   const statusText = failed
     ? ''
     : status === 'ready'
@@ -175,8 +175,8 @@ function WorldSplatPreviewComponent({ world, compact = false }: WorldSplatPrevie
               role="dialog"
               aria-modal="true"
               aria-labelledby={titleId}
-              // The failure line is announced once, by its alert (review r3
-              // NIT-2): the dialog isn't described by it as well.
+              // The failure line is announced once, by its alert:
+              // the dialog isn't described by it as well.
               aria-describedby={failed ? undefined : helpId}
               tabIndex={-1}
               onClick={(event) => event.stopPropagation()}
@@ -202,7 +202,7 @@ function WorldSplatPreviewComponent({ world, compact = false }: WorldSplatPrevie
               </header>
 
               <div className="world-modal__toolbar" role="group" aria-label="3D viewer controls">
-                {/* Nothing to reset without a splat (GM r2). */}
+                {/* Nothing to reset without a splat. */}
                 {!failed && (
                   <button
                     type="button"

@@ -47,12 +47,12 @@ interface CompatibleNode {
 export function ConnectionPopup() {
   const popup = useUIStore((s) => s.connectionPopup);
   const { visible, position, nodeId, handleId, handleType, nextStep } = popup;
-  // Stops at the band (lib/bottomBar floatingBottomLimit): one notice while it is open (GM r13 2).
+  // Stops at the band (lib/bottomBar floatingBottomLimit): one notice while it is open (design).
   useCappedPopover(visible);
   const hideConnectionPopup = useUIStore((s) => s.hideConnectionPopup);
   const addNode = useGraphStore((s) => s.addNode);
   const addNodeAndConnect = useGraphStore((s) => s.addNodeAndConnect);
-  // Offline or following an agent's switch: one read-only state (GM round 22, A).
+  // Offline or following an agent's switch: one read-only state (design).
   const lock = useCanvasLock();
   const onConnect = useGraphStore((s) => s.onConnect);
   const nodes = useGraphStore((s) => s.nodes);
@@ -62,7 +62,7 @@ export function ConnectionPopup() {
   const [intent, setIntent] = useState<NextStepIntent>('all');
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
-  /** A wait's line for a press it holds (GM PR #205 r5 item 2), not an error. */
+  /** A wait's line for a press it holds (design, PR #205), not an error. */
   const [wait, setWait] = useState('');
   const [anchor, setAnchor] = useState(position);
   const busy = useRef(false);
@@ -123,7 +123,7 @@ export function ConnectionPopup() {
     }
 
     function handleKeyDown(e: KeyboardEvent) {
-      // A modal dialog over the popup owns Escape (review 8, L-d).
+      // A modal dialog over the popup owns Escape.
       if (e.key === 'Escape' && !keyBlockedByModal(menuRef.current)) {
         hideConnectionPopup();
         if (opener.current?.isConnected) opener.current.focus();
@@ -203,12 +203,12 @@ export function ConnectionPopup() {
   }, [visible, position]);
 
   const handleSelect = async (node: CompatibleNode) => {
-    // Round 16 (L3): adding a step is an edit, so offline the items are
-    // disabled and a press only pulses the banner, never an error line.
+    // Adding a step is an edit, so offline the items are disabled and a
+    // press only pulses the banner, never an error line.
     if (refuseEditWhileOffline()) return;
-    // GM PR #205 r4 item 3: a run going doesn't lock the connected add (its
-    // add and its connect are each allowed during a run); an import does,
-    // and the picker says the store's line for it (GM r5 item 2).
+    // Design, PR #205: a run going doesn't lock the connected add (its add
+    // and its connect are each allowed during a run); an import does, and
+    // the picker says the store's line for it (design).
     if (busy.current) return;
     if (useGraphStore.getState().isImportingGraph) { setError(''); setWait(addNodeLine(node.definition.displayName, 'import')); return; }
     setWait('');
@@ -229,8 +229,8 @@ export function ConnectionPopup() {
     }
     let newId: string | null = null;
     try {
-      // While kept (GM r21, 3) the step and its wire are this tab's own, one
-      // kept step, checked by the server's wire rules (the store's kept path).
+      // While kept (design) the step and its wire are this tab's own, one kept
+      // step, checked by the server's wire rules (the store's kept path).
       if (/^n\d+$/.test(nodeId) || isCanvasKept()) {
         newId = await addNodeAndConnect(node.definition.id, nodePosition, {
           source: handleType === 'source' ? nodeId : '',

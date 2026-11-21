@@ -43,16 +43,16 @@ interface Props {
 
 /** The trim editor's transport row. With the timeline under it, it is the
  * screen's bottom bar (`data-bottom-bar`): EditorView publishes its top edge,
- * so the app's notices sit 8 px above it, over the preview's bottom edge (GM -
- * Design, round 4b: "publish the transport's top edge as well, so notices sit
- * over the preview's bottom edge. Cut, Vol and zoom are being used while
- * someone edits."). It wraps to two rows when a clip is selected; the
- * clearance follows (it is measured whenever the row changes size). */
+ * so the app's notices sit 8 px above it, over the preview's bottom edge
+ * (design: "publish the transport's top edge as well, so notices sit over the
+ * preview's bottom edge. Cut, Vol and zoom are being used while someone
+ * edits."). It wraps to two rows when a clip is selected; the clearance
+ * follows (it is measured whenever the row changes size). */
 export function EditorTransport({ editNode, sourceUrl, ref }: Props) {
-  // Offline is read-only (round 15 of PR #114; GM r18 for this screen): what
-  // edits a clip or asks Nebula to render renders disabled with the offline
-  // mark. Play, the edit points, the zoom and the timecode stay usable. It is
-  // read from the canvas lock, the one source for offline (#195 round 22).
+  // Offline is read-only (PR #114; design for this screen): what edits a clip
+  // or asks Nebula to render renders disabled with the offline mark. Play,
+  // the edit points, the zoom and the timecode stay usable. It is read from
+  // the canvas lock, the one source for offline (PR #195).
   const lock = useCanvasLock();
   const offline = lock.offline;
   const off = offlineMark(offline);
@@ -72,14 +72,13 @@ export function EditorTransport({ editNode, sourceUrl, ref }: Props) {
   const setPlayheadOutputTime = useUIStore((s) => s.setPlayheadOutputTime);
   const setRenderedPreviewUrl = useUIStore((s) => s.setRenderedPreviewUrl);
   const updateClip = useGraphStore((s) => s.updateEditNodeClip);
-  // Round 23 (review 22, L-3): Cut, the speed and volume controls and Mute
-  // edit the clip on the canvas, so they take the canvas lock. Play, the edit
-  // points, Trim/Speed/Vol (they select and focus) and zoom only look, and
-  // stay enabled while following. Render Preview and Export… start a render
-  // on the backend (while following, of the canvas that is going away;
-  // offline it can't start), so they lock too (PR #200 review 3 LOW-4), with
-  // the follow or reconnect tooltip. (`lock` is read at the top: offline is
-  // read-only here too, PR #198.)
+  // Cut, the speed and volume controls and Mute edit the clip on the canvas,
+  // so they take the canvas lock. Play, the edit points, Trim/Speed/Vol (they
+  // select and focus) and zoom only look, and stay enabled while following.
+  // Render Preview and Export… start a render on the backend (while
+  // following, of the canvas that is going away; offline it can't start), so
+  // they lock too (PR #200), with the follow or reconnect tooltip. (`lock` is
+  // read at the top: offline is read-only here too, PR #198.)
   const cutAtSource = useGraphStore((s) => s.cutEditNodeAtSource);
   const speedSliderRef = useRef<HTMLInputElement>(null);
   const volSliderRef = useRef<HTMLInputElement>(null);

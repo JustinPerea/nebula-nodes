@@ -167,14 +167,14 @@ function MeshPreviewComponent({ src }: MeshPreviewProps) {
         return;
       }
 
-      // GM, error-copy round 2: "Couldn’t load the 3D preview." then the
+      // Error copy (design): "Couldn’t load the 3D preview." then the
       // reason; the status stays in the console.
       const heading = "Couldn’t load the 3D preview.";
       const failed = (reason: string) => new FailureNotice(heading, reason);
       try {
         if (!isSafeWorldUrl(src)) throw failed('The mesh URL is not safe to preview.');
         // No answer is a ConnectionLostError (fetchUrl); a TypeError after
-        // the answer is GM's general line, not "isn't answering".
+        // the answer is the design's general line, not "isn't answering".
         const response = await fetchUrl(backendAssetUrlSync(src), {
           cache: 'no-store',
           signal: controller.signal,
@@ -217,7 +217,7 @@ function MeshPreviewComponent({ src }: MeshPreviewProps) {
     const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     closeRef.current?.focus({ preventScroll: true });
     const handleKeyDown = (e: globalThis.KeyboardEvent) => {
-      // A modal dialog opened over the preview owns the keys (review 8, L-d).
+      // A modal dialog opened over the preview owns the keys.
       if (keyBlockedByModal(dialogRef.current)) return;
       if (e.key === 'Escape') {
         e.preventDefault();

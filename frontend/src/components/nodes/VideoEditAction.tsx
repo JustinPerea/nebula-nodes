@@ -30,7 +30,7 @@ export function VideoEditAction({ id, data, displayedOutputs, className = 'model
   const isImportingGraph = useGraphStore((state) => state.isImportingGraph);
   const viewMode = useUIStore((state) => state.viewMode);
   const commonsEnabled = useUIStore((state) => state.commonsEnabled);
-  // Editing writes back to this canvas: read-only offline and while following (GM round 22, A).
+  // Editing writes back to this canvas: read-only offline and while following.
   const lock = useCanvasLock();
   const source = videoSource(data, displayedOutputs);
   if (!source) return null;
