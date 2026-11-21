@@ -2113,8 +2113,8 @@ def _preview_with_error(node_id: str, port: str | None, size: str, ctx: Context 
             unquote(failed) if failed else None)
 
 
-# A Stop that reached Nebula before the run's start did (PR #114): the run id is refused from then
-# on, so it never runs.
+# A Stop that reached Nebula before the run's start did (PR #114): the run id is
+# refused from then on, so it never runs.
 RUN_STOPPED_BEFORE_START = ("Stopped before it started. Nebula won't start a run with this id, "
                             "so nothing ran and nothing was spent.")
 CANCEL_BEFORE_START_NEXT = ("Nebula hadn't started this run yet. The stop is recorded, and Nebula "
@@ -2557,7 +2557,7 @@ def commons_borrow(id: str, attribute: str, value: Any, used_in: dict, why: str,
                                "region_id": region_id, "brand": brand})
 
 
-# Reads that used to need raw HTTP (Justin's). Each calls
+# Reads that used to need raw HTTP (Justin's call). Each calls
 # the route the Commons UI uses, in your brand scope.
 
 @_tool(annotations=_READ)
@@ -2749,9 +2749,9 @@ def extraction_correct(record: str, corrections: list[dict[str, Any]]) -> dict[s
     reason?}`: `op` is set, add or remove, and `path` is `brand` (text or null), a leaf of
     `structure.read.` (a region's `role` or `label`: `structure.read.regions.r1.role`; a text
     run's `content`, `weight` or `type_style`: `structure.read.text.t1.content`; a
-    `structure.read.reader_1.<field>.value` of summary, composition_notes, subject,
-    type_style, spacing_density, layout or medium; `structure.read.reader_1.keywords`
-    with add or remove and one vocabulary word) or anything under `shows.` (`shows.s1.statement`; a whole new show
+    `structure.read.reader_1.<field>.value` of summary, composition_notes, subject, type_style,
+    spacing_density, layout or medium; `structure.read.reader_1.keywords` with add or remove
+    and one vocabulary word) or anything under `shows.` (`shows.s1.statement`; a whole new show
     is `set` on `shows.<id>` with a statement and `evidence`, ids such as P0 from the
     palette; who added it, its status and its decision link are set for you). A whole
     region, text run or box can't be set, and a refusal names what can. A person's choices

@@ -119,7 +119,7 @@ EVENT_KINDS = frozenset({
     "board.cover",
     # The board's own fields changed (Direction, Avoid, pinned colours, its
     # notes, “Moodboard notes to generators”, strength...): data {boardId, boardName, scope,
-    # fields}, the field names only, never a value (Justin's).
+    # fields}, the field names only, never a value (Justin's call).
     "board.fields",
     "board.sorted",
     "board.arranged",

@@ -856,7 +856,7 @@ class AgentNotes:
         return {"note": note_view(note), "unread": unread, "projectId": project, "removed": removed,
                 "updated": updated}
 
-    # -- a proposal's Update (Justin's) -----------------------------
+    # -- a proposal's Update (Justin's call) -----------------------------
     def post_proposal(self, *, author: Mapping[str, Any], text: str,
                       proposal: Mapping[str, Any], project_id: str | None = None,
                       share: Callable[[], Mapping[str, Any]] | None = None) -> dict[str, Any]:

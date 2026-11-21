@@ -510,7 +510,7 @@ _RESTORE_ROWS = (
 def catalog_restore_lines(restore: dict[str, Any], *, canvas_block: bool = False) -> list[str]:
     """One line per kind of outcome a catalog restore reported, with names.
     ``canvas_block``: the CANVAS NOT SAVED block follows, so the waiting
-    canvas is left to it (design e on PR #199: said once)."""
+    canvas is left to it (design, PR #199: said once)."""
     lines = []
     for key, label in _RESTORE_ROWS:
         listed = [row for row in restore.get(key) or [] if isinstance(row, dict)]
@@ -991,11 +991,11 @@ def pin_line(head: str, text: Any, tail: str = "", indent: str = "    ", after: 
     """`head: "note"tail after` for a one-line note. A note of several lines
     goes under `head tail:`, each line indented the same (`indent`, two past
     the two-space row it sits in), blank lines empty: the lines the person
-    typed keep their shape, lists included (PR #200, design 2026-10-28). The channel
-    push prints it the same
-    way. `after` (an answer) follows the note, as on one line: under it, on
-    its own line at the row's indent, where no line of the note can start."""
-    note = agent_text(text)  # an output path: no control byte (design), no variation selector (design)
+    typed keep their shape, lists included (PR #200, design 2026-10-28). The
+    channel push prints it the same way. `after` (an answer) follows the
+    note, as on one line: under it, on its own line at the row's indent,
+    where no line of the note can start."""
+    note = agent_text(text)  # an output path: no control byte, no variation selector (design)
     if "\n" not in note:
         return f"{head}: {quote_note(note)}{tail}{after}"
     block = f"{head}{tail}:\n" + note_block(note, indent)

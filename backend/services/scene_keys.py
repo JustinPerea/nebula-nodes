@@ -71,8 +71,8 @@ MAX_DELETERS = 1024
 _reads: "OrderedDict[tuple[str, str, str], str]" = OrderedDict()
 # (scope, node id) -> who last changed its scene's authoring ({"kind", "name"}).
 _writers: "OrderedDict[tuple[str, str], dict[str, Any]]" = OrderedDict()
-# (scope, node id) -> who last deleted that Cinema scene node (PR #198, design): a save that comes
-# after says who.
+# (scope, node id) -> who last deleted that Cinema scene node (PR #198, design):
+# a save that comes after says who.
 _deleters: "OrderedDict[tuple[str, str], dict[str, Any]]" = OrderedDict()
 # node id -> (scope, key, revision) Nebula last showed for it.
 _revisions: dict[str, tuple[str, str, int]] = {}

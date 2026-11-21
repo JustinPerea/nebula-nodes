@@ -1283,7 +1283,7 @@ class Proposal:
     id_map: dict[str, str] | None = None
     run_node_ids: list[str] | None = None
     closed_at: float | None = None
-    # Its Update on the project's list ({id, projectId}; Justin's), or
+    # Its Update on the project's list ({id, projectId}; Justin's call), or
     # None when no project was open. main posts it and settles it.
     update: dict[str, str] | None = None
     # The node deletes that closed it, or deleted another node it needs while
@@ -1782,7 +1782,7 @@ def _ports_for(ref: str, definition: Mapping[str, Any], edges: Iterable[Proposed
     }
 
 
-# -- the Update each proposal posts (Justin's, 2026-10-21) --------------
+# -- the Update each proposal posts (Justin's call, 2026-10-21) --------------
 #
 # "a) Yes, every one: "Claude Code proposes 3 changes on the canvas", with
 # Review taking you to the canvas and its bar. It settles like the others

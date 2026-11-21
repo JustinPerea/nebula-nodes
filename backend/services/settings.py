@@ -274,8 +274,8 @@ def load_settings() -> dict[str, Any]:
     if not isinstance(settings, dict):
         # A file that holds something other than an object (null, [], "x"):
         # every reader fails closed on what it holds, as it is. Checked
-        # first, so no step below meets a non-object (the desktop's injected keys
-        # raised a TypeError on it, a 500).
+        # first, so no step below meets a non-object (before this check, the desktop's
+        # injected keys raised a TypeError on it, a 500).
         return settings
 
     # Desktop mode: injected keys replace file-based apiKeys entirely.
@@ -475,8 +475,8 @@ class _InPlaceInstead(Exception):
 
 
 class _Changed(Exception):
-    """The file isn't the one the save decided on any more (of: a symlink or another
-    file swapped in): decide again."""
+    """The file isn't the one the save decided on any more (a symlink or
+    another file swapped in): decide again."""
 
 
 def _write(path: Path, data: bytes, before: os.stat_result | None, *, backup: bool, locked: bool = True) -> None:
@@ -1673,7 +1673,8 @@ def _restore(path: Path, locked: bool = True) -> Restored | NotRestored | None:
     try:
         aside = _keep_aside(current)
     except OSError as exc:
-        # The copy folder takes no file (PR #203): not put back, said like any other, naming that folder.
+        # The copy folder takes no file (PR #203): not put back, said like any other,
+        # naming that folder.
         return NotRestored(path, _copy_folder_refusal(exc))
     try:
         _write(path, old, os.lstat(path), backup=False, locked=locked)
@@ -1894,7 +1895,7 @@ def _lock_target(path: Path) -> int | None:
 
 def _lock_holds(fd: int, path: Path) -> bool:
     """Whether the lock on ``fd`` is the save's: what is at ``path`` now
-    (a file, or a folder where the file should be: 's transaction
+    (a file, or a folder where the file should be: the save's transaction
     locks before the read that refuses it), or its folder while there is no
     file."""
     info = os.fstat(fd)
@@ -1949,11 +1950,10 @@ def _make_folders(folder: Path, cause: str = "folder") -> None:
 
 
 # The seams tests patch by name, so no other call in a request is touched:
-# the rename that puts a temp file in
-# place, the in-place write's positioned write and cut, the temp file's
-# chown, the platform and Linux's xattr calls the metadata copy branches on
-# (never os's own, which every test shares), and
-# the full sync's fcntl.
+# the rename that puts a temp file in place, the in-place write's positioned
+# write and cut, the temp file's chown, the platform and Linux's xattr calls
+# the metadata copy branches on (never os's own, which every test shares),
+# and the full sync's fcntl.
 _replace = os.replace
 _pwrite = os.pwrite
 _truncate = os.ftruncate
@@ -2168,7 +2168,7 @@ def _sweep_judging(dir_fd: int, *, locked: bool, clock: Callable[[], float]) -> 
 
 
 def _writer_pid(name: str) -> int | None:
-    """The process id a temp name carries (a save's own, or 's)."""
+    """The process id a temp name carries (a save's own, or an earlier version's)."""
     match = re.fullmatch(r"\..+\.nebula-tmp-(\d+)-[0-9a-f]{16}", name) or _TEMP_NAME.fullmatch(name)
     return int(match.group(1)) if match else None
 

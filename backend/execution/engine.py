@@ -1729,7 +1729,7 @@ async def _execute_graph(
             # (execution/provider_status.py).
             card = card_line(exc, node.definition_id, node.params, api_keys)
             if isinstance(exc, ProposalNeeded):
-                # A stop by design, not a failure (design, PR #203): the
+                # A stop by design, not a failure (PR #203): the
                 # style, over the person's line. No classifier line: every
                 # agent reader (run records, the journal) reads the agent's words.
                 category, friendly, retryable = "waiting", None, False

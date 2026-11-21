@@ -13,7 +13,7 @@ Some of the person's calls live on an asset or a project instead:
   ``NotesOptInProtected``). Decided in Moodboard Studio.
 - ``commons`` (a reference's asset id) ``{"correction" | "region" |
   "membership": {...}}`` or ``{"edits": [...]}``: curating the Commons,
-  which only the person may do (services/commons_proposals.py, Justin's). The body may
+  which only the person may do (services/commons_proposals.py, Justin's call). The body may
   also name the ``brand`` whose scope the agent works
   in. Decided in the Commons, on the reference's detail.
 
@@ -227,7 +227,7 @@ def summary(proposal: AssetProposal) -> str:
 
 
 def update_text(proposal: AssetProposal) -> str:
-    """The Update an asset proposal posts (Justin's), in the words of
+    """The Update an asset proposal posts (Justin's call), in the words of
     where the person decides it: the strip's and the Commons line's. Names
     only: never the agent's note, a board's notes or Commons text. The line
     never starts with the agent's name (design): every surface that shows it
@@ -248,7 +248,7 @@ def update_text(proposal: AssetProposal) -> str:
 
 def update_detail(proposal: AssetProposal) -> dict[str, Any]:
     """What the Update's ``proposal`` ref says about the change beyond its
-    target (design, PR #200 follow-up 2): for a cover, which kind (``cover``:
+    target (design, PR #200): for a cover, which kind (``cover``:
     "automatic" or "image", never which image); for a Commons ask, how many
     edits (``changes``). A tab that isn't connected as the person sees only
     the Update, so its placeholder reads these, never the Update's text

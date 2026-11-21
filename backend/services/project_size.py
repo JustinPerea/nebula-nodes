@@ -146,7 +146,7 @@ def over_by(size: int, limit: int) -> str:
 
 
 def limit_text(limit: int) -> str:
-    """The limit as the design writes it: "16 MB"."""
+    """The limit as the design shows it: "16 MB"."""
     whole = limit / MIB
     return f"{whole:g} MB" if whole >= 1 else f"{limit:,} bytes"
 

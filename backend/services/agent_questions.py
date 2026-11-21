@@ -1,17 +1,16 @@
 """Questions: an agent asks the person, the person answers or dismisses.
 
-Justin, 2026-10-24: "Yes, all four, in that order"; then "go
-with your suggestions". When an agent hits a decision only the person can
-make (which direction, a name, a detail it can't find), it asks 1-5 short
-questions (``ask_person``, ``nebula ask``, ``POST /api/canvas/questions``)
-and waits for the answers (``get_answers``). A concrete change to approve is
+Approved by Justin, 2026-10-24. When an agent hits a decision only the
+person can make (which direction, a name, a detail it can't find), it asks
+1-5 short questions (``ask_person``, ``nebula ask``,
+``POST /api/canvas/questions``) and waits for the answers (``get_answers``). A concrete change to approve is
 a proposal instead (services/canvas_proposals.py), and what it noticed is an
 Update (post_note).
 
 Modelled on proposals, with one difference: sets are kept.
 
-- Kept with the project they were asked in (follow-up in the same PR, 2026-10-24: a side
-agent noted that memory-only sets closed on a restart
+- Kept with the project they were asked in (follow-up in the same PR,
+  2026-10-24: a side agent noted that memory-only sets closed on a restart
   and lost the person's unsent answers, and design agreed). Each lives
   on its project's record, ``catalog["projects"][id]["agentQuestions"]``,
   next to pins and agentNotes and outside ``snapshot`` (services/

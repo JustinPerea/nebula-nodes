@@ -1,6 +1,6 @@
 """Placeholders: nodes an agent is still setting up.
 
-Justin, 2026-10-24 ("Yes, all four, in that order"):
+Justin, 2026-10-24:
 "The agent stays on the node it's working on, and reserves the spot ... A
 node an agent is about to fill shows as a placeholder in its colour."
 Design, 2026-10-25: "A dashed outline in the agent's color: OK. Dashed

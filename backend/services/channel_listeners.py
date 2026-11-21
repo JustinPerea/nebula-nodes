@@ -97,7 +97,7 @@ IN_APP_TOKEN_LINE = ("Nebula couldn’t connect this listener because it uses an
 SESSION_TAKEN_CODE = "listener_session_taken"
 SESSION_TAKEN_LINE = ("Nebula couldn’t connect this listener because another process is already listening as this "
                       "session. Start each Claude Code with this command, which gives each one its own session, then "
-                      "start this listener again.\nnebula mcp connect claude-code --channel")  # design
+                      "start this listener again.\nnebula mcp connect claude-code --channel")
 # channel_status with no agent token (`nebula channel`
 # says the same in its own words, cli/commands/thread.NO_TOKEN_CHANNEL_LINE).
 NO_TOKEN_STATUS_LINE = ("This Nebula server has no agent token, so Nebula can’t tell which listeners are yours. Run "
@@ -107,7 +107,7 @@ APP_ID_PREFIX = "app:"
 # leftover entry (up to TTL_SECONDS old) is not, so it never counts when a
 # reply looks for the listener it answers. Two beats and a
 # beat's 5 s timeout: one missed beat never makes a live listener stale
-# (at 25 s a single failed beat left it unfresh for ~5 s).
+# (the earlier 25 s left a live listener unfresh for ~5 s after one failed beat).
 FRESH_SECONDS = 2 * BEAT_SECONDS + 5.0
 REASONS = ("idle", "error")
 

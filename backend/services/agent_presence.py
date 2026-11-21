@@ -778,10 +778,10 @@ class AgentPresence:
         the Agent log and moves no cursor, and the agent's cursor here keeps
         its last place.
 
-        ``did`` names what the action was in the Agents panel's words: ``{"verb":
-        "Added", "nodeId", "label"}``, the verb past
-        tense, the node's name when it has one. With none (a line said in
-        place, or a pointer gesture design cut: a click, a drag, a bare move to a
+        ``did`` names what the action was in the Agents panel's words:
+        ``{"verb": "Added", "nodeId", "label"}``, the verb past tense, the
+        node's name when it has one. With none (a line said in place, or a
+        pointer gesture the design dropped: a click, a drag, a bare move to a
         spot), the cursor keeps the agent's last action wherever it goes,
         with that action's own time: the event's ``did`` carries
         ``secondsAgo``, 0 for an action that just happened.
@@ -931,8 +931,8 @@ class AgentPresence:
                 # An agent can't flood the canvas with cursors: the least
                 # recently seen session goes. That is an idle one (quiet for
                 # SESSION_IDLE_SECONDS) whenever any is idle, since idle means
-                # seen longest ago; no separate idle rule is needed (a mutant of one is
-                # equivalent).
+                # seen longest ago; no separate idle rule is needed (mutation testing found such a rule
+                # equivalent to none).
                 victim = min(slots.items(), key=lambda item: item[1].last_t)[0]
                 del slots[victim]
             taken = {live.ordinal for live in slots.values()}

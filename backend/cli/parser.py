@@ -1,6 +1,6 @@
 """The `nebula` argument parser: errors that point to the right option.
 
-The design's headless run (docs/agent-runs/2026-10-20-cli-headless.md) lost turns to
+A headless run (docs/agent-runs/2026-10-20-cli-headless.md) lost turns to
 argparse's bare "unrecognized arguments": an agent reads the error, then
 the whole help, then tries again. `NebulaArgumentParser` keeps argparse's
 behaviour and adds three things (plan v2.7, PR26, §5.10.1):

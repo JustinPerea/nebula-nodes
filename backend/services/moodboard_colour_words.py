@@ -1,5 +1,4 @@
-"""The colour-word check: measured colours against a board's own words
-(Justin).
+"""The colour-word check: measured colours against a board's own words.
 
 A board's Direction and Avoid list are the person's words; its palette and
 accents are what Nebula measured. When the words rule a measured colour out,
@@ -51,8 +50,9 @@ phrase>"', and "in the <noun>" for a list item that takes its head's noun.
 Every number below is our own first value: no published OKLCH colour-name
 boundaries exist, and the naming datasets (Lindner's Colour Thesaurus is
 CC BY-NC-SA; XKCD, StanfordHCI c3 and LUX have no confirmed licence) are not
-used. The arcs and gates are hand-defined. Retune them against boards labelled by
-design, and bump LEXICON_VERSION, which refreshes every saved check.
+used. The arcs and gates are hand-defined. Retune them against boards a
+designer has labelled, and bump LEXICON_VERSION, which refreshes every saved
+check.
 """
 from __future__ import annotations
 

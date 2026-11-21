@@ -482,9 +482,9 @@ def _scan(text: str, start: int, stop: int | None = None, depth: int = 0) -> tup
     Stops early, with the depth so far, at -3 or where it is BROKEN, and at
     a torn page (two zeros in a row, which no single flip makes): past one
     the bytes are another page's, so nothing after it can be counted, and
-    what was read up to it is FILLER (a torn record after a whole one read its leftover
-    text as broken, so the whole record looked
-    nested and was lost)."""
+    what was read up to it is FILLER (before this, a test run showed a torn
+    record after a whole one read its leftover text as broken, so the whole
+    record looked nested and was lost)."""
     index = start
     limit = len(text) if stop is None else stop
     torn = text.find("\x00\x00", start, limit)
@@ -526,7 +526,7 @@ def _depth_after(text: str, start: int) -> bool | None:
     ends. A cut file closes fewer, so it never makes a record look nested.
     None when it can't be told: text JSON doesn't allow between tokens comes
     first (a broken quote after the object reads every brace that closes it
-    as text, the text around it as structure: of PR #199).
+    as text, and the text around it as structure; PR #199).
     A torn page's zeros are read past, as before. ``text[start]`` may be the
     byte that took a record's opening brace: the scan then starts
     inside it."""
@@ -735,10 +735,10 @@ def salvage(raw: bytes, parsed: Any = _UNKNOWN) -> Salvage:
             # the damage cut), but its own members do: its id is its key and
             # it opens as a record does (id, name, createdAt). An object
             # nested in a record that shares only an id and a name (an output
-            # map, a reference) is not counted (a live check found a torn open project after
-            # another torn record was
-            # lost, and its canvas filed nameless). Its group is told only by
-            # its own deletedAt; reconcile reads None as "can't be told".
+            # map, a reference) is not counted (a live check found a torn open
+            # project after another torn record was lost, and its canvas filed
+            # nameless). Its group is told only by its own deletedAt; reconcile
+            # reads None as "can't be told".
             expected, group = True, ("trash" if isinstance(members.get("deletedAt"), str) else None)
         # A record that lost its closing brace holds the records after it as
         # its own members (a project id for a key): they are records.

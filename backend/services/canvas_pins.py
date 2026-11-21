@@ -510,7 +510,7 @@ def clean_text(raw: Any, *, limit: int, label: str = "Note", multiline: bool = F
 
 def typed_text(raw: Any, *, limit: int, label: str = "Note", multiline: bool = False) -> str:
     """What the store keeps: the text as typed, once clean_text has checked
-    it (design condition 1: notes and replies alike), trimmed
+    it (design: notes and replies alike), trimmed
     at both ends (design)."""
     clean_text(raw, limit=limit, label=label, multiline=multiline)
     # Trimmed at both ends (design, the one change to "as typed").

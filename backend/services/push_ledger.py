@@ -1,14 +1,14 @@
 """The push ledger: which of a session's deliberate pushes a reply answers.
 
-Decided 2026-11-04 (PR #225) and
-adversarially checked. A --channel listener (mcp_channel.py)
-pushes the person's messages and the answers to its questions to its
-Claude Code session, then reports each push (POST
-/api/agent/thread/accepted, with ``messageIds`` and ``questionIds``). Nebula
-records one push per report here, keyed by (agent id, raw session): never
-by a listener id or a cursor's session key, both HMACs under a secret each
-backend process makes, so a ledger keyed by them would lose a session's
-pushes to an eviction or a listener restart.
+Decided 2026-11-04 (PR #225) and adversarially checked. A --channel
+listener (mcp_channel.py) pushes the person's messages and the answers
+to its questions to its Claude Code session, then reports each push
+(POST /api/agent/thread/accepted, with ``messageIds`` and
+``questionIds``). Nebula records one push per report here, keyed by
+(agent id, raw session): never by a listener id or a cursor's session
+key, both HMACs under a secret each backend process makes, so a ledger
+keyed by them would lose a session's pushes to an eviction or a listener
+restart.
 
 A reply from session S answers S's OLDEST pickable push no reply has
 answered yet (the listener reports pushes while Claude is busy, and Claude

@@ -3,10 +3,9 @@
 An agent reads Nebula through MCP tools (propose_change, describe_node, ...)
 or through the `nebula` CLI (`nebula propose`, `nebula info <id>`, ...). A
 refusal or a hint that tells the agent what to do next names the call in its
-reader's words, worded where it is written (PR #203): the CLI sends ``X-Nebula-Surface:
-cli`` on every request
-(cli/client.py), and anything else reads MCP words. Nothing rewrites a
-refusal on its way out.
+reader's words, worded where it is written (PR #203): the CLI sends
+``X-Nebula-Surface: cli`` on every request (cli/client.py), and anything
+else reads MCP words. Nothing rewrites a refusal on its way out.
 
 ``cli_words`` stays for data that arrives in MCP words and is printed by the
 CLI (describe_node's billing note, a find_nodes row's needsKeyFor): one

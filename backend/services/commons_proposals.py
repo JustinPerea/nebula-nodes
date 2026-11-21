@@ -1,4 +1,4 @@
-"""Commons curation as asset proposals (Justin's, 2026-10-20).
+"""Commons curation as asset proposals (Justin's call, 2026-10-20).
 
 Curating the Commons is the person's: correcting a reference's reading,
 drawing, renaming, confirming or deleting a region, and a reference's role,

@@ -554,7 +554,7 @@ def port_name(label: object) -> str:
 
 
 def port_line(label: str) -> str:
-    """A required input with no wire, before the run (in the design's rule 6 words since)."""
+    """A required input with no wire, before the run (in the design's rule 6 words)."""
     return connect_line(label)
 
 
@@ -699,10 +699,10 @@ class NotReadyReason:
 
 # -- input needs: a required input with no wire, in the Agent Log's merge --
 #
-# A refused run's other stops merge as its reasons do (design, PR #203): every node that needs the
-# same input is one line, by the shared name
-# list (not_ready_subject: up to 3 names, a same-name group, "4 nodes" from
-# 4), the plural naming the input again in the action, never "one" after a
+# A refused run's other stops merge as its reasons do (design, PR #203): every
+# node that needs the same input is one line, by the shared name list
+# (not_ready_subject: up to 3 names, a same-name group, "4 nodes" from 4), the
+# plural naming the input again in the action, never "one" after a
 # count: "2 “GPT Image 2” nodes need a prompt. Connect a prompt to each, then
 # run the nodes again."; "“GPT Image 2” needs a prompt. Connect one, then
 # run the node again." Every input kind takes the same pattern from this one
@@ -712,8 +712,8 @@ class NotReadyReason:
 # one, a pass-through: connect_line) takes the "port" row, the label in
 # quotes as the card says it.
 #
-# A node with two or more different needs says them as one need (design, PR #203), in the node's
-# input order, the action naming how many:
+# A node with two or more different needs says them as one need (design, PR
+# #203), in the node's input order, the action naming how many:
 # "“FLUX Kontext” needs a prompt and an image. Connect both, then run the
 # node again."; "…needs a prompt, an image and a mask. Connect them, …".
 # Nodes with the same set merge as one need does: "2 “FLUX Kontext” nodes

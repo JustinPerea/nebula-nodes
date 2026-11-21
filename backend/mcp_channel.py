@@ -31,15 +31,15 @@ with a fake clock. What it follows, from Justin's answers of 2026-10-20 and
   got (Justin 2026-11-04; PR #225), or ``DELIBERATE_SPAN_CAP``
   (10 minutes) after the latest push if it hasn't, however long the turn
   goes without a Nebula call. So edits the person makes while Claude works
-  on the request ride a later push instead of gating its turn (PR #225). The listener
-  keeps the pushes it hasn't seen answered as
-  a set of push groups, per session (one listener is one session, the push ledger): each
-  push that carried messages or answers is one group
-  of their ids (message ids, question set ids). Nebula records each push
-  the listener reports (POST /api/agent/thread/accepted, PR C) and answers
-  a reply by marking this session's OLDEST unanswered push; the reply names
-  it (``replyTo``: its newest message, else its first question set). An
-  own ``thread.replied`` (asked for with ownReplies=1: REPLY_KIND, so
+  on the request ride a later push instead of gating its turn (PR #225).
+  The listener keeps the pushes it hasn't seen answered as a set of push
+  groups, per session (one listener is one session, the push ledger): each
+  push that carried messages or answers is one group of their ids (message
+  ids, question set ids). Nebula records each push the listener reports
+  (POST /api/agent/thread/accepted, PR C) and answers a reply by marking
+  this session's OLDEST unanswered push; the reply names it (``replyTo``:
+  its newest message, else its first question set). An own
+  ``thread.replied`` (asked for with ownReplies=1: REPLY_KIND, so
   ``nebula reply`` from the session's own shell counts) removes the group
   holding its ``replyTo``, and nothing else; so does the reply_to_person
   tool's result, whichever of the two arrives first (the other then finds
@@ -256,8 +256,8 @@ class Limits:
     window_idle: float = 20.0  # ...and ends after this long without a Nebula call
     turn_wrap: float = 300.0   # "5 minutes per turn": calls after this are told to wrap up
     person_run_max: float = 300.0  # A run the person starts goes at its end, or after this
-    deliberate_per_hour: int = 200  # deliberate sends' runaway cap (design), counted apart from per_hour
-    deliberate_span: float = DELIBERATE_SPAN_CAP  # A deliberate push's span ends on its reply, or after this
+    deliberate_per_hour: int = 200  # deliberate sends' runaway cap, counted apart from per_hour
+    deliberate_span: float = DELIBERATE_SPAN_CAP  # A push's span ends on its reply, or after this
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> "Limits":
@@ -504,7 +504,7 @@ class ChannelState:
         self._own_proposal_ids: dict[str, str] = {}
         # Runs this process started (run_nodes, and its accepted proposals'
         # runs). Only these are ever its own: get_run may refresh or drop
-        # one, never add one (reading the person's run made it "your run").
+        # one, never add one (an earlier version made the person's run "your run" once it read it).
         self.own_runs: dict[str, None] = {}
         # Its own runs it follows to their end (a subset of own_runs).
         self.tracked_runs: set[str] = set()
@@ -977,7 +977,7 @@ class ChannelState:
 
     def _ungated_turn(self, now: float) -> bool:
         """An ungated push's turn still seems under way: no gated push may go
-        (it would gate that turn: of #225)."""
+        (it would gate that turn; PR #225)."""
         end = self._ungated_end()
         if end is None:
             return False

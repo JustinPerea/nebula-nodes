@@ -326,7 +326,7 @@ class ExecutionRunRegistry:
             self._records.pop(run_id, None)
 
 
-# -- who may stop a run (Justin, 2026-10-20, MCP) -------------------
+# -- who may stop a run -------------------
 
 ANONYMOUS_STARTER: dict[str, Any] = {"kind": "anonymous"}
 

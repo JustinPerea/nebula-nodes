@@ -3,7 +3,7 @@
 Justin, 2026-10-24: "The agent's mark stays on its
 node with a status line ("Running FLUX.2 [pro] · 0:41") ... A finished run
 posts a card with a thumbnail and Show on canvas, without the agent having to
-remember to." the design's rulings, 2026-10-25, are built verbatim here.
+remember to." The design's rulings, 2026-10-25, are built verbatim here.
 
 ``AgentRunBook`` keeps, per run an identified agent started (any route: MCP
 run_nodes and `nebula run` through /api/graph/run, or an agent's own

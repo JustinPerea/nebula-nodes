@@ -1,8 +1,8 @@
 """What each agent is working on, and the roster of agents around now.
 
-The Agents panel (Justin, 2026-10-24: "Yes, all four, in that order"), Needs you /
-Working. Built from what Nebula already tracks, plus one new thing kept here: a
-status line per agent.
+The Agents panel, Needs you / Working (Justin approved, 2026-10-24). Built
+from what Nebula already tracks, plus one new thing kept here: a status line
+per agent.
 
 - An identified agent sets one line of text about what it is doing,
   optionally on a node (``set_status``, ``nebula status``, ``POST
