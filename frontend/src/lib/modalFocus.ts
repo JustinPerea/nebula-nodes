@@ -98,8 +98,8 @@ export const BEHIND_MODAL_ATTR = 'data-behind-modal';
 export function hideBehind(own: Element): () => void {
   // This call's hold on each element it hid. The element's own attributes
   // are kept once, by the first modal that hides it (`hidden`), and put back
-  // when the last one lets go, whatever order the modals close in (
-  // of PR #203: closing the lower of two first left the page inert).
+  // when the last one lets go, whatever order the modals close in (PR #203: closing the lower of two first
+  // used to leave the page inert).
   const mine = new Set<Element>();
   const hide = (element: Element) => {
     if (mine.has(element)) return;
@@ -377,12 +377,12 @@ export function noticeKeys(event: KeyboardEvent): void {
 }
 
 /**
- * PR #200: a notice can be replaced rather
- * than leave (Undo turns "Deleted the node." into "Restored the node." under a
- * new key), so the button that had focus is simply gone and focus falls to
- * <body>. With a dialog open, it goes where the last × sends it: the dialog's
- * field (design). Watches `region` for the focused notice control
- * going away; returns a stop function.
+ * PR #200: a notice can be replaced rather than leave (Undo turns "Deleted
+ * the node." into "Restored the node." under a new key), so the button that
+ * had focus is simply gone and focus falls to <body>. With a dialog open, it
+ * goes where the last × sends it: the dialog's field (design). Watches
+ * `region` for the focused notice control going away; returns a stop
+ * function.
  */
 export function keepNoticeFocus(region: HTMLElement): () => void {
   let held: Element | null = null;

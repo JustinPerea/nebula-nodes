@@ -6,8 +6,8 @@ import { isBackendOffline, subscribeBackendConnection } from './backendConnectio
  *
  * Read-only is React state, not DOM patching. Every control that
  * edits reads this and renders `disabled` itself (with `offlineMark`), so a
- * reconnect simply re-renders it, and nothing watches the DOM (
- * H1: the old MutationObserver re-triggered itself and froze the tab).
+ * reconnect simply re-renders it, and nothing watches the DOM (the
+ * old MutationObserver re-triggered itself and froze the tab).
  */
 export function useBackendOffline(): boolean {
   return useSyncExternalStore(subscribeBackendConnection, isBackendOffline, isBackendOffline);
@@ -102,7 +102,7 @@ export const OFFLINE_VERBS = {
   seeRunHistory: 'see run history',
   /** Run history's Rerun (design, PR #200). */
   rerun: 'rerun it',
-  /** Run history's Run failed nodes again and Recover (PR #200, the design's 
+  /** Run history's Run failed nodes again and Recover (PR #200, the design's
    * answers). */
   retry: 'run its failed nodes again',
   recover: 'recover it',

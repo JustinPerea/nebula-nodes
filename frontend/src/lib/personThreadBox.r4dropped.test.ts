@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { sanitizeRow, type ThreadRow } from './personThread';
 import { listenerDroppedLine, listenerLapsedLine, messageStatus, nextStatusChange, runOrigin } from './personThreadBox';
 
-/** #225, boundary: the person revoked the listener's token before it took the message. */
+/** #225: the person revoked the listener's token before it took the message. */
 
 const CLAUDE_CODE = { id: 'app:claude1', name: 'Claude Code', color: '#E8825A', verified: true };
 

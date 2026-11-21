@@ -1199,7 +1199,7 @@ export function keyPhrase(keys: readonly string[]): string | null {
 }
 
 /** "an OpenAI", "a fal.ai", "an xAI": a name with its article, chosen by
- * sound ("Add a Anthropic …"). A name read letter by
+ * sound (never "Add a Anthropic …"). A name read letter by
  * letter from an x ("xAI") takes "an". person_line.with_article is the twin;
  * both are held to one table of cases. */
 export function withArticle(name: string): string {

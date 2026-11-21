@@ -51,7 +51,7 @@ export interface PlaceholderRunRow {
    * "Engine: …", "Model: …", "Version: …" (design:
    * named even when it is the default, so a switch re-asks); "Grain model: …"
    * with Grain on, "Mesh type: …" on a Meshy node and
-   * "Model: not chosen" for a required one with nothing chosen);
+   * "Model: not chosen" for a required one with nothing chosen;
    * else null. Several are joined with " · ". */
   setting: string | null;
   /** "$0.04", "$0.0047–$0.43", "price not listed", "price depends on its
@@ -79,7 +79,7 @@ export interface PlaceholderRunConfirm {
    * was setting up is no longer in this run."; else null. */
   leftLine: string | null;
   rows: PlaceholderRunRow[];
-  /** The run's node ids in canvas order: The design's moved line names them (PR #200).
+  /** The run's node ids in canvas order: the design's moved line names them (PR #200).
    * Absent on a model built before it. */
   canvasOrder?: string[];
   /** "Plus 1 free node." / "Plus 2 free nodes.", or null. */
@@ -132,8 +132,7 @@ export interface PlaceholderRunOptions {
   /** A replay's nodes whose live settings differ from the saved ones it
    * sends (snapshotCanvas `changed`). One that is, or was, an agent's
    * placeholder is a version its agent changed after the run was saved: the
-   * replay uses the saved settings, and says so (design: 
-   * "Replay the saved version?"). Its saved version is a muted row. */
+   * replay uses the saved settings, and says so (design: "Replay the saved version?"). Its saved version is a muted row. */
   changed?: ReadonlySet<string>;
   /** The keys couldn't be read (a 409 re-ask's key read failed or timed out:
    * graphStore rereadRunKeys returned false), so the route each row would
@@ -460,7 +459,7 @@ export function requiredFieldInventory(): Record<string, string[][]> {
  * for “Clean plate” first." for the first node among `nodes` (the nodes a run
  * would send) with a required field that has nothing chosen, on the route
  * its run takes (unchosenOnRoute: "Choose an aspect ratio for “X”
- * first.": "Set a width for “X” first." for a typed value),
+ * first.", or "Set a width for “X” first." for a typed value),
  * or null. That route would refuse the run, so the canvas refuses it before
  * any dialog ("Don't ask someone to approve a run that can't go out"), on
  * every run path; the backend refuses it the same way (execution.engine
@@ -496,7 +495,7 @@ export function modelNotChosenText(nodes: Node<NodeData>[], names?: Readonly<Rec
  * what the person was shown (`shown`) and the rows now (`now`): the model a
  * row runs on its route, its setting, or its price. Null when none moved.
  * Each node is named as its row reads now (the person
- * matches the line to the row under it). Design (1): the dialog says
+ * matches the line to the row under it). Design: the dialog says
  * the same line when it updates in place (movedNodesLine).
  */
 export function changedNodesLine(shown: PlaceholderRunConfirm, now: PlaceholderRunConfirm): string | null {
@@ -578,8 +577,8 @@ function nodeScope(nodes: Node<NodeData>[], edges: Edge[], nodeId: string): Node
 }
 
 /** The placeholders in the person's direct run of `nodeId`, with their
- * agents: what a dialog of this run shows, and all it remembers (
- * L-b: never another agent's placeholder elsewhere on the canvas). */
+ * agents: what a dialog of this run shows, and all it remembers
+ * (never another agent's placeholder elsewhere on the canvas). */
 export function runPlaceholders(nodes: Node<NodeData>[], edges: Edge[], nodeId: string): Map<string, PendingAgent> {
   const found = new Map<string, PendingAgent>();
   for (const node of nodeScope(nodes, edges, nodeId)) {
@@ -652,9 +651,8 @@ function totalLineFor(cost: RunScopeSummary['cost'], anyMissing: boolean): strin
 }
 
 /** Under a total, the rows no dollar amount covers (design, verbatim):
- * "price not listed" ones by name, one or two, then a count (item
- * 1); "price depends on its input" ones the same way; both
- * kinds together, or three or more priced by their input, as one count. */
+ * "price not listed" ones by name, one or two, then a count;
+ * "price depends on its input" ones the same way; both kinds together, or three or more priced by their input, as one count. */
 function missingFootnote(unlisted: string[], byInput: string[]): string | null {
   const count = unlisted.length + byInput.length;
   if (count === 0) return null;
@@ -697,7 +695,7 @@ export function placeholderRunConfirm(
   });
   const paid = placeholders.filter(({ node }) => isPaid(node, options.apiKeys));
   // Placeholders a dialog of this run showed that their agents have finished
-  // since (H1): still in the run, no longer placeholders.
+  // since: still in the run, no longer placeholders.
   const gone = (node: Node<NodeData>) => options.gone?.has(node.id) === true && !cleanPending(node.data?.pending);
   const finished = scope.flatMap((node) => {
     const agent = options.shown?.get(node.id);
@@ -806,8 +804,8 @@ export function placeholderRunConfirm(
     intro = savedSentence;
   } else if (finished.length > 0) {
     // No placeholder left: their agents finished them while the dialog was
-    // open (design: copy 
-    // for "this node"), and any others left the run.
+    // open (design, including the wording for "this node"), and any others
+    // left the run.
     // All verbatim.
     const agents = agentNames(finished.map(({ agent }) => agent));
     const one = agents.length === 1 ? agents[0] : null;

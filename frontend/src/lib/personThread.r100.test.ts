@@ -10,7 +10,7 @@ import { receiveRows, receiveSync, usePersonThreadStore } from '../store/personT
 import { useUIStore } from '../store/uiStore';
 
 /** #225 and design: the possessive cut, the pinned
- * survivors F5/F6, sync by row version, a reply saved in
+ * survivors, sync by row version, a reply saved in
  * another project's thread and the scroll spring. */
 
 const CLAUDE = { id: 'a1', name: 'Claude', color: '#E8825A', verified: true };

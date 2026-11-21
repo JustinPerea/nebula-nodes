@@ -44,7 +44,7 @@ function listener(over: Partial<ChannelListener> = {}): ChannelListener {
 }
 
 describe('names', () => {
-  it('a session by its cursor label; one session reads as before', () => {
+  it('a session by its cursor label; one session reads as plain “Claude”', () => {
     expect(waitingLine('Claude · 2')).toBe('Waiting for Claude · 2');
     expect(workingLine('Claude · 2', 'Cooler sky')).toBe('Claude · 2 is working · Cooler sky');
     expect(workingLine('Claude · 2')).toBe('Claude · 2 is working');

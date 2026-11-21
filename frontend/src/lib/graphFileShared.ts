@@ -46,7 +46,7 @@ export const GRAPH_MAX_VALUES = 1_000_000;
 
 /** A graph past one of those limits (a written line: the save or load alert
  * puts its own heading over it; error copy). One error, two fields
- * (design PR #205): `reason`, the person's line, worded for where the
+ * (design, PR #205): `reason`, the person's line, worded for where the
  * check ran; `detail`, the engine's exact reason, for the log. */
 export class GraphStructureLimitError extends FailureNotice {
   readonly detail: string;
@@ -73,7 +73,7 @@ export type SaveUndoStep = { kind: 'person' } | { kind: 'agent'; name: string } 
   // Design, PR #205: the canvas fits again only after this many Undos (2 or more).
   | { kind: 'steps'; count: number };
 
-/** A Save's shape line (design PR #205): the cause, then
+/** A Save's shape line (design, PR #205): the cause, then
  * the Undo that can fix it, never one that can't. */
 export function saveShapeLine(kind: 'complex' | 'value', step: SaveUndoStep = { kind: 'person' }): string {
   // Design, PR #205: the "because" form, one whole line (no heading over it).
@@ -250,7 +250,7 @@ export function assertGraphComplexityWithinLimits(value: unknown, use: GraphChec
  * value once, the deepest depth (from `baseDepth`, the value's own depth in
  * the file), and whether it holds a value the walk refuses (a non-finite
  * number, a circular value). For measuring a canvas a node at a time: the
- * Undo that fixes a refused Save (design PR #205). */
+ * Undo that fixes a refused Save (design, PR #205). */
 export interface ShapeMeasure { count: number; depth: number; bad: boolean }
 export function measureShape(value: unknown, baseDepth = 0): ShapeMeasure {
   type Frame = { kind: 'value'; value: unknown; depth: number } | { kind: 'children'; iterator: Iterator<unknown>; depth: number }
@@ -488,9 +488,9 @@ function editsFile(snapshot: Pick<ProjectSnapshot, 'nodes' | 'edges' | 'viewport
  * shape walk's limits, checked the way the reader checks a plain .nebula
  * (inspectGraphFileWithinLimit, then the walk over the parsed file). The
  * backend refuses a recovered copy past its own versions of those limits
- * (413), so a held copy can be one Load graph won't open (review).
- * Since copy over the 16 MiB save limit opens (and the canvas pauses
- * saving it), so size alone fails only past the bundle ceiling.
+ * (413), so a held copy can be one Load graph won't open.
+ * A copy over the 16 MiB save limit opens (and the canvas pauses saving it),
+ * so size alone fails only past the bundle ceiling.
  * `file` is `text` parsed, the form the reader walks. */
 export function editsFileReopens(text: string, file: unknown): boolean {
   if (new Blob([text]).size > GRAPH_BUNDLE_MAX_IMPORT_BYTES) return false;

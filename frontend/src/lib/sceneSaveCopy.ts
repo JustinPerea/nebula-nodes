@@ -11,7 +11,7 @@ import { agentNameInSentence } from './personalAgentName';
 /** "Nebula couldn’t save your changes to “Opening”." The heading of the
  * lines below that keep their edits for a retry (not the 400 and 413 lines,
  * which are the design's own). Design: "Nebula" as the subject, as the
- * server-error line has it since. */
+ * server-error line has it. */
 export function sceneSaveHeading(scene: string): string {
   return `Nebula couldn’t save your changes to “${scene}”.`;
 }

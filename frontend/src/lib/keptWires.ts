@@ -258,8 +258,7 @@ function connectionNamed(from: string | null, to: string | null): string {
 }
 
 /**
- * The connections Save as a project left out, in the tab's words (design,
- * 2; design: the second sentence of the notice that confirms the save, on
+ * The connections Save as a project left out, in the tab's words (design: the second sentence of the notice that confirms the save, on
  * every ending): one is named with why ("Nebula left out the connection from
  * “A” to “B” because it connected the node to itself."); from 2 on, "Nebula
  * left out 2 connections that couldn’t be kept." naming up to 3 by the

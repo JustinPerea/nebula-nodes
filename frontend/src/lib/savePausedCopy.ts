@@ -27,7 +27,7 @@ export const panelLine = (bytes: number) =>
   `This project is ${displaySize(bytes)} MB. Make it ${overBy(bytes)} MB smaller and it saves again by itself. Until then, changes stay only in this tab.`;
 /** Once it saves again. */
 export const savingAgainNotice = (bytes: number) => `Saving again. This project is ${displaySize(bytes)} MB.`;
-/** Past the top ten rows. Design wrote the plural; one item reads singular. */
+/** Past the top ten rows. The design's copy is plural; one item reads singular. */
 /** With no size when it rounds to 0.0 (design, #182: "14 smaller
  * items", since "0.0 MB" tells nobody anything). */
 export const smallerLine = (count: number, size: string) =>

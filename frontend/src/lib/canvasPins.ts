@@ -74,8 +74,7 @@ export interface KeptNote {
   following: { agent: string | null; projectName: string } | null;
 }
 
-/** The kept note's line as the person sees it on `here` (design, PR #200
- * M-2, verbatim): on its own project the line stays as it is; on another it
+/** The kept note's line as the person sees it on `here` (design, PR #200, verbatim): on its own project the line stays as it is; on another it
  * names its project, "Your note for “Alpha” wasn’t sent because Codex started
  * opening “Second canvas”." A note of no project (or one whose name isn't
  * known) keeps the plain line everywhere. */
@@ -207,7 +206,7 @@ export const pinTextSettling = (): Promise<void> => pinTextCurrent;
 /** Whether the Unicode data is in (see pinTextReady). */
 export const pinTextIsLoaded = () => pinTextState === 'loaded';
 /** Whether its import has settled, loaded or failed: only a pending one is
- * waited for (a settled failure re-queued forever). */
+ * waited for (a settled failure used to re-queue forever). */
 export const pinTextSettled = () => pinTextState !== 'pending';
 /** The data is needed (a pins push, a hydrate, the note dialog opening):
  * after a failed import, load it again, at most once per PIN_TEXT_RETRY_GAP_MS

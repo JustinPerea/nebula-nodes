@@ -62,9 +62,9 @@ export async function sendCinemaShotToMotion(nodeId: string, shotId: string): Pr
   const graph = useGraphStore.getState();
   if (graph.isImportingGraph) return;
   // Connecting a video node is an edit. Offline the button is
-  // disabled; a press that gets here only pulses the banner. 
-  // So while following an agent's switch, the project
-  // bar's pulse, and nothing is sent or marked.
+  // disabled; a press that gets here only pulses the banner. While following
+  // an agent's switch the press gets the project bar's pulse, and nothing is
+  // sent or marked.
   if (refuseEditWhileFollowing() || refuseEditWhileOffline()) return;
   const previous = useCinemaMotionStore.getState().handoffs.find((item) => item.nodeId === nodeId && item.shotId === shotId);
   if (previous?.status === 'pending') return;

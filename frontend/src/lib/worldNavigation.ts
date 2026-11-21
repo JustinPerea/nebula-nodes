@@ -279,7 +279,7 @@ export interface ObjectFraming {
   far: number;
 }
 
-/** The object viewer draws every object at this radius (review):
+/** The object viewer draws every object at this radius:
  * the mesh is scaled by objectUnitScale before it is framed, so the camera,
  * the orbit range and the clip planes are the same numbers at 1 mm and at
  * 10 km. In the file's own units, a ×20,000 object (radius about 7,000) went

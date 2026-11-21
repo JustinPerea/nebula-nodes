@@ -40,7 +40,7 @@ export function notReadyBarLines(
 ): Array<{ key: string; text: string; accept?: true }> {
   const lines: Array<{ key: string; text: string; accept?: true }> = [];
   // Nodes with the same reason say one line, whatever their names (design, PR
-  // #203; merged only the same name), by the reason the
+  // #203; an earlier rule merged only the same name), by the reason the
   // backend sent (row.reason: person_line.NOT_READY_PREDICATES), never by
   // the words: the line's index, the reason and
   // every node's name in order.
@@ -58,7 +58,7 @@ export function notReadyBarLines(
     const text = notReadyLine(row);
     const reason = row.person?.trim() && isReason(row.reason) ? row.reason : null;
     if (!reason) {
-      // A route's own line, or a backend older than: a line each.
+      // A route's own line, or an older backend's: a line each.
       lines.push({ key: row.ref, text });
       continue;
     }
@@ -131,9 +131,9 @@ export function notReadyShown(
 }
 
 /** The person's line ("“GPT Image 2” needs your OpenAI API key. Add it in
- * Settings.", the name quoted at its source since the design, PR #203:
- * node_readiness.instance_missing_line); from a backend older than
- * 3f, find_nodes' words:
+ * Settings.", the name quoted at its source (design, PR #203;
+ * node_readiness.instance_missing_line)); from an older backend, find_nodes'
+ * words:
  * "GPT Image 2 (n3) needs OPENAI_API_KEY in Settings > Providers". */
 export function notReadyLine(row: ProposalNotReady): string {
   if (row.person?.trim()) return curlApostrophes(row.person.trim());

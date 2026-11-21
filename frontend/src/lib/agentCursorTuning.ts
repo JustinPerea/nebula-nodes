@@ -29,7 +29,7 @@ export const AGENT_CURSOR_DURATION = { baseMs: 380, gainMs: 170, scalePx: 200, m
 export const AGENT_CURSOR_LAND_SPRING: TuningSpring = { stiffness: 260, damping: 26, mass: 1 };
 /** §3 "The arrow leans toward its velocity, up to 10° (t)". Built as
  *  14° × tanh(vx / 700) × min(1, speed / 250) in Phase 1, which peaks at
- *  6°, 12° and 14° at 100, 400 and 900 px: The design's measured prototype peaks
+ *  6°, 12° and 14° at 100, 400 and 900 px: the design's measured prototype peaks
  *  (docs/notes/2026-10-31-feat-agent-cursor-foundations.md). Left as built. */
 export const AGENT_CURSOR_LEAN = { maxDeg: 14, vxScale: 700, fullSpeed: 250 } as const;
 /** §3 "through a spring on the angle (k 180 / c 22 (t))". */

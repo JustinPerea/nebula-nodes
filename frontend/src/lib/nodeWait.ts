@@ -37,7 +37,7 @@ export function waitFor(state: Pick<ProposalsState, 'proposals'>, nodeId: string
   for (const view of waiting) {
     const bar = curlApostrophes(view.wait?.barLine ?? '');
     if (!bar) continue;
-    // The hold sentence the bar adds for sighted readers (review of PR #242, L6).
+    // The hold sentence the bar adds for sighted readers (PR #242).
     const held = proposalHoldLine(view.wait?.ledgerHold, now);
     if (held) holdEnd = Math.min(holdEnd ?? Infinity, view.wait!.ledgerHold!.until);
     const line = withHoldLine(bar, held);

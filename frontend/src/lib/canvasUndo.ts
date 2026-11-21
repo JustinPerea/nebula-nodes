@@ -142,15 +142,14 @@ export interface KeptAfterAccept {
    * the order now is kept, named as one item ("the shot order"). */
   order?: 'shots' | 'clips';
   /** Keys kept because a run wrote into the part Accept changed (a shot it
-   * added and a run rendered): nobody's edit, so the line names no one.
-    */
+   * added and a run rendered): nobody's edit, so the line names no one. */
   runKept?: string[];
 }
 
-/** Who made a change this tab saw arrive (PR #114;
- * the design's follow-up): an agent (its presence name, or null for an unnamed one),
- * the person in another window ("You"), or nobody this tab can name. A
- * change with no source on it counts as unknown: never guessed. */
+/** Who made a change this tab saw arrive (PR #114; the design's follow-up):
+ * an agent (its presence name, or null for an unnamed one), the person in
+ * another window ("You"), or nobody this tab can name. A change with no
+ * source on it counts as unknown: never guessed. */
 export type ChangeSource = { kind: 'agent'; name: string | null } | { kind: 'you' } | { kind: 'unknown' };
 
 export function isOwnAdd(entry: unknown): entry is OwnAdd {
@@ -531,7 +530,7 @@ export function rebaseAcceptedOnRunOutput(step: OwnAdd, before: Node<NodeData>, 
  * a run's output off the canvas (PR #198: a shot rendered
  * between Undo and Redo, a flat key a run wrote). A part the step holds
  * otherwise is the step's own and stays, whole within an id-keyed item (a
- * clip's duration goes back with the speed the step set, L2), except a
+ * clip's duration goes back with the speed the step set), except a
  * shot's media, which is always the run's. Changes the step in place.
  */
 export function rebaseStepOnRunOutput(entry: unknown, was: Node<NodeData>, now: Node<NodeData>): void {

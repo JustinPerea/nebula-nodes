@@ -244,7 +244,7 @@ export function waitUntilOnline(): Promise<void> {
  * The backend process's id (main.py BACKEND_BOOT_ID), noted from every
  * socket hello and health answer whether or not a project is open
  * (PR #114: the first hello arrives before the tab has a
- * project, and a graph-level note dropped it). A different id later means
+ * project, and a graph-level note used to drop it). A different id later means
  * the backend restarted: anything it held in memory is gone.
  */
 let knownBootId: string | null = null;

@@ -1089,8 +1089,7 @@ export function edgeEvidenceFromLabels(
  *  flat area: its colour (within ``FLAT_TOLERANCE`` a channel) on both
  *  sides along one axis and on at least one side along the other. A clear
  *  neighbour (``counted`` false) counts as the same colour; one off the
- *  image doesn't, so a line along the image's border is no interior.
- */
+ *  image doesn't, so a line along the image's border is no interior. */
 function insideFlat(
   x: number,
   y: number,

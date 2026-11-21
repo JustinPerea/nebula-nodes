@@ -1,6 +1,6 @@
 /**
- * A Cinema scene's shape and its shots' run status (PR #198 and
- * M2). The backend fills a scene's missing fields on every write
+ * A Cinema scene's shape and its shots' run status (PR #198). The
+ * backend fills a scene's missing fields on every write
  * (services/cinema_scene_spec.py); this is the same fill for what the canvas
  * reads, so a scene saved before that (or one that reached the canvas some
  * other way) still opens instead of blanking the studio.
@@ -184,7 +184,7 @@ export function scenesDeleteBlockTitle(stoppable: boolean): string {
  * alone (the thing is plainly still there): "You can delete “X” when the run
  * finishes." (several named by the shared name-list rule, "the node" with no
  * name, "3 nodes" with no names), "You can undo when the run finishes.",
- * "You can redo when the run finishes." Cmd+D and Cmd+V the same (design PR #205). */
+ * "You can redo when the run finishes." Cmd+D and Cmd+V the same (design, PR #205). */
 export function runLockedLine(action: 'delete' | 'duplicate' | 'undo' | 'redo' | 'paste', count = 1, name?: string,
   names?: readonly string[]): string {
   // Design, PR #205: Cmd+D says "You can duplicate “X” when the run
@@ -219,7 +219,7 @@ export function sceneDeleteRefusedLine(scene: string, shots: RenderingShots): st
   return becauseLine({ heading: `Couldn’t delete “${scene}”.`, reason: `${text} ${several ? 'are' : 'is'} still running. ${shots.stoppable ? STOP_FIRST : WAIT_FOR_IT}` });
 }
 
-/** Design, PR #198 multi-select delete that keeps the scene: the
+/** Design, PR #198, a multi-select delete that keeps the scene: the
  * rest is deleted and the line goes after "Deleted 3 nodes.": "“Scene”
  * wasn't deleted because “Shot 2” is still running." Two or three scenes
  * (design, approved after "Deleted 3 nodes."): "“A” and “B” weren't

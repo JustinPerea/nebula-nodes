@@ -61,7 +61,7 @@ export const ON_KREA_PLAN: Line = (names, several) => `${names} ${several ? 'run
 
 /** The chosen route's key isn't set. `key` is the key as the node's own
  * route line names it ("fal.ai API key", "Black Forest Labs or fal.ai API
- * key"; directRoute.keyPhrase), so the two agree (design; the plural, design). */
+ * key"; directRoute.keyPhrase), so the two agree (design, plural included). */
 export const MISSING_KEY = (names: string, several: boolean, key: string) => (several
   ? `${names} can’t be priced until their ${key} is added.`
   : `${names} can’t be priced until its ${key} is added.`);
@@ -77,7 +77,7 @@ export const ROUTE_CANT_RUN: Line = (names, several) => (several
   ? `${names} can’t run as they’re set up now, so they have no price.`
   : `${names} can’t run as it’s set up now, so it has no price.`);
 
-/** Priced from its input file's size, not known yet (design; the plural, design). */
+/** Priced from its input file's size, not known yet (design, plural included). */
 export const AWAITING_INPUT: Line = (names, several) => (several
   ? `${names} are priced from their inputs, which aren’t ready yet.`
   : `${names} is priced from its input, which isn’t ready yet.`);
@@ -116,8 +116,8 @@ export const LEFT_OUT: Readonly<Record<string, Line>> = {
  * names it. PLACEHOLDER. */
 export const LEFT_OUT_OTHER = (plus: string): Line => leftOut(`its ${plus}`, `their ${plus}`);
 
-/** Amounts above this read as more than it, on both sides (
- * backend services/money.py CEILING_USD). */
+/** Amounts above this read as more than it, on both sides
+ * (backend services/money.py CEILING_USD). */
 export const CEILING_USD = 1e13;
 export const OVER_CEILING_USD = '>$10,000,000,000,000';
 export const OVER_CEILING_SPENT_USD = '>$10,000,000,000,000.00';

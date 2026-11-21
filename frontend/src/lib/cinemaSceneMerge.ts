@@ -133,7 +133,7 @@ export function withFields(target: CinemaSceneSpec, fields: readonly SceneField[
     } else if (field.shot === null && field.key === ORDER) {
       // The shots both sides have go in `source`'s order, in the slots they
       // hold now; the rest stay where they are. The next id is taken once
-      // per slot, outside any search's callback (H1: an index
+      // per slot, outside any search's callback (an index
       // moved inside `find` ran past the list and emptied every shot).
       const common = out.shots.filter((shot) => S.has(shot.id)).map((shot) => shot.id);
       const sorted = inOrder(common, source.shots.map((shot) => shot.id));

@@ -138,7 +138,7 @@ export function tellOnce<P extends ActProps>(props: P, shown?: LockShown['shown'
 export interface ActProps {
   disabled: boolean;
   title: string | undefined;
-  /** Set by `shown` (design PR #205): the on-screen line that gives the reason. */
+  /** Set by `shown` (design, PR #205): the on-screen line that gives the reason. */
   'aria-describedby'?: string;
   'data-following-disabled'?: '';
   'data-offline-disabled'?: '';
@@ -191,7 +191,7 @@ export function canvasLockOf(following: FollowingSwitch | null, offline: boolean
       // fixes it, so it goes before the reasons that clear by themselves.
       if (own?.tabLocal) return { [TAB_LOCAL_MARK]: '', disabled: true, title: TAB_LOCAL_LINES[own.tabLocal] };
       return tellOnce(options.run
-        // Then the run's line, alone (PR #198 M2, N1).
+        // Then the run's line, alone (PR #198).
         ? { disabled: true, title: options.runTitle }
         // Then following and offline (their marks and lines).
         : { ...mark, disabled: locked || Boolean(own.disabled), title: title(own) }, options.shown);

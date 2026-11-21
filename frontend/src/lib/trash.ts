@@ -46,7 +46,7 @@ async function query(filter: TrashFilter): Promise<string> {
 }
 
 /* Every call names its action (design: "Couldn't {verb}
- * {object}." then the reason); apiRequest says the reason: The design's line for no
+ * {object}." then the reason); apiRequest says the reason: the design's line for no
  * answer, 408, 429 and 5xx, else the backend's reason, else the design's line for
  * the status. Never a status code. Objects are named as the UI names them,
  * lowercase mid-sentence. */

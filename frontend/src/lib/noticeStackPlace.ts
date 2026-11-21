@@ -3,7 +3,7 @@ import { setNoticeMore } from './noticeMore';
 /**
  * Where the notice region's stack sits, and how tall the proposal card may be
  * (design, PR #216: "the notice region is one stack, moves as one;
- * the card is the only part that shrinks": the give-way order).
+ * the card is the only part that shrinks"; the give-way order is the design's too).
  *
  * - The region clears the left tool rail and a docked Agent log (CSS:
  *   noticeRegion.css). While that leaves at least BESIDE_LOG_MIN_W, the stack
@@ -718,9 +718,9 @@ function placeOnce(m: StackMeasure, options: { expanded?: boolean } = {}): Stack
     const collapse = short > logSpare && logCollapse > 0;
     const give = squeeze + (collapse ? logCollapse : 0);
     const room4 = cap + give;
-    // Step 5: the body under its kept lines, down to one line. Design (
-    // step 5 amended): the foot never comes down over the docked log's
-    // header; short of that the card caps and scrolls as a whole (`tight`).
+    // Step 5: the body under its kept lines, down to one line. Design (step 5
+    // amended): the foot never comes down over the docked log's header; short
+    // of that the card caps and scrolls as a whole (`tight`).
     // Under a floating log its bottom comes up by the give, and the stack's
     // top with it (its line is the region's: base is 0 there); above a log
     // the stack comes down by it, and never further (design).

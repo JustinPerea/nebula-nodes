@@ -1,5 +1,5 @@
 /** Extract from reference, worked out in a Web Worker so the canvas never
- *  freezes (design on #208). From (design) the worker reads the
+ *  freezes (design on #208). The worker (design) reads the
  *  picked file itself (``createImageBitmap`` and an ``OffscreenCanvas``), so
  *  the page does no pixel work: the same draws, in the same order, as the
  *  page's ``readPaletteJob``, and the same pure ``runPaletteJob``, so the

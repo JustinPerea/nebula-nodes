@@ -82,7 +82,7 @@ export { saveStepToFit } from './saveFixStep';
 export type { NebulaFile };
 // Load graph's limits and its shape walk live there too, so the unsaved
 // edits download can tell whether Load graph will open its file
-// (editsFileReopens), from the same numbers (review).
+// (editsFileReopens), from the same numbers.
 export {
   GRAPH_MAX_DEPTH, GRAPH_MAX_EDGES, GRAPH_MAX_NODES, GRAPH_MAX_VALUES,
   GraphStructureLimitError, assertGraphComplexityWithinLimits,
@@ -188,7 +188,7 @@ export interface GraphFileSelection {
 /** Inspect only four signature bytes, retaining ZIPs as Blobs so fetch can
  * stream them to the backend without first duplicating the whole selection in
  * JavaScript memory. A plain JSON file is read up to the same ceiling as a
- * bundle (Justin: "Let Load graph open bigger.nebula files (up to the
+ * bundle (Justin: "Let Load graph open bigger .nebula files (up to the
  * 512 MiB it already allows for a bundle)"); one over the 16 MiB save limit
  * opens, and the canvas pauses saving until it is trimmed. A bundle's graph
  * opens the same way. The shape walk's
@@ -692,9 +692,9 @@ export async function saveToFile(
       throw new GraphStructureLimitError(graphSaveTooLargeReason(GRAPH_BUNDLE_MAX_IMPORT_BYTES));
     }
   } catch (error) {
-    // The log keeps the engine's exact reason (design PR #205).
+    // The log keeps the engine's exact reason (design, PR #205).
     console.error('[nebula] graph save', error instanceof GraphStructureLimitError ? error.detail : error);
-    // With nothing to undo the line offers no step (design PR #205),
+    // With nothing to undo the line offers no step (design, PR #205),
     // so the Agent log says which limit it hit, for an agent to help.
     if (error instanceof GraphStructureLimitError && error.shape && stepNow()?.kind === 'none') {
       window.dispatchEvent(new CustomEvent('nebula:agent-log-entry', { detail: { source: 'system',
@@ -1057,7 +1057,7 @@ export function bundleRefusalLine(body: unknown): string | null {
     case 'bundle_size_metadata':
     case 'bundle_missing_graph':
       return GRAPH_FILE_DAMAGED_COPY;
-    // The import's own checks (design PR #205), for a plain file and a
+    // The import's own checks (design, PR #205), for a plain file and a
     // bundle's graph.json alike: backend _import_stage_refusal.
     case 'unknown_definition':
     case 'graph_unknown_port':
@@ -1094,8 +1094,7 @@ export function bundleRefusalLine(body: unknown): string | null {
  * plain file's import): the line for its code (bundleRefusalLine), and for
  * any other refusal of the file (no code, a code with no line, an empty
  * body) the design's damaged-file line. The person never reads the backend's words;
- * they stay in the console, and agents keep them (
- * limits and lines-inspector). Null for an answer that isn't
+ * they stay in the console, and agents keep them. Null for an answer that isn't
  * the file's refusal, which keeps its own line: a server failure (5xx), a
  * conflict (409, a run is active), the person gate's refusal, or a limit
  * of the project store's or the project's size. */

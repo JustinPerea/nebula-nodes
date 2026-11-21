@@ -179,7 +179,7 @@ export function undosToFitSave(nodes: Node<NodeData>[], edges: Edge[], viewport:
 
 /** The step Save's shape line offers: the newest step's owner when its Undo
  * alone fixes it; "the last N changes" when it takes N; none when no number
- * of Undos does (design PR #205). */
+ * of Undos does (design, PR #205). */
 export function saveStepToFit(walk: SaveUndoWalk, nodes: Node<NodeData>[], edges: Edge[],
   viewport: Viewport | undefined, name: string | undefined): SaveUndoStep {
   if (walk.top.kind === 'none') return walk.top;

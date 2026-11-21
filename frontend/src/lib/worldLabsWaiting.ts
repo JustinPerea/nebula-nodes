@@ -4,12 +4,12 @@ import { lastNodeLabel } from './lastNodeLabels';
 
 /**
  * The backend's words when it refuses because a node holds World Labs state
- * (backend/main.py _paid_state_person), the design's wording for 
- * of PR #114, verbatim, each under the screen's own "Couldn’t <action>."
- * heading. Pinned equal to the backend by
- * backend/tests/test_error_copy_round3b.py. The canvas reads the
- * needs-check line and the recovery line's tail to know a delete refusal is
- * one written in the design's words for the canvas (deleteRefusalText).
+ * (backend/main.py _paid_state_person), the design's wording for PR #114,
+ * verbatim, each under the screen's own "Couldn’t <action>." heading. Pinned
+ * equal to the backend by backend/tests/test_error_copy_round3b.py. The canvas
+ * reads the needs-check line and the recovery line's tail to know a delete
+ * refusal is one written in the design's words for the canvas
+ * (deleteRefusalText).
  */
 /** A start still in flight. */
 export const WORLD_LABS_STARTING = "A World Labs run is still starting. Try again in a moment.";
@@ -26,8 +26,8 @@ export const RECOVERY_ID_SAVED_TAIL = " has a saved World Labs recovery ID. Chec
 export const UNLOCK_LABEL = 'I’ve checked Marble';
 export const FORGET_LABEL = 'Forget ID';
 /**
- * How a held node is named in the World Labs controls (design
- * of PR #114): its card title in quotes; for a record whose node left the
+ * How a held node is named in the World Labs controls (design,
+ * PR #114): its card title in quotes; for a record whose node left the
  * canvas, "“<last label>”, no longer on the canvas"; with no label known, "A
  * removed World Labs node" ("a ..." inside a sentence, `inSentence`).
  */
@@ -196,7 +196,7 @@ export function heldDeleteText(count: number, unlock: boolean, held = 1, name?: 
   if (count === 1) {
     const lead = `Nebula couldn’t delete ${name ?? 'the node'}`;
     // Design: the reason says "it": a single node's delete is only ever
-    // refused for that node's own World Labs state (removed the
+    // refused for that node's own World Labs state (a later change removed the
     // never-passed parameter for naming another node).
     return `${lead} because ${unlock ? lowerFirst(WORLD_LABS_NEEDS_CHECK) : RECOVERY_ID_FORGET_CLAUSE}`;
   }

@@ -135,7 +135,7 @@ export interface ProjectList {
     deletes?: number;
     /** Held canvases that couldn't be read. */
     heldUnreadable?: { count: number | null; kept?: string[]; at?: string } };
-  /** A waiting canvas was saved as its own project, recently: The design's toast.
+  /** A waiting canvas was saved as its own project, recently: the design's toast.
    * `filed` names every canvas saved with it. */
   canvasSaved?: { id: string; name: string; at?: string; overSaveLimit?: boolean;
     /** Filed after a restore notice named a canvas: "Another canvas…" (design). */

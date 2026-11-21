@@ -51,7 +51,7 @@ export interface PaletteContext {
   running?: boolean;
   /** What the canvas waits for (lib/runLock's canvasWait): a locked Run,
    * Save or Load says that wait's line, an import's or Create's preparation
-   * as well as a run's (design PR #205). `running` means 'run'. */
+   * as well as a run's (design, PR #205). `running` means 'run'. */
   wait?: LockWait | null;
   /** Existing nodes on the canvas, for search-and-focus. */
   canvasNodes: Array<{ id: string; label: string }>;
@@ -69,7 +69,7 @@ const PANELS: Array<[PanelKey, string]> = [
   ['history', 'run history'],
 ];
 
-/** A row a wait locks says its lock line (design PR #205). */
+/** A row a wait locks says its lock line (design, PR #205). */
 function runLocked(ctx: PaletteContext, enabled: boolean, verb: string): Pick<PaletteCommand, 'lockLine'> {
   const wait = ctx.wait ?? (ctx.running ? 'run' : null);
   return wait && !enabled ? { lockLine: lockLine(verb, wait) } : {};

@@ -25,7 +25,7 @@ export const GEMINI_OMNI_REASON = 'Gemini Omni can edit a video but can’t make
  * - the handler wrote the person's line (`errorPerson`): the heading over
  *   that line, and nothing else (the specific text is for agents), unless
  *   the line was written for a provider's answer (`providerText`:
- *   "Meshy is busy....", Krea's refused input). Design: "Raw provider text
+ *   "Meshy is busy. ...", Krea's refused input). Design: "Raw provider text
  *   stays behind Details in every case.", so that text goes behind Details;
  * - the backend's classifier named the failure (blocked, auth, quota, rate
  *   limit, timeout, network, invalid input): the heading over its line, the

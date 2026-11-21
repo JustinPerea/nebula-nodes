@@ -33,7 +33,7 @@ export interface ModelReadiness {
   tone: 'neutral' | 'success' | 'warning';
   setupTarget?: ProviderSetupTarget;
   connectionLabel?: string;
-  /** Muted words after the connection label ("Optional", design PR #203). */
+  /** Muted words after the connection label ("Optional", design, PR #203). */
   connectionNote?: string;
   /** A Hugging Face token is saved for the route this row describes (a Space route with a saved key), whatever the
    *  label says; the library button reads "Settings" then and "Set up" without one (design). */
@@ -181,12 +181,12 @@ export function modelReadiness(def: ModelNodeDefinition, params: Record<string, 
 }
 
 /** A maker's Hugging Face Space route (handler hf-space: Idol). Keyless
- * (PR #203: the first live call ran with no token), in the design's 
- * words, and the design's case: without the token "Hugging Face · free" and that it can be busy;
- * with it "Hugging Face token · saved" (the shared key vocabulary: "Saved"
+ * (PR #203: the first live call ran with no token), in the design's words, and
+ * the design's case: without the token "Hugging Face · free" and that it can
+ * be busy; with it "Hugging Face token · saved" (the shared key vocabulary: "Saved"
  * until a check runs, "Connected" after one passes, "Not connected" after
  * one fails) and "Idol uses your Hugging Face allowance." A keyed Space route
- * (one with `keys`, as Idol's was in to 6) says what is needed
+ * (one with `keys`, as Idol's once was) says what is needed
  * (design). The specific line replaces the generic one, never both (design). */
 function spaceReadiness(
   def: ModelNodeDefinition,

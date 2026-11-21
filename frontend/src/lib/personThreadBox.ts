@@ -94,7 +94,7 @@ export type AnswerGoneCause = 'withdrawn' | 'answered' | 'closed' | 'gone';
 /** Why a question set is no longer answerable, from its status. Null while
  * it is open, and for a set this tab no longer holds: Nebula doesn't know
  * why it went, so the caller falls back to 'gone', whose line claims no
- * cause (F13; design). */
+ * cause (design). */
 export function answerGoneCause(status: string | undefined): AnswerGoneCause | null {
   if (status === 'withdrawn') return 'withdrawn';
   if (status === 'answered') return 'answered';
@@ -212,7 +212,7 @@ export function joinQuoted(words: readonly string[]): string {
   return quoted.length <= 1 ? (quoted[0] ?? '') : `${quoted.slice(0, -1).join(', ')} and ${quoted[quoted.length - 1]}`;
 }
 
-/** Design: a quoted answer that ends its line already ending in. ? or !
+/** Design: a quoted answer that ends its line already ending in . ? or !
  * keeps its own mark, and the sentence drops its period:
  * "You answered “From the other tab.”", never "…tab.”.". */
 export function closingPeriod(lastQuoted: string): string {
@@ -238,7 +238,7 @@ function typedAnswers(answers: readonly { text: string | null }[]): string[] {
  * Design: "You answered “…”." on one line, the words cut with the ellipsis
  * inside the curly quotes: the line in three parts, the middle one the part
  * the CSS cuts (the closing quote and the full stop always show). `after`
- * is for the whole words (design: no period after their own. ? or !);
+ * is for the whole words (design: no period after their own . ? or !);
  * `afterCut` for words cut short, which end in the ellipsis, not a mark.
  * Null for a chosen answer, whose line is answeredLine's as it is.
  */

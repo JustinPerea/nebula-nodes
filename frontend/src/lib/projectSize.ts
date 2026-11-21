@@ -161,7 +161,7 @@ export function projectSizeBreakdown(snapshot: unknown): { bytes: number; rows: 
   return { bytes: total, rows };
 }
 
-/** A project's size as design writes it, without " MB": one decimal, rounded up
+/** A project's size as the design writes it, without " MB": one decimal, rounded up
  * while over the limit (so it never reads as the limit or under) and down at
  * or under it. */
 export function displaySize(bytes: number, limit = PROJECT_SAVE_LIMIT_BYTES): string {
@@ -194,8 +194,8 @@ export function rowSize(bytes: number): string {
  * project_name, in code points). */
 const PROJECT_NAME_MAX = 120;
 
-/** The new project's name for a Load graph file over the limit (
- * Justin: "Files over the limit open as a new project named after the
+/** The new project's name for a Load graph file over the limit
+ * (Justin: "Files over the limit open as a new project named after the
  * file."): the file's name without its graph extension, fitted to the
  * backend's name rule, or the default name when that leaves nothing. */
 export function projectNameForFile(fileName: string | undefined): string {

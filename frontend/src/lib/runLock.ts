@@ -11,7 +11,7 @@ import { nodeNameList } from './errorCopy';
  *   which act the same way): the row's verb plus "it" ("them" for a
  *   selection of several nodes).
  * - Cinema's Generate all, a model node's next step, Run history's Forget,
- *   Auto-layout, Load, Import and Clear: The design's words.
+ *   Auto-layout, Load, Import and Clear: the design's words.
  * - Save, Run history's Clear, Arrange (the selection's), Undo and Redo:
  *   on the design's pattern, confirmed in PR #205.
  * The waits other than the run (an import, preparation, a grade, Cinema's
@@ -26,7 +26,7 @@ export const RUN_LOCK_VERBS = {
   deleteThem: 'delete them',
   arrangeThem: 'arrange them',
   generateShot: 'generate this shot',
-  /** Cinema's toolbar "Generate all" (design PR #205). */
+  /** Cinema's toolbar "Generate all" (design, PR #205). */
   generateShots: 'generate the shots',
   forgetRun: 'forget this run',
   arrangeCanvas: 'arrange the canvas',
@@ -37,12 +37,12 @@ export const RUN_LOCK_VERBS = {
   clearRunHistory: 'clear the run history',
   undo: 'undo',
   redo: 'redo',
-  /** Cmd+V during a run (design PR #205). */
+  /** Cmd+V during a run (design, PR #205). */
   paste: 'paste',
   /** The command palette's rows and the toolbar's Run (design, PR #205:
    * one name everywhere). */
   runCanvas: 'run the canvas',
-  /** Cinema's "Send to motion" during an import (design PR #205). */
+  /** Cinema's "Send to motion" during an import (design, PR #205). */
   sendToMotion: 'send it to motion',
   viewVideoNode: 'view the video node',
 } as const;
@@ -58,28 +58,28 @@ export type RunLockVerb = typeof RUN_LOCK_VERBS[keyof typeof RUN_LOCK_VERBS];
 export const LOCK_WAITS = {
   /** This tab's run (design). */
   run: 'when the run finishes',
-  /** A graph import (design PR #205). */
+  /** A graph import (design, PR #205). */
   import: 'when the import finishes',
-  /** Generation preparation (Create's launch; design PR #205). */
+  /** Generation preparation (Create's launch; design, PR #205). */
   preparing: 'when Nebula finishes preparing the run',
-  /** Commons: a grade still being written (design PR #205). */
+  /** Commons: a grade still being written (design, PR #205). */
   grade: 'when the grade finishes',
-  /** Cinema: another run holds the shot's shared inputs (design PR #205). */
+  /** Cinema: another run holds the shot's shared inputs (design, PR #205). */
   otherRun: 'when the other run finishes or after you stop it',
-  /** Cinema: the scenes' shots still rendering (design PR #205, after). */
+  /** Cinema: the scenes' shots still rendering (design, PR #205, after). */
   runningShots: 'when the running shots finish',
 } as const;
 export type LockWait = keyof typeof LOCK_WAITS;
 
 /** "You can <verb> <when>.": a wait from the table, or a named thing still
- * running ("when “Shot 2” finishes", design PR #205 after). */
+ * running ("when “Shot 2” finishes", design, PR #205 after). */
 export function lockLine(verb: string, wait: LockWait | { finishes: string }): string {
   const when = typeof wait === 'string' ? LOCK_WAITS[wait] : `when ${wait.finishes} finishes`;
   return `You can ${verb} ${when}.`;
 }
 
 /** The connected add's line, said by the store's refusal and shown in the
- * connection-drop picker alike (design PR #205): "You can add “X”
+ * connection-drop picker alike (design, PR #205): "You can add “X”
  * when the import finishes." */
 export function addNodeLine(displayName: string, wait: LockWait): string {
   return lockLine(`add “${displayName}”`, wait);

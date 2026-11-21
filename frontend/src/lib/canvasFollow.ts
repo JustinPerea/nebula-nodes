@@ -10,8 +10,8 @@ import { agentNameInSentence } from './personalAgentName';
  * edit is refused before it changes anything (graphStore's edit gate, a
  * file drop, Clear, Load graph), fields show disabled, and an attempt pulses
  * the project bar, at most once a second. Nothing is typed into a canvas
- * that's about to go away (probe A1); what the person had typed before the
- * switch goes into the handoff save (H1).
+ * that's about to go away; what the person had typed before the
+ * switch goes into the handoff save.
  *
  * The design's words, verbatim:
  * - The project bar: "Opening “<project>”…" (ellipsis character, no

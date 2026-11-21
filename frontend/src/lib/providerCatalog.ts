@@ -57,9 +57,8 @@ export function credentialNoun(spec: Pick<ProviderKeySpec, 'keyLink'>): string {
 /** The row's credential by name, its noun said once: "Hugging Face token",
  * "Replicate token", "OpenAI API key", "Google · Gemini API key", "Google ·
  * Vertex AI service account key", "Krea · API key", "Krea · usage key"
- * (never "Krea · API key API key"). The one name
- * screen readers hear for the row's Add, field, Show and Remove (design, PR #203).
- */
+ * (never "Krea · API key API key"). The one name screen readers hear for the
+ * row's Add, field, Show and Remove (design, PR #203). */
 export function credentialName(spec: Pick<ProviderKeySpec, 'keyLink' | 'label'>): string {
   // Google Cloud's service-account key isn't an API key: "Google · Vertex AI
   // service account key" (design, PR #203).

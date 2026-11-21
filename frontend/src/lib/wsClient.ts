@@ -178,8 +178,8 @@ export interface AgentStatusEvent {
 }
 
 /**
- * A node of a run an agent started began or stopped running (
- * backend services/run_done_cards.py AgentRunBook): the agent's mark on it.
+ * A node of a run an agent started began or stopped running
+ * (backend services/run_done_cards.py AgentRunBook): the agent's mark on it.
  */
 export interface AgentRunEvent {
   type: 'agentRun';
@@ -408,7 +408,7 @@ export interface ProposalView {
    * card's words, "Hero shot" and "Krea 2" (no id). `inputsUpdated`: the
    * change sets the model param `key` to the model the node already has, so
    * its inputs are read again; `name` is that model's own name (design,
-   * PR #216 8: "Krea 2 · inputs updated"). Names follow renames while the
+   * PR #216: "Krea 2 · inputs updated"). Names follow renames while the
    * proposal is open. */
   params: Array<{ nodeId: string; name: string; title?: string; model?: string;
     inputsUpdated?: { key: string; name: string };
@@ -418,8 +418,8 @@ export interface ProposalView {
     paidRuns: number;
     /** Runs that may bill the person's own account (a mayBillWithKey route
      * with their key set: Idol with a Hugging Face token), never counted as
-     * paid (design, PR #203), and who they are. Absent from a backend
-     * before. */
+     * paid (design, PR #203), and who they are. Absent from an older
+     * backend. */
     mayCostRuns?: number;
     mayCost?: Array<{ name: string; account: string }>;
     /** Runs on the person's Krea plan, never counted as paid (design, PR #203:

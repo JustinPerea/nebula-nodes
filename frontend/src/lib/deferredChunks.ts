@@ -48,7 +48,7 @@ export const DeferredAgentLog = lazyWithPreload(
   (module) => module.AgentLog,
 );
 
-// The Updates corner (PR9a; on every screen since): the chip shows at
+// The Updates corner (PR9a; on every screen): the chip shows at
 // once but isn't needed for the first paint. Its store
 // (store/agentNotesStore.ts) is imported eagerly by App.tsx, so no update is
 // missed before the chip arrives. The node outlines mount inside Canvas,

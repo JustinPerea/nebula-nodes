@@ -367,8 +367,8 @@ export function estimateNode(
  * non-finite amounts are nothing: a cost or a spend is a sum of prices, and
  * the only way below zero is float noise from a subtraction (a limit minus
  * what was used), where "nothing left" is the true reading ("$-0.00" never
- * shows). Amounts above CEILING_USD read as more than it (PR #198,
- * N4: past it, a float's whole dollars are written as an exponent, and
+ * shows). Amounts above CEILING_USD read as more than it (PR #198:
+ * past it, a float's whole dollars are written as an exponent, and
  * money.py's cents overflow), on both sides. */
 
 /** An amount that can be shown: a finite, positive number, else 0. */
@@ -524,8 +524,8 @@ const inCents = (amount: number) => halfUp(clampUsd(amount) * 100) < 1000;
 
 export function chipEstimate(low: number, high: number, open: boolean): ChipEstimate {
   // A high end that isn't a number (NaN, Infinity) has no price: the chip
-  // reads its low end with the rest unknown, never "~$0" (
-  // "$0" only ever means free).
+  // reads its low end with the rest unknown, never "~$0"
+  // ("$0" only ever means free).
   if (typeof high !== 'number' || !Number.isFinite(high)) {
     return chipEstimate(low, clampUsd(low), true);
   }

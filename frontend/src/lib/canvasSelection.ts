@@ -19,9 +19,9 @@ export function selectedNodeIds(nodes: Node<NodeData>[]): string[] {
 
 
 export async function publishCanvasSelection(nodeIds: string[], signal?: AbortSignal): Promise<void> {
-  // A kept canvas is this tab's
-  // own, and Nebula's canvas may be another project now, so its ids would
-  // name other nodes there. Nothing is shared while kept.
+  // A kept canvas is this tab's own, and Nebula's canvas may be another
+  // project now, so its ids would name other nodes there. Nothing is shared
+  // while kept.
   if (isCanvasKept()) return;
   // Background sync, never shown; named like every request so the console
   // says what failed, once.

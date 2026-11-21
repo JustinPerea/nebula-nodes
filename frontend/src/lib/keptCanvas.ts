@@ -6,7 +6,7 @@
  * refused and a refused param save was put back: the typing was lost.
  *
  * While kept, nothing is sent and nothing is put back: the person can keep
- * typing (param edits stay on the canvas only) and, design, use the tab
+ * typing (param edits stay on the canvas only) and (design) use the tab
  * as a scratch canvas: move, delete, duplicate, Arrange, Clear canvas, and
  * Undo and Redo over those steps only (graphStore's KeptStep); later design rulings
  * add typing, renames, added nodes and connections (checked here by the
@@ -59,7 +59,7 @@ export function useKeptCanvas(): boolean {
  * nobody should see: every control names its own (canvasLock's `act` takes
  * a `kept` for each, and a test walks the sources). */
 // Design: delete, arrange, clear and undo are the kept tab's own now
-// (live, no line), as duplicate and settings did before.
+// (live, no line), as duplicate and settings already were.
 // Forget ID has its own verb (design). The routes that replace
 // the canvas (Projects, another project, a new one, Load, Import) name both
 // ways out, since discarding the kept edits unlocks them too.

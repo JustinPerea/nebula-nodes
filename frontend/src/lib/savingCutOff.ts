@@ -25,7 +25,7 @@ export interface CutOffSave {
   node: string | null;
   /** The setting's label on the card (never a raw key). */
   setting: string | null;
-  /** The node's place on its canvas when the save was made: The design's lists
+  /** The node's place on its canvas when the save was made: the design's lists
    * read in canvas order. Unknown goes last. */
   order?: number;
 }
@@ -37,8 +37,8 @@ export type CutOffEnding = { kind: 'switch' } | { kind: 'import' }
   /** An agent's clear: agentClearedLine, no project. */
   | { kind: 'agentClear'; agent: string | null }
   /** A sync with no edit found another canvas (a
-   * restart, a missed change): changesNotSavedLine, no project. 
-   * (design): `copy`, the recovered copy the edits it cut off were saved to. */
+   * restart, a missed change): changesNotSavedLine, no project.
+   * Design: `copy`, the recovered copy the edits it cut off were saved to. */
   | { kind: 'reconnect'; copy?: { id: string; name: string } | null };
 
 function ending(how: CutOffEnding): string {
@@ -145,8 +145,7 @@ export function agentClearedLine(saves: CutOffSave[], agent: string | null): str
  * didn't keep because the canvas it was for is no longer the one Nebula
  * holds, found by a sync with no edit (a restart that lost Nebula's canvas
  * revisions, then showed another canvas). Not an agent's clear, so not its
- * line (design). The design's failed-save wording (
- * 2026-10-27), verbatim:
+ * line (design). The design's failed-save wording (2026-10-27), verbatim:
  *   One node, one setting: "Couldn't save “<setting>” for “<node>”."
  *   One node, 2–3 settings: "Couldn't save “a” and “b” for “Hero still”." /
  *    "“a”, “b” and “c”"
