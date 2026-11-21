@@ -147,8 +147,7 @@ export interface ProjectHomeProps {
    * filed with it (`filed`). */
   canvasSaved?: { id: string; name: string; overSaveLimit?: boolean; another?: boolean; agentCopy?: { agent?: string | null };
     filed?: SavedCanvas[] } | null;
-  /** The project [Save as a project] saved this tab's edits as
-   * (design, PR #199): its toast names it. */
+  /** The project [Save as a project] saved this tab's edits as (design, PR #199): its toast names it. */
   editsRecoveredAs?: { id: string; name: string; dropped?: string } | null;
   onDismissEditsRecovered?: () => void;
   /** The line for a tab sent home after an agent's write closed its project

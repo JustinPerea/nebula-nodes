@@ -46,8 +46,8 @@ describe('the open canvas, saved as its own project', () => {
 });
 
 describe('the open project that couldn\'t be added back, saved from its canvas', () => {
-  // The canvas sentence is the one sentence for that project (the design
-  // wants one sentence for "couldn't restore"); its failed add-back isn't
+  // The canvas sentence is the one sentence for that project (design: one
+  // sentence for "couldn't restore"); its failed add-back isn't
   // said again beside "so nothing in it is lost".
   const canvas = { recoveredCanvas: { id: 'c'.repeat(32), name: 'Scratch (recovered)' }, openProjectMissing: 's'.repeat(32) };
   const scratch = { id: 's'.repeat(32), name: 'Scratch', reason: 'incomplete' };

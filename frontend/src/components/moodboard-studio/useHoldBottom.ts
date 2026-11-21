@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef } from 'react';
 
 /**
- * The approved line (PR #208): "The brief holds its place ... clearing the
+ * The design rule (PR #208): "The brief holds its place ... clearing the
  * line must not move what's above it. When clearing the line would shorten a
  * panel scrolled to the bottom, put a bottom spacer of the removed height in
  * its place. The spacer collapses on the person's next scroll, or when the
@@ -16,7 +16,7 @@ import { useEffect, useLayoutEffect, useRef } from 'react';
  * on screen moves. It is shown and sized through a data attribute and a CSS
  * variable (no React style prop), so React's renders leave it alone.
  *
- * The spacer never goes away in one step (PR #208; the approved line:
+ * The spacer never goes away in one step (PR #208; the design follow-up:
  * "Shrinking it as the person scrolls up or the content grows is what 'no
  * jump' meant"). Removing it at once would shorten the content again, the
  * browser would clamp scrollTop by its height, and the brief would jump on

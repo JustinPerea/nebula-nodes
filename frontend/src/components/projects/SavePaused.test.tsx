@@ -106,7 +106,7 @@ describe('the panel', () => {
     return { opener, view };
   }
 
-  it('names the connections row and counts its connections (the design says connection, never wire)', () => {
+  it('names the connections row and counts its connections (design: connection, never wire)', () => {
     const edge = (id: string) => ({ id, source: 'n1', target: 'n2', data: { note: 'w'.repeat(Math.round(0.3 * MIB)) } });
     useGraphStore.setState({ edges: [edge('e1'), edge('e2')] } as never);
     open();
@@ -124,7 +124,7 @@ describe('the panel', () => {
     expect(within(panel).getByRole('button', { name: 'Download a copy' })).toBeTruthy();
     expect(within(panel).getByText('Largest first')).toBeTruthy();
     const rows = within(panel).getAllByRole('button').filter((button) => button.closest('[data-size-row]'));
-    // Only the two Briefs are 0.1 MB or more; the rest fold into one line (design, #182).
+    // Only the two Briefs are 0.1 MB or more; the rest fold into one line (design, PR #182).
     expect(rows).toHaveLength(2);
     for (const row of rows) expect(row.textContent).not.toContain('0.0 MB');
     // The largest, by name as the canvas shows it, its part, its size.
@@ -138,7 +138,7 @@ describe('the panel', () => {
     expect(panel.textContent).not.toMatch(/\bn1\b|\bm0\b/);
     // The rest, counted.
     // Thirteen small nodes and the project's settings.
-    // Their total rounds to 0.0, so the line has no size (design, #182).
+    // Their total rounds to 0.0, so the line has no size (design, PR #182).
     expect(within(panel).getByText('14 smaller items')).toBeTruthy();
     opener.remove();
   });

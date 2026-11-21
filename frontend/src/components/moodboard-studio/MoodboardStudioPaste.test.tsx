@@ -621,7 +621,7 @@ describe('links on the clipboard', () => {
     expect(server.edits).toHaveLength(0);
   });
 
-  it('the lines read as the design words them', () => {
+  it('the lines read as the approved copy has them', () => {
     expect(NOTHING_TO_PASTE).toBe('There’s no image on the clipboard to add.');
     expect(LINKS_NOT_ADDED).toBe('Nebula can’t add images from links. Copy the image itself, then paste it.');
   });
@@ -946,7 +946,7 @@ describe('a held key whose keyup went elsewhere', () => {
   });
 });
 
-describe('the backstop takes turns (the race)', () => {
+describe('the backstop takes turns: two adds of one file racing', () => {
   const same = () => new File([new Uint8Array([9, 8, 7, 6, 5, 4, 3, 2])], 'same.png', { type: 'image/png' });
   it('two quick presses of the same image add it once, and say so politely, with nothing on screen', async () => {
     const raf = immediateFrames();
@@ -2769,7 +2769,7 @@ describe('the open board\'s commit, reload records per tab and per board', () =>
     await waitFor(() => expect(made.board?.images.map((img) => img.url)).toEqual([river]), { timeout: 2000 });
   });
 
-  it('control: the same paste after the queued send has landed keeps its Undo (persist sends it)', async () => {
+  it('the control case: the same paste after the queued send has landed keeps its Undo (persist sends it)', async () => {
     const create = gate();
     const made = madeServer(create.held);
     const editGate = gate();
@@ -2792,7 +2792,7 @@ describe('the open board\'s commit, reload records per tab and per board', () =>
     await waitFor(() => expect(made.board?.images.map((img) => img.url)).toEqual([river]), { timeout: 2000 });
   });
 
-  it('conflict: a paste on the saved board while the queued send replays a 409 is still its own step, with its Undo', async () => {
+  it('a paste on the saved board while the queued send replays a 409 is still its own step, with its Undo', async () => {
     const create = gate();
     const made = madeServer(create.held);
     const editGate = gate();
@@ -2872,7 +2872,7 @@ describe('the open board\'s commit, reload records per tab and per board', () =>
     expect(steps.map((step) => step.state)).toEqual(['saved']);
   });
 
-  it('fields: a rename on the saved board while the queued send is out keeps its Undo', async () => {
+  it('a rename on the saved board while the queued send is out keeps its Undo', async () => {
     const create = gate();
     const made = madeServer(create.held);
     const editGate = gate();
@@ -2946,7 +2946,7 @@ describe('the open board\'s commit, reload records per tab and per board', () =>
     await waitFor(() => expect(store().entries[madeKey]).toMatchObject({ dirty: false, saveState: 'saved' }));
   });
 
-  it('away: a change on the saved board while no Studio has it open goes by the queued send', async () => {
+  it('a change on the saved board while no Studio has it open goes by the queued send', async () => {
     const create = gate();
     const made = madeServer(create.held);
     const editGate = gate();
@@ -4231,7 +4231,7 @@ describe('offline background sends, the mutants that survived an earlier pass, t
       expect(urlsOf(madeKey)).toEqual([river]);
     });
 
-    it('with what the unsaved board still had to send (an image, its notes): folded into the open board\'s draft and sent from it', async () => {
+    it('renamed on the rail, with what the unsaved board still had to send (an image, its notes): folded into the open board\'s draft and sent from it', async () => {
       const made = madeServer();
       onceServer(made, { next: true });
       const answer = api.createMoodboard.getMockImplementation()!;
@@ -4269,7 +4269,7 @@ describe('offline background sends, the mutants that survived an earlier pass, t
       expect((store().entries[madeKey].draft as { notes: string; name: string })).toMatchObject({ notes: 'from the unsaved board', name: 'Rivers' });
     });
 
-    it('the open board\'s own rename still out when the repeat lands: its draft keeps it, never put over', async () => {
+    it('renamed on the rail, with the open board\'s own rename still out when the repeat lands: its draft keeps it, never put over', async () => {
       const made = madeServer();
       onceServer(made, { next: true });
       const answer = api.createMoodboard.getMockImplementation()!;
@@ -5098,7 +5098,7 @@ describe('the offline board, the chip, the replay and toast gaps', () => {
 });
 
 // A saved board's kept edit lives through a reload of the tab and replays on the board as the
-// server has it then, by the same rebase rule a repeated create uses.
+// server has it then, by the later-edit rule a repeated create uses too (replayKeptFields).
 describe('a saved board\'s kept edit through a reload', () => {
   const EDITS = 'nebula:moodboard-kept-edits';
   const g1Key = JSON.stringify(['moodboard', 'global', 'g1']);

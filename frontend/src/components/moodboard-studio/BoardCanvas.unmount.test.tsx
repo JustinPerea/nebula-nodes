@@ -3,7 +3,7 @@ import { act, cleanup, render, screen } from '@testing-library/react';
 import { StrictMode, type ReactNode } from 'react';
 import type { MoodboardImage } from '../../types';
 
-// #213: React Flow's REAL store and d3 pan-zoom, not the
+// PR #213: React Flow's REAL store and d3 pan-zoom, not the
 // stand-in of BoardCanvas.fitFollow.test.tsx. When the view closes, React
 // Flow's StoreUpdater (a child of the board) resets its store to the camera
 // (0, 0, 1) in a layout cleanup, before any passive cleanup runs, and its

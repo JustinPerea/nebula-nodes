@@ -9,7 +9,7 @@ import { nearestEdge, outsideChipText, placeChip } from './outsideChipText';
 import { CHIP_SHARE, outsideForChip, visibleShare } from '../../lib/boardPlacement';
 import type { OutsideTiles } from './BoardCanvas';
 
-// The reveal for tiles placed outside the view (design, #210): an edge chip
+// The reveal for tiles placed outside the view (design, PR #210): an edge chip
 // with an arrow, a thumbnail and the design's words; a button that brings
 // the tiles into view; no timer; it goes when pressed, when the tiles come
 // into view, on Esc, or at the next paste (the Studio replaces it).

@@ -1160,7 +1160,7 @@ export function MoodboardStudioView() {
   const isDraftId = !moodboardEditorId || moodboardEditorId === NEW_MOODBOARD_SENTINEL;
   const canSave = draft.name.trim().length > 0 && draft.images.length > 0;
 
-  // The Board view (the moodboard canvas): which view, the selected cards
+  // The Board view (PR #127): which view, the selected cards
   // (per board draft), and this tab's undo steps for the board.
   const view = useBoardCanvasStore((state) => state.view);
   const setView = useBoardCanvasStore((state) => state.setView);
@@ -3363,7 +3363,7 @@ export function MoodboardStudioView() {
   );
 }
 
-/** Board or List (the moodboard canvas). Board is a preview for now; List stays the default. */
+/** Board or List (the Board view, PR #127). Board is a preview for now; List stays the default. */
 function ViewSwitch({ view, onChange }: { view: MoodboardView; onChange: (view: MoodboardView) => void }) {
   const options: Array<{ id: MoodboardView; label: string }> = [{ id: 'board', label: 'Board' }, { id: 'list', label: 'List' }];
   const refs = useRef<Record<string, HTMLButtonElement | null>>({});

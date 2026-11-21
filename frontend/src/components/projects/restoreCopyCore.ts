@@ -48,8 +48,8 @@ export function sizeCapAdvice(trashHasItems: boolean): string {
     : 'Delete a project, then remove it from Recently deleted too, and Nebula will save it.';
 }
 
-/** The head all three kept-save refusals share (the design asked that the
- * three match, and no second "Nebula"). */
+/** The head all three kept-save refusals share (design: the three match,
+ * with no second "Nebula"). */
 const KEPT_SAVE_REFUSED = 'Nebula couldn’t save your edits as a project because';
 
 /** The kept save the storage cap refused (design, PR #199, verbatim). The
@@ -74,18 +74,18 @@ export function keptLimitLine(count: number, limit: number, deletes?: number | n
 }
 
 /** The notice's line once deleting has made room, until the retry starts or
- * while a run or offline holds it (PR #199; wording not yet confirmed by the
- * design). */
+ * while a run or offline holds it (PR #199; this wording is still to be
+ * confirmed). */
 export const KEPT_ROOM_LINE = 'There’s room now. Nebula is saving your edits as a project.';
 
 /** The notice's line while a Delete that made room still shows its Undo: the
  * save waits for the toast to go (or for [Save as a project]), so Undo is
- * real (PR #199; wording not yet confirmed by the design). */
+ * real (PR #199; this wording is still to be confirmed). */
 export const KEPT_ROOM_WAIT_LINE = 'There’s room now. Nebula will save your edits as a project when Undo goes away.';
 
 /** Why the project the kept edits came from can't be deleted from here, in the
  * chooser's row and after the heading of the refusal Delete gives (PR #199;
- * wording not yet confirmed by the design). */
+ * this wording is still to be confirmed). */
 export const KEPT_SOURCE_DELETE_LINE = 'Your kept edits came from this project. You can delete it after you save them as a project or discard them.';
 
 /** The button that opens the chooser on either of the two refusal notices

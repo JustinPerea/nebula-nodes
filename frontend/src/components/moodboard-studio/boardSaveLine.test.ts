@@ -466,7 +466,7 @@ describe('the "Kept …" line', () => {
   });
 });
 
-// #210 (design, verbatim): a replayed kept edit's save that failed on a board the person isn't on, under
+// PR #210 (design, verbatim): a replayed kept edit's save that failed on a board the person isn't on, under
 // the Restore's confirmation, names the board, from the save line it failed with.
 describe('a replayed save that failed elsewhere', () => {
   it('names the board in the because form, with the same cause and step: the approved line', () => {

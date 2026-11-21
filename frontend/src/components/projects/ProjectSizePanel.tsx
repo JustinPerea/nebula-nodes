@@ -15,7 +15,7 @@ import './ProjectSizePanel.css';
 const GUTTER = 16;
 const WIDTH = 340;
 
-/** One row as the panel shows it: no ids (the design asks for none), the name the canvas shows. */
+/** One row as the panel shows it: no ids (design), the name the canvas shows. */
 interface ShownRow {
   key: string;
   name: string;

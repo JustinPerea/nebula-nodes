@@ -419,7 +419,7 @@ describe('a saved board\'s kept edit', () => {
   });
 });
 
-describe('replaying a kept edit on the board as it is now (the replay rule)', () => {
+describe('replaying a kept edit on the board as it is now (the later-edit rule)', () => {
   const edit = (fields: Record<string, unknown>, from: Record<string, unknown>, at: Record<string, number> = {}): KeptEdit =>
     ({ board: 'g1', fields, base: from, fieldEditedAt: at, ops: [], at: 0 });
 

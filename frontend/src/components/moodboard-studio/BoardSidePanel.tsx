@@ -13,7 +13,7 @@ import { PRIVATE_NOTE_LIMIT } from './MoodboardListView';
 import { isSetAside, setAsidePatch } from './steering';
 
 /**
- * The Board view's side panel (moodboard canvas PR5). One reference
+ * The Board view's side panel (PR #127). One reference
  * selected: its notes, colours, Set aside and weight, the same controls as
  * its tile in the List. Several: how many, and Remove. None: the board
  * itself (`children`: its fields, Direction and the brief, the analysis).
@@ -33,7 +33,7 @@ export function BoardSidePanel({ images, selected, analysis, onUpdate, onRemove,
   const title = picked.length === 0 ? 'Moodboard' : picked.length === 1 ? `Reference #${picked[0].number}`
     : `${picked.length} references`;
   // A tab stop while it scrolls (under the board in a narrow window), and its
-  // scroll position kept across the size where it doesn't (#213).
+  // scroll position kept across the size where it doesn't (PR #213).
   const panelRef = useRef<HTMLElement>(null);
   const scrolls = useScrollPanel(panelRef);
   return (

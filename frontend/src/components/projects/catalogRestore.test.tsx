@@ -31,7 +31,7 @@ const failedRows = (...names: (string | null)[]) => names.map((name, index) => (
 const line = (overrides: Partial<CatalogRestore>) => catalogRestoreLine(restore(overrides), NOW);
 const OPEN = "Nebula’s project list was damaged, so it restored the last good copy";
 
-describe('form 1: restored, with what was added back', () => {
+describe('restored, with what was added back', () => {
   it('names one, two or three projects added back, and counts from four', () => {
     expect(line({ addedBack: rows('Dunes'), addedBackCount: 1 }))
       .toBe(`${OPEN} and added back “Dunes”, a newer project it found.`);
@@ -62,7 +62,7 @@ describe('form 1: restored, with what was added back', () => {
   });
 });
 
-describe('form 2: add-backs that failed', () => {
+describe('add-backs that failed', () => {
   it('names what failed when all failed', () => {
     expect(line({ notAddedBack: failedRows('Hero study'), notAddedBackCount: 1 }))
       .toBe(`${OPEN}. “Hero study”, a newer project, couldn’t be added back. The damaged file was kept.`);
@@ -79,7 +79,7 @@ describe('form 2: add-backs that failed', () => {
       .toBe(`${OPEN}. 1 newer project couldn’t be added back. The damaged file was kept.`);
   });
 
-  it('gives form 1, then what failed, when some were added back', () => {
+  it('gives what was added back, then what failed, when some were added back', () => {
     expect(line({ addedBack: rows('Logo'), addedBackCount: 1, notAddedBack: failedRows('Dunes'), notAddedBackCount: 1 }))
       .toBe(`${OPEN} and added back “Logo”, a newer project it found. “Dunes” couldn’t be added back. The damaged file was kept.`);
   });
@@ -90,7 +90,7 @@ describe('form 2: add-backs that failed', () => {
   });
 });
 
-describe('form 2: added back into Recently deleted', () => {
+describe('added back into Recently deleted', () => {
   it('says where they are and offers to open it', () => {
     const one = catalogRestoreNotice(restore({ addedBack: trashedRows('Logo'), addedBackCount: 1 }), NOW);
     expect(one.text).toBe(`${OPEN}. “Logo”, a newer project it found, is in Recently deleted. Restore it from there to keep it.`);
@@ -107,7 +107,7 @@ describe('form 2: added back into Recently deleted', () => {
   });
 });
 
-describe('form 3: what an older copy decided', () => {
+describe('what an older copy decided', () => {
   const older = { source: 'catalog.json.bak.1', copyAt: TWO_DAYS_AGO };
 
   it('says the copy is older up front when its age is known', () => {
@@ -173,7 +173,7 @@ describe('form 3: what an older copy decided', () => {
   });
 });
 
-describe('form 4: rebuilt, no good copy', () => {
+describe('rebuilt, no good copy', () => {
   const rebuilt = { kind: 'rebuilt' as const, source: null };
 
   it('says when nothing was spotted missing', () => {

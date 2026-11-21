@@ -185,7 +185,7 @@ export function resetUnsavedDrafts(): void {
  * board fields (with the values they were changed from, `base`, and when
  * each was edited) and its queued ops. The board's next load in this tab
  * takes it (takeKeptEdit) and replays it on the board as the server has it
- * then, by the replay rule (replayKeptFields). Gone once the draft holds
+ * then, by the later-edit rule (replayKeptFields). Gone once the draft holds
  * nothing unsent. Keyed by the board's id, so a project switch, or the
  * board moving, still finds it.
  *
@@ -531,7 +531,7 @@ export function noteKeptChange(board: string, images: readonly string[], by: str
 }
 
 /**
- * The replay rule for a kept edit replayed on the board as it is now:
+ * The later-edit rule for a kept edit replayed on the board as it is now:
  * a field the board still holds as the edit found it takes the edit's value;
  * one the board changed since goes to the later edit, the edit's time
  * against the board's `updatedAt`. `kept` names each field where the

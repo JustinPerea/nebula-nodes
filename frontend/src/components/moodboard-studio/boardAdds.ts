@@ -14,8 +14,8 @@ import type { BoardPlaceholder } from './boardPlaceholder';
  * draft. So each add holds a `BoardRef`: the key, the draft's epoch (a reset
  * bumps it, a copy keeps it) and, once the board is saved, its id. When a
  * draft is copied to another key (its first save, a move) the ref follows it
- * at once, so a later reset of the old key can't send the add to
- * the fresh draft.
+ * at once, so a later reset of the old key can't send the add to the fresh
+ * draft.
  */
 export interface BoardRef {
   key: string;
@@ -383,9 +383,8 @@ export function boardImages(key: string): MoodboardImage[] {
 /**
  * The paste backstop, per board: a file identical (by size, type and bytes
  * hash) to one still being added to the same board is ignored there; the
- * same image on another board goes. Kept
- * here, not in the Studio, so it holds across a board switch or the Studio
- * closing and opening again. Adds take turns: each one's files are checked
+ * same image on another board goes. Kept here, not in the Studio, so it holds
+ * across a board switch or the Studio closing and opening again. Adds take turns: each one's files are checked
  * only after the add before it has claimed its own.
  */
 const claims: Array<{ signature: string; board: BoardRef }> = [];

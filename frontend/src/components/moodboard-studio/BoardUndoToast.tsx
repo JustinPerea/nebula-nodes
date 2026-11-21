@@ -20,7 +20,7 @@ export interface BoardToast {
 }
 
 /**
- * The Studio's undo toast (plan section 5.4): Delete offers Undo here,
+ * The Studio's undo toast: Delete offers Undo here,
  * and an undo says what it left alone. It stays while the pointer is on it
  * or focus is in it, and Escape (from inside it) closes it. In the app's
  * notice region, on the Board and in the List view alike (design,
@@ -41,7 +41,7 @@ export function BoardUndoToast({ toast, onDismiss, leave }: {
   // The deadline belongs to the toast, not to this mount: the Studio draws
   // the toast again when the person switches Board and List (each view
   // renders its own), and a remount must keep the time it had left (a check
-  // on #210: a line stayed up past its 6 s across the switch). Leaving
+  // on PR #210: a line stayed up past its 6 s across the switch). Leaving
   // the toast after holding it gives it a fresh BOARD_TOAST_MS, as before.
   const wasHeld = useRef(false);
   useEffect(() => {

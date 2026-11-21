@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
 import { ReactFlowProvider } from '@xyflow/react';
 import type { Moodboard, MoodboardImage, MoodboardPlacement } from '../../types';
 
-// The Board view in Moodboard Studio (moodboard canvas PR5): a switch between
+// The Board view in Moodboard Studio (PR #127): a switch between
 // Board and List, one op and one undo step per drag, the Studio's own keys,
 // and the board kept in step with List and with edits made elsewhere. The
 // canvas itself is a stand-in here (BoardCanvas.test.tsx covers it); it gets
@@ -250,7 +250,7 @@ describe('a drag on the board', () => {
     expect(await screen.findByText('card #1 at 300,40')).toBeTruthy();
   });
 
-  // The ask: "Make Retry redo the failed action, never a different one."
+  // The design rule: "Make Retry redo the failed action, never a different one."
   // A failed undo names its own action, and the toolbar's Retry undoes the
   // same step again (so the reason is the design's short line: the button is
   // the retry). On 867f254e the Retry saved the board and never undid.
@@ -482,7 +482,7 @@ describe('an agent on the board', () => {
 });
 
 /**
- * /edits under the test's hand (#209): each call waits until
+ * /edits under the test's hand (PR #209): each call waits until
  * the test answers it, and the test waits for each call itself, so nothing
  * here sleeps or polls (under load the polling version ran past 5 s).
  * `called(n)` resolves once call n (from 0) has been made; `answer(n)` lets

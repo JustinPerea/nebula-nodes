@@ -1,7 +1,7 @@
 /**
  * PR #199: a canvas saved over the save limit has its own line (design), in
  * the toast and the restore notice alike, never beside the plain one;
- * several named mark only those over it (plural form included). The plural
+ * several named mark only those over it (the plural wording is still to be confirmed). The plural
  * waiting line says the real number of deletes (design). The saved toast
  * wraps (design). (The Restore tooltip is gone: a restore may pass the
  * project limit, Justin, 2026-10-29; design.)

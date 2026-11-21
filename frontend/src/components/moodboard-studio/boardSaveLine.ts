@@ -48,7 +48,8 @@ const SAVE_LINES = {
 
 type SaveLineKind = keyof typeof SAVE_LINES;
 
-/** The board's own save line for one of the cause and step pairs: "Nebula couldn’t save the board because <cause>. <step>". */
+/** The board's own save line for one of the cause and step pairs:
+ * "Nebula couldn’t save the board because <cause>. <step>". */
 const notSavedReason = (line: (typeof SAVE_LINES)[SaveLineKind]) => `${NOT_SAVED_OPENING}${line.cause}. ${line.step}`;
 
 /**

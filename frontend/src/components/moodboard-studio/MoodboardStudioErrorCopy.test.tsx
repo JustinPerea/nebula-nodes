@@ -179,7 +179,7 @@ describe('a board save that fails', () => {
 
 });
 
-// The ask: "Make Retry redo the failed action, never a different one."
+// The design rule: "Make Retry redo the failed action, never a different one."
 // The toolbar's Retry after an analyze failure analyzes again, so the notice
 // takes the design's short line (WRAP: "The button is the retry"). On 867f254e
 // the Retry saved the board instead and the line kept its "Try again".

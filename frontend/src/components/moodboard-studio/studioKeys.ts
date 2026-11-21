@@ -1,7 +1,7 @@
 import { keyBlockedByModal } from '../../lib/canvasShortcutScope';
 
 /**
- * Moodboard Studio's own keys (plan section 5.4): Cmd+Z, Shift+Cmd+Z, Cmd+S
+ * Moodboard Studio's own keys: Cmd+Z, Shift+Cmd+Z, Cmd+S
  * and, on the Board view, Delete and Shift+1. They listen on the document so
  * they work after a click on a card, the header or the canvas, and they
  * yield to anything that owns its keys: text fields (their own undo), dialogs,

@@ -4,8 +4,8 @@ import type { ReactNode } from 'react';
 import { ReactFlowProvider, type NodeProps } from '@xyflow/react';
 import type { Moodboard, MoodboardImage } from '../../types';
 
-// Approved by Justin, 2026-10-21 ("Yes: the same check, and the same
-// placeholder for old boards"). A board saved before board images were
+// Justin, 2026-10-21: old boards get the same check and the same
+// placeholder as new ones. A board saved before board images were
 // checked can hold an image link to another site. It stays on the board, but
 // the app never loads it: every place a board image is drawn shows #133's
 // placeholder and "Image link from outside Nebula" instead

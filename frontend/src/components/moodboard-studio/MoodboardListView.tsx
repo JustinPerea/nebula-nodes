@@ -18,7 +18,7 @@ export const PRIVATE_NOTE_LIMIT = 2000;
 /**
  * The List view: the board's images as a grid of tiles, each with its weight,
  * Set aside, the cover pick and notes. This is Moodboard Studio's grid as it
- * was before the Board view (moodboard canvas PR5), moved here, with the
+ * was before the Board view (PR #127), moved here, with the
  * cover's mark and Use as cover / Back to #1 (lib/moodboardCover).
  *
  * Files still uploading (from any add, Board or List) are rows of their own

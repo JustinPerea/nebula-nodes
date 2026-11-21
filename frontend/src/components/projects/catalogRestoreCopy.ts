@@ -5,9 +5,9 @@
  * damaged file's path never goes in the notice: it is in the Agent log line,
  * and agents read it from GET /api/projects `catalogRestore`.
  *
- * Layout: one outcome is said inline after the opening. More than one: the
- * opening on its own line, then each outcome on its own line in the design's
- * order, then "The damaged file was kept." last (`lines`).
+ * Layout: the opening on its own line, then each outcome on its own line in the
+ * design's order, then "The damaged file was kept." last (`lines`), however many
+ * outcomes there are (a single outcome used to be said inline after the opening).
  *
  * The design's general rules: names up to 3, a count from 4, never a count
  * of 1 (except where the name couldn't be read).
@@ -139,8 +139,8 @@ const EVERY_ONE_OVER = "They’re over the save limit, so new changes to them wo
  * shows). ``lost`` adds "so nothing in them is lost" unless every one is
  * over the save limit (its tail takes that place, as the singular over-limit
  * line drops it). ``another``: the toast for a filing after the restore
- * notice named one ("Other canvases you had open…"; the plural wording is not
- * yet confirmed by the design). */
+ * notice named one ("Other canvases you had open…"; the plural wording
+ * is still to be confirmed). */
 function canvasesSavedLine(given: { name: string; overSaveLimit?: boolean; filedAt?: string | null }[], lost: boolean, another = false): string {
   const rows = savedOrder(given);
   const counted = rows.length > RESTORE_NAMED_MAX;
@@ -152,7 +152,7 @@ function canvasesSavedLine(given: { name: string; overSaveLimit?: boolean; filed
 }
 
 /** Several canvases saved, some over the save limit: only those are marked
- * (the plural form is not yet confirmed by the design). */
+ * (the plural wording is still to be confirmed). */
 function overLimitTail(rows: { name: string; overSaveLimit?: boolean }[], counted: boolean): string {
   const over = rows.filter((row) => row.overSaveLimit === true);
   if (over.length === 0) return '';
@@ -207,8 +207,8 @@ function deleteToSaveMany(context: CanvasLimitContext): string {
  * "Open canvas" for good). */
 const NOTHING_LOST = 'Nothing in it is lost.';
 
-/** The size cap's advice for several canvases (wording not yet confirmed by
- * the design). */
+/** The size cap's advice for several canvases (this wording is still to be
+ * confirmed). */
 function sizeCapAdviceMany(trashHasItems: boolean): string {
   return trashHasItems
     ? 'Permanently delete projects in Recently deleted and Nebula will save them.'
@@ -441,9 +441,9 @@ export function copyAge(copyAt: string | null | undefined, now: number = Date.no
 export interface CatalogRestoreNotice {
   /** The notice as one paragraph (single outcome, or for logs and tests). */
   text: string;
-  /** The design's stacked layout, when there is more than one outcome: the
-   * opening, each outcome, and "The damaged file was kept." when said, one per
-   * line. Null when the notice is said inline. */
+  /** The design's stacked layout: the opening, each outcome, and "The damaged
+   * file was kept." when said, one per line. layout() always sets it, a single
+   * outcome included. */
   lines: string[] | null;
   /** Show "Open Recently deleted": Recently deleted holds one of the
    * notice's items (or the size cap's line asks to empty it). */
@@ -697,8 +697,7 @@ export function catalogRestoreNotice(restore: NoticeInput, now: number = Date.no
     else outcomes.push(`${backInTrash} projects are in Recently deleted again because the copy had them there. Restore them again if you need them.`);
   }
 
-  // The open canvas, saved as its own project, or the limit it waits on
-  // (design).
+  // The open canvas, saved as its own project, or the limit it waits on (design).
   if (canvas) outcomes.push(...canvas.lines);
 
   // A damaged file that wasn't read to its end (cut, zeroed, or a key

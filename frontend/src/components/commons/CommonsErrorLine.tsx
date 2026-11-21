@@ -9,10 +9,11 @@ import { useOfflineFirstBecause } from '../../hooks/useOfflineFirstBecause';
 import { useBackendOffline } from '../../lib/useBackendOffline';
 
 /** A load line's "Try again". Once a read succeeds its line goes, and focus on it goes to the
- * page's heading "Commons" rather than dropping to the page (the same rule as a not-connected
- * line's focus, below). When the read fails again for another reason, the new line (the page
- * row keys its lines by their words, so it is a new element) has its own Try again: focus goes
- * there, and to the heading only when the new line has none. */
+ * page's heading "Commons" rather than dropping to the page (the rule CommonsView's demote
+ * handover follows: focus taken away never drops to the page). When the read fails again for
+ * another reason, the new line (the page row keys its lines by their words, so it is a new
+ * element) has its own Try again: focus goes there, and to the heading only when the new line
+ * has none. */
 function RetryButton({ onRetry }: { onRetry: () => void }) {
   const ref = useRef<HTMLButtonElement>(null);
   useLayoutEffect(() => {

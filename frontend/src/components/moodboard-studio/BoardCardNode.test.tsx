@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render } from '@testing-library/react';
 import type { NodeProps } from '@xyflow/react';
 
 // A card draws the 512 px thumbnail the backend makes (`?thumb=1`) unless it
-// is wider than about 480 css px on screen (plan PR5), so a 300-card board
+// is wider than about 480 css px on screen (PR #127), so a 300-card board
 // doesn't decode 300 full-size files.
 
 // The canvas works out once per zoom which card widths are "wide" and hands

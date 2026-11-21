@@ -182,7 +182,7 @@ const STATUS_POLL_MS = 5000;
 const SEARCH_DEBOUNCE_MS = 250;
 
 /**
- * The worker's status text. The approved line: "Keep the worker status to its
+ * The worker's status text. The design rule: "Keep the worker status to its
  * state plus one action, short enough to show whole at 1280 (about 36
  * characters), with the full explanation in the tooltip." The text is the status a
  * person reads at a glance; its title (the tooltip) says what it means and what
@@ -221,7 +221,7 @@ export function StatusLine({ status, connecting = true, onStart, onStop }: {
     return <span className="commons-status"><StatusText text="Connecting…" title="Connecting to library analysis…" /></span>;
   }
   if (status.evaluation_waiting) {
-    // The approved line: "the label names whatever has to be fixed first, and the
+    // The design rule: "the label names whatever has to be fixed first, and the
     // tooltip lists anything still blocking after that." Sealing or closing only
     // lifts the hold: a stopped worker (the default at launch) stays stopped,
     // so the label leads with "Stopped", in the stopped colour, and Start is
@@ -361,8 +361,7 @@ function CommonsViewBody({ view }: {
   const readOnly = useBackendOffline();
   const returnView = useUIStore((s) => s.commonsReturnView);
   // The "← Projects" way back is CommonsOffView's: the app shows this view only with a project
-  // open (App: never over the Projects home), so its way back is always the screen
-  // it came from.
+  // open (App: never over the Projects home), so its way back is always the screen it came from.
   const restoreWorkspace = useUIStore((s) => s.exitCommons);
   const exitCommons = () => {
     restoreWorkspace();
@@ -641,8 +640,8 @@ function CommonsViewBody({ view }: {
     };
   }, [filters, tab, refreshKey, loadFailed, loadsClear, loadStarted, loadAbandoned, noteAnswered, view]);
 
-  // What Add to shows and what Add sends are one value by construction: the target when the list has it, else the list's first (what a select shows
-  // for a value it has no option for), else none.
+  // What Add to shows and what Add sends are one value by construction: the target when the list
+  // has it, else the list's first (what a select shows for a value it has no option for), else none.
   const chosen = collections.some((c) => c.id === target) ? target : collections[0]?.id ?? '';
   const chooseTarget = async (value: string) => {
     if (value !== NEW_COLLECTION) {

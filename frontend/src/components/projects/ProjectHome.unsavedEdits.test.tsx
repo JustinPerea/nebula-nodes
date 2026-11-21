@@ -33,8 +33,8 @@ const Home = ProjectHome as unknown as (props: Props) => ReturnType<typeof Proje
 afterEach(() => vi.restoreAllMocks());
 
 describe("Projects: Couldn’t save your edits.", () => {
-  // The approved behaviour (design, 2026-10-24): when an agent's switch is
-  // what left the project, "{agent} is opening “{name}”." goes above the screen's lines.
+  // The approved behaviour (design, 2026-10-24): when an agent's switch is what left the
+  // project, "{agent} is opening “{name}”." goes above the screen's lines.
   it("an agent's switch: the agent and the project it opens, above the heading; the rest unchanged", () => {
     render(<Home {...props({ unsavedEdits: { reason: TOO_LARGE, keptIn: 'Glass campaign',
       agentOpening: { agent: 'Claude Code', projectName: 'Moodboard v2' } } })} />);
@@ -148,7 +148,7 @@ describe("Projects: Couldn’t save your edits.", () => {
 const SAVED = 'Glass campaign - unsaved edits.nebula';
 const REOPEN_LINE = `Your edits are saved as ${SAVED}. Open it with “Load canvas” under “Canvas actions” in a new project to bring them back.`;
 
-describe('review: the line after a download, and where focus goes', () => {
+describe('the line after a download, and where focus goes', () => {
   // PR #178's too-large line is gone (design, 2026-10-23): the Load graph line
   // covers every case now, so every download reads it.
   it('every download reads the Load graph line, even one past a reader limit', () => {

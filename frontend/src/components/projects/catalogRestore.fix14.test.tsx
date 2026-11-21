@@ -39,7 +39,7 @@ describe('records left out at the limit say so', () => {
       '“Alpha”, “Beta” and “Gamma” weren’t added back because you’ve reached the limit of 500 projects. They’re still in the damaged file, which was kept.']);
   });
 
-  it('from four, a count (the design says "5 projects weren’t added back …")', () => {
+  it('from four, a count (design: "5 projects weren’t added back …")', () => {
     expect(catalogRestoreNotice(restore(4)).lines?.[1])
       .toBe('4 projects weren’t added back because you’ve reached the limit of 500 projects. They’re still in the damaged file, which was kept.');
     expect(catalogRestoreNotice(restore(5)).lines?.[1])

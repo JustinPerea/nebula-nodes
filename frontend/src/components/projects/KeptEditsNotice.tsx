@@ -18,8 +18,8 @@ export const DISCARD_KEPT_OFFLINE = 'You can discard the kept edits when Nebula 
 
 /**
  * The line a restore (or an agent's write that closed the project) leaves
- * where the person is, when the tab's latest edits weren't saved (design,
- * PR #199): "Nebula restored its project list before your latest edits were
+ * where the person is, when the tab's latest edits weren't saved
+ * (design, PR #199): "Nebula restored its project list before your latest edits were
  * saved. They're kept in this tab." (or the agent form) with
  * [Save as a project] and [Discard edits] (after its confirm). It stays
  * until resolved (no Dismiss, no timer); the person can keep typing

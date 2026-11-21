@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
 import type { Node, NodeChange } from '@xyflow/react';
 import type { MoodboardImage, MoodboardPlacement } from '../../types';
 
-// The Board view's canvas (moodboard canvas PR5), with React Flow replaced by
+// The Board view's canvas (PR #127), with React Flow replaced by
 // a stand-in that keeps the props it was given: the cards sit where the
 // server put them, a drag is one move when it ends, and selection lives in
 // boardCanvasStore so the side panel (outside the canvas) can read it.
@@ -23,7 +23,7 @@ type FlowProps = {
 };
 type FlowState = { width: number; height: number; transform: [number, number, number]; panZoom?: unknown };
 const flow = vi.hoisted(() => ({ props: null as FlowProps | null, setViewport: vi.fn(), fitView: vi.fn(),
-  // React Flow's store listeners get the state and the one before it (#209's fit-follow reads both).
+  // React Flow's store listeners get the state and the one before it (PR #209's fit-follow reads both).
   zoom: 1, zoomListeners: new Set<(state: FlowState, previous: FlowState) => void>(),
   fill: null as null | { progress: (imageId: string) => number },
   // Draws the stand-in again on its own, as React Flow does a commit after the board's (the board doesn't render).
@@ -372,7 +372,7 @@ describe('where new tiles go (lib/boardPlacement targets)', () => {
   });
 });
 
-describe('one view for every framing and placement (#213\'s shared insets)', () => {
+describe('one view for every framing and placement (PR #213\'s shared insets)', () => {
   it('Fit, an Update\'s Show, the chip\'s press and placement all use the column less the toolbar\'s band', async () => {
     const tiles = { id: 1, rects: [{ x: 0, y: 0, width: 100, height: 100 }], thumb: null };
     const view = render(<BoardCanvas boardKey="k1" images={images} onMove={() => {}} onDropFiles={(_f, target) => { targets.push(target); }}

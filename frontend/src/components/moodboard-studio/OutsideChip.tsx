@@ -10,7 +10,7 @@ import { CHIP_EDGE, outsideChipText, placeChip } from './outsideChipText';
 import { outsideForChip, type SeenArea } from '../../lib/boardPlacement';
 
 /**
- * The reveal for tiles placed outside the view (design, #210):
+ * The reveal for tiles placed outside the view (design, PR #210):
  * a chip centred on the view's edge nearest the first tile, never on a tile,
  * its arrow pointing at it (outsideChipText placeChip), with the
  * tile's thumbnail. It is up only while some tile it points at has less
