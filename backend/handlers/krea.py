@@ -975,7 +975,7 @@ async def _account_style_train(node, name, model, image_values, emit) -> dict[st
     fields = [_label("krea-style-train", key) for key in keys]
     if training_type == "Default":
         unsupported.append("Type: Default")
-        # design: write "Type: Default" as “Type” set to Default.
+        # Written as “Type” set to Default, not "Type: Default" (design).
         fields.append(f"“{_label('krea-style-train', 'training_type')}” set to "
                       f"{_option_label('krea-style-train', 'training_type', 'Default')}")
     if unsupported:

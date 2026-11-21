@@ -182,11 +182,11 @@ def quota_error(message: str, *, signed_in: bool) -> IdolSpaceError:
     return with_provider_line(IdolSpaceError(text), line)
 
 
-# The anonymous-run line (design, PR #203): an anonymous run (no token)
-# that finds the free GPU time used up, from the quota and the Space-limit
-# refusals alike. Nobody knows whose pool a server-side call with no token
-# draws on (no X-IP-Token reaches the Space), so the line names no allowance
-# numbers. Re-ruled once the real text is seen live.
+# The anonymous-run line (design, PR #203): a run with no token that finds the
+# free GPU time used up, from the quota and the Space-limit refusals alike.
+# Nobody knows whose pool a server-side call with no token draws on (no
+# X-IP-Token reaches the Space), so the line names no allowance numbers.
+# Re-ruled once the real text is seen live.
 ANONYMOUS_ALLOWANCE_OUT = ("Hugging Face’s free GPU time for Idol is used up for now. Try again later, "
                            "or add your Hugging Face token in Settings to use your own allowance.")
 
@@ -367,16 +367,16 @@ class IdolProposalNeeded(run_origin.ProposalNeeded):
     (its person line)."""
 
 
-# (design, PR #203), verbatim. The stop is intended, not a failure.
+# The person's stop line (design, PR #203), verbatim. The stop is intended, not a failure.
 # The card shows WAITING under its own neutral heading ("Waiting for you to
 # run it", frontend nodeErrorCopy, by the event's category "waiting").
 AGENT_STOP_PERSON = ("An agent’s run stopped here because this node could bill your Hugging Face account, and only "
                      "you can start that. Run the node yourself to go ahead.")
 
 
-# (design, PR #203), verbatim, for Run clicked in a canvas tab that isn't
-# connected as the person, with the token set (the same stop, under the same
-# heading; only the body differs).
+# The person's line (design, PR #203), verbatim, for Run clicked in a canvas tab
+# that isn't connected as the person, with the token set (the same stop, under
+# the same heading; only the body differs).
 TAB_STOP_PERSON = ("This node could bill your Hugging Face account, so only you can run it. You can run it when this "
                    "tab is connected as you.")
 

@@ -1266,11 +1266,10 @@ class ProjectStore:
         source: str | None = None
         copy_at: str | None = None
         damaged_copies: list[tuple[Path, bytes, Any]] = []
-        # Every copy is read: the base is .bak, the newer by construction (a
-        # link of the catalog the last commit replaced, or a copy of every
-        # commit where links fail), unless .bak.1 holds later dates (a .bak a
-        # sync tool or a person put back) and, when both are
-        # numbered, a later commit. Dates are the copies' own
+        # Every copy is read: the base is .bak, the newer by construction (a link of
+        # the catalog the last commit replaced, or a copy of every commit where links
+        # fail), unless .bak.1 holds later dates (a .bak a sync tool or a person put
+        # back) and, when both are numbered, a later commit. Dates are the copies' own
         # (catalog_recovery.newer_copy; every change Nebula makes moves one),
         # judged by file order: a date ahead of this restore's clock is left
         # out in .bak.1 and counts as now in .bak, so neither a .bak.1 nor a
@@ -1435,8 +1434,8 @@ class ProjectStore:
             temporary = self.prepare(catalog, restoring=True)
         except ProjectLimitError as exc:
             if fallback is None or not (merged.added or merged.updated):
-                # A rebuild has no copy to fall back on: the
-                # 507, and nothing is kept, written or recorded.
+                # A rebuild has no copy to fall back on: the 507, and nothing is kept,
+                # written or recorded.
                 _log(f"the {'rebuilt' if fallback is None else 'restored'} catalog is past a limit ({exc}); "
                      "nothing changed")
                 raise
@@ -2644,10 +2643,9 @@ class ProjectStore:
         purged, self._prepared_purged = self._prepared_purged, None
         if purged is not None and purged[0] != temporary:
             purged = None
-        # The side file first, before the commit point: a
-        # crash after it leaves it one commit ahead (its own number says so,
-        # and each of its layers is true of a commit), never a delete for
-        # good that landed without it.
+        # The side file first, before the commit point: a crash after it leaves it
+        # one commit ahead (its own number says so, and each of its layers is true
+        # of a commit), never a delete for good that landed without it.
         side_before = self._write_side_ahead(purged[1], purged[2]) if purged is not None else False
         # A successful atomic rename is the commit point. A post-commit
         # directory fsync warning must not report a failed, unadopted canvas.

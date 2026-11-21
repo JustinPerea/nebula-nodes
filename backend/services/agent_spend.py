@@ -236,9 +236,9 @@ def ledger_unreadable(until: float, *, tz: tzinfo | None = None) -> str:
 
 # What Settings and the agents' spend view say while the ledger can't be
 # opened at all (SpendLedger.cant_read): no end time, since nothing known
-# says when it will open again. Design: "open" sets it apart from the
-# unreadable hold; the app holds the same (frontend/src/lib/ledgerHold.ts
-# LEDGER_CANT_READ, pinned by a test).
+# says when it will open again. The design rule: "open" sets it apart from
+# the unreadable hold; the app holds the same
+# (frontend/src/lib/ledgerHold.ts LEDGER_CANT_READ, pinned by a test).
 LEDGER_CANT_READ = ("Nebula can\u2019t open its record of what agents have spent, so agents can\u2019t start paid runs "
                     "until it can.")
 
