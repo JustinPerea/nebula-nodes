@@ -32,10 +32,10 @@ MAKER_ROUTED = {
     "nano-banana-fal", "nano-banana-fal-edit", "meshy-text-to-3d", "meshy-image-to-3d",
     "krea-image-google-nano-banana-2", "krea-image-google-nano-banana-pro",
     "krea-image-google-nano-banana-flash-lite", "krea-image-google-nano-banana",
-    # Google lane (execution/maker_routes_google.py)
+    # Google route (execution/maker_routes_google.py)
     "identity-edit", "krea-image-google-nano-banana-2-1", "krea-video-google-veo-3-1",
     "krea-video-google-veo-3-1-fast", "krea-video-google-veo-3-1-lite", "krea-video-google-gemini-omni-flash-1-1",
-    # OpenAI lane (execution/maker_routes_openai.py)
+    # OpenAI route (execution/maker_routes_openai.py)
     "gpt-image-1-5", "gpt-image-1-5-edit", "gpt-image-2-fal-generate", "gpt-image-2-fal-edit",
     "krea-image-openai-gpt-image-2", "krea-image-openai-gpt-image-2-5-flare",
     "krea-image-openai-gpt-image-2-5-sunburst",

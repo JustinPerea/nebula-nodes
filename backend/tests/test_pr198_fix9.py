@@ -93,15 +93,15 @@ def test_m1_a_switch_away_and_back_keeps_the_agents_read(api):  # noqa: F811
 
 def test_m2_two_sessions_of_one_agent_never_share_a_read(api):  # noqa: F811
     node = _cinema(api)
-    one = {**CODEX, "X-Nebula-Agent-Session": "lane-1"}
-    two = {**CODEX, "X-Nebula-Agent-Session": "lane-2"}
+    one = {**CODEX, "X-Nebula-Agent-Session": "agent-1"}
+    two = {**CODEX, "X-Nebula-Agent-Session": "agent-2"}
     assert api.client.get("/api/canvas/snapshot", headers=one).status_code == 200
     _person_types(api, node)
     assert api.client.get("/api/graph/export", headers=two).status_code == 200
-    stale = _put(api, node, one, _scene("a quiet street", "lane 1's stale copy"))
+    stale = _put(api, node, one, _scene("a quiet street", "agent 1's stale copy"))
     assert stale.status_code == 409 and stale.json()["code"] == "scene_changed"
-    # Lane 2 read the typing: its write goes.
-    taken = _put(api, node, two, _scene("the person typed this", "lane 2 on top"))
+    # Session 2 read the typing: its write goes.
+    taken = _put(api, node, two, _scene("the person typed this", "agent 2 on top"))
     assert taken.status_code == 200, taken.text
 
 

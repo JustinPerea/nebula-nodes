@@ -217,7 +217,7 @@ APPROVED_DUAL_ROUTE_SPLITS = {
               "falParams": ["output_format", "seed"], "order": _NANO_BANANA_FAL_ORDER}
     for node_id in ("nano-banana-fal", "nano-banana-fal-edit")
 }
-# Direct maker routes, Google lane (2026-10-14): identity-edit also runs on
+# Direct maker routes, Google route (2026-10-14): identity-edit also runs on
 # the Gemini API (gemini-3.1-flash-image) with GOOGLE_API_KEY. Same approved
 # split as the Nano Banana fal copies; its three params all move, unchanged
 # and in order, to sharedParams (none are route-only).
@@ -329,7 +329,7 @@ APPROVED_TOP_LEVEL_FIELD_ADDITIONS["seedance-1-0-t2v"] = {"directRoute": {
 APPROVED_PARAM_GROUP_MOVES = {
     "meshy-image-to-3d": {"texture_prompt": ("sharedParams", "falParams", 0)},
 }
-# Direct maker routes, OpenAI lane (2026-10-14): the fal copies of GPT Image
+# Direct maker routes, OpenAI route (2026-10-14): the fal copies of GPT Image
 # 1.5 and 2 also run on OpenAI's Images API with the person's OPENAI_API_KEY
 # (execution/maker_routes_openai.py). Every param reaches both routes, so
 # nothing splits: only OPENAI_API_KEY joins envKeyName and becomes

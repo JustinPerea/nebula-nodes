@@ -143,6 +143,18 @@ describe('check-internal-ids: what counts', () => {
     expect(count('a.css', '.a { /* GM r901 1 */ color: red; }')).toBe(2);
   });
 
+  it('counts the whole word lane in a string, a title and a docstring, not in a comment', () => {
+    expect(kinds('a.ts', 'const help = "give each lane its own cursor";')).toEqual(['lane']);
+    expect(kinds('a.ts', "it('keeps one lane per agent', () => {});")).toEqual(['lane']);
+    expect(kinds('a.py', 'HELP = "set a value per Lane"\n')).toEqual(['lane']);
+    expect(kinds('a.py', 'def f():\n    """Give each lane its own cursor."""\n')).toEqual(['lane']);
+    expect(count('a.ts', 'const x = ["lane", "lanes"];')).toBe(2);
+    expect(count('a.css', '/* the scrollbar lane */ .a { color: red; }')).toBe(0);
+    expect(count('a.ts', '// the scrollbar lane stays empty\n/* a lane here */')).toBe(0);
+    expect(count('a.py', '# the scrollbar lane\n')).toBe(0);
+    expect(count('a.ts', 'const s = "plane, laneway, lanewise, Elaney";')).toBe(0);
+  });
+
   it('does not count GMT or a word that contains the initials', () => {
     expect(count('a.ts', '// 12:00 GMT, GMAIL, aGM, GM_FLAG')).toBe(0);
   });

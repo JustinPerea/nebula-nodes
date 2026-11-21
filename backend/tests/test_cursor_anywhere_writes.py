@@ -18,8 +18,8 @@ from services.agent_presence import AgentPresence
 from services.output import OUTPUT_ROOT
 
 AGENT = {"X-Nebula-Agent": "Claude Code"}
-LANE_A = {**AGENT, "X-Nebula-Agent-Session": "lane-a"}
-LANE_B = {**AGENT, "X-Nebula-Agent-Session": "lane-b"}
+AGENT_A = {**AGENT, "X-Nebula-Agent-Session": "agent-a"}
+AGENT_B = {**AGENT, "X-Nebula-Agent-Session": "agent-b"}
 
 
 @pytest.fixture
@@ -89,7 +89,7 @@ def _after(sent):
 
 def test_create_is_the_board_click(api):
     client, sent, _, _ = api
-    board = _create(client, LANE_A)
+    board = _create(client, AGENT_A)
     event = _cursor(sent)
     assert _where(event) == (board["id"], None, "click")
     assert event["target"]["surface"] == "moodboard" and event["anchorNames"] == {"board": "Desert light"}
@@ -99,11 +99,11 @@ def test_create_is_the_board_click(api):
 def test_move_and_restore_are_the_board_click(api):
     client, sent, _, project_id = api
     board = _create(client, projectId=project_id)
-    moved = client.post(f"/api/moodboards/{board['id']}/move", headers=LANE_A, json={"projectId": None})
+    moved = client.post(f"/api/moodboards/{board['id']}/move", headers=AGENT_A, json={"projectId": None})
     assert moved.status_code == 200, moved.text
     assert _where(_cursor(sent)) == (board["id"], None, "click")
     assert client.delete(f"/api/moodboards/{board['id']}").status_code == 200
-    assert client.post(f"/api/trash/moodboard/{board['id']}/restore", headers=LANE_A).status_code == 200
+    assert client.post(f"/api/trash/moodboard/{board['id']}/restore", headers=AGENT_A).status_code == 200
     assert _where(_cursor(sent)) == (board["id"], None, "click")
     assert _cursor(sent)["say"] == "Restored “Desert light”"
 
@@ -129,26 +129,26 @@ def test_a_board_made_in_another_project_sends_no_cursor_target(api):
     """The panel doesn't list that board, so a cursor parked
     at "Open assets" for it would be pointing at nothing. The log line stays."""
     client, sent, _, _ = api
-    _create(client, LANE_A, projectId=_other_project())
+    _create(client, AGENT_A, projectId=_other_project())
     event = _agent_events(sent)[-1]
     assert not event.get("target") and event["say"] == "Made “Desert light” with 3 images"
     # A board of the open project, and a Global one, still point.
-    mine = _create(client, LANE_A, projectId=api[3])
+    mine = _create(client, AGENT_A, projectId=api[3])
     assert _where(_cursor(sent)) == (mine["id"], None, "click")
-    glob = _create(client, LANE_A)
+    glob = _create(client, AGENT_A)
     assert _where(_cursor(sent)) == (glob["id"], None, "click")
 
 
 def test_moving_a_board_to_another_project_sends_no_cursor_target(api):
     client, sent, _, project_id = api
     board = _create(client, projectId=project_id)
-    moved = client.post(f"/api/moodboards/{board['id']}/move", headers=LANE_A, json={"projectId": _other_project()})
+    moved = client.post(f"/api/moodboards/{board['id']}/move", headers=AGENT_A, json={"projectId": _other_project()})
     assert moved.status_code == 200, moved.text
     event = _agent_events(sent)[-1]
     assert not event.get("target") and event["say"]  # it still says what it did
     # ...and moving one into the open project points at it.
     away = _create(client, projectId=_other_project())
-    back = client.post(f"/api/moodboards/{away['id']}/move", headers=LANE_A, json={"projectId": project_id})
+    back = client.post(f"/api/moodboards/{away['id']}/move", headers=AGENT_A, json={"projectId": project_id})
     assert back.status_code == 200, back.text
     assert _where(_cursor(sent)) == (away["id"], None, "click")
 
@@ -156,11 +156,11 @@ def test_moving_a_board_to_another_project_sends_no_cursor_target(api):
 def test_adding_one_image_is_that_image_and_several_are_the_board(api):
     client, sent, _, _ = api
     board = _create(client)
-    _edit(client, board["id"], [{"op": "add", "images": [{"id": "newone", "url": _url((9, 9, 9))}]}], LANE_A)
+    _edit(client, board["id"], [{"op": "add", "images": [{"id": "newone", "url": _url((9, 9, 9))}]}], AGENT_A)
     event = _cursor(sent)
     assert _where(event) == (f"{board['id']}/newone", None, "click")
     assert event["anchorNames"] == {"board": "Desert light", "image": 4}
-    _edit(client, board["id"], [{"op": "add", "images": [{"url": _url((1, 1, 1))}, {"url": _url((2, 2, 2))}]}], LANE_A)
+    _edit(client, board["id"], [{"op": "add", "images": [{"url": _url((1, 1, 1))}, {"url": _url((2, 2, 2))}]}], AGENT_A)
     assert _where(_cursor(sent)) == (board["id"], None, "click")
 
 
@@ -168,10 +168,10 @@ def test_removing_an_image_clicks_it_and_that_cursor_holds_the_spot(api):
     client, sent, presence, _ = api
     board = _create(client)
     gone = board["images"][1]
-    # lane-b is looking at the same image; lane-a removes it.
-    client.post("/api/canvas/cursor", headers=LANE_B, json={
+    # agent-b is looking at the same image; agent-a removes it.
+    client.post("/api/canvas/cursor", headers=AGENT_B, json={
         "target": {"surface": "moodboard", "board": board["id"], "image": 2}, "action": "look"})
-    _edit(client, board["id"], [{"op": "remove", "images": [gone["id"]]}], LANE_A)
+    _edit(client, board["id"], [{"op": "remove", "images": [gone["id"]]}], AGENT_A)
     event = _cursor(sent)
     assert _where(event) == (f"{board['id']}/{gone['id']}", None, "click")
     assert event["anchorNames"] == {"board": "Desert light", "image": 2}  # numbered as it was on the board
@@ -186,7 +186,7 @@ def test_the_persons_removal_drops_every_cursor_on_the_image_to_the_board(api):
     client, sent, presence, _ = api
     board = _create(client)
     gone = board["images"][0]
-    client.post("/api/canvas/cursor", headers=LANE_A, json={
+    client.post("/api/canvas/cursor", headers=AGENT_A, json={
         "target": {"surface": "moodboard", "board": board["id"], "image": 1}, "action": "look"})
     _edit(client, board["id"], [{"op": "remove", "images": [gone["id"]]}])  # the person's
     assert [cursor["target"] for cursor in presence.replay()] == [{"surface": "moodboard", "itemId": board["id"]}]
@@ -196,9 +196,9 @@ def test_placing_one_card_is_that_image_and_set_aside_too(api):
     client, sent, _, _ = api
     board = _create(client)
     first = board["images"][0]
-    _edit(client, board["id"], [{"op": "place", "image": first["id"], "x": 700, "y": 40}], LANE_A)
+    _edit(client, board["id"], [{"op": "place", "image": first["id"], "x": 700, "y": 40}], AGENT_A)
     assert _after(sent) == (f"{board['id']}/{first['id']}", None, "click")
-    _edit(client, board["id"], [{"op": "setAside", "image": first["id"], "value": True}], LANE_A)
+    _edit(client, board["id"], [{"op": "setAside", "image": first["id"], "value": True}], AGENT_A)
     assert _after(sent) == (f"{board['id']}/{first['id']}", None, "click")
 
 
@@ -213,7 +213,7 @@ def test_placing_one_card_is_that_image_and_set_aside_too(api):
 def test_a_field_is_its_control_typed_and_a_pin_is_a_click_on_colors(api, field, value, part, action):
     client, sent, _, _ = api
     board = _create(client)
-    _put(client, board["id"], LANE_A, **{field: value})
+    _put(client, board["id"], AGENT_A, **{field: value})
     event = _cursor(sent)
     assert _where(event) == (board["id"], part, action), event
     assert event["anchorNames"]["part"] == {"name": "Name", "direction": "Direction", "avoid": "Avoid",
@@ -223,7 +223,7 @@ def test_a_field_is_its_control_typed_and_a_pin_is_a_click_on_colors(api, field,
 def test_two_controls_in_one_write_are_the_board_not_a_control(api):
     client, sent, _, _ = api
     board = _create(client)
-    _put(client, board["id"], LANE_A, direction="Low sun", avoid=["neon"])
+    _put(client, board["id"], AGENT_A, direction="Low sun", avoid=["neon"])
     assert _after(sent) == (board["id"], None, "type")
 
 
@@ -231,16 +231,16 @@ def test_a_weight_is_a_click_and_a_note_is_typed(api):
     client, sent, _, _ = api
     board = _create(client)
     image = board["images"][2]
-    _edit(client, board["id"], [{"op": "weight", "image": 3, "value": 0.5}], LANE_A)
+    _edit(client, board["id"], [{"op": "weight", "image": 3, "value": 0.5}], AGENT_A)
     event = _cursor(sent)
     assert _where(event) == (f"{board['id']}/{image['id']}", "weight", "click")
     assert event["anchorNames"] == {"board": "Desert light", "image": 3, "part": "Weight"}
-    _edit(client, board["id"], [{"op": "note", "image": 3, "notes": "warmer"}], LANE_A)
+    _edit(client, board["id"], [{"op": "note", "image": 3, "notes": "warmer"}], AGENT_A)
     event = _cursor(sent)
     assert _where(event) == (f"{board['id']}/{image['id']}", "note", "type")
     assert event["anchorNames"]["part"] == "Note"
     # A private note is the same control (its text is never in the line).
-    _edit(client, board["id"], [{"op": "note", "image": 3, "privateNote": "secret"}], LANE_A)
+    _edit(client, board["id"], [{"op": "note", "image": 3, "privateNote": "secret"}], AGENT_A)
     assert _where(_cursor(sent)) == (f"{board['id']}/{image['id']}", "note", "type")
     assert "secret" not in str(_cursor(sent))
 
@@ -250,19 +250,19 @@ def test_a_weight_and_a_set_aside_together_are_the_image_not_a_control(api):
     board = _create(client)
     image = board["images"][0]
     _edit(client, board["id"], [{"op": "weight", "image": 1, "value": 0.4},
-                                {"op": "setAside", "image": 1, "value": True}], LANE_A)
+                                {"op": "setAside", "image": 1, "value": True}], AGENT_A)
     assert _after(sent) == (f"{board['id']}/{image['id']}", None, "click")
 
 
 def test_analyze_looks_at_the_colors_and_keeping_the_brief_clicks_the_direction(api):
     client, sent, _, _ = api
     board = _create(client)
-    assert client.post(f"/api/moodboards/{board['id']}/analyze", headers=LANE_A).status_code == 200
+    assert client.post(f"/api/moodboards/{board['id']}/analyze", headers=AGENT_A).status_code == 200
     assert _where(_cursor(sent)) == (board["id"], "colors", "look")
     assert _cursor(sent)["say"] == "Analyzed “Desert light”"
     # The agent keeps a hand-written brief of its own.
-    _put(client, board["id"], LANE_A, briefOverride={"text": "My own brief."})
-    kept = client.post(f"/api/moodboards/{board['id']}/brief-override/keep", headers=LANE_A)
+    _put(client, board["id"], AGENT_A, briefOverride={"text": "My own brief."})
+    kept = client.post(f"/api/moodboards/{board['id']}/brief-override/keep", headers=AGENT_A)
     assert kept.status_code == 200, kept.text
     assert _where(_cursor(sent)) == (board["id"], "direction", "click")
     assert _cursor(sent)["say"] == "Kept the brief for “Desert light”"
@@ -272,17 +272,17 @@ def test_delete_sends_no_cursor_and_every_cursor_on_the_board_leaves(api):
     client, sent, presence, _ = api
     board = _create(client)
     other = _create(client, name="Dusk", count=1)
-    for headers, ref in ((LANE_A, board["id"]), (LANE_B, board["id"])):
+    for headers, ref in ((AGENT_A, board["id"]), (AGENT_B, board["id"])):
         client.post("/api/canvas/cursor", headers=headers, json={"target": {"surface": "moodboard", "board": ref}})
-    client.post("/api/canvas/cursor", headers={**AGENT, "X-Nebula-Agent-Session": "lane-c"},
+    client.post("/api/canvas/cursor", headers={**AGENT, "X-Nebula-Agent-Session": "agent-c"},
                 json={"target": {"surface": "moodboard", "board": other["id"]}})
     sent.clear()
-    assert client.delete(f"/api/moodboards/{board['id']}", headers=LANE_A).status_code == 200
+    assert client.delete(f"/api/moodboards/{board['id']}", headers=AGENT_A).status_code == 200
     event = _cursor(sent)
     assert "target" not in event and event["say"] == "Deleted “Desert light”"  # the Agent log only
     assert [cursor["target"]["itemId"] for cursor in presence.replay()] == [other["id"]]
     # The numbers on the board are free again: the next new session takes the lowest.
-    again = client.post("/api/canvas/cursor", headers={**AGENT, "X-Nebula-Agent-Session": "lane-d"},
+    again = client.post("/api/canvas/cursor", headers={**AGENT, "X-Nebula-Agent-Session": "agent-d"},
                         json={"target": {"surface": "moodboard", "board": other["id"]}})
     assert again.status_code == 200
     assert _cursor(sent)["session"]["ordinal"] == 1
@@ -293,8 +293,8 @@ def test_delete_sends_no_cursor_and_every_cursor_on_the_board_leaves(api):
 def test_a_write_is_the_sessions_numbered_cursor_and_agents_get_the_agent_form(api):
     client, sent, _, _ = api
     board = _create(client)
-    _edit(client, board["id"], [{"op": "weight", "image": 1, "value": 0.5}], LANE_A)
-    _edit(client, board["id"], [{"op": "weight", "image": 2, "value": 0.5}], LANE_B)
+    _edit(client, board["id"], [{"op": "weight", "image": 1, "value": 0.5}], AGENT_A)
+    _edit(client, board["id"], [{"op": "weight", "image": 2, "value": 0.5}], AGENT_B)
     person, agent_form = [(person, others) for person, others in sent if person.get("type") == "agentPresence"][-1]
     assert person["session"]["ordinal"] == 2 and "session" not in agent_form
     assert agent_form["target"] == person["target"] and agent_form["action"] == person["action"]
@@ -316,7 +316,7 @@ def test_the_persons_own_writes_move_no_cursor_and_send_nothing(api):
 def test_the_agent_log_line_is_still_the_writes_own_words(api):
     client, sent, _, _ = api
     board = _create(client)
-    _edit(client, board["id"], [{"op": "weight", "image": 1, "value": 0.5}], LANE_A)
+    _edit(client, board["id"], [{"op": "weight", "image": 1, "value": 0.5}], AGENT_A)
     assert _cursor(sent)["say"] == "Resized image 1 on “Desert light”"
-    _edit(client, board["id"], [{"op": "weight", "image": 2, "value": 0.5}], LANE_A, say="Eased the blue")
+    _edit(client, board["id"], [{"op": "weight", "image": 2, "value": 0.5}], AGENT_A, say="Eased the blue")
     assert _cursor(sent)["say"] == "Eased the blue"

@@ -183,7 +183,7 @@ def test_the_session_cap_lets_a_younger_idle_session_go_before_an_older_active_o
 
 
 # -- An invalid NEBULA_AGENT_SESSION is ignored for the cursor ---------
-@pytest.mark.parametrize("bad", ["lane a", "x" * 65, "lane/a", "lañe", "\u202elane"])
+@pytest.mark.parametrize("bad", ["agent a", "x" * 65, "agent/a", "agñt", "\u202eagent"])
 def test_the_cli_treats_an_invalid_session_as_unset_for_the_cursor(monkeypatch, bad):
     from cli.client import NebulaClient, cursor_session
     from services.agent_presence import presence_session
@@ -212,7 +212,7 @@ def test_the_cli_sends_a_valid_session_alone(monkeypatch):
     client = NebulaClient("http://127.0.0.1:1")
     monkeypatch.setenv("NEBULA_AGENT_NAME", "Claude Code")
     monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "abc")
-    for good in ("lane-a", "x" * 64, "a.b:c_d-1"):
+    for good in ("agent-a", "x" * 64, "a.b:c_d-1"):
         monkeypatch.setenv("NEBULA_AGENT_SESSION", good)
         assert client._identity_headers() == {"X-Nebula-Agent": "Claude Code", "X-Nebula-Agent-Session": good,
                                                          "X-Nebula-Surface": "cli"}
@@ -222,22 +222,22 @@ def test_mcp_treats_an_invalid_session_as_unset_for_the_cursor(monkeypatch):
     import mcp_server
     from services.agent_presence import presence_session
 
-    assert mcp_server._own_cursor_session("lane-a") is None
+    assert mcp_server._own_cursor_session("agent-a") is None
     assert mcp_server._own_cursor_session("x" * 64) is None
-    own = mcp_server._own_cursor_session("lane a")
-    assert own and own != mcp_server._own_cursor_session("lane a")  # one per process, never fixed
+    own = mcp_server._own_cursor_session("agent a")
+    assert own and own != mcp_server._own_cursor_session("agent a")  # one per process, never fixed
     assert presence_session({"X-Nebula-Cursor-Session": own}) == own
 
-    monkeypatch.setattr(mcp_server, "_AGENT_SESSION", "lane a")
+    monkeypatch.setattr(mcp_server, "_AGENT_SESSION", "agent a")
     monkeypatch.setattr(mcp_server, "_CURSOR_SESSION", own)
     headers = mcp_server._agent_headers(None)
-    assert headers["X-Nebula-Agent-Session"] == "lane a"  # scene reads as before
+    assert headers["X-Nebula-Agent-Session"] == "agent a"  # scene reads as before
     assert presence_session(headers) == own               # this process's own cursor
 
-    monkeypatch.setattr(mcp_server, "_AGENT_SESSION", "lane-a")
+    monkeypatch.setattr(mcp_server, "_AGENT_SESSION", "agent-a")
     monkeypatch.setattr(mcp_server, "_CURSOR_SESSION", None)
     headers = mcp_server._agent_headers(None)
-    assert "X-Nebula-Cursor-Session" not in headers and presence_session(headers) == "lane-a"
+    assert "X-Nebula-Cursor-Session" not in headers and presence_session(headers) == "agent-a"
 
 
 def test_one_session_rule_for_the_backend_cli_and_mcp():

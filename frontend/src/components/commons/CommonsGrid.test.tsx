@@ -58,21 +58,21 @@ describe('CommonsGrid', () => {
   });
 
   // #208 review 4, N2: Chrome reads the badge's CSS capitals into the tile's
-  // name ("NOT ANALYZED Lane refs"); the tile names itself with the words as written.
+  // name ("NOT ANALYZED Harbour refs"); the tile names itself with the words as written.
   it('names each tile by its caption, then its badges as written', () => {
-    const clear = { ...row('ast_1'), summary: null, collection: 'Lane refs', analysis_state: 'analysis_failed' as const,
+    const clear = { ...row('ast_1'), summary: null, collection: 'Harbour refs', analysis_state: 'analysis_failed' as const,
       last_error_kind: 'transparent' };
     const busy = { ...row('ast_2'), analysis_state: 'queued' as const, in_inbox: true, comment_count: 2,
       media: 'video' as const };
     render(<CommonsGrid rows={[clear, busy, row('ast_3')]} selectedId={null} loading={false} emptyHint=""
       onOpen={() => {}} onDropFiles={() => {}} proposed={new Set(['ast_2'])} />);
-    expect(screen.getByRole('option', { name: 'Lane refs, Not analyzed' })).toBeTruthy();
+    expect(screen.getByRole('option', { name: 'Harbour refs, Not analyzed' })).toBeTruthy();
     expect(screen.getByRole('option', {
       name: 'Reference ast_2, Queued, Inbox, An agent proposes changes, Video, 2 comments',
     })).toBeTruthy();
     expect(screen.getByRole('option', { name: 'Reference ast_3' })).toBeTruthy();
     // What shows is unchanged: the badges' own words.
-    const tile = screen.getByRole('option', { name: 'Lane refs, Not analyzed' });
+    const tile = screen.getByRole('option', { name: 'Harbour refs, Not analyzed' });
     expect(tile.querySelector('.commons-badge--not-analyzed')?.textContent).toBe('Not analyzed');
   });
 });

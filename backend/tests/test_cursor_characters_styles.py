@@ -31,8 +31,8 @@ from services.output import OUTPUT_ROOT
 from services.saved_graph_upgrades import PARAMS_VERSION
 
 AGENT = {"X-Nebula-Agent": "Claude Code"}
-LANE_A = {**AGENT, "X-Nebula-Agent-Session": "lane-a"}
-LANE_B = {**AGENT, "X-Nebula-Agent-Session": "lane-b"}
+AGENT_A = {**AGENT, "X-Nebula-Agent-Session": "agent-a"}
+AGENT_B = {**AGENT, "X-Nebula-Agent-Session": "agent-b"}
 
 CHARACTERS = [
     {"id": "c1", "name": "Mara", "referenceViews": ["/a", "/b", "/c", "/d"]},
@@ -488,9 +488,9 @@ def test_a_style_delete_clears_its_cursors_before_its_line_is_said(api, monkeypa
 
     monkeypatch.setattr(main_module.manager, "broadcast_raw", raw)
     monkeypatch.setattr(main_module.manager, "broadcast_browser", tabs)
-    style = _make_style(client, LANE_A)
+    style = _make_style(client, AGENT_A)
     order.clear()
-    assert client.delete(f"/api/presets/{style['id']}", headers=LANE_A).status_code == 200
+    assert client.delete(f"/api/presets/{style['id']}", headers=AGENT_A).status_code == 200
     left = [n for n, (where, data) in enumerate(order) if data.get("type") == "agentPresenceLeave"]
     said = [n for n, (where, data) in enumerate(order)
             if data.get("say") == "Moved the style “Dusk grain” to “Recently deleted”"]
@@ -503,8 +503,8 @@ def test_renaming_a_character_and_a_style_reaches_the_names_on_their_cursors(api
     client, sent, _, presence, _ = api
     character = _make_character(client)
     style = _make_style(client)
-    _point(client, {"surface": "character", "character": character["id"], "view": 2}, LANE_A)
-    _point(client, {"surface": "style", "style": style["id"]}, LANE_B)
+    _point(client, {"surface": "character", "character": character["id"], "view": 2}, AGENT_A)
+    _point(client, {"surface": "style", "style": style["id"]}, AGENT_B)
     assert client.put(f"/api/characters/{character['id']}", json={"name": "Mara Vance"}).status_code == 200
     assert client.put(f"/api/presets/{style['id']}", json={"name": "Dusk grain II"}).status_code == 200
     names = _live_names(presence)
@@ -516,11 +516,11 @@ def test_deleting_a_character_clears_its_cursors_and_tells_the_tabs(api):
     client, sent, heard, presence, _ = api
     character = _make_character(client)
     other = _make_character(client, name="Other")
-    _point(client, {"surface": "character", "character": character["id"]}, LANE_A)
-    _point(client, {"surface": "character", "character": character["id"], "view": 1}, LANE_B)
-    _point(client, {"surface": "character", "character": other["id"]}, {**AGENT, "X-Nebula-Agent-Session": "lane-c"})
+    _point(client, {"surface": "character", "character": character["id"]}, AGENT_A)
+    _point(client, {"surface": "character", "character": character["id"], "view": 1}, AGENT_B)
+    _point(client, {"surface": "character", "character": other["id"]}, {**AGENT, "X-Nebula-Agent-Session": "agent-c"})
     heard.clear()
-    assert client.delete(f"/api/characters/{character['id']}", headers=LANE_A).status_code == 200
+    assert client.delete(f"/api/characters/{character['id']}", headers=AGENT_A).status_code == 200
     (leave,) = [event for event in heard if event.get("type") == "agentPresenceLeave"]
     assert len([c for c in leave["cursors"] if c["key"] is not None]) == 2
     left = presence.active()
@@ -530,9 +530,9 @@ def test_deleting_a_character_clears_its_cursors_and_tells_the_tabs(api):
 def test_deleting_a_style_clears_its_cursors_and_tells_the_tabs(api):
     client, sent, heard, presence, _ = api
     style = _make_style(client)
-    _point(client, {"surface": "style", "style": style["id"]}, LANE_A)
+    _point(client, {"surface": "style", "style": style["id"]}, AGENT_A)
     heard.clear()
-    assert client.delete(f"/api/presets/{style['id']}", headers=LANE_B).status_code == 200
+    assert client.delete(f"/api/presets/{style['id']}", headers=AGENT_B).status_code == 200
     (leave,) = [event for event in heard if event.get("type") == "agentPresenceLeave"]
     assert len([c for c in leave["cursors"] if c["key"] is not None]) == 1
     assert presence.active() == []
@@ -544,22 +544,22 @@ def test_a_delete_that_drops_no_cursor_tells_no_tab(api):
     client, _, heard, _, _ = api
     character = _make_character(client)
     heard.clear()
-    assert client.delete(f"/api/characters/{character['id']}", headers=LANE_A).status_code == 200
+    assert client.delete(f"/api/characters/{character['id']}", headers=AGENT_A).status_code == 200
     assert [event for event in heard if event.get("type") == "agentPresenceLeave"] == []
 
 
 def test_views_cut_down_move_the_cursors_past_the_end_to_the_character(api):
     client, sent, heard, presence, _ = api
     character = _make_character(client, views=5)
-    _point(client, {"surface": "character", "character": character["id"], "view": 5}, LANE_A)
-    _point(client, {"surface": "character", "character": character["id"], "view": 3}, LANE_B)
+    _point(client, {"surface": "character", "character": character["id"], "view": 5}, AGENT_A)
+    _point(client, {"surface": "character", "character": character["id"], "view": 3}, AGENT_B)
     _point(client, {"surface": "character", "character": character["id"], "view": 4},
-           {**AGENT, "X-Nebula-Agent-Session": "lane-c"})
+           {**AGENT, "X-Nebula-Agent-Session": "agent-c"})
     heard.clear()
     kept = [_url(), _url(), _url()]
     assert client.put(f"/api/characters/{character['id']}", json={"referenceViews": kept}).status_code == 200
     (retarget,) = [event for event in heard if event.get("type") == "agentPresenceRetarget"]
-    assert len({c["key"] for c in retarget["cursors"] if c["key"] is not None}) == 2  # lanes a and c, not b
+    assert len({c["key"] for c in retarget["cursors"] if c["key"] is not None}) == 2  # agents a and c, not b
     for cursor in retarget["cursors"]:
         assert cursor["target"] == {"surface": "character", "itemId": character["id"]}
         assert cursor["anchorNames"] == {"character": "Mara"}
@@ -571,7 +571,7 @@ def test_views_cut_down_move_the_cursors_past_the_end_to_the_character(api):
 def test_a_put_that_keeps_every_view_moves_no_cursor(api):
     client, _, heard, _, _ = api
     character = _make_character(client)
-    _point(client, {"surface": "character", "character": character["id"], "view": 4}, LANE_A)
+    _point(client, {"surface": "character", "character": character["id"], "view": 4}, AGENT_A)
     heard.clear()
     assert client.put(f"/api/characters/{character['id']}", json={"frozenTraitString": "grey"}).status_code == 200
     assert client.put(f"/api/characters/{character['id']}",
@@ -584,7 +584,7 @@ def test_moving_a_character_between_project_and_global_keeps_the_cursor_on_it(ap
     item wherever its list now shows it (or park at the Assets button). Nothing is cleared."""
     client, _, heard, presence, project_id = api
     character = _make_character(client)
-    _point(client, {"surface": "character", "character": character["id"]}, LANE_A)
+    _point(client, {"surface": "character", "character": character["id"]}, AGENT_A)
     heard.clear()
     moved = client.post(f"/api/characters/{character['id']}/move", json={"projectId": project_id})
     assert moved.status_code == 200, moved.text
@@ -601,7 +601,7 @@ def _style_cursor(sent):
 
 def test_an_agents_new_style_moves_its_cursor_to_the_style_with_the_new_words(api):
     client, sent, _, _, _ = api
-    style = _make_style(client, LANE_A)
+    style = _make_style(client, AGENT_A)
     event = _style_cursor(sent)
     assert event["target"] == {"surface": "style", "itemId": style["id"]}
     assert event["action"] == "type" and event["anchorNames"] == {"style": "Dusk grain"}
@@ -610,16 +610,16 @@ def test_an_agents_new_style_moves_its_cursor_to_the_style_with_the_new_words(ap
 
 def test_each_single_field_update_points_at_its_part_and_two_fields_have_none(api):
     client, sent, _, _, _ = api
-    style = _make_style(client, LANE_A)
+    style = _make_style(client, AGENT_A)
     one = {"name": ("Dusk grain 2", "name"), "category": ("Film", "category"), "prompt": ("new prompt", "prompt"),
            "params": ({"a": 1}, "settings"), "refImages": ([_url()], "references")}
     for field, (value, part) in one.items():
-        assert client.put(f"/api/presets/{style['id']}", headers=LANE_A, json={field: value}).status_code == 200
+        assert client.put(f"/api/presets/{style['id']}", headers=AGENT_A, json={field: value}).status_code == 200
         event = _style_cursor(sent)
         assert event["target"].get("part") == part, (field, event["target"])
         assert event["action"] == "type"
         assert event["anchorNames"]["style"].startswith("Dusk grain") and event["anchorNames"].get("part") == part
-    two = client.put(f"/api/presets/{style['id']}", headers=LANE_A, json={"prompt": "again", "category": "Other"})
+    two = client.put(f"/api/presets/{style['id']}", headers=AGENT_A, json={"prompt": "again", "category": "Other"})
     assert two.status_code == 200
     event = _style_cursor(sent)
     assert "part" not in event["target"] and "part" not in event["anchorNames"]
@@ -628,15 +628,15 @@ def test_each_single_field_update_points_at_its_part_and_two_fields_have_none(ap
 
 def test_the_say_for_an_update_uses_the_journals_words(api):
     client, sent, _, _, _ = api
-    style = _make_style(client, LANE_A)
-    assert client.put(f"/api/presets/{style['id']}", headers=LANE_A, json={"prompt": "x"}).status_code == 200
+    style = _make_style(client, AGENT_A)
+    assert client.put(f"/api/presets/{style['id']}", headers=AGENT_A, json={"prompt": "x"}).status_code == 200
     assert _style_cursor(sent)["say"] == "Changed the prompt of the style “Dusk grain”"
 
 
 def test_a_renames_say_gives_both_names(api):
     client, sent, _, _, _ = api
-    style = _make_style(client, LANE_A)
-    renamed = client.put(f"/api/presets/{style['id']}", headers=LANE_A, json={"name": "Dusk grain II", "prompt": "y"})
+    style = _make_style(client, AGENT_A)
+    renamed = client.put(f"/api/presets/{style['id']}", headers=AGENT_A, json={"name": "Dusk grain II", "prompt": "y"})
     assert renamed.status_code == 200
     event = _style_cursor(sent)
     assert event["say"] == "Renamed the style “Dusk grain” to “Dusk grain II” and changed its prompt"
@@ -652,10 +652,10 @@ def test_a_person_writing_a_style_moves_no_cursor(api):
 
 def test_a_style_delete_and_restore_move_nothing_but_leave_a_line(api):
     client, sent, _, presence, _ = api
-    style = _make_style(client, LANE_A)
-    assert client.delete(f"/api/presets/{style['id']}", headers=LANE_A).status_code == 200
+    style = _make_style(client, AGENT_A)
+    assert client.delete(f"/api/presets/{style['id']}", headers=AGENT_A).status_code == 200
     assert presence.active() == []  # the cursor left
-    assert client.post(f"/api/trash/style/{style['id']}/restore", headers=LANE_A).status_code == 200
+    assert client.post(f"/api/trash/style/{style['id']}/restore", headers=AGENT_A).status_code == 200
     assert presence.active() == []  # a restore doesn't bring it back
 
 
@@ -664,7 +664,7 @@ def test_a_project_style_of_another_project_sends_no_target(api, monkeypatch):
 
     client, sent, _, _, project_id = api
     monkeypatch.setattr(main_module, "_open_project_id", lambda: "some-other-project")
-    made = client.post("/api/presets", headers=LANE_A,
+    made = client.post("/api/presets", headers=AGENT_A,
                        json={**STYLE, "scope": "project", "projectId": project_id})
     assert made.status_code == 200, made.text
     assert not [event for event in _cursors(sent) if (event.get("target") or {}).get("surface") == "style"]
@@ -676,7 +676,7 @@ def test_the_journal_the_log_and_the_say_use_one_set_of_words(api):
     import main as main_module
 
     client, sent, _, _, _ = api
-    style = _make_style(client, LANE_A, name="Dusk grain")
+    style = _make_style(client, AGENT_A, name="Dusk grain")
     events = main_module.canvas_events.read(after=0, kinds={"style"}, limit=500)["events"]
     assert [event["summary"] for event in events if event["data"].get("styleId") == style["id"]] == [
         "made the style “Dusk grain”"]
@@ -1010,7 +1010,7 @@ def test_nebula_character_list_and_show(api, monkeypatch, capsys):
 def test_a_type_or_a_click_at_a_character_is_stored_and_told_as_a_look(api, action, extra):
     client, sent, heard, presence, _ = api
     character = _make_character(client)
-    made = _point(client, {"surface": "character", "character": character["id"], **extra}, LANE_A, action=action,
+    made = _point(client, {"surface": "character", "character": character["id"], **extra}, AGENT_A, action=action,
                   say="Checking")
     assert made.status_code == 200, made.text
     assert made.json()["action"] == "look"
@@ -1029,7 +1029,7 @@ def test_a_style_and_a_board_keep_their_type_and_click(api):
     board = client.post("/api/moodboards", json={"name": "Desert light", "images": [{"url": _url()}]}).json()
     for target in ({"surface": "style", "style": style["id"]}, {"surface": "moodboard", "board": board["id"]}):
         for action in ("type", "click"):
-            assert _point(client, target, LANE_A, action=action).json()["action"] == action
+            assert _point(client, target, AGENT_A, action=action).json()["action"] == action
 
 
 def test_point_at_and_the_cli_say_what_was_stored_for_a_character(api):
@@ -1088,7 +1088,7 @@ def test_a_character_deleted_while_the_point_reads_leaves_no_cursor(api, monkeyp
     character = _make_character(client)
     _delete_during_first_lookup(monkeypatch, "_characters_to_point_at",
                                 lambda main: main._char_store().delete(character["id"]))
-    refused = _point(client, {"surface": "character", "character": "Mara"}, LANE_A, action="look")
+    refused = _point(client, {"surface": "character", "character": "Mara"}, AGENT_A, action="look")
     assert refused.status_code == 422, refused.text
     assert refused.json()["detail"].startswith("No character “Mara” here."), refused.text
     _nothing_left(presence, sent, heard)
@@ -1099,12 +1099,12 @@ def test_a_view_cut_while_the_point_reads_leaves_no_cursor(api, monkeypatch):
     character = _make_character(client, views=5)
     kept = _make_character(client, name="Other", views=3)  # another cursor, which stays
     assert _point(client, {"surface": "character", "character": kept["id"]},
-                  {**AGENT, "X-Nebula-Agent-Session": "lane-c"}).status_code == 200
+                  {**AGENT, "X-Nebula-Agent-Session": "agent-c"}).status_code == 200
     sent.clear()
     heard.clear()
     _delete_during_first_lookup(monkeypatch, "_characters_to_point_at",
                                 lambda main: main._char_store().update(character["id"], referenceViews=[_url(), _url(), _url()]))
-    refused = _point(client, {"surface": "character", "character": character["id"], "view": 5}, LANE_A)
+    refused = _point(client, {"surface": "character", "character": character["id"], "view": 5}, AGENT_A)
     assert refused.status_code == 422, refused.text
     assert refused.json()["detail"] == "Nebula couldn’t point at view 5 because “Mara” has 3 views. Use a number from 1 to 3."
     assert _cursors(sent) == [] and _told(heard) == []
@@ -1118,7 +1118,7 @@ def test_a_style_deleted_while_the_point_reads_leaves_no_cursor(api, monkeypatch
     client, sent, heard, presence, _ = api
     style = _make_style(client)
     _delete_during_first_lookup(monkeypatch, "_styles_to_point_at", lambda main: main.preset_store.delete(style["id"]))
-    refused = _point(client, {"surface": "style", "style": "Dusk grain"}, LANE_A, action="type")
+    refused = _point(client, {"surface": "style", "style": "Dusk grain"}, AGENT_A, action="type")
     assert refused.status_code == 422, refused.text
     assert refused.json()["detail"].startswith("No style “Dusk grain” here."), refused.text
     _nothing_left(presence, sent, heard)
@@ -1130,7 +1130,7 @@ def test_a_board_deleted_while_the_point_reads_leaves_no_cursor(api, monkeypatch
     board = client.post("/api/moodboards", json={"name": "Desert light", "images": [{"url": _url()}]}).json()
     _delete_during_first_lookup(monkeypatch, "_boards_to_point_at",
                                 lambda main: main._moodboard_store().delete(board["id"]))
-    refused = _point(client, {"surface": "moodboard", "board": "Desert light", "image": 1}, LANE_A)
+    refused = _point(client, {"surface": "moodboard", "board": "Desert light", "image": 1}, AGENT_A)
     assert refused.status_code == 422, refused.text
     assert refused.json()["detail"].startswith("No moodboard “Desert light” here."), refused.text
     _nothing_left(presence, sent, heard)
@@ -1163,13 +1163,13 @@ def test_a_refused_point_leaves_the_sessions_cursor_where_it_was(api, monkeypatc
     """A cursor at a spot stays there, in the roster and on the tabs alike."""
     client, sent, heard, presence, _ = api
     spot = {"x": 120.0, "y": 80.0}
-    assert _point(client, spot, LANE_A).status_code == 200
+    assert _point(client, spot, AGENT_A).status_code == 200
     character = _make_character(client)
     sent.clear()
     heard.clear()
     _delete_during_first_lookup(monkeypatch, "_characters_to_point_at",
                                 lambda main: main._char_store().delete(character["id"]))
-    refused = _point(client, {"surface": "character", "character": "Mara"}, LANE_A, action="look")
+    refused = _point(client, {"surface": "character", "character": "Mara"}, AGENT_A, action="look")
     assert refused.status_code == 422, refused.text
     assert [live["target"] for live in presence.active()] == [spot]
     assert [cursor["target"] for cursor in presence.replay()] == [spot]
@@ -1183,7 +1183,7 @@ def test_a_point_at_an_item_deleted_under_it_leaves_no_cursor_there(api, monkeyp
     the Character: not the one the point asked for, and not the earlier one."""
     client, sent, _, presence, _ = api
     character = _make_character(client)
-    assert _point(client, {"surface": "character", "character": "Mara"}, LANE_A).status_code == 200
+    assert _point(client, {"surface": "character", "character": "Mara"}, AGENT_A).status_code == 200
     sent.clear()
 
     def delete(main, held=None):
@@ -1204,7 +1204,7 @@ def test_a_point_at_an_item_deleted_under_it_leaves_no_cursor_there(api, monkeyp
         looks = _at_look(monkeypatch, 1, before=forget)
     else:
         looks = _at_look(monkeypatch, 1, after=both)
-    refused = _point(client, {"surface": "character", "character": "Mara", "view": 2}, LANE_A, action="look")
+    refused = _point(client, {"surface": "character", "character": "Mara", "view": 2}, AGENT_A, action="look")
     assert refused.status_code == 422, refused.text
     assert refused.json()["detail"].startswith("No character “Mara” here."), refused.text
     assert presence.active() == [] and presence._agents == {} and _live_names(presence) == []
@@ -1223,7 +1223,7 @@ def test_a_delete_that_lands_behind_the_second_read_is_seen_before_the_cursor_is
         held.forget_item("character", character["id"])
 
     looks = _at_look(monkeypatch, 1, after=delete_and_forget)
-    refused = _point(client, {"surface": "character", "character": "Mara"}, LANE_A)
+    refused = _point(client, {"surface": "character", "character": "Mara"}, AGENT_A)
     assert refused.status_code == 422, refused.text
     _nothing_left(presence, sent, heard)
     assert len(looks) == 2 and presence._watches == []
@@ -1236,7 +1236,7 @@ def test_a_cut_of_views_under_a_point_moves_the_earlier_cursor_and_refuses_the_p
     client, sent, _, presence, _ = api
     character = _make_character(client, views=5)
     on_character = {"surface": "character", "itemId": character["id"]}
-    assert _point(client, {"surface": "character", "character": character["id"], "view": 5}, LANE_A).status_code == 200
+    assert _point(client, {"surface": "character", "character": character["id"], "view": 5}, AGENT_A).status_code == 200
     sent.clear()
 
     def cut(main, held):
@@ -1244,7 +1244,7 @@ def test_a_cut_of_views_under_a_point_moves_the_earlier_cursor_and_refuses_the_p
         held.forget_subs("character", character["id"], ["3", "4", "5"])
 
     looks = _at_look(monkeypatch, 1, after=cut)
-    refused = _point(client, {"surface": "character", "character": character["id"], "view": 3}, LANE_A, action="look")
+    refused = _point(client, {"surface": "character", "character": character["id"], "view": 3}, AGENT_A, action="look")
     assert refused.status_code == 422, refused.text
     assert refused.json()["detail"] == "Nebula couldn’t point at view 3 because “Mara” has 2 views. Use a number from 1 to 2."
     assert [live["target"] for live in presence.active()] == [on_character]
@@ -1261,7 +1261,7 @@ def test_a_cut_that_keeps_the_pointed_view_costs_no_second_look(api, monkeypatch
         held.forget_subs("character", character["id"], ["4", "5"])
 
     looks = _at_look(monkeypatch, 1, after=cut)
-    made = _point(client, {"surface": "character", "character": character["id"], "view": 2}, LANE_A)
+    made = _point(client, {"surface": "character", "character": character["id"], "view": 2}, AGENT_A)
     assert made.status_code == 200, made.text
     assert [live["target"]["itemId"] for live in presence.active()] == [f"{character['id']}/2"]
     assert len(_cursors(sent)) == 1 and len(looks) == 1 and presence._watches == []
@@ -1277,7 +1277,7 @@ def test_a_rename_under_a_point_reaches_the_name_it_stores(api, monkeypatch):
         held.rename_item("character", character["id"], "Mara Vance")
 
     looks = _at_look(monkeypatch, 1, after=rename)
-    made = _point(client, {"surface": "character", "character": "Mara", "part": "traits"}, LANE_A)
+    made = _point(client, {"surface": "character", "character": "Mara", "part": "traits"}, AGENT_A)
     assert made.status_code == 200, made.text
     assert made.json()["anchorNames"]["character"] == "Mara Vance" and "part" in made.json()["anchorNames"]
     assert [live["anchorNames"]["character"] for live in presence.active()] == ["Mara Vance"]
@@ -1291,7 +1291,7 @@ def test_an_item_written_at_every_look_is_not_pointed_at(api, monkeypatch):
     character = _make_character(client)
     looks = _at_look(monkeypatch, "every",
                      after=lambda main, held: held.rename_item("character", character["id"], "Mara"))
-    refused = _point(client, {"surface": "character", "character": "Mara", "view": 2}, LANE_A)
+    refused = _point(client, {"surface": "character", "character": "Mara", "view": 2}, AGENT_A)
     assert refused.status_code == 422, refused.text
     assert refused.json()["detail"] == ("Nebula couldn’t point at the character “Mara” because it kept changing "
                                         "while Nebula checked it. Point at it again.")
@@ -1309,7 +1309,7 @@ def test_the_changing_refusal_names_a_board_and_a_style(api, monkeypatch, surfac
     item = made(client)
     key = {"moodboard": "board", "style": "style"}[surface]
     _at_look(monkeypatch, "every", after=lambda main, held: held.rename_item(surface, item["id"], item["name"]))
-    refused = _point(client, {"surface": surface, key: item["id"]}, LANE_A)
+    refused = _point(client, {"surface": surface, key: item["id"]}, AGENT_A)
     assert refused.status_code == 422 and refused.json()["detail"] == said, refused.text
     _nothing_left(presence, sent, heard)
 
@@ -1330,7 +1330,7 @@ def test_a_delete_in_the_last_look_leaves_no_cursor(api, monkeypatch):
             held.forget_item("character", character["id"])
 
     looks = _at_look(monkeypatch, "every", after=write)
-    refused = _point(client, {"surface": "character", "character": "Mara"}, LANE_A)
+    refused = _point(client, {"surface": "character", "character": "Mara"}, AGENT_A)
     assert refused.status_code == 422, refused.text
     _nothing_left(presence, sent, heard)
     assert len(looks) == 4 and presence._watches == []
@@ -1347,7 +1347,7 @@ def test_a_look_that_fails_drops_its_watch(api, monkeypatch):
 
     monkeypatch.setattr(main_module, "_look_again", unreadable)
     with pytest.raises(RuntimeError):
-        _point(client, {"surface": "character", "character": "Mara"}, LANE_A)
+        _point(client, {"surface": "character", "character": "Mara"}, AGENT_A)
     assert presence._watches == [] and presence.active() == [] and _cursors(sent) == []
 
 
@@ -1389,7 +1389,7 @@ def test_a_rename_while_the_point_reads_does_not_refuse_it(api, monkeypatch):
     character = _make_character(client)
     _delete_during_first_lookup(monkeypatch, "_characters_to_point_at",
                                 lambda main: main._char_store().update(character["id"], name="Mara Vance"))
-    made = _point(client, {"surface": "character", "character": "Mara"}, LANE_A)
+    made = _point(client, {"surface": "character", "character": "Mara"}, AGENT_A)
     assert made.status_code == 200, made.text
     assert len(presence.active()) == 1 and len(_cursors(sent)) == 1
     assert made.json()["anchorNames"] == {"character": "Mara Vance"}  # the name as the second look read it
@@ -1404,7 +1404,7 @@ LONG_NAME = "a" * 78 + FAMILY + "tail"
 def test_a_cut_name_never_splits_a_joined_emoji_through_a_point(api):
     client, _, _, presence, _ = api
     character = _make_character(client, name=LONG_NAME)
-    assert _point(client, {"surface": "character", "character": character["id"]}, LANE_A).status_code == 200
+    assert _point(client, {"surface": "character", "character": character["id"]}, AGENT_A).status_code == 200
     names = _live_names(presence)
     assert names and all(shown == {"character": "a" * 78} for shown in names)
 
@@ -1412,7 +1412,7 @@ def test_a_cut_name_never_splits_a_joined_emoji_through_a_point(api):
 def test_a_cut_name_never_splits_a_joined_emoji_through_a_rename(api):
     client, _, _, presence, _ = api
     character = _make_character(client)
-    _point(client, {"surface": "character", "character": character["id"], "view": 2}, LANE_A)
+    _point(client, {"surface": "character", "character": character["id"], "view": 2}, AGENT_A)
     assert client.put(f"/api/characters/{character['id']}", json={"name": LONG_NAME}).status_code == 200
     assert {"character": "a" * 78, "view": 2} in _live_names(presence)
 

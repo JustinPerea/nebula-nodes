@@ -23,7 +23,7 @@ def _positive_int(text: str) -> int:
     return value
 
 
-# `nebula --help`'s closing section: how an orchestrator gives each lane its
+# `nebula --help`'s closing section: how an orchestrator gives each subagent its
 # own cursor (design, PR #211). The same text is in skills/nebula and
 # docs/MCP-SETUP.md, "Agent cursors".
 CURSOR_ENV_HELP = """\
@@ -34,8 +34,8 @@ your cursor on the person's canvas:
                         "Claude Code · 2". Unset under Claude Code, the CLI uses
                         your Claude Code session, which subagents share, so
                         every subagent moves its parent's cursor. To give each
-                        subagent its own, set a value per lane, the same on every
-                        call it makes: NEBULA_AGENT_SESSION=lane-a nebula point n2
+                        subagent its own, set a value for each, the same on every
+                        call it makes: NEBULA_AGENT_SESSION=agent-a nebula point n2
                         It also keys your scene reads, so read and write with it.
                         Only the person's canvas shows sessions; nebula look and
                         nebula agents list one cursor per agent."""
@@ -221,7 +221,7 @@ def build_parser() -> argparse.ArgumentParser:
         description="Point at a node, a port or a spot. With only --say (no target) the line shows where your "
                     "cursor already is, and it doesn't move; with no cursor yet it starts at the middle of the "
                     "person's view, or at 0,0 when no canvas has reported its view. Each session of yours has its "
-                    "own cursor: give each lane its own $NEBULA_AGENT_SESSION, or a subagent moves its parent's "
+                    "own cursor: give each subagent its own $NEBULA_AGENT_SESSION, or a subagent moves its parent's "
                     "cursor (see `nebula --help`).")
     point_p.add_argument("target", nargs="?", default=None,
                          help="Node (n2), port (n2.prompt) or flow coordinates (120,-40); leave it out to say "

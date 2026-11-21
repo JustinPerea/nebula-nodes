@@ -359,7 +359,7 @@ DIRECT_ROUTES = {
 # pages).
 
 
-# -- Google lane (2026-10-14): Nano Banana 2.1, Veo 3.1 on Vertex, Gemini Omni Flash 1.1 ---------
+# -- Google route (2026-10-14): Nano Banana 2.1, Veo 3.1 on Vertex, Gemini Omni Flash 1.1 ---------
 # Translations live in backend/execution/maker_routes_google.py. Every price
 # below was read on the maker's own page on 2026-10-14 (quotes in `sources`).
 VERTEX_PRICING_URL = "https://cloud.google.com/gemini-enterprise-agent-platform/generative-ai/pricing"

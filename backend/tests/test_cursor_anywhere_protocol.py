@@ -164,21 +164,21 @@ def test_the_same_spot_is_the_same_anchor():
     assert not _same_spot({"x": 0.0, "y": 0.0}, BOARD) and not _same_spot(BOARD, {"x": 0.0, "y": 0.0})
 
 
-def _person(presence, event, session="lane-a"):
+def _person(presence, event, session="agent-a"):
     return presence.person_form(event, CLAUDE, session=session)
 
 
 def test_surface_cursors_are_numbered_like_any_other_and_keep_their_arrival():
     clock = Clock()
     presence = AgentPresence(clock=clock)
-    first = _person(presence, presence.point(CLAUDE, target=BOARD, names={"board": "Desert light"}), "lane-a")
+    first = _person(presence, presence.point(CLAUDE, target=BOARD, names={"board": "Desert light"}), "agent-a")
     clock.now += 1
-    second = _person(presence, presence.point(CLAUDE, target=IMAGE, names=NAMES), "lane-b")
+    second = _person(presence, presence.point(CLAUDE, target=IMAGE, names=NAMES), "agent-b")
     assert (first["session"]["ordinal"], second["session"]["ordinal"]) == (1, 2)
     clock.now += 1
-    again = _person(presence, presence.point(CLAUDE, target=BOARD, names={"board": "Desert light"}), "lane-a")
+    again = _person(presence, presence.point(CLAUDE, target=BOARD, names={"board": "Desert light"}), "agent-a")
     assert again["since"] == first["since"]  # the same anchor: its arrival stays
-    moved = _person(presence, presence.point(CLAUDE, target=IMAGE, names=NAMES), "lane-a")
+    moved = _person(presence, presence.point(CLAUDE, target=IMAGE, names=NAMES), "agent-a")
     assert moved["since"] > first["since"]  # another anchor: it arrives again
 
 
@@ -186,9 +186,9 @@ def test_a_node_move_leaves_a_surface_cursors_arrival_alone():
     clock = Clock()
     presence = AgentPresence(clock=clock)
     presence.carry_nodes({"n1": {"x": 0, "y": 0}, "n2": {"x": 400, "y": 0}})
-    surface = _person(presence, presence.point(CLAUDE, target=BOARD, names={"board": "Desert light"}), "lane-a")
-    on_n1 = _person(presence, presence.point(CLAUDE, target={"nodeId": "n1"}), "lane-b")
-    _person(presence, presence.point(CLAUDE, target={"nodeId": "n2"}), "lane-c")
+    surface = _person(presence, presence.point(CLAUDE, target=BOARD, names={"board": "Desert light"}), "agent-a")
+    on_n1 = _person(presence, presence.point(CLAUDE, target={"nodeId": "n1"}), "agent-b")
+    _person(presence, presence.point(CLAUDE, target={"nodeId": "n2"}), "agent-c")
     clock.now += 5
     # n1 moves next to n2: the node cursor's chain changes, so it arrives; the surface cursor doesn't.
     updates = presence.carry_nodes({"n1": {"x": 410, "y": 0}, "n2": {"x": 400, "y": 0}})
@@ -198,7 +198,7 @@ def test_a_node_move_leaves_a_surface_cursors_arrival_alone():
     # Nothing but a surface cursor: a node move carries nothing at all.
     other = AgentPresence(clock=clock)
     other.carry_nodes({"n1": {"x": 0, "y": 0}})
-    _person(other, other.point(CLAUDE, target=BOARD, names={"board": "Desert light"}), "lane-a")
+    _person(other, other.point(CLAUDE, target=BOARD, names={"board": "Desert light"}), "agent-a")
     assert other.carry_nodes({"n1": {"x": 50, "y": 0}}) == []
 
 
@@ -206,7 +206,7 @@ def test_a_graph_change_leaves_surface_cursors_where_they_are():
     presence = AgentPresence(clock=Clock())
     presence.carry_nodes({"n1": {"x": 0, "y": 0}})
     presence.point(CLAUDE, target=BOARD, names={"board": "Desert light"})
-    _person(presence, presence.point(CLAUDE, target=IMAGE, names=NAMES), "lane-a")
+    _person(presence, presence.point(CLAUDE, target=IMAGE, names=NAMES), "agent-a")
     presence.forget_node("n1")
     presence.forget_graph()
     assert presence.active()[0]["target"] == IMAGE
@@ -220,7 +220,7 @@ def test_a_line_said_in_place_keeps_the_cursors_surface_names():
     assert placed == "cursor" and target == IMAGE
     assert presence.here_names(CLAUDE) == NAMES
     spoken = presence.person_form(presence.point(CLAUDE, target=target, say="Hm", names=NAMES), CLAUDE,
-                                  session="lane-a", in_place=True)
+                                  session="agent-a", in_place=True)
     assert spoken["target"] == IMAGE and spoken["anchorNames"] == NAMES
     # A cursor on the canvas has no surface names.
     other = AgentPresence(clock=Clock())
@@ -237,17 +237,17 @@ def test_a_replayed_surface_cursor_has_its_anchor_and_names():
 
 def test_deleting_a_board_sends_every_cursor_on_it_away_and_frees_their_numbers():
     presence = AgentPresence(clock=Clock())
-    _person(presence, presence.point(CLAUDE, target=BOARD, names={"board": "Desert light"}), "lane-a")
-    _person(presence, presence.point(CLAUDE, target=IMAGE, names=NAMES), "lane-b")
+    _person(presence, presence.point(CLAUDE, target=BOARD, names={"board": "Desert light"}), "agent-a")
+    _person(presence, presence.point(CLAUDE, target=IMAGE, names=NAMES), "agent-b")
     elsewhere = {"surface": "moodboard", "itemId": "b2"}
-    kept = _person(presence, presence.point(CLAUDE, target=elsewhere, names={"board": "Dusk"}), "lane-c")
+    kept = _person(presence, presence.point(CLAUDE, target=elsewhere, names={"board": "Dusk"}), "agent-c")
     # The agent's own record (its last event) is on the other board: it stays; both sessions on b1 go.
     assert presence.forget_board("b1") == 0
     assert presence.active()[0]["target"] == elsewhere
     assert [cursor["target"] for cursor in presence.replay()] == [elsewhere]
     assert [number for _, number in presence.live_sessions(CLAUDE.id)] == [3]
     # The first new session takes the lowest free number again.
-    fresh = _person(presence, presence.point(CLAUDE, target=BOARD, names={"board": "Desert light"}), "lane-d")
+    fresh = _person(presence, presence.point(CLAUDE, target=BOARD, names={"board": "Desert light"}), "agent-d")
     assert fresh["session"]["ordinal"] == 1 and kept["session"]["ordinal"] == 3
     assert [row["target"] for row in presence.active()] == [BOARD]
     # The agent's own record leaves too when its last event was on the board.
@@ -258,14 +258,14 @@ def test_an_image_removed_elsewhere_drops_cursors_to_the_board_and_the_removers_
     clock = Clock()
     presence = AgentPresence(clock=clock)
     codex = identify({"X-Nebula-Agent": "Codex"})
-    mine = _person(presence, presence.point(CLAUDE, target=IMAGE, names=NAMES), "lane-a")
+    mine = _person(presence, presence.point(CLAUDE, target=IMAGE, names=NAMES), "agent-a")
     theirs = presence.person_form(presence.point(codex, target={**IMAGE, "part": "weight"}, names=NAMES), codex,
-                                  session="lane-x")
+                                  session="agent-x")
     other_image = {"surface": "moodboard", "itemId": "b1/i7"}
     unrelated = _person(presence, presence.point(CLAUDE, target=other_image, names={"board": "Desert light",
-                                                                                      "image": 7}), "lane-b")
-    # The Claude lane-a cursor made the removal: it holds. Codex's falls back; lane-b's image stays.
-    fell = presence.forget_image("b1", ["i3"], holder=(CLAUDE.id, "lane-a"))
+                                                                                      "image": 7}), "agent-b")
+    # The Claude agent-a cursor made the removal: it holds. Codex's falls back; agent-b's image stays.
+    fell = presence.forget_image("b1", ["i3"], holder=(CLAUDE.id, "agent-a"))
     assert fell == 2  # the codex cursor, and Claude's agent form (a different session than the holder's)
     byKey = {cursor["session"]["key"]: cursor for cursor in presence.replay()}
     assert byKey[mine["session"]["key"]]["target"] == IMAGE
@@ -277,7 +277,7 @@ def test_an_image_removed_elsewhere_drops_cursors_to_the_board_and_the_removers_
 def test_the_removers_own_agent_form_holds_the_removed_image_too():
     presence = AgentPresence(clock=Clock())
     presence.point(CLAUDE, target=IMAGE, names=NAMES)
-    assert presence.forget_image("b1", ["i3"], holder=(CLAUDE.id, "lane-a")) == 0
+    assert presence.forget_image("b1", ["i3"], holder=(CLAUDE.id, "agent-a")) == 0
     assert presence.active()[0]["target"] == IMAGE
     # The same removal made elsewhere drops it to the board.
     assert presence.forget_image("b1", ["i3"], holder=None) == 1
@@ -286,7 +286,7 @@ def test_the_removers_own_agent_form_holds_the_removed_image_too():
 
 def test_a_removal_by_the_person_drops_every_cursor_on_the_image_to_the_board():
     presence = AgentPresence(clock=Clock())
-    first = _person(presence, presence.point(CLAUDE, target=IMAGE, names=NAMES), "lane-a")
+    first = _person(presence, presence.point(CLAUDE, target=IMAGE, names=NAMES), "agent-a")
     assert presence.forget_image("b1", ["i3"], holder=None) >= 1
     cursor = presence.replay()[0]
     assert cursor["session"]["key"] == first["session"]["key"]

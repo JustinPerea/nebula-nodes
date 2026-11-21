@@ -227,14 +227,14 @@ def _agent_reads(api) -> list[str]:
 
 
 def _two_nodes_with_cursors(api) -> tuple[str, str]:
-    """n1 at (0, 0) with lane-a and lane-b on it, n2 at (600, 0) with lane-c."""
+    """n1 at (0, 0) with agent-a and agent-b on it, n2 at (600, 0) with agent-c."""
     n1 = api.graph.add_node("text-input", {"value": "hi"})
     n2 = api.graph.add_node("text-input", {"value": "hi"})
     laid = api.client.put("/api/graph/layout", headers=PERSON,
                           json={"positions": {n1: {"x": 0, "y": 0}, n2: {"x": 600, "y": 0}}})
     assert laid.status_code == 200, laid.text
-    for lane, node in (("lane-a", n1), ("lane-b", n1), ("lane-c", n2)):
-        api.client.post("/api/canvas/cursor", headers={**CLAUDE, "X-Nebula-Agent-Session": lane},
+    for agent, node in (("agent-a", n1), ("agent-b", n1), ("agent-c", n2)):
+        api.client.post("/api/canvas/cursor", headers={**CLAUDE, "X-Nebula-Agent-Session": agent},
                         json={"target": {"nodeId": node}, "action": "look"})
         api.presence_clock.now += 1
     return n1, n2
@@ -246,8 +246,8 @@ def _sessions(api) -> dict[int, int]:
 
 
 def _moved_carries_n1_onto_n2(api, move) -> None:
-    """``move`` puts n1 next to n2 by some route. lane-a and lane-b arrive
-    now, in their order, after lane-c; only the person's tabs hear it; agents
+    """``move`` puts n1 next to n2 by some route. agent-a and agent-b arrive
+    now, in their order, after agent-c; only the person's tabs hear it; agents
     read what they did; and the replay (a reload) agrees."""
     before = _agent_reads(api)
     before_replay = _sessions(api)
@@ -509,8 +509,8 @@ def test_a_sibling_placed_by_the_layout_route_moves_no_unplaced_node(sockets):
                           json={"positions": {n0: {"x": 0, "y": 900}}}).status_code == 200
     shown = api.main._display_positions(list(api.main.cli_graph.nodes.values()))
     assert shown[c] == {"x": 600.0, "y": 100.0}
-    for lane, target in (("lane-c", {"nodeId": c}), ("lane-q", {"x": 355.0, "y": 100.0})):
-        api.client.post("/api/canvas/cursor", headers={**CLAUDE, "X-Nebula-Agent-Session": lane},
+    for agent, target in (("agent-c", {"nodeId": c}), ("agent-q", {"x": 355.0, "y": 100.0})):
+        api.client.post("/api/canvas/cursor", headers={**CLAUDE, "X-Nebula-Agent-Session": agent},
                         json={"target": target, "action": "look"})
         api.presence_clock.now += 1
     api.person_socket.sent.clear()

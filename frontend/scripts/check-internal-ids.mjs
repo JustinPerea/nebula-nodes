@@ -52,7 +52,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 // .skip/.only/.todo variants and .each(...)( forms) in TS, TSX, JS, MJS. A member call such as
 // RE.test('...') is not a title.
 //
-// This file and its test hold the patterns and fixtures, so both are skipped by name (SELF_SKIP).
+// This file and its tests hold the patterns and fixtures, so they are skipped by name (SELF_SKIP).
 // A text scanner, not a parser. Known limits: a regex literal that holds an unbalanced quote can
 // confuse it, and so can JSX text that holds // or /* or an apostrophe (it reads them as a
 // comment or a string until the line or file ends). A `.each` title is followed only in the
@@ -75,11 +75,16 @@ const SKIP_FILE = /(^|\/)(package-lock\.json|[^/]*\.lock|[^/]*\.min\.(js|css)|[^
 export const SELF_SKIP = new Set([
   'frontend/scripts/check-internal-ids.mjs',
   'frontend/tests/internalIdCheck.test.ts',
+  'backend/tests/test_agent_text_wording.py',
 ]);
 export const BASELINE_REL = 'frontend/scripts/internal-ids-baseline.json';
-export const KINDS = ['gm', 'round', 'question', 'review'];
+export const KINDS = ['gm', 'round', 'question', 'review', 'lane'];
 
 const GM_RE = /\bGM\b/g;
+// "lane" is how the studio organises its own work, not a Nebula word; agents and people read
+// "session". Counted as a whole word in any case, in strings, titles and Python docstrings (the
+// MCP tool docs agents read), never in a comment, where "the scrollbar lane" is ordinary English.
+const LANE_RE = /\blanes?\b/gi;
 const ROUND_RE = /\br\d{1,3}[a-z]?\b|\bround\s+\d{1,3}[a-z]?\b/gi;
 const ROUND_BEFORE = /(?:\b(?:design|review|since|per)|PR\s*#\d+|#\d+)[,\s]*$/i;
 const ROUND_BEFORE_GM = /\bGM[,\s]*$/;
@@ -393,7 +398,7 @@ function joinPieces(pieces) {
   return { body, map };
 }
 
-/** Every match in one file: [{line, text, kind: 'gm'|'round'|'question'|'review', match}]. */
+/** Every match in one file: [{line, text, kind: 'gm'|'round'|'question'|'review'|'lane', match}]. */
 export function scanSource(path, text) {
   const spans = findSpans(path, text);
   const lineStarts = [0];
@@ -415,6 +420,11 @@ export function scanSource(path, text) {
     out.push({ line: idx + 1, text: lineText(idx), kind, match });
   };
   for (const m of text.matchAll(GM_RE)) push(m.index, 'gm', m[0]);
+  for (const m of text.matchAll(LANE_RE)) {
+    const span = spans.find((s) => s.kind === 'comment' && m.index >= s.start && m.index < s.end);
+    if (span && !/^["']/.test(text.slice(span.start, span.end))) continue;
+    push(m.index, 'lane', m[0]);
+  }
   const seen = new Set();
   const add = (offset, kind, match) => {
     const key = `${kind}:${offset}`;
@@ -697,7 +707,7 @@ export function main(argv) {
   let code = 0;
   if (failures.length > 0) {
     code = 1;
-    console.error('internal-ids: internal ids in a public repo. Write "design" instead and drop the id (studio initials, round ids, question ids, review ids; in code, use a neutral name).');
+    console.error('internal-ids: internal ids in a public repo. Write "design" instead and drop the id (studio initials, round ids, question ids, review ids, the word lane in a string; in code, use a neutral name).');
     for (const f of failures) {
       console.error(`\n  ${f.file}: ${f.count} match(es), baseline allows ${f.allowed}`);
       for (const l of f.lines) console.error(l);
@@ -729,7 +739,7 @@ export function main(argv) {
   if (notes.length > 0) {
     console.log(`internal-ids: ${notes.length} file(s) fell below their baseline (run \`npm run check:internal-ids -- --write-baseline\` from frontend/ to lock it in).`);
   }
-  console.log(`internal-ids: ok (${Object.keys(counts).length} files, ${totals.gm} studio, ${totals.round} round, ${totals.question} question, ${totals.review} review matches, all within baseline).`);
+  console.log(`internal-ids: ok (${Object.keys(counts).length} files, ${totals.gm} studio, ${totals.round} round, ${totals.question} question, ${totals.review} review, ${totals.lane} lane matches, all within baseline).`);
   return 0;
 }
 

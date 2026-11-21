@@ -749,7 +749,7 @@ def point_at(
     Each of your sessions (each MCP server process) has its own cursor on the
     person's canvas: a second one shows as "<name> · 2". Set
     NEBULA_AGENT_SESSION to choose the id yourself. Subagents that share this
-    server share its cursor; to give each lane its own, have each use the
+    server share its cursor; to give each subagent its own, have each use the
     CLI with its own NEBULA_AGENT_SESSION.
     """
     def anchor(node: str | None, handle: str | None, px: float | None, py: float | None) -> dict[str, Any] | None:

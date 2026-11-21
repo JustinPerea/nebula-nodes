@@ -1,4 +1,4 @@
-"""Google maker routes for more fal and Krea copies (the Google lane, 2026-10-14).
+"""Google maker routes for more fal and Krea copies (2026-10-14).
 
 Same pattern as execution/maker_routes.py (Nano Banana's fal and Krea
 copies): services/node_route.py picks the route, ``dual_route`` filters each

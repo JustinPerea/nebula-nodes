@@ -1,4 +1,4 @@
-"""PR #198 (backend lane).
+"""PR #198 (backend).
 
 - Design: a scene write refused for removing a rendering shot
   (``PUT /api/graph/node/{id}``, and the canvas's undo/redo restore) carries

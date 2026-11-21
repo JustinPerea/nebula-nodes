@@ -656,9 +656,9 @@ to your own last `nebula look`; only if you never looked is it held to the
 newest read by any session of that name, your MCP looks included. An MCP
 look never refreshes a `nebula look`: after one, a `nebula set` built on an
 older `nebula look` is refused, so run `nebula look` and redo it. Set
-`NEBULA_AGENT_SESSION` to a name of your own when two lanes of one agent
+`NEBULA_AGENT_SESSION` to a name of your own when two sessions of one agent
 work on the same canvas, and use it for both reading and writing (it also
-gives each lane its own cursor on the person's canvas). The person's canvas merges your change
+gives each session its own cursor on the person's canvas). The person's canvas merges your change
 into theirs and only asks them when you both changed the same thing. A shot run holds the
 scenes upstream of it too, until it ends. A saved project, a graph file you
 import (`nebula load`, also when you load it) and the person's own edits are
@@ -1158,13 +1158,13 @@ the cursor, as if unset.
 
 - **Without it**, under Claude Code the CLI uses your Claude Code session.
   Your subagents see the same one, so every subagent moves your cursor, and
-  the person sees one cursor jumping between lanes. Over MCP, your subagents
+  the person sees one cursor jumping between subagents. Over MCP, your subagents
   share your MCP server and so its cursor too.
 - **To give each subagent its own cursor**, the orchestrator picks a value
-  per lane and tells the subagent to put it on every `nebula` call it makes,
-  for example `NEBULA_AGENT_SESSION=lane-a nebula point n4 --say "Lighting"`.
+  per subagent and tells the subagent to put it on every `nebula` call it makes,
+  for example `NEBULA_AGENT_SESSION=agent-a nebula point n4 --say "Lighting"`.
   Use the CLI for this: an MCP server has one session for all its callers.
-- The same value keys the lane's scene reads, so a lane reads and writes
+- The same value keys the session's scene reads, so a session reads and writes
   with it (above).
 - Only the person sees sessions: `nebula look` and `nebula agents` show one
   cursor per agent.

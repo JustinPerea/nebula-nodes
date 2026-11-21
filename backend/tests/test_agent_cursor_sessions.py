@@ -212,9 +212,9 @@ def test_the_cli_derives_its_cursor_session_from_claude_code_and_never_sends_the
     assert "X-Nebula-Agent-Session" not in headers
 
     # NEBULA_AGENT_SESSION set: the headers sent before, exactly.
-    monkeypatch.setenv("NEBULA_AGENT_SESSION", "lane-a")
+    monkeypatch.setenv("NEBULA_AGENT_SESSION", "agent-a")
     assert client._identity_headers() == {"X-Nebula-Agent": "Claude Code", "X-Nebula-Surface": "cli",
-                                          "X-Nebula-Agent-Session": "lane-a"}
+                                          "X-Nebula-Agent-Session": "agent-a"}
     # Neither: no session header at all.
     monkeypatch.delenv("NEBULA_AGENT_SESSION")
     monkeypatch.delenv("CLAUDE_CODE_SESSION_ID")
@@ -700,7 +700,7 @@ def test_nebula_agent_session_is_documented_where_an_orchestrator_looks():
     top = parser.format_help()
     assert "NEBULA_AGENT_SESSION" in top
     assert "subagents share" in top and "parent's cursor" in top
-    assert "NEBULA_AGENT_SESSION=lane-a nebula point" in top
+    assert "NEBULA_AGENT_SESSION=agent-a nebula point" in top
     subs = next(a for a in parser._actions if a.__class__.__name__ == "_SubParsersAction").choices
     point = subs["point"].format_help()
     assert "NEBULA_AGENT_SESSION" in point and "parent's" in point
@@ -710,7 +710,7 @@ def test_nebula_agent_session_is_documented_where_an_orchestrator_looks():
     skill = " ".join((root / "skills/nebula/SKILL.md").read_text().split())
     setup = " ".join((root / "docs/MCP-SETUP.md").read_text().split())
     for text in (skill, setup):
-        assert "NEBULA_AGENT_SESSION=lane-a nebula point" in text
+        assert "NEBULA_AGENT_SESSION=agent-a nebula point" in text
         assert "subagents share" in text.lower() or "your subagents see the same one" in text.lower()
     assert "Without it" in skill and "Without it, subagents share the parent's cursor" in setup
     # The numbering the docs describe is the live one, not "until Nebula restarts".
@@ -1005,14 +1005,14 @@ def test_a_person_tab_gets_the_replay_on_its_hello_and_no_one_else_does(sockets,
     api = sockets
     node = api.graph.add_node("text-input", {"value": "hi"})
     no_hello_before = _connect(api, [])
-    for raw in ("lane-a", "lane-b", "lane-c"):
+    for raw in ("agent-a", "agent-b", "agent-c"):
         body = {"target": {"nodeId": node}, "action": "look", "say": f"Reading in {raw}"}
         assert api.client.post("/api/canvas/cursor", headers={**CLAUDE, "X-Nebula-Agent-Session": raw},
                                json=body).status_code == 200
     # b leaves (quiet past the TTL); a and c keep going.
     for _ in range(5):
         api.presence_clock.now += 30
-        for raw in ("lane-a", "lane-c"):
+        for raw in ("agent-a", "agent-c"):
             api.client.post("/api/canvas/cursor", headers={**CLAUDE, "X-Nebula-Agent-Session": raw},
                             json={"target": {"x": 10, "y": 10}, "action": "move"})
 
