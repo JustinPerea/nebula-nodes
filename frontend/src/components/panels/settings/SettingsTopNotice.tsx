@@ -8,6 +8,7 @@ import { PersonLockLine } from '../../PersonLock';
 import { DISMISS_FAILED, dismissSettingsNotice, getSettingsNotice, noticeParts, type SettingsNotice } from '../../../lib/settingsNotice';
 
 /**
+ * Nebula restored the settings at start: the person sees its line once, at
  * the top of Settings, until they dismiss it. This is the fallback
  * (design, PR #203) while Updates takes no system card. Neutral, not an
  * error.
