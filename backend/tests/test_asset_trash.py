@@ -37,11 +37,11 @@ def test_delete_moves_the_file_untouched_and_restore_puts_it_back(tmp_path, monk
     live = tmp_path / "proj1" / f"{board['id']}.json"
     original = live.read_bytes()
 
-    record = store.delete(board["id"], deleted_by=actor_record({"kind": "agent", "name": "GM - Design", "id": "x"}))
+    record = store.delete(board["id"], deleted_by=actor_record({"kind": "agent", "name": "Studio Agent", "id": "x"}))
 
     assert not live.exists()
     assert (tmp_path / ".trash" / f"{board['id']}.json").read_bytes() == original
-    assert record["deletedBy"] == {"kind": "agent", "name": "GM - Design"}
+    assert record["deletedBy"] == {"kind": "agent", "name": "Studio Agent"}
     assert record["projectId"] == "proj1" and record["scopeDir"] == "proj1" and record["name"] == "Warm"
     # Gone from every live lookup, but the trash knows it.
     assert store.get(board["id"]) is None
@@ -105,7 +105,7 @@ async def test_an_agent_deletes_a_board_and_restores_it_and_the_node_runs_again(
     deleted = api.client.delete(f"/api/moodboards/{board['id']}", headers=AGENT)
     assert deleted.status_code == 200, deleted.text
     assert deleted.json()["status"] == "trashed"
-    assert deleted.json()["trashed"]["deletedBy"] == {"kind": "agent", "name": "GM - Design"}
+    assert deleted.json()["trashed"]["deletedBy"] == {"kind": "agent", "name": "Studio Agent"}
 
     gone = api.client.get(f"/api/moodboards/{board['id']}")
     assert gone.status_code == 404
@@ -161,7 +161,7 @@ def test_saving_a_board_or_character_someone_trashed_says_it_is_in_recently_dele
     saved = api.client.put(f"/api/moodboards/{board['id']}", headers=PERSON, json={"name": "Edited"})
     assert saved.status_code == 404
     assert saved.json()["code"] == "in_trash"
-    assert saved.json()["trashed"]["deletedBy"]["name"] == "GM - Design"
+    assert saved.json()["trashed"]["deletedBy"]["name"] == "Studio Agent"
     assert MoodboardStore().get(board["id"]) is None
     api.client.post(f"/api/trash/moodboard/{board['id']}/restore", headers=PERSON)
     again = api.client.put(f"/api/moodboards/{board['id']}", headers=PERSON, json={"name": "Edited"})
@@ -383,7 +383,7 @@ def test_cli_lists_and_restores(api, monkeypatch):
     with redirect_stdout(out):
         assert trash.run_list(client) == 0
     text = out.getvalue()
-    assert f"moodboard {board['id']}  CLI board  [global]" in text and "by GM - Design" in text
+    assert f"moodboard {board['id']}  CLI board  [global]" in text and "by Studio Agent" in text
     assert f"nebula trash restore moodboard {board['id']}" in text
 
     out = io.StringIO()

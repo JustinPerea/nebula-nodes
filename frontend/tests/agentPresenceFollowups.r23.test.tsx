@@ -211,7 +211,7 @@ describe('screen readers', () => {
 describe('on the canvas: a registered variant is kept, an unregistered one dropped', () => {
   it('matches the corpus the backend wrote', () => {
     const cases = (corpus as { cases: Array<{ name: string; typed: string; note: string; agent: string }> }).cases;
-    for (const c of cases.filter((x) => x.name.startsWith('GM r23') || x.name.startsWith('fuzz r23'))) {
+    for (const c of cases.filter((x) => x.name.startsWith('selectors and joins'))) {
       expect(pinDisplayText(c.typed, { fold: false }), c.name).toBe(c.note);
     }
     expect(pinDisplayText('葛\u{E0100}')).toBe('葛\u{E0100}');

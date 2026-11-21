@@ -171,7 +171,7 @@ def test_only_the_persons_tab_saves_the_view(workspace, person):
     theirs["nodes"][1]["data"]["params"]["value"] = "Edited in the agent's tab"
     theirs["nodes"][1]["data"]["outputs"]["text"]["value"] = "Edited in the agent's tab"
     theirs["viewport"] = {"x": -900, "y": -400, "zoom": 4}
-    for headers in ({}, {"X-Nebula-Agent": "GM - Design"}, {**person.headers, "X-Nebula-Agent": "GM - Design"}):
+    for headers in ({}, {"X-Nebula-Agent": "Studio Agent"}, {**person.headers, "X-Nebula-Agent": "Studio Agent"}):
         response = client.put(f"/api/projects/{project_id}", json={"workspaceRevision": revision, "snapshot": theirs},
                               headers=headers)
         assert response.status_code == 200, response.text

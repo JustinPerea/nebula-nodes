@@ -73,7 +73,7 @@ def test_the_store_moves_a_deleted_style_to_the_trash_untouched_and_restores_it(
     live = tmp_path / "_global" / f"{style['id']}.json"
     raw = live.read_bytes()
 
-    record = store.delete(style["id"], deleted_by={"kind": "agent", "name": "GM - Design"})
+    record = store.delete(style["id"], deleted_by={"kind": "agent", "name": "Studio Agent"})
     assert record["kind"] == "style" and record["name"] == "Dusk" and record["scopeDir"] == "_global"
     assert not live.exists()
     assert (tmp_path / ".trash" / f"{style['id']}.json").read_bytes() == raw
@@ -82,7 +82,7 @@ def test_the_store_moves_a_deleted_style_to_the_trash_untouched_and_restores_it(
     assert store.list("global") == []
     with pytest.raises(KeyError):
         store.update(style["id"], name="Edited")
-    assert store.trashed(style["id"])["deletedBy"] == {"kind": "agent", "name": "GM - Design"}
+    assert store.trashed(style["id"])["deletedBy"] == {"kind": "agent", "name": "Studio Agent"}
     assert [item["id"] for item in store.list_trash(scope="global")] == [style["id"]]
 
     assert store.restore(style["id"]) == style
@@ -112,7 +112,7 @@ def test_an_agent_deletes_a_style_and_restores_it(styles):
     assert deleted.status_code == 200, deleted.text
     body = deleted.json()
     assert body["status"] == "trashed" and body["id"] == style["id"]
-    assert body["trashed"]["deletedBy"] == {"kind": "agent", "name": "GM - Design"}
+    assert body["trashed"]["deletedBy"] == {"kind": "agent", "name": "Studio Agent"}
     assert body["trashed"]["kind"] == "style"
 
     gone = styles.client.get(f"/api/presets/{style['id']}")
