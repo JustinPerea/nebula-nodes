@@ -14,7 +14,7 @@ and returns ``[Model3D file (.ply), seed, html]``. The Gradio queue protocol
 ``/gradio_api/upload`` (multipart ``files``), which answers with the
 server-side paths, the call the Gradio client makes.
 
-Who pays: nobody bills Nebula. The route is keyless (PR #203 round 7):
+Who pays: nobody bills Nebula. The route is keyless (PR #203):
 without ``HF_TOKEN`` the run goes to Hugging Face's shared ZeroGPU with no
 auth header; with it, the person's own ZeroGPU time
 (https://huggingface.co/docs/hub/spaces-zerogpu), and past the daily quota a
@@ -182,7 +182,7 @@ def quota_error(message: str, *, signed_in: bool) -> IdolSpaceError:
     return with_provider_line(IdolSpaceError(text), line)
 
 
-# GM, PR #203 r12 item 6: an anonymous run (no token) that finds the free GPU
+# Design, PR #203: an anonymous run (no token) that finds the free GPU
 # time used up, from the quota and the Space-limit refusals alike. Nobody
 # knows whose pool a server-side call with no token draws on (no X-IP-Token
 # reaches the Space), so the line names no allowance numbers. Re-ruled once
@@ -201,8 +201,8 @@ def gpu_busy_error(*, detail: str) -> IdolSpaceError:
 def space_limit_error(*, detail: str) -> IdolSpaceError:
     # Only an anonymous run reaches it (zerogpu_kind: with HF_TOKEN sent the
     # same text means the token didn't apply). No X-IP-Token reached the
-    # Space, so the shared pool a call with no token draws on is out: GM r12
-    # item 6's anonymous line.
+    # Space, so the shared pool a call with no token draws on is out: the
+    # anonymous line (design, PR #203).
     return with_provider_line(
         IdolSpaceError(f"The Idol Space has reached its own ZeroGPU limit; no X-IP-Token reached it, so the run "
                        f"drew on the shared pool a call with no token uses ({detail})"),
@@ -222,8 +222,8 @@ def duration_token_not_applied_error(*, detail: str) -> IdolSpaceError:
     # (spaces then gives the anonymous cap), or that a free ("regular")
     # account's per-task cap, which isn't published, is under the Space's
     # ask. The text is the same for both (spaces 0.51.3 zero/client.py), so
-    # the first live run settles it; until then GM's r6 #7 ruling shows the
-    # token line.
+    # the first live run settles it; until then the token line is shown
+    # (design).
     return with_provider_line(
         IdolSpaceError("HF_TOKEN was sent, but ZeroGPU refused the Idol Space's per-run GPU ask as over the "
                        "maximum: either the token didn't apply, or a free account's per-task cap is under the ask "
@@ -264,7 +264,7 @@ _NO_IP_TOKEN = "re-running outside of examples"
 # back to IP-based quotas", meta.auth is None): the bare label "your ZeroGPU
 # quota" (an account's says "your free ZeroGPU quota" or "your Pro ZeroGPU
 # quota") and, on an API call, this suffix. With HF_TOKEN sent, either means
-# the token didn't apply (PR #203 review, spaces 0.51.3 zero/client.py).
+# the token didn't apply (PR #203, spaces 0.51.3 zero/client.py).
 _IP_ONLY_QUOTA = ("authenticate with a hugging face token", "exceeded your zerogpu quota")
 
 
@@ -368,14 +368,14 @@ class IdolProposalNeeded(run_origin.ProposalNeeded):
     (its person line)."""
 
 
-# GM, PR #203 r39 item 1, verbatim: the stop is by design, not a failure.
+# Design, PR #203, verbatim: the stop is by design, not a failure.
 # The card shows WAITING under its own neutral heading ("Waiting for you to
 # run it", frontend nodeErrorCopy, by the event's category "waiting").
 AGENT_STOP_PERSON = ("An agent’s run stopped here because this node could bill your Hugging Face account, and only "
                      "you can start that. Run the node yourself to go ahead.")
 
 
-# GM, PR #203 r40 item 5, verbatim: Run clicked in a canvas tab that isn't
+# Design, PR #203, verbatim: Run clicked in a canvas tab that isn't
 # connected as the person, with the token set (the same stop, under the same
 # heading; only the body differs).
 TAB_STOP_PERSON = ("This node could bill your Hugging Face account, so only you can run it. You can run it when this "
@@ -385,7 +385,7 @@ TAB_STOP_PERSON = ("This node could bill your Hugging Face account, so only you 
 def agent_stop_text(name: str) -> str:
     """What agents read (MCP, the CLI, the run's result, the events) when
     their run stopped at ``name``, the node's name as the canvas shows it
-    (GM, PR #203 r39 item 1, verbatim)."""
+    (design, PR #203, verbatim)."""
     return (f"“{name}” wasn’t run. Nodes that call Hugging Face with the person’s token can bill their account, "
             f"so only the person can run them. Ask them to run “{name}”, or carry on without it.")
 
@@ -393,10 +393,10 @@ def agent_stop_text(name: str) -> str:
 def agent_call_stop(node: GraphNode) -> IdolProposalNeeded:
     """The stop at the call (run_idol), named as the canvas names the node
     (run_origin.RunOrigin.node_name: its label when renamed, else its
-    type's). GM's words, then how the agent asks: the agent is told to
-    propose the run (Justin decided, 2026-10-31), in its reader's words with
-    the node's id; a quick run, which has no canvas node, says how to add one
-    and propose it (main._quick_propose_hint)."""
+    type's). The stop line (design), then how the agent asks: the agent is
+    told to propose the run (Justin decided, 2026-10-31), in its reader's
+    words with the node's id; a quick run, which has no canvas node, says how
+    to add one and propose it (main._quick_propose_hint)."""
     from services import agent_spend
 
     origin = run_origin.current()
@@ -756,7 +756,7 @@ DOWNLOAD_LINE = "Nebula couldn’t download the object from Idol. Try again in a
 async def _decoded_chunks(response: httpx.Response) -> AsyncIterator[bytes]:
     """The body, decoded. A compressed body that won't decode (httpx's
     DecodingError, an HTTPError the run would read as no connection) is a
-    download that failed, in GM's download line (PR #203 r8 item 4)."""
+    download that failed, in the download line (design, PR #203)."""
     try:
         async for chunk in response.aiter_bytes():
             yield chunk
@@ -836,7 +836,7 @@ def world_value(path: Path, *, seed: int, gaussians: int, mode: str, steps: int)
     degrees about x, (x, y, z) -> (x, -z, y), so in the file up is -y (its
     own "y-up" comment notwithstanding). The front faces +x: renders of the
     Space's backpack example from each axis show its front at +x, its back at
-    -x and its sides at +-z (PR #203 review, 2026-10-29); the input camera's
+    -x and its sides at +-z (PR #203, 2026-10-29); the input camera's
     yaw is predicted per image, so this is the typical front, not a promise.
     The object fits [-0.5, 0.5] on each axis in model units, so the unit is
     ``custom``. ``gaussians`` is the file's own count (its validated header),

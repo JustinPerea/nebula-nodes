@@ -27,11 +27,11 @@ damaged files hold; only when they hold no project at all does the read
 refuse, as before. A catalog from a newer Nebula (version above 1) is not
 damage: it refuses and nothing changes.
 
-Reads stay cheap (review 2 of PR #199, M1): a file this process committed
-(its signature is the projection's) is decoded by the C decoder, refusing
-only NaN and the infinities; the strict read (a number past float's range,
-a lone surrogate) runs only for a file changed elsewhere. A reader on the
-event loop never restores or waits for one (hand_off_restore).
+Reads stay cheap (PR #199): a file this process committed (its signature
+is the projection's) is decoded by the C decoder, refusing only NaN and
+the infinities; the strict read (a number past float's range, a lone
+surrogate) runs only for a file changed elsewhere. A reader on the event
+loop never restores or waits for one (hand_off_restore).
 """
 from __future__ import annotations
 
@@ -91,26 +91,26 @@ RESTORE_RECORD_NAME = "catalog-restore.json"
 RESTORES_KEPT = 10
 # The live canvas waiting to be filed (main._mark_canvas_not_filed), across
 # restarts; a second copy (".bak") so a damaged or missing one keeps its
-# `since` and its one journal event (review 4 of PR #199, N-1).
+# `since` and its one journal event (PR #199).
 CANVAS_WAITING_NAME = "canvas-waiting.json"
 CANVAS_WAITING_BACKUP_NAME = CANVAS_WAITING_NAME + ".bak"
 # The projects deleted for good as the latest commit that changed them left
-# them (its `purged`): .bak is one commit behind, so a delete for good as the
-# last commit, then a catalog.json damaged past its head, brought the project
-# back to Recently deleted with no line (review 4 of PR #199, L-3). Read by a
-# restore only. {version, commit, purged, previous: {commit, purged}}:
-# `commit` is the catalog's `commitSeq` it is true of, `previous` the
-# tombstones that commit took away, true of the commit before. Written
-# before the catalog's rename (review 5, L-3): a crash between the two
-# leaves it one commit ahead, which its layers say, never a landed delete
-# without it. A write that fails leaves it at its older commit; the copies
-# numbered later than it then decide the ids they hold (review 5, L-1).
+# them (its `purged`): .bak is one commit behind, so a delete for good as
+# the last commit, then a catalog.json damaged past its head, brought the
+# project back to Recently deleted with no line (PR #199). Read by a restore
+# only. {version, commit, purged, previous: {commit, purged}}: `commit` is
+# the catalog's `commitSeq` it is true of, `previous` the tombstones that
+# commit took away, true of the commit before. Written before the catalog's
+# rename: a crash between the two leaves it one commit ahead, which its
+# layers say, never a landed delete without it. A write that fails leaves it
+# at its older commit; the copies numbered later than it then decide the ids
+# they hold.
 PURGED_NAME = "catalog-purged.json"
 # The live canvases held aside while they wait to be saved as their own
 # projects (main._hold_live_canvas: an open, a create, or below the limit an
-# agent's write replaced it; review 5 of PR #199, M-3; GM's held model,
-# 2026-10-28). Each canvas in its own file (review 7, L-3: one shared file,
-# capped, refused the person's open once it was full), in two copies:
+# agent's write replaced it; PR #199; design: the held model, 2026-10-28).
+# Each canvas in its own file (one shared file, capped, used to refuse the
+# person's open once it was full), in two copies:
 # canvas-held/<projectId>.json and its .bak, {version: 2, entry, check},
 # each written whole and fsynced, then the folder. ``check`` is a digest of
 # the entry, so a flip that still parses loses to the other copy (design).
@@ -121,16 +121,16 @@ CANVAS_HELD_NAME = "canvas-held.json"
 CANVAS_HELD_BACKUP_NAME = CANVAS_HELD_NAME + ".bak"
 CANVAS_HELD_NOTE_NAME = "unreadable.json"
 _HELD_FILE = re.compile(r"^([0-9a-f]{32})\.json(\.bak)?$")
-# No shared cap (review 7, L-3). A held canvas is capped like a project
-# (main: MAX_PROJECT_BYTES, for agents only; the person's open always holds
-# it). A file past the catalog's own cap isn't one Nebula wrote: it can't
-# be saved as a project, so it is kept aside as damaged.
+# No shared cap. A held canvas is capped like a project (main:
+# MAX_PROJECT_BYTES, for agents only; the person's open always holds it). A
+# file past the catalog's own cap isn't one Nebula wrote: it can't be saved
+# as a project, so it is kept aside as damaged.
 CANVAS_HELD_READ_MAX_BYTES = 128 * 1024 * 1024 + 1024 * 1024
-# How long the person is told a held canvas couldn't be read (review 6, L-1).
+# How long the person is told a held canvas couldn't be read.
 HELD_UNREADABLE_SECONDS = 7 * 24 * 3600
 PURGED_FILE_MAX_BYTES = 1024 * 1024
 # Whether a restore from Recently deleted (the person's Undo, Restore in the
-# list, an agent's restore) may take the list past MAX_PROJECTS: yes (GM r6;
+# list, an agent's restore) may take the list past MAX_PROJECTS: yes (design;
 # Justin, 2026-10-29: the limit is for new projects, so an Undo of a delete
 # may go over it when a recovered canvas took the freed place). prepare's
 # cap then counts only projects new to the list: later saves of a list past
@@ -149,18 +149,18 @@ RESTORE_MAY_PASS_THE_PROJECT_LIMIT = True
 KEPT_SAVE_MAY_PASS_THE_PROJECT_LIMIT = True
 KEPT_SAVE_OVER_BY = 1
 RECORD_ROWS = 100  # names listed per restore; the counts are whole
-# The fields prepare writes first, so a cut file still says which project was
-# open. ``canvasPending`` (what protects the person's canvas) comes right
-# before ``activeProjectId`` (review 10 of PR #199, HIGH-1: at the file's end,
-# damage in its last quarter lost it while the open project survived): a
-# head that still says which project is open has its protection whole too.
+# The fields prepare writes first, so a cut file still says which project
+# was open. ``canvasPending`` (what protects the person's canvas) comes
+# right before ``activeProjectId`` (PR #199: at the file's end, damage in
+# its last quarter used to lose it while the open project survived): a head
+# that still says which project is open has its protection whole too.
 _HEAD_KEYS = ("version", "commitSeq", "commitCheck", "canvasPending", "activeProjectId", "workspaceRevision",
               "migratedProjectId", "purged")
 # Every read refuses NaN, Infinity and -Infinity (parse_constant: free on the
 # C decoder). A file this process didn't commit (or a copy) is also read
 # strictly: a number past float's range and a lone surrogate are refused too
 # (catalog_recovery.loads, writable), which costs a Python call per float and
-# a re-encode, so never on the hot path (review 2 of PR #199, M1).
+# a re-encode, so never on the hot path (PR #199).
 _DECODER = json.JSONDecoder(parse_constant=catalog_recovery.reject_constant)
 # What a raw catalog holding an escaped lone surrogate must contain (the
 # bytes decode as UTF-8, so a raw one is refused before this).
@@ -202,7 +202,7 @@ class _Damaged(Exception):
 
 def _newer_version(result: Any) -> bool:
     """A catalog a newer Nebula wrote (an integer version above 1): not ours
-    to restore or rewrite (review 1, L4)."""
+    to restore or rewrite."""
     version = result.get("version") if isinstance(result, dict) else None
     return isinstance(version, int) and not isinstance(version, bool) and version > 1
 
@@ -218,7 +218,7 @@ def _log(message: str) -> None:
 # A kept damaged file's name says when it was kept: ``<name>.damaged-<UTC>-<id>``.
 _STAMP_FORMAT = "%Y%m%dT%H%M%SZ"
 _KEPT_AT = re.compile(r"\.damaged-(\d{8}T\d{6}Z)")
-# The held canvases' kept files (review 8 of PR #199, N-1): damaged copies,
+# The held canvases' kept files (PR #199): damaged copies,
 # canvases that couldn't be filed, and the moved canvas-held.json.
 _HELD_KEPT = re.compile(r"\.(damaged|unfileable|migrated)-(\d{8}T\d{6}Z)-[0-9a-f]{8}$")
 
@@ -229,7 +229,7 @@ def _stamp(moment: datetime) -> str:
 
 def _kept_at(path: Path) -> float:
     """When a damaged file was kept: the time in its name. A hard link keeps
-    the damaged file's own mtime, which can be weeks older (review 2, L7);
+    the damaged file's own mtime, which can be weeks older;
     only a name without a time falls back to it."""
     match = _KEPT_AT.search(path.name)
     if match:
@@ -245,7 +245,7 @@ class ProjectLimitError(ProjectStoreError):
     there may be) or "storage" (how big the catalog may grow). The answer
     carries it beside ``detail`` (main._storage_error_body), so the Projects
     screen can tell a full store from a copy that is itself too large without
-    reading the words (Q116 a)."""
+    reading the words."""
 
     def __init__(self, message: str, limit: str) -> None:
         super().__init__(message)
@@ -254,7 +254,7 @@ class ProjectLimitError(ProjectStoreError):
         # (the answer's ``projectCount``); None otherwise.
         self.project_count: int | None = None
         # How many to delete before the refused write fits (the answer's
-        # ``deletes``: the tab's line, GM r35 on PR #199); None when unknown.
+        # ``deletes``: the tab's line; design, PR #199); None when unknown.
         self.deletes: int | None = None
 
 
@@ -290,8 +290,8 @@ def metadata(project: dict[str, Any]) -> dict[str, Any]:
     if project.get("createdBy"):
         found["createdBy"] = copy.deepcopy(project["createdBy"])
     # Who pinned the cover ({kind, name}); a pin from before it was recorded
-    # has none and is the person's (main._cover_owner). A pin whose image left
-    # the project no longer counts (Q90 a): the card is automatic, and
+    # has none and is the person's (main._cover_owner). A pin whose image
+    # left the project no longer counts: the card is automatic, and
     # `coverLostPin` names the old pin so a screen can say why.
     pin = project.get("coverPin")
     if pin and (project.get("cover") or {}).get("source") == "pinned":
@@ -388,16 +388,16 @@ def purge_expired_trash(catalog: dict[str, Any], *, at: datetime | None = None) 
 
 RECOVERED_CANVAS_NAME = "Recovered canvas"
 
-# Nebula's copy names (GM r29 of PR #199, 2): Nebula never reads a number in
+# Nebula's copy names (design, PR #199): Nebula never reads a number in
 # someone else's name. Three kinds of name:
 # - a duplicate: "Alpha copy", then "Alpha copy 2" (the Mac Finder's form);
 # - a recovered copy: "Recovered <name>" when that is free, else that name
 #   plus " copy", then " copy 2", " copy 3" (the lowest free);
 # - a canvas filed when which project it was isn't known: "Recovered canvas",
-#   then "Recovered canvas 2" (GM r5, r10), Nebula's own whole name.
+#   then "Recovered canvas 2" (design), Nebula's own whole name.
 # The only number Nebula raises in a name is its own "copy N": a trailing
 # " copy" or " copy N" is the one pattern Nebula reads, as the Finder does
-# (GM r32 of PR #199, 4), so a name the person typed that way is read the same
+# (design, PR #199), so a name the person typed that way is read the same
 # way ("Budget copy 3" gives "Budget copy 4"). No other number in a name is
 # ever read ("Shot 7", "Recovered Shot 7", "Delta 1" are names, never a copy
 # count). Don't widen it: the frontend's copy (recoveredNames.ts) says the same.
@@ -409,9 +409,10 @@ RECOVERED_CANVAS_NAME = "Recovered canvas"
 # "Shot ７" are names, not numbers.
 _COPY = re.compile(r"(?P<stem>.+?) copy(?: (?P<n>[2-9]|[1-9][0-9]+))?", re.DOTALL)
 
-# A recovered copy's name before GM r23 a ("Alpha (recovered)", "Alpha
-# (recovered 2)"): Nebula's old form of "Recovered Alpha". The whole suffix
-# was Nebula's word; its number is never read, so both give "Recovered Alpha".
+# An earlier version's name for a recovered copy ("Alpha (recovered)",
+# "Alpha (recovered 2)"): Nebula's old form of "Recovered Alpha". The whole
+# suffix was Nebula's word; its number is never read, so both give
+# "Recovered Alpha".
 _LEGACY_RECOVERED = re.compile(r"(?P<stem>.+?) \(recovered(?: [0-9]+)?\)", re.DOTALL)
 
 # Nebula's word for a recovered copy: a name that starts with it is already
@@ -475,12 +476,12 @@ def _first_free(first: str, names: set[str]) -> str:
 
 
 def recovered_name(source_name: str, catalog: Mapping[str, Any], taken: Iterable[str] = ()) -> str:
-    """A recovered copy's name (GM - Design, round 21 of PR #195, G5; GM r29
-    2 of PR #199): "Recovered <name>" when that is free, else that name plus
-    " copy", then " copy 2", " copy 3", the lowest free. Nebula never reads a
-    number in the name: the next recovery of "Shot" is "Recovered Shot" even
-    with "Recovered Shot 7" in the list (a different name); "Shot 7" with
-    "Recovered Shot 7" taken gives "Recovered Shot 7 copy".
+    """A recovered copy's name (design, PR #195 and PR #199): "Recovered
+    <name>" when that is free, else that name plus " copy", then " copy 2",
+    " copy 3", the lowest free. Nebula never reads a number in the name: the
+    next recovery of "Shot" is "Recovered Shot" even with "Recovered Shot 7"
+    in the list (a different name); "Shot 7" with "Recovered Shot 7" taken
+    gives "Recovered Shot 7 copy".
 
     - A name that starts with "Recovered" (Nebula's word) is never given a
       second one: it starts from its own name, taken as it is the source, so
@@ -508,36 +509,36 @@ def recovered_name(source_name: str, catalog: Mapping[str, Any], taken: Iterable
 
 
 def lost_row_name(name: str, catalog: Mapping[str, Any]) -> str:
-    """The name a canvas whose project row is gone is filed under (GM r14,
-    4; GM r16, 3): that row's own name when it is free, and free means no
-    project in the list or in Recently deleted has it ("Beta" still in
-    Recently deleted gives "Recovered Beta"). Else it is a recovered copy of
-    that name (recovered_name): "Alpha copy" gives "Recovered Alpha copy",
-    "Recovered Alpha" gives "Recovered Alpha copy"."""
+    """The name a canvas whose project row is gone is filed under (design):
+    that row's own name when it is free, and free means no project in the
+    list or in Recently deleted has it ("Beta" still in Recently deleted
+    gives "Recovered Beta"). Else it is a recovered copy of that name
+    (recovered_name): "Alpha copy" gives "Recovered Alpha copy", "Recovered
+    Alpha" gives "Recovered Alpha copy"."""
     if name not in _names_in_use(catalog):
         return name
     return recovered_name(name, catalog)
 
 
 def duplicate_name(source_name: str, catalog: Mapping[str, Any], taken: Iterable[str] = ()) -> str:
-    """Nebula's duplicate naming (GM r10, 1; the Mac Finder convention; GM
-    r14, 4; GM r25, 5; GM r29, 2): "<name> copy", then "<name> copy 2" and
-    on, the lowest free in the list, Recently deleted and ``taken`` (names
-    already promised to copies not yet filed); a copy's copy raises its own
-    copy number: "Alpha copy" gives "Alpha copy 2", "Recovered Alpha copy 2"
-    gives "Recovered Alpha copy 3". Any other number is the name's own:
-    "Shot 7" gives "Shot 7 copy". The one helper for every duplicate: an
-    agent's copy of the person's canvas (PR #199) and a future Duplicate
-    project. A long name is cut short so the whole copy name, " copy N"
-    included, fits NAME_LIMIT code points (_fit)."""
+    """Nebula's duplicate naming (design; the Mac Finder convention):
+    "<name> copy", then "<name> copy 2" and on, the lowest free in the list,
+    Recently deleted and ``taken`` (names already promised to copies not yet
+    filed); a copy's copy raises its own copy number: "Alpha copy" gives
+    "Alpha copy 2", "Recovered Alpha copy 2" gives "Recovered Alpha copy 3".
+    Any other number is the name's own: "Shot 7" gives "Shot 7 copy". The
+    one helper for every duplicate: an agent's copy of the person's canvas
+    (PR #199) and a future Duplicate project. A long name is cut short so
+    the whole copy name, " copy N" included, fits NAME_LIMIT code points
+    (_fit)."""
     return _copy_of(source_name, _names_in_use(catalog, taken))
 
 
 def recovered_canvas_name(catalog: Mapping[str, Any], taken: Iterable[str] = ()) -> str:
-    """The name of a live canvas filed when which project it was isn't
-    known (GM r5 of PR #199): "Recovered canvas", then "Recovered canvas 2"
-    and on, the lowest free (GM r14, 4). Nebula's own whole name and its own
-    count: no name is read for it."""
+    """The name of a live canvas filed when which project it was isn't known
+    (design, PR #199): "Recovered canvas", then "Recovered canvas 2" and on,
+    the lowest free. Nebula's own whole name and its own count: no name is
+    read for it."""
     names = _names_in_use(catalog, taken)
     number = 1
     while (name := RECOVERED_CANVAS_NAME if number == 1 else f"{RECOVERED_CANVAS_NAME} {number}") in names:
@@ -569,7 +570,7 @@ class Projection(NamedTuple):
     pins: tuple[dict[str, Any], ...]        # the open project's pins, as stored
     # The file's bytes as read or written here (zlib.crc32), so a rewrite in
     # place that keeps (inode, mtime, size) still gets the strict read
-    # (review 3 of PR #199, L-6). None when not known yet.
+    # (PR #199). None when not known yet.
     digest: int | None = None
 
 
@@ -579,8 +580,8 @@ def file_signature(info: os.stat_result) -> tuple[int, int, int, int]:
     write and every change of times, so a rewrite in place that puts the
     mtime back (rsync --inplace -t, cp -p onto it) changes it too, and
     needs_reading() and projection() see it without reading the file
-    (review 4 of PR #199, N-3). Bit rot changes none of them: _load's crc
-    of the bytes catches it at the next read under the lock."""
+    (PR #199). Bit rot changes none of them: _load's crc of the bytes
+    catches it at the next read under the lock."""
     return (info.st_ino, info.st_mtime_ns, info.st_size, info.st_ctime_ns)
 
 
@@ -603,10 +604,9 @@ def _waiting_record(found: Any) -> dict[str, Any] | None:
                 and catalog_recovery.dated(saved.get("at")):
             record = {"id": saved["id"], "name": saved["name"], "at": saved["at"],
                       **({"overSaveLimit": True} if saved.get("overSaveLimit") is True else {}),
-                      # After a restore notice named a canvas (GM's answer 1 to review 8).
+                      # After a restore notice named a canvas.
                       **({"another": True} if saved.get("another") is True else {})}
-            # Every canvas filed together (review 6 of PR #199, N-2), each
-            # marked when it is over the save limit (GM, review 7).
+            # Every canvas filed together (PR #199), each marked when it is over the save limit.
             filed = saved.get("filed")
             if isinstance(filed, list) and all(isinstance(row, dict) and isinstance(row.get("id"), str)
                                                and isinstance(row.get("name"), str) for row in filed):
@@ -622,15 +622,15 @@ def _waiting_record(found: Any) -> dict[str, Any] | None:
     return {"reason": found["reason"], "from": owner, "since": found["since"], "journaled": found["journaled"]}
 
 
-# What main keeps in the catalog about the person's canvas once it was
-# filed from waiting (PR #199, the design's rule (a); in the same commit
-# as the filing, so no failed write or crash can leave a filed project
-# open and unprotected). ``fresh``: the project filed
-# from the person's waiting canvas, with that canvas's digest; until the
-# canvas changes or one of the person's tabs is open on it (GM r11, 2), an
-# agent's write closes it first and works elsewhere. ``copies``: the copies
-# an agent's change was made on, by the id each is filed under: the name it
-# takes, the agent, and the undo book's mark and boot when it was made.
+# What main keeps in the catalog about the person's canvas once it was filed
+# from waiting (PR #199, design; in the same commit as the filing, so no
+# failed write or crash can leave a filed project open and unprotected).
+# ``fresh``: the project filed from the person's waiting canvas, with that
+# canvas's digest; until the canvas changes or one of the person's tabs is
+# open on it (design), an agent's write closes it first and works elsewhere.
+# ``copies``: the copies an agent's change was made on, by the id each is
+# filed under: the name it takes, the agent, and the undo book's mark and
+# boot when it was made.
 CANVAS_PENDING_FIELD = "canvasPending"
 
 
@@ -660,7 +660,7 @@ def canvas_pending_of(catalog: Mapping[str, Any]) -> dict[str, Any]:
     # ``filed``: the project was made from the person's waiting canvas (a
     # listing's filing, or the agent's write filing it first); absent for a
     # project protected again after a restore, which already was a project
-    # (GM r15 on PR #199: its replies say "kept", not "saved").
+    # (design, PR #199: its replies say "kept", not "saved").
     return {"fresh": None if fresh is None else {"projectId": fresh["projectId"], "digest": fresh["digest"],
                                                  **({"filed": True} if fresh.get("filed") is True else {})},
             "copies": kept}
@@ -690,7 +690,7 @@ def _held_unreadable_note(found: Any) -> dict[str, Any] | None:
         return None
     if not isinstance(kept, list) or not all(isinstance(name, str) for name in kept):
         return None
-    # The person closed its notice (×, GM r9): kept, but not shown again
+    # The person closed its notice (×): kept, but not shown again
     # until a new loss writes a new note.
     dismissed = {"dismissedAt": found["dismissedAt"]} if catalog_recovery.dated(found.get("dismissedAt")) else {}
     return {"count": count, "kept": list(kept), "at": found["at"], **dismissed}
@@ -706,11 +706,11 @@ def _held_id(found: Any) -> str | None:
 
 def held_canvas_items_ok(nodes: Any, edges: Any) -> bool:
     """Whether a held canvas's nodes and connections are what a project
-    stores (review 7 of PR #199, M-2 and N-6): lists of dicts, each node
-    with a unique string ``id`` (and a dict ``data`` when it has one), each
-    connection with a unique string ``id``, ``source`` and ``target``.
-    Anything else is damage: filing it raised (a node without an id, mixed
-    id types) or saved a project holding garbage nodes."""
+    stores (PR #199): lists of dicts, each node with a unique string ``id``
+    (and a dict ``data`` when it has one), each connection with a unique
+    string ``id``, ``source`` and ``target``. Anything else is damage:
+    filing it raised (a node without an id, mixed id types) or saved a
+    project holding garbage nodes."""
     if not isinstance(nodes, list) or not isinstance(edges, list):
         return False
     seen: set[str] = set()
@@ -737,24 +737,24 @@ def held_canvas_items_ok(nodes: Any, edges: Any) -> bool:
 
 
 def held_entry_check(entry: dict[str, Any]) -> str:
-    """The digest a held canvas's file carries of its entry (review 7, M-2's
-    option): a copy whose bytes still parse after a flip loses to the other."""
+    """The digest a held canvas's file carries of its entry: a copy whose
+    bytes still parse after a flip loses to the other."""
     return hashlib.sha256(json.dumps(entry, sort_keys=True, ensure_ascii=False, separators=(",", ":"),
                                      default=str).encode("utf-8")).hexdigest()
 
 
 def held_items_digest(nodes: Any, edges: Any) -> str:
     """The digest of a held canvas's content, its nodes and connections as
-    held (review 8 of PR #199, L-1): written with the canvas, so a copy
-    salvaged when neither copy passes its whole check is filed only when its
-    content is still exactly what was held."""
+    held (PR #199): written with the canvas, so a copy salvaged when neither
+    copy passes its whole check is filed only when its content is still
+    exactly what was held."""
     return hashlib.sha256(json.dumps({"nodes": nodes, "edges": edges}, sort_keys=True, ensure_ascii=False,
                                      separators=(",", ":"), default=str).encode("utf-8")).hexdigest()
 
 
 def held_items_intact(entry: Mapping[str, Any]) -> bool | None:
     """Whether a held entry's content matches its ``itemsDigest``; None when
-    it carries none (held before fix round 8)."""
+    it carries none (held before the items digest was written)."""
     digest = entry.get("itemsDigest")
     if not isinstance(digest, str):
         return None
@@ -762,11 +762,11 @@ def held_items_intact(entry: Mapping[str, Any]) -> bool | None:
 
 
 def _held_salvage_choice(candidates: list[dict[str, Any]]) -> dict[str, Any] | None:
-    """Which salvaged copy of one held canvas may be filed (review 8, L-1):
-    one whose content matches the items digest it was held with; with no
-    digest to check (an entry held before fix round 8), only when both
-    copies salvage to the same content. Else None: the canvas is said lost
-    and its files kept, never filed with altered content unsaid."""
+    """Which salvaged copy of one held canvas may be filed: one whose
+    content matches the items digest it was held with; with no digest to
+    check (an entry held before the items digest was written), only when
+    both copies salvage to the same content. Else None: the canvas is said
+    lost and its files kept, never filed with altered content unsaid."""
     for candidate in candidates:
         if held_items_intact(candidate) is True:
             return candidate
@@ -821,8 +821,8 @@ _HELD_ARRAY = re.compile(r'"held"[ \t\n\r]*:[ \t\n\r]*\[')
 
 
 def _held_entries_cut(text: str) -> tuple[list[Any], bool] | None:
-    """The complete leading entries of a cut canvas-held.json (review 7 of PR
-    #199, L-2: truncating both copies lost every canvas), and whether the
+    """The complete leading entries of a cut canvas-held.json (PR #199:
+    truncating both copies used to lose every canvas), and whether the
     array's end was reached (its length is then known): each element of its
     "held" array decoded in turn, separated by JSON's own whitespace only
     (as catalog_recovery's salvage), up to the first that doesn't decode.
@@ -874,26 +874,26 @@ class ProjectStore:
         # Called once per restore with its record, after the lock is let go
         # (main._on_catalog_restore journals it and tells open tabs).
         self.on_restore: Callable[[dict[str, Any]], None] | None = None
-        # Which project the live canvas is (main._canvas_owner_for_restore): a
-        # restore opens that one, or none, never the copy's (review 1, H1).
+        # Which project the live canvas is (main._canvas_owner_for_restore):
+        # a restore opens that one, or none, never the copy's.
         # catalog_recovery.UNKNOWN, or no callback, when it isn't recorded.
         self.canvas_owner: Callable[[], Any] | None = None
         # After a restore that couldn't read the damaged file whole, given the
         # restored catalog (before it is written): main._protect_after_restore
         # protects the reopened project again when it is the live canvas's
-        # (review 10 of PR #199, HIGH-1: a record the damage took fails safe).
+        # (PR #199: a record the damage took fails safe).
         self.protect_after_restore: Callable[[dict[str, Any]], None] | None = None
         # A reader that finds catalog.json damaged asks this first (main's
         # _hand_off_catalog_restore): True when the restore was handed to a
         # worker thread (the reader is on the event loop), and projection()
         # then answers the last projection rather than restore or wait for
-        # the lock (review 2 of PR #199, L2).
+        # the lock (PR #199).
         self.hand_off_restore: Callable[[], bool] | None = None
         # Whether a worker thread is reading this catalog file (its
         # signature) for a reader on the event loop: projection() then
         # answers the last projection instead of parsing the file itself
-        # (fix round 2, L2: a damaged 102 MB file held the loop 1.6 s in the
-        # parse that finds the damage, before any hand-off could start).
+        # (PR #199: a damaged 102 MB file held the loop 1.6 s in the parse
+        # that finds the damage, before any hand-off could start).
         self.read_in_flight: Callable[[tuple[int, int, int]], bool] | None = None
         # The catalog file projection() last found damaged (its signature):
         # while a hand-off for it runs, a reader skips parsing it again (at
@@ -904,7 +904,7 @@ class ProjectStore:
         self._verified: tuple[tuple[int, int, int], int] | None = None
         # The catalog file this process last committed or read whole, as
         # version 1 (its signature): a version above 1 in that very file was
-        # written in place, which a newer Nebula never does (review 3, L-1).
+        # written in place, which a newer Nebula never does.
         self._own_signature: tuple[int, int, int] | None = None
         # The purged map the commit being prepared carries (its temporary
         # file, the map), and catalog-purged.json as last read or written
@@ -956,7 +956,7 @@ class ProjectStore:
             raise ValueError("Invalid active project")
         for key, value in result.items():
             # A section whose name was damaged ("trasi"): its projects would
-            # vanish from the list unseen (review 2, M2).
+            # vanish from the list unseen.
             if key not in catalog_recovery.CATALOG_FIELDS and catalog_recovery.holds_records(value):
                 raise ValueError(f"Invalid catalog: projects outside the list, under {key!r}")
 
@@ -967,13 +967,13 @@ class ProjectStore:
     def _parse(raw: bytes, *, committed_here: bool = False) -> Any:
         """``raw`` decoded as a catalog may hold it. Raises ValueError for
         anything else, including a value the store reads but can't write
-        back (NaN, Infinity, 1e999, a lone surrogate: review 1, L2): those
-        would make every later commit fail.
+        back (NaN, Infinity, 1e999, a lone surrogate): those would make
+        every later commit fail.
 
         ``committed_here``: a file this process committed or already read
         whole (its signature is the projection's): prepare encoded it with
         allow_nan=False as UTF-8, so only NaN and the infinities are checked
-        (no cost). Any other file is read strictly (review 2, M1)."""
+        (no cost). Any other file is read strictly."""
         text = raw.decode("utf-8")
         try:
             if committed_here:
@@ -1021,7 +1021,7 @@ class ProjectStore:
         # The fast read only for the very bytes this process wrote or read:
         # a rewrite in place that kept the signature (rsync --inplace -t,
         # cp -p onto it, bit rot) is read strictly, and the projection,
-        # which may no longer describe it, is dropped (review 3, L-6).
+        # which may no longer describe it, is dropped.
         committed_here = cached is not None and cached.signature == signature and cached.digest == digest
         if cached is not None and cached.signature == signature and cached.digest is not None \
                 and cached.digest != digest:
@@ -1035,8 +1035,7 @@ class ProjectStore:
             if ours:
                 # This process wrote (or read) this file as version 1, and a
                 # newer Nebula commits by rename: its version changed in place
-                # (a bit flip: 1 -> 3, 5 or 9). Damage, not a newer Nebula's
-                # (review 3, L-1).
+                # (a bit flip: 1 -> 3, 5 or 9). Damage, not a newer Nebula's version.
                 _log(f"catalog.json says version {result.get('version')}, but this process saved it as version 1 "
                      "and it was changed in place: damaged")
                 raise _Damaged("invalid", f"version {result.get('version')} written in place", raw, result, ours=True)
@@ -1092,7 +1091,7 @@ class ProjectStore:
         Only ``nested`` holds (_recover's read inside a transaction that
         finds the file damaged) may sit inside another hold of this thread.
         A nested transaction() would commit, then the outer one would commit
-        over it from what it read before: it raises instead (review 1, L3)."""
+        over it from what it read before: it raises instead."""
         depth = getattr(self._local, "depth", 0)
         if depth:
             if not nested:
@@ -1155,7 +1154,7 @@ class ProjectStore:
         """Whether catalog.json changed since this store last read or wrote
         it (no projection for its signature): the next reader parses it, and
         restores it if it is damaged. main reads it in a worker thread first,
-        so a long restore doesn't hold up the event loop (review 1, L5)."""
+        so a long restore doesn't hold up the event loop."""
         try:
             signature = self._signature()
         except ProjectStoreError:
@@ -1269,7 +1268,7 @@ class ProjectStore:
         # Every copy is read: the base is .bak, the newer by construction (a
         # link of the catalog the last commit replaced, or a copy of every
         # commit where links fail), unless .bak.1 holds later dates (a .bak a
-        # sync tool or a person put back: review 2, L3) and, when both are
+        # sync tool or a person put back) and, when both are
         # numbered, a later commit. Dates are the copies' own
         # (catalog_recovery.newer_copy; every change Nebula makes moves one),
         # judged by file order: a date ahead of this restore's clock is left
@@ -1298,8 +1297,7 @@ class ProjectStore:
                 continue
             if _newer_version(candidate):
                 # Decided below, with catalog.json's own head and the other
-                # copy (review 3, L-1): a bit flip in "version" reads as a
-                # newer Nebula's.
+                # copy: a bit flip in "version" reads as a newer Nebula's.
                 newer_copies.append((path, raw, candidate))
                 continue
             try:
@@ -1339,13 +1337,13 @@ class ProjectStore:
             _log("the damaged catalog.json says it is from a newer Nebula: not restoring over it"
                  + self._older_copy_hint())
             raise ProjectStoreError(NEWER_VERSION)
-        # A copy that says a newer version is damage, not a newer Nebula's,
-        # when something contradicts it (review 3, L-1: one bit makes
-        # version 1 read 3, 5 or 9): catalog.json's own head says version 1
-        # (a newer Nebula writes catalog.json first, and the copies after
-        # it), catalog.json is this process's own file, or another copy can
-        # do the restore (a bad version in one copy never blocks a restore
-        # the other can do). Only with none of those does it refuse.
+        # A copy that says a newer version is damage, not a newer Nebula's, when
+        # something contradicts it (one bit makes version 1 read 3, 5 or 9):
+        # catalog.json's own head says version 1 (a newer Nebula writes
+        # catalog.json first, and the copies after it), catalog.json is this
+        # process's own file, or another copy can do the restore (a bad version
+        # in one copy never blocks a restore the other can do). Only with none
+        # of those does it refuse.
         contradicted = head_version == 1 or damage.ours or bool(valid)
         for path, raw, candidate in newer_copies:
             if not contradicted:
@@ -1436,7 +1434,7 @@ class ProjectStore:
             temporary = self.prepare(catalog, restoring=True)
         except ProjectLimitError as exc:
             if fallback is None or not (merged.added or merged.updated):
-                # A rebuild has no copy to fall back on (review 1, L1): the
+                # A rebuild has no copy to fall back on: the
                 # 507, and nothing is kept, written or recorded.
                 _log(f"the {'rebuilt' if fallback is None else 'restored'} catalog is past a limit ({exc}); "
                      "nothing changed")
@@ -1536,8 +1534,8 @@ class ProjectStore:
             "updatedFromDisk": rows(merged.updated), "updatedFromDiskCount": len(merged.updated),
             "notAddedBack": rows(merged.not_added), "notAddedBackCount": len(merged.not_added),
             # Readable records left out because the list was at its project
-            # limit (reconcile adds none past it), and that limit: GM r18 on
-            # PR #199 (their own line, never "may be missing").
+            # limit (reconcile adds none past it), and that limit:
+            # design, PR #199 (their own line, never "may be missing").
             "notAddedBackLimitCount": sum(1 for row in merged.not_added if row.get("reason") == "limit"),
             "projectLimit": MAX_PROJECTS,
             "reverted": rows(merged.reverted), "revertedCount": len(merged.reverted),
@@ -1556,17 +1554,17 @@ class ProjectStore:
             # Whether the damaged catalog.json was read to its end (it parsed;
             # only its shape was wrong). When it wasn't (cut, zeroed, a key
             # destroyed), what it held past the damage is unknown, so nobody
-            # may say nothing was lost (live check of fix round 1).
+            # may say nothing was lost.
             "damagedReadWhole": read_whole,
             # Whether, besides, the damaged file held project records Nebula
-            # couldn't read (GM r19 on PR #199, 6a;
+            # couldn't read (design, PR #199;
             # catalog_recovery.records_unread): a file cut after its
             # projects group closed isn't read whole, but lost no project
             # (a cut trash group is logged, not in the notice). Records from
             # before it lack the field: unknown.
             "damagedRecordsUnread": records_unread,
             # catalog-purged.json was older than a file that decided ids it
-            # names (review 5, L-1): its write had failed, or a crash.
+            # names: its write had failed, or a crash.
             "purgedFileBehind": merged.purged_file_behind,
         }
         try:
@@ -1584,13 +1582,13 @@ class ProjectStore:
 
     def _carry_protection(self, catalog: dict[str, Any], salvages: list[catalog_recovery.Salvage],
                           read_whole: bool) -> None:
-        """The restored catalog's ``canvasPending`` (review 10 of PR #199,
-        HIGH-1): the copy's, with what each damaged file's head still says
-        (newer than the copy) on top: a protection either holds is kept, and
-        every copy's name. Then, when the damaged catalog.json wasn't read
-        whole (its record may be what the damage took), main protects the
-        reopened project again if it is the live canvas
-        (protect_after_restore). Never fails the restore."""
+        """The restored catalog's ``canvasPending`` (PR #199): the copy's,
+        with what each damaged file's head still says (newer than the copy)
+        on top: a protection either holds is kept, and every copy's name.
+        Then, when the damaged catalog.json wasn't read whole (its record
+        may be what the damage took), main protects the reopened project
+        again if it is the live canvas (protect_after_restore). Never fails
+        the restore."""
         pending = canvas_pending_of(catalog)
         fresh, copies = pending["fresh"], dict(pending["copies"])
         for found in salvages:
@@ -1603,8 +1601,7 @@ class ProjectStore:
         if fresh is not None and fresh["projectId"] not in listed:
             # A protection for a project the restored list doesn't have (a
             # copy older than the filing): it protects nothing, so it goes,
-            # unless the copy's own record names a project that is listed
-            # (review 11 of PR #199, nit 3).
+            # unless the copy's own record names a project that is listed.
             base = pending["fresh"]
             fresh = base if base is not None and base["projectId"] in listed else None
         set_canvas_pending_in(catalog, {"fresh": fresh, "copies": copies})
@@ -1747,12 +1744,11 @@ class ProjectStore:
         """main's record of the live canvas that isn't a project and couldn't
         be filed as one (the list at a limit), or of the one filed last after
         waiting: {reason, from, since, journaled} or {saved: {id, name, at}}.
-        Kept beside the catalog so it outlives a restart (review 3, L-5), in
-        two copies: a missing or damaged one, or one whose fields have the
-        wrong types, is passed over for the other (review 4, N-1). Within a
-        process main keeps it in memory, so only a restart reads it; with
-        both copies gone the wait starts again (a new process's journal
-        never had its event)."""
+        Kept beside the catalog so it outlives a restart, in two copies: a
+        missing or damaged one, or one whose fields have the wrong types, is
+        passed over for the other. Within a process main keeps it in memory,
+        so only a restart reads it; with both copies gone the wait starts
+        again (a new process's journal never had its event)."""
         for name in (CANVAS_WAITING_NAME, CANVAS_WAITING_BACKUP_NAME):
             path = self.root / name
             try:
@@ -1782,7 +1778,7 @@ class ProjectStore:
         for path in paths:
             self._write_file(path, encoded)
 
-    # -- the canvases held aside (one file per canvas: review 7 of PR #199, L-3) --
+    # -- the canvases held aside (one file per canvas: PR #199) --
 
     @property
     def held_dir(self) -> Path:
@@ -1895,10 +1891,10 @@ class ProjectStore:
             return None
 
     def _note_held_lost(self, count: int | None, kept: list[str]) -> None:
-        """Held canvases that may be lost (``count``, None: unknown): added to
-        the note the person and agents are told, kept on disk. After the
-        person closed the note, a new loss is counted on its own (review 9,
-        nit 2); the files kept before stay named, so none is pruned."""
+        """Held canvases that may be lost (``count``, None: unknown): added
+        to the note the person and agents are told, kept on disk. After the
+        person closed the note, a new loss is counted on its own; the files
+        kept before stay named, so none is pruned."""
         previous = self._held_note
         if previous is not None and previous.get("dismissedAt"):
             kept = [*previous["kept"], *[name for name in kept if name not in previous["kept"]]]
@@ -1927,7 +1923,7 @@ class ProjectStore:
         to DAMAGED_KEPT_MAX within DAMAGED_KEPT_DAYS), by when each was kept
         (its name); never one the note of lost canvases names while it is
         said. Each kind on its own: damaged copies, unfileable canvases, and
-        the moved canvas-held.json (review 8 of PR #199, N-1)."""
+        the moved canvas-held.json (PR #199)."""
         named = set((self._held_note or {}).get("kept") or [])
         cutoff = datetime.now(timezone.utc) - timedelta(days=DAMAGED_KEPT_DAYS)
         found: dict[str, list[tuple[datetime, Path]]] = {}
@@ -1959,16 +1955,16 @@ class ProjectStore:
         """The live canvases held aside while they wait to be saved as their
         own projects (main._hold_live_canvas), oldest first. [] for none.
 
-        Each canvas is read on its own (review 7 of PR #199, L-3/M-2): its
-        file when it reads whole (its entry valid, nodes and connections
-        included, and its check matching), else its .bak, else either copy's
-        entry whose canvas is still there, its other fields made good. A
-        copy that doesn't read is kept aside (``.damaged-<UTC>-<id>``) and
-        the canvas's two copies written again from the one that read. A
-        canvas neither copy yields is said (``unreadable``: {count, kept,
-        at}; canvas_held_unreadable) and its files kept aside: one damaged
-        canvas never costs another. canvas-held.json from before is moved in
-        first (_migrate_legacy_held)."""
+        Each canvas is read on its own (PR #199): its file when it reads
+        whole (its entry valid, nodes and connections included, and its
+        check matching), else its .bak, else either copy's entry whose
+        canvas is still there, its other fields made good. A copy that
+        doesn't read is kept aside (``.damaged-<UTC>-<id>``) and the
+        canvas's two copies written again from the one that read. A canvas
+        neither copy yields is said (``unreadable``: {count, kept, at};
+        canvas_held_unreadable) and its files kept aside: one damaged canvas
+        never costs another. canvas-held.json from before is moved in first
+        (_migrate_legacy_held)."""
         self._held_note = self._read_held_note()
         self._prune_held_kept()
         entries = self._migrate_legacy_held()
@@ -1982,7 +1978,7 @@ class ProjectStore:
             entry = main_found if main_status == "read" else backup_found if backup_status == "read" else None
             if entry is None:
                 # Neither copy passes its whole check: a copy's content is
-                # filed only when it is exactly what was held (L-1).
+                # filed only when it is exactly what was held.
                 candidates = [salvaged for found in (main_found, backup_found) if isinstance(found, dict)
                               if (salvaged := _held_entry_salvaged({**found, "projectId": project_id})) is not None]
                 entry = _held_salvage_choice(candidates)
@@ -2013,15 +2009,14 @@ class ProjectStore:
         entries.sort(key=lambda entry: entry["heldAt"])
         return entries
 
-    # The canvas-held.json of fix rounds 5-6 (one file, both copies), read once
-    # and moved in (review 7 of PR #199, L-3).
+    # The earlier canvas-held.json (one file, both copies), read once and
+    # moved in (PR #199).
 
     def _legacy_held_read(self) -> tuple[list[dict[str, Any]], list[str], int | None, dict[str, Any] | None]:
         """canvas-held.json and its .bak read entry by entry: (the entries,
         the damaged copies' names, how many canvases may be lost (None:
         unknown), its unreadable note). A cut copy gives its complete leading
-        entries (L-2). An entry is counted lost only when no copy yields it
-        (N-1)."""
+        entries. An entry is counted lost only when no copy yields it."""
         copies: list[tuple[str, str, list[Any] | None, bool]] = []
         note = None
         for name in (CANVAS_HELD_NAME, CANVAS_HELD_BACKUP_NAME):
@@ -2133,8 +2128,8 @@ class ProjectStore:
         return {key: note[key] for key in ("count", "kept", "at")} if 0 <= age <= HELD_UNREADABLE_SECONDS else None
 
     def dismiss_held_unreadable(self, at: str) -> bool:
-        """The person closed the notice that held canvases may be lost (×,
-        GM r9): it isn't shown again. False when ``at`` isn't the note shown
+        """The person closed the notice that held canvases may be lost (×):
+        it isn't shown again. False when ``at`` isn't the note shown
         (already closed, or a newer loss came). Read canvas_held first."""
         note = getattr(self, "_held_note", None)
         if note is None or note.get("at") != at or note.get("dismissedAt"):
@@ -2188,9 +2183,9 @@ class ProjectStore:
 
     def set_aside_unfileable_held(self, project_id: str) -> list[str]:
         """A held canvas whose entry read but couldn't be saved as a project
-        (review 7 of PR #199, M-2): its copies kept aside as
-        ``.unfileable-<UTC>-<id>``, removed from the held canvases, and
-        counted in the note the person and agents are told."""
+        (PR #199): its copies kept aside as ``.unfileable-<UTC>-<id>``,
+        removed from the held canvases, and counted in the note the person
+        and agents are told."""
         paths = [path for path in self.held_paths(project_id) if path.exists()]
         kept = self._keep_held_aside(paths, "unfileable")
         for path in paths:
@@ -2279,7 +2274,7 @@ class ProjectStore:
         Returns the bytes it replaced (None: there was none), for
         _undo_side_file if the rename then fails, or False when nothing was
         written. Never fails the commit: a failed write is logged, and the
-        file stays at its older commit, which a restore can tell (L-1)."""
+        file stays at its older commit, which a restore can tell."""
         side = self._side_file()
         held = dict(side.get("purged") or {})
         if held == purged:
@@ -2376,9 +2371,9 @@ class ProjectStore:
         catalog.json changes: every commit replaces the file (os.replace), so
         its (inode, mtime, size) signature says when, whichever route or
         process wrote it. A commit made here keeps the projection of what it
-        wrote, so nothing is read back (review 5 of PR #114, M2: an autosave
-        every 600 ms made the next pins listing parse, upgrade and deep-copy
-        the whole catalog). A file written elsewhere is parsed once, without
+        wrote, so nothing is read back (PR #114: an autosave every 600 ms
+        made the next pins listing parse, upgrade and deep-copy the whole
+        catalog). A file written elsewhere is parsed once, without
         upgrading or copying it. No lock: a commit replaces the file whole,
         so a read sees one complete version; the signature is taken before
         and after it, and a projection is kept only when both agree (a commit
@@ -2528,15 +2523,14 @@ class ProjectStore:
 
         Refuses (ProjectStoreError, nothing written) a catalog _read would
         refuse: it would read back as damage and be "restored", hiding the
-        bug behind the person's restore notice (review 1, L7), or one that
-        can't be encoded.
+        bug behind the person's restore notice, or one that can't be encoded.
 
-        ``restoring`` (the catalog restore, fix round 13 of PR #199): a list
-        restored from Nebula's own files adds no new project, so with
-        RESTORE_MAY_PASS_THE_PROJECT_LIMIT on it may pass the project limit
-        (a copy of a list an Undo took past it). reconcile adds a record past
-        the limit back only when the copy is below it, so the restored list
-        is past it only by what the copy holds. The size cap still holds.
+        ``restoring`` (the catalog restore, PR #199): a list restored from
+        Nebula's own files adds no new project, so with
+        RESTORE_MAY_PASS_THE_PROJECT_LIMIT on it may pass the project limit (a
+        copy of a list an Undo took past it). reconcile adds a record past the
+        limit back only when the copy is below it, so the restored list is past
+        it only by what the copy holds. The size cap still holds.
 
         ``kept_save``: the person's save of a kept tab's edits, which may pass
         the project limit too (KEPT_SAVE_MAY_PASS_THE_PROJECT_LIMIT), by one
@@ -2548,7 +2542,7 @@ class ProjectStore:
                          and len(catalog["projects"]) <= MAX_PROJECTS + KEPT_SAVE_OVER_BY)
                 and not self._past_the_limit_by_restores_only(catalog)):
             refused = ProjectLimitError("Project limit reached", "projects")
-            # The numbers for the tab's line (GM r35 on PR #199): the list as
+            # The numbers for the tab's line (design, PR #199): the list as
             # this hold read it, and how many to delete for what this adds.
             known = getattr(self._local, "ids", None)
             if known:
@@ -2564,7 +2558,7 @@ class ProjectStore:
         self._remember_purged(catalog)
         # Every commit is numbered, above every number this store wrote or
         # its restore saw and the side file's: the copies and the side file
-        # then say which commit each is of (review 5, L-1).
+        # then say which commit each is of.
         seq = catalog_recovery._commit_of(catalog.get("commitSeq")) or 0
         side_seq = self._side_file().get("commit") or 0
         catalog["commitSeq"] = max(seq, self._last_seq, side_seq) + 1
@@ -2579,8 +2573,8 @@ class ProjectStore:
         except (ValueError, TypeError, RecursionError) as exc:
             _log(f"refusing to write a catalog that can't be encoded ({exc}); the next read is strict")
             # The catalog read for it may have come from the fast read of a
-            # file that isn't what this process wrote (review 3, L-6): the
-            # next read checks it whole and restores it if it is damaged.
+            # file that isn't what this process wrote: the next read checks
+            # it whole and restores it if it is damaged.
             self._projection = None
             raise ProjectStoreError("Project catalog could not be saved: it holds a value that can't be written. "
                                     "Nothing changed.") from exc
@@ -2614,10 +2608,10 @@ class ProjectStore:
         temporary name, when it is the file this hold read and validated
         (its signature), else None. The commit then renames it to .bak, so
         .bak is the catalog that commit replaced, never unvalidated bytes,
-        and no byte is copied (review 1, L6). The second value says the link
-        itself failed (a file system without hard links: exFAT, FAT, some
-        network and FUSE mounts): the commit then writes .bak as a real copy
-        of what it commits, every time (review 2, L3)."""
+        and no byte is copied. The second value says the link itself failed
+        (a file system without hard links: exFAT, FAT, some network and FUSE
+        mounts): the commit then writes .bak as a real copy of what it
+        commits, every time."""
         validated = getattr(self._local, "validated", None)
         if validated is None:
             return None, False
@@ -2649,7 +2643,7 @@ class ProjectStore:
         purged, self._prepared_purged = self._prepared_purged, None
         if purged is not None and purged[0] != temporary:
             purged = None
-        # The side file first, before the commit point (review 5, L-3): a
+        # The side file first, before the commit point: a
         # crash after it leaves it one commit ahead (its own number says so,
         # and each of its layers is true of a commit), never a delete for
         # good that landed without it.

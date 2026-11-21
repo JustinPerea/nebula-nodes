@@ -1,12 +1,12 @@
 """Recently deleted, for saved moodboards, characters and Styles (presets).
 
-Styles joined on 2026-10-20 (Justin's Q53 a): a Style's record has kind
+Styles joined on 2026-10-20 (PR #130): a Style's record has kind
 "style", and everything below holds for it as for a board.
 
 Deleting a board or a character used to unlink its JSON file, so a delete
-(an agent may delete one, design-canvas answer D5) could not be undone. Now a
-delete moves the file, untouched, into the store's trash folder and writes a
-small record beside it saying who deleted it and when:
+(an agent may delete one) could not be undone. Now a delete moves the file,
+untouched, into the store's trash folder and writes a small record beside
+it saying who deleted it and when:
 
     <store root>/.trash/<id>.json        the asset, byte for byte as it was
     <store root>/.trash/<id>.trash.json  {kind, id, name, thumbnail, projectId,

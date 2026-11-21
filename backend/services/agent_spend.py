@@ -191,7 +191,7 @@ DEFAULT_DAILY_TOTAL_USD = 5.0
 # limit"; a typed amount above this isn't a limit anyone means (No limit says
 # that), and keeping it here keeps every sum and the "$100,000 / day" label
 # finite: a hand-written 1e308 or 10**400 is read as unreadable ($5), never
-# an OverflowError (review 1 of PR #212, N-2). frontend lib/dailyTotal.ts
+# an OverflowError (PR #212). frontend lib/dailyTotal.ts
 # MAX_DAILY_TOTAL_USD is the same.
 MAX_DAILY_TOTAL_USD = 100_000.0
 DAILY_WHO = "everything that isn't the person"
@@ -224,11 +224,11 @@ def clock_time(when: datetime) -> str:
 
 def ledger_unreadable(until: float, *, tz: tzinfo | None = None) -> str:
     """The sentence a refusal, a waiting run's line and the agents' spend
-    view add while an unreadable ledger holds every limit (GM - Design,
-    review of PR #242), with the hold's end (``until``, epoch seconds) in
-    the computer's local time, or ``tz``'s. The weekday form: these lines
-    are written once and read later, so "today" or "tomorrow" could be
-    wrong by then. The app draws its own live form in Settings."""
+    view add while an unreadable ledger holds every limit (design, PR #242),
+    with the hold's end (``until``, epoch seconds) in the computer's local
+    time, or ``tz``'s. The weekday form: these lines are written once and
+    read later, so "today" or "tomorrow" could be wrong by then. The app
+    draws its own live form in Settings."""
     end = datetime.fromtimestamp(until, tz) if tz is not None else datetime.fromtimestamp(until)
     return ("Nebula couldn\u2019t read its record of what agents have spent, so it counts every spending limit as "
             f"used up until {clock_time(end)} on {_WEEKDAYS[end.weekday()]}.")
@@ -236,9 +236,9 @@ def ledger_unreadable(until: float, *, tz: tzinfo | None = None) -> str:
 
 # What Settings and the agents' spend view say while the ledger can't be
 # opened at all (SpendLedger.cant_read): no end time, since nothing known
-# says when it will open again. GM - Design's words ("open" sets it apart
-# from the unreadable hold); the app holds the same
-# (frontend/src/lib/ledgerHold.ts LEDGER_CANT_READ, pinned by a test).
+# says when it will open again. Design: "open" sets it apart from the
+# unreadable hold; the app holds the same (frontend/src/lib/ledgerHold.ts
+# LEDGER_CANT_READ, pinned by a test).
 LEDGER_CANT_READ = ("Nebula can\u2019t open its record of what agents have spent, so agents can\u2019t start paid runs "
                     "until it can.")
 
@@ -247,9 +247,9 @@ def _finite(value: Any) -> bool:
     return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
 
 
-# Why a check couldn't read the ledger (LedgerBusy.why), each finishing GM's
-# refusal: "Nebula couldn’t check this run’s cost because <why>. Try again in
-# a moment." (main._reserve_spend; GM - Design, review of PR #242).
+# Why a check couldn't read the ledger (LedgerBusy.why), each finishing the
+# refusal (design, PR #242): "Nebula couldn’t check this run’s cost because
+# <why>. Try again in a moment." (main._reserve_spend).
 BUSY_OTHER = "another Nebula on this computer is updating the spending record"
 BUSY_LOCK = "it can’t lock the spending record"
 BUSY_READ = "it can’t read the spending record or set it aside"
@@ -265,8 +265,8 @@ def pricing_refusal(exc: BaseException, ask: str) -> str:
     """A run refused because model_pricing.json couldn't be loaded, in the
     same family with its own reason and no "Try again" (a broken table
     stays broken). The reason in plain words, then the raw error as its own
-    sentence behind "Error:" (agents and logs use it; GM - Design, review
-    of PR #242), with a final period only when the error has none:
+    sentence behind "Error:" (agents and logs use it; design, PR #242), with a
+    final period only when the error has none:
     "… because it can’t read the pricing table. Error: Expecting value: line
     1 column 1 (char 0). <hint>". Only agents get this (the person's runs
     never reach the check); a version for the person would stop after
@@ -467,7 +467,7 @@ class Spent:
     # Whether ``until`` is a real end (False for the stand-in a display read
     # uses while the ledger can't be read at all, SpendLedger._view: no line
     # may name it as a time). Read with ``until`` from the same read, so a
-    # view never pairs one read's end with another read's state (L2).
+    # view never pairs one read's end with another read's state.
     known: bool = True
 
     @property
@@ -654,13 +654,12 @@ class SpendLedger:
         repaired = False
         if mark is not None and not (isinstance(mark, dict) and _finite(mark.get("since"))):
             # A mark that can't be read stays a mark (strict), from now. Saved
-            # so, its 24 hours start once rather than at every read (review
-            # of PR #242, L1).
+            # so, its 24 hours start once rather than at every read (PR #242).
             kept = mark.get("keptAs") if isinstance(mark, dict) and isinstance(mark.get("keptAs"), str) else None
             mark, repaired = {"since": now, "keptAs": kept}, True
         elif mark is not None and float(mark["since"]) > now:
             # A start in the future (a hand edit, a clock that was ahead) would
-            # hold the limits past 24 hours: it starts now instead (L2).
+            # hold the limits past 24 hours: it starts now instead.
             mark, repaired = {**mark, "since": now}, True
         changed = self._migrate(sessions) or repaired
         # A file from before the daily total kept chats as running totals
@@ -698,8 +697,8 @@ class SpendLedger:
                 # An unreadable file still has its name and is found again
                 # next time; a repaired mark or a migration that can't be
                 # saved is tried again by the next locked read. Either way the
-                # caller refuses (a check answers 503, not 500: review of
-                # PR #242 round 2, L4) and a display read stays strict.
+                # caller refuses (a check answers 503, not 500: PR #242) and a
+                # display read stays strict.
                 raise LedgerBusy(BUSY_READ, self._path) from exc
 
     def _keep_aside(self) -> str:
@@ -759,9 +758,9 @@ class SpendLedger:
         A file that needs a change (a malformed or future-dated mark that
         appeared after the first load, or an older backend's unmigrated
         save) is saved once when this read gets the lock, as ``reserve``
-        would, so the shown end stops moving forward at each read (review of
-        PR #242 round 2, L3). A read that doesn't get the lock, or whose
-        save fails, works on its own repaired copy: strict, never $0."""
+        would, so the shown end stops moving forward at each read (PR #242). A
+        read that doesn't get the lock, or whose save fails, works on its own
+        repaired copy: strict, never $0."""
         if self._path is None or self._holder == threading.get_ident():
             with self._io_lock:
                 return self._sessions, self._until(self._unreadable), True
@@ -798,10 +797,10 @@ class SpendLedger:
 
     def _seed_chats_daily(self, sessions: dict[str, dict[str, Any]]) -> None:
         """Chat spend from before the daily total counts toward it from the
-        start (review 1 of PR #212, L-4): each chat entry updated in the last
-        24 hours counts as spent at that time, as _migrate folds legacy keys
-        (it was spent then or earlier, so this can only overcount). Once per
-        file; a file that already has CHATS_DAILY counted its chats itself."""
+        start (PR #212): each chat entry updated in the last 24 hours counts
+        as spent at that time, as _migrate folds legacy keys (it was spent
+        then or earlier, so this can only overcount). Once per file; a file
+        that already has CHATS_DAILY counted its chats itself."""
         if CHATS_DAILY in sessions:
             return
         since = self._clock() - WINDOW_SECONDS
@@ -921,7 +920,7 @@ class SpendLedger:
         daily total: every outside key's events and every chat's (CHATS_DAILY).
         Each key is summed and held at 0 on its own before they're added, so a
         give-back larger than its own key's charge can't erase another key's
-        spend (review 1 of PR #212, N-1)."""
+        spend (PR #212)."""
         sessions, until, known = self._view()
         with self._lock:
             parts = [self._sum(self._events(entry)) for key, entry in sessions.items() if _keeps_events(key)]
@@ -1171,7 +1170,7 @@ ALSO_PLAN_RUNS = "planRuns"         # over a Krea plan-run limit
 
 
 def limit_owner(who: str) -> str:
-    """Whose limit a Budget is, as the bar names it (GM - Design, 2026-10-31):
+    """Whose limit a Budget is, as the bar names it (design, 2026-10-31):
     "this chat", "agents outside Nebula chats", or an app by name."""
     if who == "this session":
         return "this chat"
@@ -1183,14 +1182,14 @@ def limit_owner(who: str) -> str:
 @dataclass
 class DailyWait:
     """A run that would pass the daily total: it waits for the person's OK as
-    a proposal, with these as its reasons (GM - Design, 2026-10-31,
+    a proposal, with these as its reasons (design, 2026-10-31,
     verbatim). ``limit`` is the total, ``used`` what everything that isn't
     the person spent in the last 24 hours before this run, ``run`` this run's
     upper bound.
 
     ``also`` is the other reason it needs an OK, when it has one: the one the
     guard would give first without the total, since accepting overrides both
-    (GM: "Accepting overrides both, so the person should know"). With it:
+    (design: "Accepting overrides both, so the person should know"). With it:
     ``per_run_limit`` (the per-run limit, a model's own, or the budget's
     amount), ``model`` (that model's display name), ``owner`` (whose budget,
     limit_owner), ``plan_runs_limit``, and ``unpriced`` (the nodes with no
@@ -1207,8 +1206,8 @@ class DailyWait:
     unpriced: tuple[str, ...] = ()
     names: dict[str, str] = field(default_factory=dict)
     # False when the run itself fits under the total and waits only because a
-    # node has no list price, which Nebula can't count toward it (Justin's
-    # Q165): every line then says that, never "would pass".
+    # node has no list price, which Nebula can't count toward it (Justin,
+    # 2026-10-31): every line then says that, never "would pass".
     over: bool = True
     # While an unreadable ledger holds every limit (Spent.until): when that
     # ends, in epoch seconds. The total counts as used up, and the lines an
@@ -1261,10 +1260,10 @@ class DailyWait:
         return [self.names.get(node_id) or node_id for node_id in self.unpriced]
 
     def _cannot_count(self) -> str:
-        """GM - Design (PR #212 r2, item 4), verbatim: the line when only a node
-        with no list price makes the run wait. "“Sketch” has no list price, so
-        Nebula can\u2019t count it toward the $5 daily total." (several: "have
-        no list price" and "them")."""
+        """Design (PR #212), verbatim: the line when only a node with no
+        list price makes the run wait. "“Sketch” has no list price, so
+        Nebula can\u2019t count it toward the $5 daily total." (several:
+        "have no list price" and "them")."""
         names = self._unpriced_names() or ["A node"]
         one = len(names) == 1
         return (f"{node_name_list(names) if self.unpriced else names[0]} {'has' if one else 'have'} no list price, "
@@ -1273,8 +1272,8 @@ class DailyWait:
     def update_line(self, run_names: list[str]) -> str:
         """The Updates card's second sentence. Beside the bar's line except
         when only the unpriced nodes make the run wait: "It has no list
-        price, so Nebula can\u2019t count it toward the $5 daily total." (GM
-        item 4). When the run holds other nodes too, the nodes are named
+        price, so Nebula can\u2019t count it toward the $5 daily total."
+        (design). When the run holds other nodes too, the nodes are named
         (the bar's line), since "It" would be unclear."""
         names = self._unpriced_names()
         if self.over or not names or sorted(names) != sorted(run_names):
@@ -1288,7 +1287,7 @@ class DailyWait:
                 f"total for everything that isn\u2019t them ({money.usd_spent(self.used)} used in the last 24 hours)")
 
     def agent_line(self, proposal_id: str) -> str:
-        """What an agent reads (run results, the CLI, HTTP), in GM's words.
+        """What an agent reads (run results, the CLI, HTTP), in the approved words.
         MCP's run_nodes words the last sentence for its reader (for_mcp)."""
         if not self.over:
             return (f"{self._cannot_count()} Proposing {'it' if len(self.unpriced) < 2 else 'them'} for the "
@@ -1302,7 +1301,7 @@ class DailyWait:
 
     def nameless_line(self) -> str:
         """A caller that didn't name itself (a script, curl) over the total:
-        refused, since only a caller with a name gets a proposal (GM - Design,
+        refused, since only a caller with a name gets a proposal (design,
         2026-10-31). A tab not opened from the link reads its own lock line."""
         if not self.over:
             return f"{self._cannot_count()} Name yourself with NEBULA_AGENT_NAME or --as to send it as a proposal."
@@ -1310,14 +1309,14 @@ class DailyWait:
                 "NEBULA_AGENT_NAME or --as to send it as a proposal.")
 
     def slots_full_line(self, open_count: int) -> str:
-        """The agent's line when its proposal slots are full (GM - Design, 2026-10-31)."""
+        """The agent's line when its proposal slots are full (design, 2026-10-31)."""
         return (f"{self._reason()}, and you already have {open_count} "
                 "open proposals. Wait until the person accepts or rejects one, then propose it again.")
 
     def total_full_line(self, open_count: int) -> str:
-        """The agent's line when Nebula's open proposals are at the cap (GM -
-        Design, PR #212 r2, item 3), verbatim: "This would pass the $5 daily
-        total, and Nebula already has 12 open proposals. Wait until the person
+        """The agent's line when Nebula's open proposals are at the cap
+        (design, PR #212), verbatim: "This would pass the $5 daily total,
+        and Nebula already has 12 open proposals. Wait until the person
         accepts or rejects one, then propose it again."""
         return (f"{self._reason()}, and Nebula already has {open_count} "
                 "open proposals. Wait until the person accepts or rejects one, then propose it again.")
@@ -1331,16 +1330,16 @@ class DailyWait:
         return f"{node_name_list(mine)} {'has' if len(mine) == 1 else 'have'} no list price"
 
     def slots_full_log(self, names: list[str], open_count: int) -> str:
-        """The person's Agent log line for it. The log's source column names the
-        agent, so the sentence reads whole without it (GM - Design, PR #212 r2,
-        item 2)."""
+        """The person's Agent log line for it. The log's source column names
+        the agent, so the sentence reads whole without it (design, PR #212)."""
         return (f"Couldn\u2019t run {node_name_list(names)} because {self._log_reason(names)} and all "
                 f"{open_count} proposal slots are full.")
 
     def total_full_log(self, names: list[str], open_count: int) -> str:
-        """The person's Agent log line when Nebula's open proposals are at the
-        cap (GM item 3), verbatim: "Couldn\u2019t run \u201cWriter\u201d because it would pass
-        the $5 daily total and Nebula already has 12 open proposals."""
+        """The person's Agent log line when Nebula's open proposals are at
+        the cap (design, PR #212), verbatim: "Couldn\u2019t run
+        \u201cWriter\u201d because it would pass the $5 daily total and
+        Nebula already has 12 open proposals."""
         return (f"Couldn\u2019t run {node_name_list(names)} because {self._log_reason(names)} and Nebula "
                 f"already has {open_count} open proposals.")
 
@@ -1407,7 +1406,7 @@ class Decision:
     wait: DailyWait | None = None
 
 
-# How each surface checks on a waiting run's proposal (GM - Design,
+# How each surface checks on a waiting run's proposal (design,
 # 2026-10-31: "MCP gets get_proposal("<id>") and the CLI gets “nebula proposals”").
 CHECK_CLI = "Check it with nebula proposals."
 CHECK_MCP = 'Check it with get_proposal("{id}").'
@@ -1423,7 +1422,7 @@ def for_mcp(message: str, proposal_id: str) -> str:
 
 def _usd(amount: float) -> str:
     """A cost, limit or amount used in a refusal line: services/money.py's
-    one form for an amount ("$0.0004", never "$0.000"; review 2, L4)."""
+    one form for an amount ("$0.0004", never "$0.000")."""
     return money.usd_amount(amount)
 
 
@@ -1461,7 +1460,7 @@ _LISTED = 5
 
 def _connected_now(ids: list[str], size_inputs: SizeInputs | None) -> str:
     """The inputs connected to each node's measured port, so the agent knows
-    which to choose from (GM - Design: "If the refusal doesn't already name
+    which to choose from (design: "If the refusal doesn't already name
     the connected inputs, list them right before it"). Each is the source
     node's name in quotes and its id:port, as `--unwire` takes it. Text only:
     the refusal itself is decided before this runs, whatever it lists."""
@@ -1681,7 +1680,7 @@ def decide(
     estimate = model_pricing.estimate_run(list(items), pricing, definitions, api_keys, multipliers,
                                           model_pricing.wired_counts(list(items), edges), sizes)
     definition_of = {str(item["id"]): str(item.get("definitionId") or "") for item in items}
-    # A node by its canvas title (review 18 M-D: the name the canvas shows).
+    # A node by its canvas title (the name the canvas shows).
     labels = {node_id: node_route.node_name(definitions.get(def_id), None) for node_id, def_id in definition_of.items()}
 
     by_model: dict[str, float] = {}
@@ -1717,7 +1716,7 @@ def decide(
 
     # Plan-run limits stand on their own: a Krea plan cap (on by default)
     # doesn't make unpriced nodes need a proposal when no USD limit is set.
-    # The daily total is a USD limit (Justin's Q165, 2026-10-31): with it on,
+    # The daily total is a USD limit (Justin, 2026-10-31): with it on,
     # a node with no list price always waits for the person's OK, since
     # Nebula can't count it toward the total, even with no other limit set.
     finer = [budget for budget in budgets if not budget.daily]
@@ -1821,10 +1820,10 @@ def may_bill_nodes(items: list[Mapping[str, Any]], definitions: Mapping[str, Map
                    api_keys: Mapping[str, Any]) -> list[str]:
     """The ids of the run's nodes that may bill the person's own provider
     account, in run order: the one cost class's "mayCost"
-    (model_pricing.cost_class), as every cost surface reads it (review 10 of
-    PR #203, NIT-5). Its reach is node_route.may_bill's, exactly:
-    cost_class returns a key-billing route's own class first
-    (tests/test_idol_round11.py proves the two agree on every node)."""
+    (model_pricing.cost_class), as every cost surface reads it (PR #203).
+    Its reach is node_route.may_bill's, exactly: cost_class returns a
+    key-billing route's own class first (tests/test_idol_round11.py proves
+    the two agree on every node)."""
     found = []
     for item in items:
         definition = definitions.get(str(item.get("definitionId") or ""))
@@ -1835,11 +1834,10 @@ def may_bill_nodes(items: list[Mapping[str, Any]], definitions: Mapping[str, Map
 
 
 def propose_hint(run_ids: list[str], where: str = "mcp") -> str:
-    """The sentence pointing an agent at a proposal for these canvas nodes, in
-    its reader's words (services/agent_words: "propose_change (run: n2)" for
-    MCP, `nebula propose --note "<why>" --run n2` for the CLI), worded here,
-    never rewritten on the way out (review 8 of PR #203, NIT-4; review 9,
-    keys MEDIUM-1)."""
+    """The sentence pointing an agent at a proposal for these canvas nodes,
+    in its reader's words (services/agent_words: "propose_change (run: n2)"
+    for MCP, `nebula propose --note "<why>" --run n2` for the CLI), worded
+    here, never rewritten on the way out (PR #203)."""
     from services import agent_words
 
     return (

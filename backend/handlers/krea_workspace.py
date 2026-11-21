@@ -244,12 +244,12 @@ def _media_fields(schema: dict) -> set[str]:
 
 
 # The Settings field the Krea usage key goes in, by its label there
-# (frontend/src/lib/providerCatalog.ts; GM: "Use the field's real label.").
+# (frontend/src/lib/providerCatalog.ts; design: "Use the field's real label.").
 USAGE_KEY_SETTINGS_LABEL = "Krea · usage key"
 
 
 def refused_input_line(app: str, schema: dict, error: Any) -> str:
-    """GM's line 10: the app refused the input. The field when the validator
+    """The app refused the input (design). The field when the validator
     names a property the person sees by a name (its schema ``title``), else
     the first form; the validator's own message stays behind Details."""
     path = [str(part) for part in getattr(error, "path", [])]
@@ -723,7 +723,7 @@ async def handle_krea_desktop(node: GraphNode, inputs: dict[str, PortValueDict],
             tool_input.setdefault("outputIndex", _int_value(node.params.get("output_index"), 0, 0))
         errors = list(Draft202012Validator(schema).iter_errors(tool_input))
         if errors:
-            # GM's {tool}: the tool's own title, else its name in words.
+            # The {tool} (design): the tool's own title, else its name in words.
             app = str(spec.get("title") or "").strip() or re.sub(r"[_-]+", " ", tool_name).strip()
             raise with_provider_line(ValueError(f"{tool_name} input: {errors[0].message}; nothing was sent"),
                                      refused_input_line(f"The {app} app", schema, errors[0]))
