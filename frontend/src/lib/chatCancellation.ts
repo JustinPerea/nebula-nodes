@@ -1,4 +1,4 @@
-import { REFUSED_FALLBACK_COPY, becauseLine } from './errorCopy';
+import { refusedFallbackCopy, becauseLine } from './errorCopy';
 
 export type ChatCancellationState = 'idle' | 'requested' | 'failed';
 
@@ -29,10 +29,10 @@ export function chatCancellationNotice(
   status: 'requested' | 'confirmed' | 'failed',
   reason?: string,
 ): ChatCancellationNotice {
-  if (status === 'requested') return { text: 'Cancellation requested…' };
-  if (status === 'confirmed') return { text: 'Canceled.' };
+  if (status === 'requested') return { text: 'Stopping…' };
+  if (status === 'confirmed') return { text: 'Stopped.' };
   return {
-    text: becauseLine({ heading: "Couldn’t stop the reply.", reason: reason || REFUSED_FALLBACK_COPY }),
+    text: becauseLine({ heading: "Couldn’t stop the reply.", reason: reason || refusedFallbackCopy() }),
     tone: 'error',
   };
 }

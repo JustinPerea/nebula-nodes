@@ -343,7 +343,7 @@ async def intake_files(collection_id: str = Form(...), role: str = Form("neutral
             # specific text, never shown to the person.
             log_refusal("commons upload of one file refused (%s): %s", exc.code, exc)
             results.append({"filename": upload.filename, "ok": False, "error": str(exc), "reason": exc.code,
-                            "person": person_copy.INTAKE.get(exc.code, person_copy.FALLBACK)})
+                            **person_copy.person_field(person_copy.INTAKE.get(exc.code, person_copy.FALLBACK))})
     return {"results": results}
 
 

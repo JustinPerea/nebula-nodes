@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Node } from '@xyflow/react';
 import type { NodeData } from '../../src/types';
 import {
-  CONNECTION_LOST_COPY, ConnectionLostError, REFUSED_FALLBACK_COPY,
+  CONNECTION_LOST_COPY, ConnectionLostError, refusedFallbackCopy,
   copyForError, failureCopy, failureMessage, isConnectionFailure, isNoAnswer,
 } from '../../src/lib/errorCopy';
 import { fetchUrl } from '../../src/lib/backend';
@@ -23,7 +23,7 @@ import { fetchWorldSplatBytes } from '../../src/lib/worldSplat';
 
 const LOST = CONNECTION_LOST_COPY;
 const LOST_CLAUSE = 'because the server isn’t answering. Check that Nebula is running, then try again.';
-const GENERAL = REFUSED_FALLBACK_COPY;
+const GENERAL = refusedFallbackCopy();
 const SAVE_GENERAL = `Nebula couldn’t save because the server didn’t accept it. ${GENERAL}`;
 
 function thrown(run: () => unknown): unknown {

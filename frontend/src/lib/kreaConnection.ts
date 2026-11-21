@@ -1,5 +1,5 @@
 import { apiFetch } from './backend';
-import { copyForAnswer, copyForError, FailureNotice, readRefusal, REFUSED_FALLBACK_COPY } from './errorCopy';
+import { copyForAnswer, copyForError, FailureNotice, readRefusal, refusedFallbackCopy } from './errorCopy';
 import { hasRoutes, routeUnavailable, usesRoutePlan } from './directRoute';
 import { keysNeeded } from './nodeKeys';
 import type { ModelNodeDefinition } from '../types';
@@ -135,7 +135,7 @@ async function kreaJson<T>(heading: string, path: string, init?: RequestInit): P
   try {
     return await response.json() as T;
   } catch {
-    throw new FailureNotice(heading, REFUSED_FALLBACK_COPY);
+    throw new FailureNotice(heading, refusedFallbackCopy());
   }
 }
 

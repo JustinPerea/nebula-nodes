@@ -118,7 +118,9 @@ def test_the_frontend_says_the_same_words_for_the_lines_both_sides_use():
     with no detail. Pin them equal so neither drifts."""
     from pathlib import Path
     ts = (Path(__file__).resolve().parents[2] / "frontend" / "src" / "lib" / "errorCopy.ts").read_text()
-    assert f'REFUSED_FALLBACK_COPY = "{person_copy.FALLBACK}"' in ts
+    # The no-reason line is not sent (the backend leaves it out); the frontend's browser line is the same
+    # words, so a person line equal to it is recognised as "no line" and never shown twice.
+    assert f'REFUSED_FALLBACK_BROWSER = "{person_copy.FALLBACK}"' in ts
     assert f'TOO_LARGE_COPY = "{person_copy.INTAKE["too_large"]}"' in ts
 
 
@@ -169,12 +171,44 @@ def test_records_refusals_are_written_copy_for_the_person(client):
     correction = client.post(f"/api/commons/assets/{asset_id}/corrections",
                              json={"field_path": "summary", "op": "replace", "value": "x"}, headers=h)
     assert correction.status_code == 422
-    assert correction.json()["detail"] == FALLBACK
+    assert correction.json()["detail"] == ""  # no line: the frontend says the shell's
     created = client.post(f"/api/commons/assets/{asset_id}/regions", json={"box": [0.1, 0.1, 0.2, 0.2], "label": "x"},
                           headers=h).json()
     status = client.patch(f"/api/commons/regions/{created['id']}", json={"status": "sparkly"}, headers=h)
     assert status.status_code == 422
-    assert status.json()["detail"] == FALLBACK
+    assert status.json()["detail"] == ""
+
+
+def test_a_refusal_whose_person_line_is_the_fallback_leaves_the_line_out_and_agents_keep_detail(client):
+    """The frontend supplies the no-reason line for its shell (a browser tab or the desktop app), so the
+    backend sends none: the person's detail is empty, an agent's is the specific text as before."""
+    h = human()
+    asset_id = _asset(client, h)
+    body = {"field_path": "summary", "op": "replace", "value": "x"}
+    person = client.post(f"/api/commons/assets/{asset_id}/corrections", json=body, headers=h)
+    assert person.status_code == 422 and person.json()["detail"] == ""
+    assert FALLBACK not in person.text
+    # An agent, where a route lets one in, keeps the specific text whatever the person's line is.
+    from types import SimpleNamespace
+    from services import refusal_copy
+    agent_actor = SimpleNamespace(is_human=False)
+    assert refusal_copy.refusal_detail("op must be set", FALLBACK, actor=agent_actor) == "op must be set"
+    assert refusal_copy.refusal_detail("op must be set", FALLBACK, actor=None) == ""
+
+
+def test_person_field_leaves_out_only_the_fallback():
+    assert person_copy.person_field(person_copy.FALLBACK) == {}
+    assert person_copy.person_field(person_copy.BAD_FILTERS) == {"person": person_copy.BAD_FILTERS}
+
+
+def test_an_upload_result_with_no_line_of_its_own_has_no_person_field(client, monkeypatch):
+    h = human()
+    col = collection(client, h)
+    monkeypatch.delitem(person_copy.INTAKE, "unsupported_type")
+    r = client.post("/api/commons/intake/files", headers=h, data={"collection_id": col},
+                    files=[("files", ("notes.txt", b"hello there, plain text", "text/plain"))])
+    row = r.json()["results"][0]
+    assert row["ok"] is False and row["reason"] == "unsupported_type" and "person" not in row
 
 
 def test_comment_refusal_person_gets_written_copy_agent_keeps_detail(client):

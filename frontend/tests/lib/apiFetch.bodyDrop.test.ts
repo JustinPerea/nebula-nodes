@@ -16,9 +16,9 @@ import {
  * a JSON SyntaxError and the caller's own abort keep their class.
  */
 
-const HEADING = "Couldn't check Claude status.";
-const LOST_LINE = 'Nebula couldn’t check Claude status because the server isn’t answering. Check that Nebula is running, then try again.';
-const GENERAL_LINE = 'Nebula couldn’t check Claude status because the server didn’t accept it. Try again, or reload the page if it keeps happening.';
+const HEADING = "Couldn’t check Claude Code’s status.";
+const LOST_LINE = 'Nebula couldn’t check Claude Code’s status because the server isn’t answering. Check that Nebula is running, then try again.';
+const GENERAL_LINE = 'Nebula couldn’t check Claude Code’s status because the server didn’t accept it. Try again, or reload the page if it keeps happening.';
 
 /** Headers and the first bytes arrive, then the stream errors as fetch's does mid-body. */
 function droppingResponse(init: ResponseInit = {}): Response {

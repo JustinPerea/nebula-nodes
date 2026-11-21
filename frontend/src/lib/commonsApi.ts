@@ -6,7 +6,7 @@ import { CommonsRequestError } from './commonsRequestError';
 import { noteCommonsAnswered, noteCommonsOff } from './commonsOff';
 import {
   COMMONS_OFF_COPY, COMMONS_OFF_DETAIL, CONNECTION_LOST_COPY, ConnectionLostError, NO_ANSWER_STATUS, detailText,
-  REFUSED_FALLBACK_COPY, commonsNotConnected, copyForStatus, isBackendUnreachable, isNoAnswer, readDetail, requestSucceeded,
+  refusedFallbackCopy, commonsNotConnected, copyForStatus, isBackendUnreachable, isNoAnswer, readDetail, requestSucceeded,
   warnFailure, type FailureCopy,
 } from './errorCopy';
 import {
@@ -179,7 +179,7 @@ export interface UploadResult {
 export function uploadFailureCopy(result: UploadResult): FailureCopy {
   return {
     heading: `Couldn’t upload ${result.filename ? quoted(result.filename) : 'that file'}.`,
-    reason: result.person?.trim() || REFUSED_FALLBACK_COPY,
+    reason: result.person?.trim() || refusedFallbackCopy(),
   };
 }
 

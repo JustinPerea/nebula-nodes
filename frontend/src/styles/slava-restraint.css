@@ -182,6 +182,20 @@ body.app-slava-restraint {
   --sr-radius-control-lg: 10px;
   --sr-radius-pill: 999px;
 
+  /* The app's button, one set of values for every surface that draws it (the proposal bar's Accept, Show and
+   * Dismiss in canvasProposals.css, Connect's buttons in this file): a quiet secondary, and a light-filled
+   * primary whose label is the canvas colour. */
+  --sr-button-height: 30px;
+  --sr-button-pad-x: 10px;
+  --sr-button-radius: var(--sr-radius-control);
+  --sr-button-edge: var(--sr-edge-strong);
+  --sr-button-fill: rgb(255 255 255 / 0.05);
+  --sr-button-fill-hover: rgb(255 255 255 / 0.1);
+  --sr-button-ink: var(--sr-ink);
+  --sr-button-primary-fill: var(--sr-ink);
+  --sr-button-primary-fill-hover: var(--sr-ink-bold);
+  --sr-button-primary-ink: var(--sr-canvas);
+
   --sr-control-h-xs: 24px;
   --sr-control-h-sm: 28px;
   --sr-control-h-md: 34px;
@@ -1077,6 +1091,12 @@ body.app-slava-restraint .chat-panel__session {
   font-family: var(--sr-mono);
   font-size: var(--sr-type-meta);
   letter-spacing: 0;
+}
+
+/* The status words ("Claude Code · Max plan", "Codex · your ChatGPT plan", "thinking…") are sentences in the
+ * UI face; only the session id, which is an identifier, stays mono. */
+body.app-slava-restraint .chat-panel__meta .chat-panel__status {
+  font-family: var(--sr-ui);
 }
 
 body.app-slava-restraint .chat-panel__model-picker {
@@ -4988,4 +5008,50 @@ body.app-slava-restraint .code-glue {
 body.app-slava-restraint .code-glue .code-span {
   display: inline;
   max-width: none;
+}
+
+/* Connect Claude Code / Connect ChatGPT account (the chat's connect section): the app's primary button for
+ * Connect and its secondary for Use a device code, through the same --sr-button-* tokens as the proposal
+ * bar's Accept and Show (canvasProposals.css), so the two can't drift. Hover, focus and disabled follow
+ * those buttons. */
+body.app-slava-restraint .chat-panel__connect-btn {
+  justify-content: center;
+  height: var(--sr-button-height);
+  padding: 0 var(--sr-button-pad-x);
+  border: 1px solid var(--sr-button-edge);
+  border-radius: var(--sr-button-radius);
+  background: var(--sr-button-fill);
+  color: var(--sr-button-ink);
+  white-space: nowrap;
+  transition: background 120ms ease-out, opacity 120ms ease-out;
+}
+
+body.app-slava-restraint .chat-panel__connect-btn:hover:not(:disabled) {
+  background: var(--sr-button-fill-hover);
+}
+
+body.app-slava-restraint .chat-panel__connect-btn:disabled {
+  opacity: 0.5;
+}
+
+body.app-slava-restraint .chat-panel__connect-btn:focus-visible {
+  outline: var(--sr-focus-outline);
+  outline-offset: var(--sr-focus-offset);
+}
+
+body.app-slava-restraint .chat-panel__connect-btn--primary {
+  border-color: var(--sr-button-primary-fill);
+  background: var(--sr-button-primary-fill);
+  color: var(--sr-button-primary-ink);
+  font-weight: 600;
+}
+
+body.app-slava-restraint .chat-panel__connect-btn--primary:hover:not(:disabled) {
+  border-color: var(--sr-button-primary-fill-hover);
+  background: var(--sr-button-primary-fill-hover);
+}
+
+/* The label above the terminal commands ("Or run one in a terminal:"): the UI face, like the line above it. */
+body.app-slava-restraint .chat-panel__connect-commands-label {
+  font-family: var(--sr-ui);
 }

@@ -99,13 +99,11 @@ export function ChatModelPicker({ agent, personalAgents = [], agentsHeld = false
     : selected?.label ?? model ?? (loading ? 'Loading models…' : 'Choose model');
   const effortLabel = effort ? offeredEffort?.label ?? 'Unavailable effort'
     : defaultEffort ? aside(defaultEffort.label, 'default') : 'CLI default';
-  const unavailable = error ?? current?.error?.message ?? (
-    current?.status === 'not_installed' ? `${provider.label} isn’t installed. Install it, then try again.`
-      : current?.status === 'not_authenticated' ? `Sign in to ${provider.label}, then try again.`
-        : // A retry can help when the CLI listed nothing for a moment (a cold start), so the line sits beside
-        // the Try again button and ends in it (design r160 answer 5).
-        ready && !models.length ? `Nebula couldn’t find any models in ${provider.label}. Try again.` : 'Model catalog is unavailable.'
-  );
+  // The backend's line for the code (services/chat_models.py), which ends in "try again" beside the Try again button
+  // (design). These are the lines when the catalog came with none.
+  const unavailable = error ?? current?.error?.message ?? (ready && !models.length
+    ? `Nebula couldn’t find any models in ${provider.label}. Try again.`
+    : 'Nebula couldn’t get the model list. Try again.');
   const connection = current?.auth.mode === 'chatgpt' ? 'Connected to ChatGPT'
     : chatAuthUsesProviderBilling(current?.auth.mode ?? null)
       ? /api|bearer/i.test(current?.auth.mode || '') ? 'Using API billing' : 'Using provider billing'

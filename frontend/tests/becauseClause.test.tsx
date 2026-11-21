@@ -10,7 +10,7 @@ import { FailureLines } from '../src/components/failure/FailureLines';
 import { LineText } from '../src/components/LineText';
 import {
   ACCESS_LOST_COPY, BACKEND_NOT_RUNNING_COPY, CONNECTION_LOST_COPY, ConnectionLostError, FailureNotice, NEBULA_NOT_ANSWERING_COPY,
-  NO_RESPONSE_COPY, PERSON_REQUIRED_APP_COPY, PERSON_REQUIRED_COPY, PERSON_REQUIRED_DEV_COPY, REASON_CLAUSES, REFUSED_FALLBACK_COPY,
+  NO_RESPONSE_COPY, PERSON_REQUIRED_APP_COPY, PERSON_REQUIRED_COPY, PERSON_REQUIRED_DEV_COPY, REASON_CLAUSES, refusedFallbackCopy,
   RequestFailedError, TOO_LARGE_COPY, becauseLine, besideButton, clauseFor, curlApostrophes, failedWhat, failureCopy, failureMessage,
   couldntLine, endedSentence, foldApostrophes, isBecauseFailure, isLoadLine, oneLine, overProjectLimitCopy,
 } from '../src/lib/errorCopy';
@@ -81,7 +81,7 @@ describe('the status rows', () => {
     ['a rate limit', NO_RESPONSE_COPY, 429, 'the server is busy. Try again in a moment.', 'the server is busy. Try again.'],
     ['a server error', NO_RESPONSE_COPY, 500, 'the server hit an error. Try again.', 'the server hit an error. Try again.'],
     ['no access', ACCESS_LOST_COPY, 403, 'you don’t have access to this anymore. Reload to sign in again.', 'you don’t have access to this anymore. Reload to sign in again.'],
-    ['a refusal with no reason', REFUSED_FALLBACK_COPY, 400, 'the server didn’t accept it. Try again, or reload the page if it keeps happening.', 'the server didn’t accept it. Try again.'],
+    ['a refusal with no reason', refusedFallbackCopy(), 400, 'the server didn’t accept it. Try again, or reload the page if it keeps happening.', 'the server didn’t accept it. Try again.'],
     ['too large', TOO_LARGE_COPY, 413, 'it’s too large.', 'it’s too large.'],
   ];
   it.each(cases)('%s', (_name, reason, status, alone, button) => {

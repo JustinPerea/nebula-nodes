@@ -47,7 +47,18 @@ export const NO_RESPONSE_COPY = 'Nebula didn’t respond. Try again.';
  * Also what a failure that isn't a request's says (copyForError). Round 3f
  * (GM): "Under any other heading (Projects, graph file, Commons…), drop
  * "That didn't work."". A node card says its own (lib/nodeErrorCopy.ts). */
-export const REFUSED_FALLBACK_COPY = "Try again, or reload the page if it keeps happening.";
+/** The browser's and the desktop app's lines for a refusal with no reason: a tab reloads the page, the app has
+ * View > Reload (Electron's default menu; a reload keeps the person-token bridge). Read through
+ * refusedFallbackCopy() / isRefusedFallback(), the one place that picks by shell. */
+const REFUSED_FALLBACK_BROWSER = "Try again, or reload the page if it keeps happening.";
+const REFUSED_FALLBACK_APP = "Try again, or choose View > Reload if it keeps happening.";
+export function refusedFallbackCopy(desktop: boolean = inDesktopShell()): string {
+  return desktop ? REFUSED_FALLBACK_APP : REFUSED_FALLBACK_BROWSER;
+}
+/** Whether `reason` is the no-reason line of either shell. */
+export function isRefusedFallback(reason: string): boolean {
+  return reason === REFUSED_FALLBACK_BROWSER || reason === REFUSED_FALLBACK_APP;
+}
 /** 401 or 403 with no reason (GM). */
 export const ACCESS_LOST_COPY = 'You don’t have access to this anymore. Reload to sign in again.';
 /** 413 with no reason (GM). */
@@ -260,7 +271,9 @@ export const NOT_ANSWERING_RETRY_CLAUSE = 'the server isn’t answering. Try aga
 const SERVER_BUSY_RETRY_CLAUSE = 'the server is busy. Try again.';
 /** GM r30: a 4xx with no readable reason, and any reason not listed above (GM r31's wording). */
 export const LOAD_NOT_ACCEPTED = 'the server didn’t accept it. Try again.';
-const NOT_ACCEPTED_ALONE = 'the server didn’t accept it. Try again, or reload the page if it keeps happening.';
+const NOT_ACCEPTED_BROWSER = `the server didn’t accept it. ${REFUSED_FALLBACK_BROWSER}`;
+const NOT_ACCEPTED_APP = `the server didn’t accept it. ${REFUSED_FALLBACK_APP}`;
+const notAcceptedAlone = (): string => (inDesktopShell() ? NOT_ACCEPTED_APP : NOT_ACCEPTED_BROWSER);
 /** The backend's answer when it runs without the Commons (backend commons/activation, routes/commons
  * activation_dep), and GM r30's page line for it. The Commons is on only when the backend starts
  * with NEBULA_COMMONS_ENABLED=1: no setting turns it on, so the line names none. */
@@ -766,7 +779,7 @@ function statusClause(reason: string, status: number | undefined, beside: 'alone
     return status !== undefined && status >= 500 && !GATEWAY_STATUSES.has(status) ? SERVER_ERROR_CLAUSE : NO_RESPONSE_CLAUSE;
   }
   // A refusal with no readable reason: "it" is the request, as the Cinema line says.
-  if (reason === REFUSED_FALLBACK_COPY) return button ? LOAD_NOT_ACCEPTED : NOT_ACCEPTED_ALONE;
+  if (isRefusedFallback(reason)) return button ? LOAD_NOT_ACCEPTED : notAcceptedAlone();
   if (reason === TOO_LARGE_COPY) return 'it’s too large.';
   return null;
 }
@@ -1193,7 +1206,7 @@ export function detailText(detail: unknown): string {
 function refusedCopy(status: number): string {
   if (status === 401 || status === 403) return ACCESS_LOST_COPY;
   if (status === 413) return TOO_LARGE_COPY;
-  return REFUSED_FALLBACK_COPY;
+  return refusedFallbackCopy();
 }
 
 /** The line for an answer with `status`: GM's line for no answer, 408, 429
@@ -1237,7 +1250,7 @@ export function failureDetails(error: unknown): string | null {
  * the error's own message. */
 export function copyForError(error: unknown, signal?: AbortSignal | null): string {
   if (isOfflineRefusal(error)) return '';
-  return isNoAnswer(error, signal) ? CONNECTION_LOST_COPY : REFUSED_FALLBACK_COPY;
+  return isNoAnswer(error, signal) ? CONNECTION_LOST_COPY : refusedFallbackCopy();
 }
 
 /** An answer's `detail`, read from a JSON body; undefined when there is none. */
@@ -1320,7 +1333,8 @@ export function besideButton(line: string): string {
   const endings: readonly (readonly [string, string])[] = [
     [NOT_ANSWERING_CLAUSE, NOT_ANSWERING_RETRY_CLAUSE],
     [SERVER_BUSY_CLAUSE, SERVER_BUSY_RETRY_CLAUSE],
-    [NOT_ACCEPTED_ALONE, LOAD_NOT_ACCEPTED],
+    [NOT_ACCEPTED_BROWSER, LOAD_NOT_ACCEPTED],
+    [NOT_ACCEPTED_APP, LOAD_NOT_ACCEPTED],
   ];
   for (const [page, button] of endings) {
     if (line.endsWith(page)) return line.slice(0, line.length - page.length) + button;

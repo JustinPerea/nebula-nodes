@@ -66,7 +66,7 @@ const calls: Array<[string, () => Promise<unknown>]> = [
   ["Couldn't save the API key.", () => api.updateCredential('openai', '')],
   ["Couldn't load the OpenRouter models.", () => api.fetchOpenRouterModels()],
   ["Couldn't load the Nous models.", () => api.fetchNousModels()],
-  ["Couldn't check Claude status.", () => api.fetchClaudeStatus()],
+  ["Couldn’t check Claude Code’s status.", () => api.fetchClaudeStatus()],
   ["Couldn't check Codex status.", () => api.fetchCodexStatus()],
   ["Couldn't start the ChatGPT sign-in.", () => api.startCodexChatGPTLogin()],
   ["Couldn't check the ChatGPT sign-in.", () => api.fetchCodexChatGPTLoginState()],

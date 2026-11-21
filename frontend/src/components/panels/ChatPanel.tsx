@@ -109,6 +109,8 @@ function chatBackendPort(): number {
 }
 const CHAT_BACKEND_PORT = chatBackendPort();
 const BACKEND_START_COMMAND = `backend/.venv/bin/python backend/devserver.py --port ${CHAT_BACKEND_PORT} --open`;
+/** The label above the terminal commands in the connect section (not above the one command that starts Nebula). */
+const COMMANDS_LABEL = 'Or run one in a terminal:';
 const CHAT_PANEL_RESIZE_CURSORS: Record<string, string> = {
   l: 'ew-resize',
   r: 'ew-resize',
@@ -658,7 +660,7 @@ export function ChatPanel() {
         .catch((err: unknown) => {
           if (cancelled) return;
           setClaudeStatus(null);
-          setClaudeStatusError(failureMessage(err, "Couldn’t check Claude status."));
+          setClaudeStatusError(failureMessage(err, "Couldn’t check Claude Code’s status."));
           setClaudeBackendOffline(isBackendUnavailableError(err));
           retryTimer = window.setTimeout(refresh, 3000);
         });
@@ -761,14 +763,14 @@ export function ChatPanel() {
 
   const claudeStatusLabel = useMemo(() => {
     if (claudeBackendOffline) return 'Nebula’s server isn’t answering';
-    if (claudeStatusError) return 'Nebula couldn’t check Claude';
-    if (!claudeStatus) return 'Checking Claude…';
-    if (!claudeStatus.installed) return 'Claude isn’t installed';
-    if (!claudeStatus.loggedIn) return 'Claude needs a sign-in';
+    if (claudeStatusError) return 'Nebula couldn’t check Claude Code';
+    if (!claudeStatus) return 'Checking Claude Code…';
+    if (!claudeStatus.installed) return 'Claude Code isn’t installed';
+    if (!claudeStatus.loggedIn) return 'Claude Code needs a sign-in';
     if (activeCatalog?.agent === 'claude' && chatAuthUsesProviderBilling(activeCatalog.auth.mode)) return /api|bearer/i.test(activeCatalog.auth.mode || '') ? 'Claude Code · billed to your API key' : 'Claude Code · billed to your cloud account';
-    if (claudeStatus.subscriptionType) return `Claude · ${claudeStatus.subscriptionType.charAt(0).toUpperCase()}${claudeStatus.subscriptionType.slice(1)} plan`;
-    if (claudeStatus.authMethod) return `Claude · ${claudeStatus.authMethod}`;
-    return 'Claude · signed in';
+    if (claudeStatus.subscriptionType) return `Claude Code · ${claudeStatus.subscriptionType.charAt(0).toUpperCase()}${claudeStatus.subscriptionType.slice(1)} plan`;
+    if (claudeStatus.authMethod) return `Claude Code · ${claudeStatus.authMethod}`;
+    return 'Claude Code · signed in';
   }, [claudeStatus, claudeStatusError, claudeBackendOffline, activeCatalog]);
 
   const codexStatusLabel = useMemo(() => {
@@ -793,19 +795,21 @@ export function ChatPanel() {
           open: true,
           title: 'Start Nebula backend',
           status: 'Backend offline',
-          detail: `Claude may already be logged in, but Nebula cannot reach FastAPI on port ${CHAT_BACKEND_PORT}.`,
+          detail: `Nebula’s backend isn’t answering on port ${CHAT_BACKEND_PORT}. Start it with the command below.`,
           canStartLogin: false,
           commands: [BACKEND_START_COMMAND],
+          commandsLabel: null,
         };
       }
       return {
         agent: 'claude' as const,
         open: needsConnection,
-        title: needsConnection ? 'Connect Claude' : 'Claude connected',
+        title: needsConnection ? 'Connect Claude Code' : 'Claude Code connected',
         status: claudeStatusLabel,
         detail: activeCatalog?.agent === 'claude' && chatAuthUsesProviderBilling(activeCatalog.auth.mode)
-          ? 'Claude Code is using provider billing. Check its authentication settings to use your subscription login.'
+          ? 'Claude Code is billed to your API key or cloud account, not your Claude plan. Sign in with `claude auth login --claudeai` to use your plan.'
           : 'Uses your existing Claude Code login on this machine.',
+        commandsLabel: COMMANDS_LABEL,
         canStartLogin: false,
         commands: [
           'claude auth login --claudeai',
@@ -828,20 +832,22 @@ export function ChatPanel() {
           open: true,
           title: 'Start Nebula backend',
           status: 'Backend offline',
-          detail: `Codex may already be logged in, but Nebula cannot reach FastAPI on port ${CHAT_BACKEND_PORT}.`,
+          detail: `Nebula’s backend isn’t answering on port ${CHAT_BACKEND_PORT}. Start it with the command below.`,
           canStartLogin: false,
           commands: [BACKEND_START_COMMAND],
+          commandsLabel: null,
         };
       }
       const detail = codexStatus?.mode === 'api'
-        ? 'Codex is using API billing. Switch to ChatGPT account login for subscription access.'
-        : "Sign in through Codex’s local ChatGPT OAuth flow. Nebula starts it and keeps checking status.";
+        ? 'Codex is billed to your API key, not your ChatGPT plan. Use Connect ChatGPT account to use your plan.'
+        : 'Nebula opens ChatGPT in your browser so you can sign in, then checks that Codex is connected.';
       return {
         agent: 'codex' as const,
         open: needsConnection,
         title: needsConnection ? 'Connect ChatGPT account' : 'ChatGPT account connected',
         status: codexStatusLabel,
         detail,
+        commandsLabel: COMMANDS_LABEL,
         canStartLogin: true,
         commands: [
           'codex login',
@@ -1295,7 +1301,7 @@ export function ChatPanel() {
             if (event.code === 'personal_agent_warning_required') {
               setPersonalAgents((current) => current ? { ...current, warningAcknowledged: false } : current);
             }
-            if (['model_unsupported', 'effort_unsupported', 'model_required', 'auth_required'].includes(String(event.code))) {
+            if (['model_unsupported', 'effort_unsupported', 'model_required', 'auth_required', 'auth_api_key'].includes(String(event.code))) {
               setCatalogRefresh((value) => value + 1);
             }
             setMessages((prev) => markThinkingCompleted(prev));
@@ -1804,16 +1810,16 @@ export function ChatPanel() {
 
   const status = useMemo(() => {
     if (!connected) return 'disconnected';
-    if (cancelState === 'requested') return 'canceling…';
-    if (cancelState === 'failed') return 'cancel failed';
+    if (cancelState === 'requested') return 'stopping…';
+    if (cancelState === 'failed') return 'stop failed';
     if (busy) return 'thinking…';
     return 'ready';
   }, [connected, busy, cancelState]);
 
-  // The meta line says the panel's state only while it is busy ("thinking…", "canceling…", "cancel failed"):
+  // The meta line says the panel's state only while it is busy ("thinking…", "stopping…", "stop failed"):
   // "ready" next to a sign-in problem contradicted it, and an idle panel needs no word. A running turn means the
   // agent can run, so those states show whenever they hold, whatever the status check says (design).
-  // A failed cancel matters only while its turn still runs: once the turn ends, the word goes too.
+  // A failed stop matters only while its turn still runs: once the turn ends, the word goes too.
   const panelState = busy || cancelState === 'requested' ? status : null;
   // The session's id means nothing to a person on the line itself: it rides in the hover title.
   const sessionTitle = sessionId ? `Session ${sessionId}` : undefined;
@@ -2050,11 +2056,11 @@ export function ChatPanel() {
                 {agentDisplayName}
               </span>
             ) : (
-              <span title={agentStatusTitle(agent === 'claude' ? claudeMessage || claudeStatusError : codexStatus?.message || codexStatusError, sessionTitle)}>
+              <span className="chat-panel__status" title={agentStatusTitle(agent === 'claude' ? claudeMessage || claudeStatusError : codexStatus?.message || codexStatusError, sessionTitle)}>
                 {agent === 'claude' ? claudeStatusLabel : codexStatusLabel}
               </span>
             )}
-            {panelState && <span> · {panelState}</span>}
+            {panelState && <span className="chat-panel__status"> · {panelState}</span>}
           </div>
           {personal && personalOptions.length > 0 && (
             // The models (or thinking levels) the agent offers, on their own row
@@ -2150,7 +2156,7 @@ export function ChatPanel() {
               <span className="chat-panel__connect-status">{agentConnectHint.status}</span>
             </summary>
             <div className="chat-panel__connect-body">
-              <div>{agentConnectHint.detail}</div>
+              <div><LineText text={agentConnectHint.detail} code /></div>
               {agentConnectHint.agent === 'codex' && agentConnectHint.canStartLogin && (
                 <>
                   <div className="chat-panel__connect-actions">
@@ -2177,7 +2183,7 @@ export function ChatPanel() {
                       onClick={codexLock.guard(() => handleStartCodexChatGPTLogin(true))}
                       disabled={codexLoginBusy || codexLoginState?.running}
                     >
-                      Device code
+                      Use a device code
                     </button>
                   </div>
                   <PersonLockLine lock={codexLock} place="control" />
@@ -2208,6 +2214,7 @@ export function ChatPanel() {
                   )}
                 </>
               )}
+              {agentConnectHint.commandsLabel && <div className="chat-panel__connect-commands-label">{agentConnectHint.commandsLabel}</div>}
               <div className="chat-panel__connect-commands">
                 {agentConnectHint.commands.map((command) => (
                   <code key={command}>{command}</code>
@@ -2406,8 +2413,8 @@ export function ChatPanel() {
               className="chat-panel__send chat-panel__send--stop"
               onClick={cancel}
               disabled={cancelState === 'requested'}
-              aria-label={cancelState === 'requested' ? 'Cancellation requested' : 'Stop response'}
-              title={cancelState === 'requested' ? 'Waiting for backend cancellation' : 'Stop response'}
+              aria-label={cancelState === 'requested' ? 'Stopping' : 'Stop response'}
+              title={cancelState === 'requested' ? 'Waiting for the reply to stop' : 'Stop response'}
             >
               <Square
                 className="chat-panel__send-icon"

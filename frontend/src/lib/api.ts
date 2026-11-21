@@ -592,7 +592,7 @@ export interface ClaudeStatus {
 }
 
 export async function fetchClaudeStatus(): Promise<ClaudeStatus> {
-  const response = await apiRequest("Couldn’t check Claude status.", '/api/agents/claude/status');
+  const response = await apiRequest("Couldn’t check Claude Code’s status.", '/api/agents/claude/status');
   return response.json();
 }
 

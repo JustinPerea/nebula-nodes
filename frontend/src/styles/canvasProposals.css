@@ -787,12 +787,12 @@ body.app-slava-restraint .proposal-bar__not-ready-mark {
   align-items: center;
   justify-content: center;
   gap: 5px;
-  height: 30px;
-  padding: 0 10px;
-  border: 1px solid var(--sr-edge-strong, rgb(255 255 255 / 0.14));
-  border-radius: var(--sr-radius-control, 8px);
-  background: rgb(255 255 255 / 0.05);
-  color: var(--sr-ink, rgb(255 255 255 / 0.92));
+  height: var(--sr-button-height, 30px);
+  padding: 0 var(--sr-button-pad-x, 10px);
+  border: 1px solid var(--sr-button-edge, var(--sr-edge-strong, rgb(255 255 255 / 0.14)));
+  border-radius: var(--sr-button-radius, var(--sr-radius-control, 8px));
+  background: var(--sr-button-fill, rgb(255 255 255 / 0.05));
+  color: var(--sr-button-ink, var(--sr-ink, rgb(255 255 255 / 0.92)));
   font: inherit;
   white-space: nowrap;
   cursor: pointer;
@@ -800,7 +800,7 @@ body.app-slava-restraint .proposal-bar__not-ready-mark {
 }
 
 .proposal-bar__button:hover:not(:disabled) {
-  background: rgb(255 255 255 / 0.1);
+  background: var(--sr-button-fill-hover, rgb(255 255 255 / 0.1));
 }
 
 .proposal-bar__button:disabled {
@@ -818,15 +818,15 @@ body.app-slava-restraint .proposal-bar__not-ready-mark {
    person's decision, and a light agent colour (#ffd9e2) with white text
    would fail contrast; the old one was white on lime, about 1.3:1. */
 .proposal-bar__button--primary {
-  border-color: var(--sr-ink, rgb(255 255 255 / 0.92));
-  background: var(--sr-ink, rgb(255 255 255 / 0.92));
-  color: var(--sr-canvas, #000);
+  border-color: var(--sr-button-primary-fill, var(--sr-ink, rgb(255 255 255 / 0.92)));
+  background: var(--sr-button-primary-fill, var(--sr-ink, rgb(255 255 255 / 0.92)));
+  color: var(--sr-button-primary-ink, var(--sr-canvas, #000));
   font-weight: 600;
 }
 
 .proposal-bar__button--primary:hover:not(:disabled) {
-  border-color: var(--sr-ink-bold, #fff);
-  background: var(--sr-ink-bold, #fff);
+  border-color: var(--sr-button-primary-fill-hover, var(--sr-ink-bold, #fff));
+  background: var(--sr-button-primary-fill-hover, var(--sr-ink-bold, #fff));
 }
 
 /* Taller where a finger presses them. */
