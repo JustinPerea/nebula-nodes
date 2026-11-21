@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { BOARD_BAR_BAND_PX, BOARD_FALLBACK_INSETS, BOARD_NOTICE_GAP_PX, frameInInsets, insideInsets, measureBoardViewInsets } from './boardViewInsets';
 
-// #213 review 2 LOW-2: the view insets are measured from the control bar;
+// #213: the view insets are measured from the control bar;
 // jsdom has no layout, so these give the rects by hand.
 
 const rect = (top: number, height: number) => ({ getBoundingClientRect: () => ({ top, bottom: top + height, height, left: 0, right: 100, width: 100, x: 0, y: top, toJSON: () => ({}) }) as DOMRect });
@@ -46,11 +46,11 @@ describe('the fallback and insideInsets', () => {
   });
 });
 
-// #210 round 6q (GM r95): the Studio's notice stack over the board's top is
+// #210 (design): the Studio's notice stack over the board's top is
 // outside the view while a line shows, so a fit never frames a card under it.
 describe('the notice band', () => {
   it('the board\'s top down to the stack\'s bottom, and the gap below it', () => {
-    // GM r95's shot 4: the column at y 98 (the offline row up), 542 tall; the three-line line ends at y 172.
+    // The design's shot 4: the column at y 98 (the offline row up), 542 tall; the three-line line ends at y 172.
     const board = rect(98, 542);
     const bar = rect(98 + 542 - 53, 38);
     // The band ends 12 px below the line (the stack's own offset from the board's top): 172 - 98 + 12.
@@ -70,14 +70,14 @@ describe('the notice band', () => {
 });
 
 /**
- * The fuzz (GM r95: "add a cell for banner + 3-line notice at 1024 x 640"):
+ * The fuzz (design: "add a cell for banner + 3-line notice at 1024 x 640"):
  * the Studio's layout at each window size the live runs use and two more,
  * with the offline row closed or open (49 px, and taller if it wraps), one
  * to three lines in the stack (or two lines stacked), and boards of every
  * shape: the fitted cards always start below the notice band and end above
  * the bar's band. The geometry is the Studio's: the header 49 px; the rail
  * 250 px and the side panel 319 px beside the column; the stack 12 px below
- * the column's top, a line 17 + 15 px a row (GM's shot 4: three rows, 62 px),
+ * the column's top, a line 17 + 15 px a row (the design's shot 4: three rows, 62 px),
  * 6 px between lines; the bar 38 px tall, 15 px above the column's bottom.
  */
 describe('fuzz: a fitted board clears the notices and the bar, whatever the banner adds', () => {
@@ -88,7 +88,7 @@ describe('fuzz: a fitted board clears the notices and the bar, whatever the bann
   let seed = 210;
   const random = () => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648; };
   const BOARDS = [
-    { x: 0, y: 0, width: 360, height: 360 }, // GM's shot: one card
+    { x: 0, y: 0, width: 360, height: 360 }, // The design's shot: one card
     { x: 0, y: 0, width: 2000, height: 1000 },
     { x: 0, y: 0, width: 400, height: 1200 },
     ...Array.from({ length: 12 }, () => ({ x: Math.round(random() * 4000 - 2000), y: Math.round(random() * 4000 - 2000),
@@ -108,7 +108,7 @@ describe('fuzz: a fitted board clears the notices and the bar, whatever the bann
     return { cardTop, cardBottom, noticeBottom: stack.length ? noticeBottom + BOARD_NOTICE_GAP_PX : top, barTop, zoom: camera.zoom };
   };
 
-  it('GM r95\'s cell: 1024 x 640, the offline row up, a three-line line, one card: the card starts below the line', () => {
+  it('the design\'s cell: 1024 x 640, the offline row up, a three-line line, one card: the card starts below the line', () => {
     const { cardTop, noticeBottom } = cell(1024, 640, 49, [3], BOARDS[0]);
     // Shot 4 had the line ending at y 172 and the card starting at y 163.
     expect(noticeBottom).toBe(172 + BOARD_NOTICE_GAP_PX);

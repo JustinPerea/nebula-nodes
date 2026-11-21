@@ -81,7 +81,7 @@ export function nodesKeyLockReason(
 }
 
 /**
- * GM, PR #203 r6 item 1: nothing on the canvas runs until the key is added.
+ * Design, PR #203: nothing on the canvas runs until the key is added.
  * The toolbar's Run, Cmd+Enter and the palette's "Run graph" say it for the
  * canvas ("You can run this canvas after you add your Hugging Face token in
  * Settings."); the node card keeps its own line, so the person sees which
@@ -100,8 +100,8 @@ export function canvasKeyLockReason(nodes: readonly LockableNode[], settings: Lo
  * needs them, as the backend's _skip_placeholders does; a node's own run
  * takes what feeds it). The whole graph says the canvas's line, a node or a
  * selection the node's own. Every Run surface and every store run path use
- * this, so the toolbar can't lock a canvas Cmd+Enter would run (review r4
- * MEDIUM-1). Null when that run can go.
+ * this, so the toolbar can't lock a canvas Cmd+Enter would run.
+ * Null when that run can go.
  */
 export function runKeyLockLine(
   nodes: readonly Node<NodeData>[],
@@ -118,7 +118,7 @@ export function runKeyLockLine(
 /** runKeyLockLine's rule with the node's own line for every scope ("You can
  * run X after you add your Hugging Face token in Settings."): a Run
  * History replay and the deferred "Run now" say which node needs the key
- * (GM, PR #203 r8 item 3). */
+ * (design, PR #203). */
 export function runKeyLockNodeLine(
   nodes: readonly Node<NodeData>[],
   edges: readonly Edge[],
@@ -130,7 +130,7 @@ export function runKeyLockNodeLine(
   return nodesKeyLockReason(running, running.map((node) => node.id), settings);
 }
 
-/** GM, PR #203 r6 item 1: Accept's line when one of the nodes its run would
+/** Design, PR #203: Accept's line when one of the nodes its run would
  * run can't start without its key ("You can accept this after you add your
  * Hugging Face token in Settings."); lib/proposalAcceptLock reads which nodes
  * those are. Null when they can all run. */
@@ -153,7 +153,7 @@ export interface KeyLockedProps {
 
 /**
  * A Run locked by a missing key, as the toolbar's Run is while the tab
- * follows an agent's switch (Toolbar.tsx, round 20 GM follow-up 3):
+ * follows an agent's switch (Toolbar.tsx, design):
  * `aria-disabled`, never natively disabled, so it keeps its focus and its
  * tooltip, and its accessible description is the lock line (`reasonId`, an
  * element holding it). The caller's click handler refuses while locked.
@@ -178,12 +178,12 @@ export function isKeyLocked(props: KeyLockedProps): boolean {
 /** The marks the canvas lock puts on a control it holds (lib/canvasLock):
  * a press on one pulses the project bar or the offline banner. A key-locked
  * control drops them, so the press and the tooltip name the same reason
- * (PR #198 M2). */
+ * (PR #198). */
 const CANVAS_LOCK_MARKS = [FOLLOWING_MARK, OFFLINE_MARK, OFFLINE_NEUTRAL] as const;
 
 /**
  * One order for a control that the canvas lock and the key lock can both
- * hold. The rule (GM, PR #203 r11 item 3): a reason only the person can fix
+ * hold. The rule (design, PR #203): a reason only the person can fix
  * comes before reasons that clear by themselves, or the person waits out the
  * run only to be refused. So the missing key comes first, then the run in
  * progress, then following, then offline (lib/canvasLock `act`, in its own
@@ -200,7 +200,7 @@ const CANVAS_LOCK_MARKS = [FOLLOWING_MARK, OFFLINE_MARK, OFFLINE_NEUTRAL] as con
 export function withKeyLock<T extends { disabled: boolean; title?: string | undefined }>(
   props: T, reason: string | null | undefined, reasonId: string,
 ): T & KeyLockedProps {
-  // A kept canvas (PR #199, GM r19 item 4) comes first of all, as in canvasLock `act`:
+  // A kept canvas (PR #199, design) comes first of all, as in canvasLock `act`:
   // its line and mark stay, and the missing key is told once the canvas is back.
   if (!reason || KEPT_MARK in props) return props;
   const rest: Record<string, unknown> = { ...props };

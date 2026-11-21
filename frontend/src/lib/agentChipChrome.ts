@@ -30,7 +30,7 @@ export const CHROME_SELECTORS: readonly { id: string; selector: string }[] = [
 export const TRANSIENT_SELECTORS: readonly string[] = ['.context-menu', '.connection-popup', '.asset-move__menu', '[role="menu"]'];
 
 /**
- * The canvas's own fixed chrome, which an edge chip must not sit on (GM: a chip
+ * The canvas's own fixed chrome, which an edge chip must not sit on (design: a chip
  * stands clear of chrome). By the attributes the layout code already reads
  * (`TOP_BAR_ATTR`, `BOTTOM_BAR_ATTR`: lib/bottomBar.ts) and the classes of the
  * rest; tests/agentChipChrome.test.ts checks each still exists in the source.
@@ -45,7 +45,7 @@ export const CANVAS_CHROME_SELECTORS: readonly string[] = [
   '.canvas-undo-notice',
   '.node-inspector-popover, .panel--inspector',
   '.agent-notes-panel, .agent-note-card',
-  // Open menus and popovers: a chip stands clear of one as well as under it (final review of PR #233, 5).
+  // Open menus and popovers: a chip stands clear of one as well as under it (PR #233).
   ...TRANSIENT_SELECTORS,
 ];
 

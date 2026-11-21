@@ -32,7 +32,7 @@ export interface SwitchContext {
   /** Wired input ports, with how many edges reach each (runScope.nodeWiredCounts). */
   wired?: ReadonlyMap<string, number>;
   /** The person's name for a renamed node (renamedLabel): the stop line names
-   * it, as its card and the agent's bubble do (GM, PR #203 r39 item 8). */
+   * it, as its card and the agent's bubble do (design, PR #203). */
   name?: string;
 }
 
@@ -69,10 +69,10 @@ export interface SwitchState {
   rows: ProviderRow[];
   /** The card chip as it shows: each provider's full name where it fits
    * ("Auto · fal.ai", "Replicate"), its short name where it can't ("Auto ·
-   * BFL"), round 3g (chipText). */
+   * BFL"), as chipText writes it. */
   chip: string;
   /** The chip with every provider named in full ("Auto · Black Forest Labs"),
-   * for its title and aria-label (GM, round 3g). */
+   * for its title and aria-label (design). */
   chipName: string;
   /** The chip's title: "Auto runs it on Black Forest Labs. Change provider",
    * "Runs on Fal. Change provider" for a hand-picked route; the block's
@@ -103,8 +103,8 @@ export function shortProvider(provider: string | null | undefined): string {
  * The chip's room, in characters of its 10px JetBrains Mono (6px each): its
  * 96px max-width less padding and border leaves 84px, and 75px beside the
  * warning glyph and its gap when the run can't start (measured in Chrome at
- * 1280x800 and 1440x900, round 3g; the chip never shrinks below its text,
- * provider-switcher.css). GM: "Provider chip: "Auto · Black Forest Labs". If
+ * 1280x800 and 1440x900; the chip never shrinks below its text,
+ * provider-switcher.css). Design: "Provider chip: "Auto · Black Forest Labs". If
  * the chip can't fit it at its narrowest, keep "BFL" in the chip only, with
  * the full name in its title and aria-label."
  */
@@ -118,8 +118,8 @@ export function chipText(full: string, short: string, blocked: boolean): string 
 
 /** The one "key is set" predicate (directRoute isKeySet, keyText: a value
  * empty once trimmed of spaces and invisible characters is not set), so the
- * switcher, the router and every cost surface agree (review 8 of PR #203,
- * LOW-1). */
+ * switcher, the router and every cost surface agree.
+ */
 function isSet(apiKeys: SwitchContext['apiKeys'], key: string): boolean {
   return isKeySet(apiKeys, key);
 }
@@ -142,9 +142,9 @@ function billingWrites(definition: ModelNodeDefinition, routeId: string, plan: b
 }
 
 /** A row's block note: what this route doesn't take of the recipe, the
- * setting by its label in quotes (error copy round 3f, GM: "Switcher notes
+ * setting by its label in quotes (error copy, design: "Switcher notes
  * become "Doesn't take “{Label}”." / "Needs “{Label}”.""), with curly
- * apostrophes (GM, PR #203 r32 item 2). */
+ * apostrophes (design, PR #203). */
 function rowBlock(definition: ModelNodeDefinition, route: RouteSpec, block: DirectBlock, params: Params): string {
   if (block.reason === 'hidden' || block.reason === 'unsupported' || block.reason === 'blocked') {
     return `Doesn’t take ${blockedSetting(definition, block, params)}.`;
@@ -161,8 +161,8 @@ function rowBlock(definition: ModelNodeDefinition, route: RouteSpec, block: Dire
 }
 
 /** The Auto row's reason when the run can't start, a fragment after
- * "Auto · " with no colon (GM, PR #203 r34 item 2), subject first so the
- * provider always leads (r35 item 2): "fal.ai doesn’t take “Resolution” set
+ * "Auto · " with no colon (design, PR #203), subject first so the
+ * provider always leads: "fal.ai doesn’t take “Resolution” set
  * to 1.5K", "fal.ai needs …", "fal.ai doesn’t take this many images",
  * "fal.ai can’t make that size", "fal.ai no longer runs this model"
  * ("no route can take it" when there is none). */
@@ -193,9 +193,9 @@ export function routeDisplayName(spec: RouteSpec | undefined): string {
   return providerLabel(spec?.handler === 'hf-space' && isKeylessRoute(spec) ? 'huggingface' : spec?.provider);
 }
 
-/** A keyless Space route's row line, GM's PR #203 r12 item 2: "Free on
+/** A keyless Space route's row line (design, PR #203): "Free on
  * Hugging Face." without its token, "Uses your Hugging Face allowance." with
- * it. No allowance numbers (GM r12). */
+ * it. No allowance numbers (design). */
 function spaceNote(spec: RouteSpec, keyed: boolean): string | null {
   if (!isKeylessRoute(spec) || spec.handler !== 'hf-space') return null;
   const key = spec.optionalKeys?.[0];
@@ -203,12 +203,12 @@ function spaceNote(spec: RouteSpec, keyed: boolean): string | null {
   return keyed ? `Uses your ${name} allowance.` : `Free on ${name}.`;
 }
 
-/** The Auto row when the run can't start. No key set for any route is GM's
- * one shared string (PR #203 r5 item 4): "Auto · needs a key". */
+/** The Auto row when the run can't start. No key set for any route is the design's
+ * one shared string (PR #203): "Auto · needs a key". */
 export const AUTO_NEEDS_A_KEY = 'Auto · needs a key';
 
-/** "Auto · needs a key", in the providers' own noun (GM, PR #203 r35 item
- * 2): "needs a token" when every key that would let it run is a token
+/** "Auto · needs a key", in the providers' own noun (design, PR #203):
+ * "needs a token" when every key that would let it run is a token
  * (Replicate, Hugging Face), from the one key-noun source Settings uses
  * (lib/credentialNoun, pinned to providerCatalog.credentialNoun by its test); "a key" otherwise. */
 export function autoNeedsCredential(missing: readonly string[]): string {
@@ -218,8 +218,8 @@ export function autoNeedsCredential(missing: readonly string[]): string {
 
 /** The Auto row's label when the run can't start. Exported for its tests:
  * the "{provider} needs a key" fragment (a route chosen with no block) is a
- * guard no shipped node reaches today (review 18 of PR #203, copy-ui NIT-2,
- * F8), so it is pinned on a built answer. */
+ * guard no shipped node reaches today (PR #203),
+ * so it is pinned on a built answer. */
 export function autoLabel(definition: ModelNodeDefinition, unavailable: NonNullable<ReturnType<typeof routeUnavailable>>,
   params: Params): string {
   if (!unavailable.routeId && unavailable.missing.length) return autoNeedsCredential(unavailable.missing);
@@ -242,7 +242,7 @@ function price(definition: ModelNodeDefinition, route: RouteSpec, estimates: Ret
   const unconfirmed = routePriceUnconfirmed(definition, route.id, pricing, params, wired);
   return {
     price: `${formatUsdRange(estimate.low, estimate.high)}${unconfirmed ? '*' : ''}`,
-    // Sentences (GM, PR #203 r19 item 4).
+    // Sentences (design, PR #203).
     priceTitle: unconfirmed ? 'An estimate, because the provider’s page doesn’t state this price exactly.' : 'List price per run at these settings.',
   };
 }
@@ -268,11 +268,11 @@ export function providerSwitchState(definition: ModelNodeDefinition, params: Par
   const rows: ProviderRow[] = [{
     id: AUTO, routeId: null, plan: false,
     label: autoUnavailable ? autoLabel(definition, autoUnavailable, { ...routed, [PROVIDER_PARAM]: AUTO })
-      // GM, PR #203 r12 item 2: a keyless Space route (Idol's) reads "Auto ·
+      // Design, PR #203: a keyless Space route (Idol's) reads "Auto ·
       // free" without its token and plain "Auto" with it.
       : isSpace(autoSpec)
         ? (autoRoute.key ? 'Auto' : 'Auto · free')
-        // GM, PR #203 r26 item 1: signed out, a plan run can't happen, so the row doesn't promise it.
+        // Design, PR #203: signed out, a plan run can't happen, so the row doesn't promise it.
         : autoRoute.kind === 'plan' && !context.kreaSignedIn ? 'Auto · Krea needs a sign-in'
           : `Auto · runs on ${autoName}`,
     keyState: null, price: autoUnavailable || !autoSpec ? '-'
@@ -292,7 +292,7 @@ export function providerSwitchState(definition: ModelNodeDefinition, params: Par
         id: spec.id, routeId: spec.id, plan: false,
         label: both ? `${label} · API balance` : label,
         // A Space route's token (Idol's): the green dot and "Connected" once
-        // set, "Add token →" while missing (GM, PR #203 r4; r30 item 3).
+        // set, "Add token →" while missing (design, PR #203).
         keyState: keyless ? (keyed ? 'connected' : 'none')
           : keyed ? (spec.handler === 'hf-space' ? 'connected' : 'set') : 'missing',
         setup: setupKey ? { kind: 'api-key', key: setupKey } : undefined,
@@ -556,7 +556,7 @@ export function providerKeyWarnings(
   return warnings;
 }
 
-/** The words of a switcher row's setup button (GM, PR #203 r30 item 3).
+/** The words of a switcher row's setup button (design, PR #203).
  * `label` is what it shows, the provider's button noun from the one source
  * Settings' buttons use (lib/credentialNoun: "Add token" for
  * Replicate and Hugging Face, "Add key" for the rest), with a decorative

@@ -28,12 +28,12 @@ export interface AcceptedProposal {
 
 /** A failed accept/reject, keeping the HTTP status so the bar can explain a 403. */
 /** A refused accept or reject: heading + reason like every request's error
- * (GM, error-copy round 2); `status` tells a gone proposal from a refusal. */
+ * (design); `status` tells a gone proposal from a refusal. */
 export class ProposalRequestError extends RequestFailedError {
   /** Which of Save's limits a refused Accept hit (the answer's `limit.kind`
    * beside `code: "proposal_too_complex"`): 'size' for the project's size
    * limit, else the shape limits ('depth', 'values'). Null otherwise. Read
-   * from the answer, never its words (review 8 of PR #205, limits MEDIUM-1). */
+   * from the answer, never its words. */
   readonly limitKind: string | null;
 
   constructor(status: number, reason: string, options: {
@@ -224,7 +224,7 @@ export function stillNotReady(
     const kept = routeKeyLine ? [{ ...row, routeKeyLine: true as const }] : [row];
     if (!cache.loaded) return kept;
     // A missing key, in either wording: find_nodes' "needs <key>", or a
-    // route's own line. PR #203 round 6: with the key added, the line stayed
+    // route's own line. PR #203: with the key added, the line stayed
     // beside an unlocked Accept.
     if (!row.missing.startsWith('needs ') && !routeKeyLine) return kept;
     return !node?.definition || nodeKeyStatus(node.definition, node.params, cache) === 'missing' ? kept : [];
@@ -233,7 +233,7 @@ export function stillNotReady(
 
 /** A proposal whose whole run waits on agents' placeholders: its run skips
  * them and everything that needs them, so it runs nothing, and Accept starts
- * no run for it (canvasProposalsStore.accept; review 5, L1). */
+ * no run for it (canvasProposalsStore.accept). */
 export function runsNothing(view: ProposalView): boolean {
   const { paidRuns, freeRuns, pendingSkipped } = view.cost;
   return view.run.length > 0 && paidRuns === 0 && (view.cost.mayCostRuns ?? 0) === 0 && (view.cost.planRuns ?? 0) === 0
@@ -259,5 +259,5 @@ export function withAncestors(targets: string[], edges: Array<{ source: string; 
   return [...seen];
 }
 
-/** GM - Design (2026-10-31): the status on each node a held run waits on. */
+/** Design (2026-10-31): the status on each node a held run waits on. */
 export const WAITING_FOR_OK = 'Waiting for your OK';

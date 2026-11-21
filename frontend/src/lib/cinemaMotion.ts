@@ -12,16 +12,16 @@ import { cinemaMotionSource, cinemaMotionTarget, useCinemaMotionStore, type Cine
 import type { NodeData } from '../types';
 import { becauseLine, CONNECTION_LOST_COPY, copyForAnswer, isNoAnswer, readRefusal } from './errorCopy';
 
-/** A refused handoff's reason: a person-only refusal says GM's line, by its
- * code (Q116 a); else the backend's reason or GM's line for the status. */
+/** A refused handoff's reason: a person-only refusal says the design's line, by its
+ * code; else the backend's reason or the design's line for the status. */
 async function refusalReason(response: Response): Promise<string> {
   const { detail, code } = await readRefusal(response);
   return copyForAnswer(response.status, detail, code);
 }
 
 // The handoff's lines sit beside its "Retry connection" button, so they name
-// what failed and why and leave the retry to the button (GM's WRAP rule, error
-// copy round 3c-2; round 2: every failure starts "Couldn't").
+// what failed and why and leave the retry to the button (the design's WRAP rule, error
+// copy: every failure starts "Couldn't").
 const UNCONFIRMED = 'Nebula couldn’t confirm the video connection.';
 
 /** A handoff failure whose message is already the person's line. */
@@ -61,9 +61,9 @@ function validatedResponse(value: unknown, handoff: CinemaMotionHandoff): { node
 export async function sendCinemaShotToMotion(nodeId: string, shotId: string): Promise<void> {
   const graph = useGraphStore.getState();
   if (graph.isImportingGraph) return;
-  // Round 16 (L3): connecting a video node is an edit. Offline the button is
-  // disabled; a press that gets here only pulses the banner. Round 22
-  // (review 21, L-d): so while following an agent's switch, the project
+  // Connecting a video node is an edit. Offline the button is
+  // disabled; a press that gets here only pulses the banner. 
+  // So while following an agent's switch, the project
   // bar's pulse, and nothing is sent or marked.
   if (refuseEditWhileFollowing() || refuseEditWhileOffline()) return;
   const previous = useCinemaMotionStore.getState().handoffs.find((item) => item.nodeId === nodeId && item.shotId === shotId);
@@ -91,7 +91,7 @@ export async function sendCinemaShotToMotion(nodeId: string, shotId: string): Pr
       if (!response.ok) {
         throw new HandoffError(response.status === 409
           ? 'Nebula couldn’t connect the video node because the shot changed first. Try again with the current result.'
-          // headedLine (review 5, L4): a backend line that already says what
+          // headedLine: a backend line that already says what
           // couldn't be done shows once, never under a second heading.
           : becauseLine({ heading: "Couldn’t connect the video node.", reason: await refusalReason(response), status: response.status }, 'button'));
       }

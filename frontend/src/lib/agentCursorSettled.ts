@@ -1,5 +1,5 @@
 /**
- * When a cursor's "propose" or "wait" is over (GM - Design's cursor spec, §2:
+ * When a cursor's "propose" or "wait" is over (the design's cursor spec, §2:
  * they hold "until the person acts"). Pure: the layer feeds it what the
  * canvas already holds, so a reload with the answer settled draws no state.
  *

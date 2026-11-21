@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { sanitizeRow, type ThreadRow } from './personThread';
 import { listenerDroppedLine, listenerLapsedLine, messageStatus, nextStatusChange, runOrigin } from './personThreadBox';
 
-/** #225 review 2, boundary LOW-1: the person revoked the listener's token before it took the message. */
+/** #225, boundary: the person revoked the listener's token before it took the message. */
 
 const CLAUDE_CODE = { id: 'app:claude1', name: 'Claude Code', color: '#E8825A', verified: true };
 
@@ -33,7 +33,7 @@ describe('a message its listener can never take', () => {
   });
 });
 
-/** Round 5d: a listener that stopped beating may come back; its row says so, and offers no resend. */
+/** A listener that stopped beating may come back; its row says so, and offers no resend. */
 describe('a message its listener may still come back to', () => {
   const lapsedRow = (state: string = 'sent', lapsed: boolean = true): ThreadRow => {
     const row = sanitizeRow({

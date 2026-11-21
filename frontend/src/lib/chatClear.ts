@@ -1,7 +1,7 @@
 /**
  * Chat `/clear` (ChatPanel). The session is the tab's own and always clears;
  * the canvas clear is the backend's (DELETE /api/graph?force=true) and can be
- * refused (a run going) or go unanswered. GM's lines, one per answer (round 12
+ * refused (a run going) or go unanswered. The design's lines, one per answer (
  * of PR #114). Clear is all or nothing (backend clear_graph empties the live
  * graph in one step), so there's no "may not be fully cleared" line.
  */

@@ -1,7 +1,7 @@
 /**
  * Where the canvas's bottom bar (Run / Canvas actions / zoom) really starts,
  * for what must keep clear of it: the app's notices sit just above it, and a
- * floating panel opened beside a node low on the screen ends above it (GM -
+ * floating panel opened beside a node low on the screen ends above it (design -
  * Design, 2026-10-23: "Clamp it so it stays above the bottom bar inside the
  * viewport"). Measured, never a fixed number: the bar's height changes with
  * its contents, and its Canvas actions panel opens above it.
@@ -10,7 +10,7 @@
  * (empty value) and, while open, its Canvas actions panel (`"panel"`). The
  * bar is a band across the whole width: nothing floats down beside it. The
  * panel is 310 px wide and centred, so it only pushes up what it is under
- * (review, 2026-10-23: a far-left Inspector jumped 400 px off its node when
+ * (2026-10-23: a far-left Inspector jumped 400 px off its node when
  * the panel opened). The bar publishes the distance from the window's bottom
  * edge to its top, panel included, as `--bottom-bar-clearance` on the root,
  * which the notice region's CSS reads (canvasProposals.css): the notices are
@@ -46,7 +46,7 @@ export function bottomBarTop(span?: HorizontalSpan): number | null {
 }
 
 /**
- * The notice region's reserved band (GM - Design, 2026-10-23: "Floating
+ * The notice region's reserved band (design, 2026-10-23: "Floating
  * panels stop above a reserved notice band, whether or not a notice is
  * showing. The band is the region's height for one notice plus its gap,
  * measured like the bottom line."). The region always keeps an empty box
@@ -72,7 +72,7 @@ function noticeBand(): DOMRect | null {
  * sees (the region itself lifts over the centred actions panel, which a panel
  * off to the side never meets). `clearance` keeps the panel that much further
  * above the band's (or, with no band, the bar's) line: the unpinned Inspector
- * beside a node keeps FLOATING_CHROME_CLEARANCE (GM r72: "Cap to the BAND
+ * beside a node keeps FLOATING_CHROME_CLEARANCE (design: "Cap to the BAND
  * line, not the bar: the reserved notice band wins").
  */
 export function floatingBottomLimit(gutter: number, viewportHeight = window.innerHeight, span?: HorizontalSpan,
@@ -85,15 +85,15 @@ export function floatingBottomLimit(gutter: number, viewportHeight = window.inne
 }
 
 /**
- * The top line floating panels stop below (GM - Design, 2026-10-23: "Floating
+ * The top line floating panels stop below (design, 2026-10-23: "Floating
  * panels stop below the workspace header and the selection toolbar, whichever
  * is lower, plus the same 8 px gap."). Each carries `data-top-bar`; measured
  * when asked, so a resize moves the line. With neither on screen, the
  * window's `gutter`.
  *
- * Round 3 (GM: "The Inspector jumping on deselect: hold it. A panel
+ * Design: "The Inspector jumping on deselect: hold it. A panel
  * shouldn't move unless someone moves it. While it's open, use the lower of
- * the two top lines (the toolbar's) whether or not the toolbar is showing."):
+ * the two top lines (the toolbar's) whether or not the toolbar is showing.":
  * the toolbar's marker is its React Flow Panel, which keeps the toolbar's
  * height while it is empty (canvas.css --selection-toolbar-h). An empty Panel
  * has no width, so a part counts by its height alone: the toolbar going or
@@ -113,7 +113,7 @@ export function floatingTopLimit(gutter: number, gap = BOTTOM_BAR_GAP): number {
 }
 
 /**
- * Where the selection toolbar goes (GM r35 on PR #199): it must not cover
+ * Where the selection toolbar goes (design on PR #199): it must not cover
  * the selection. In order:
  * 1. its own place below the top stack (the workspace header, the World
  *    Labs notice and its reopen line), when that doesn't cover the
@@ -203,7 +203,7 @@ export function applySelectionToolbarPlace(toolbar: HTMLElement): SelectionToolb
 /**
  * The canvas's top notices (the World Labs notice, its held-reopen line
  * inside it) sit over the selection toolbar's line; the toolbar moves below
- * them while they show (review 20 lens item 4, GM r34 A5 on PR #199): the
+ * them while they show (design, PR #199): the
  * notice covered 28% of the toolbar alone, and with the held-reopen line all
  * seven of its controls. The notice publishes its foot as
  * `--top-notice-bottom` (viewport px) and, for the toolbar's panel inside
@@ -255,8 +255,8 @@ export function watchTopNotice(notice: HTMLElement): () => void {
 
 /**
  * How far floating chrome keeps clear of the top chrome and the bottom bar
- * (GM - Design r68 for the Inspector popover, r70 for the Agent log's
- * ceiling: "Same clearance as the r68 popover rule").
+ * (design, for the Inspector popover and for the Agent log's
+ * ceiling: "Same clearance as the popover rule").
  */
 export const CHROME_CLEARANCE = 12;
 
@@ -281,12 +281,12 @@ export function toolbarSlotSpan(slot: HTMLElement, box: DOMRect = slot.getBoundi
 
 /**
  * The top line a floating box that reaches up stops at, `gap` below the top
- * chrome (GM - Design r70: "the selection toolbar's slot bottom + 12 px
+ * chrome (design: "the selection toolbar's slot bottom + 12 px
  * whenever the log's horizontal span overlaps that slot (whether or not the
  * toolbar is showing — selecting a node must not move the log). Otherwise
  * the top bar + 12 px."). Over the slot (or with no `span`) it is
  * floatingTopLimit's line, the one source for "the toolbar + 12" shared
- * with the r68 popover rule; clear of the slot, the other top bars' line.
+ * with the popover rule; clear of the slot, the other top bars' line.
  * `floor` is the line with no top bar on screen.
  */
 export function chromeTopLimit(span?: HorizontalSpan, gap = CHROME_CLEARANCE, floor = 0): number {
@@ -309,7 +309,7 @@ export function chromeTopLimit(span?: HorizontalSpan, gap = CHROME_CLEARANCE, fl
 }
 
 /** Parts of the top line only the notice stack's proposal card stays under,
- * besides the top bars: the offline banner (GM - Design, PR #216 r4 7). The
+ * besides the top bars: the offline banner (design, PR #216). The
  * floating panels don't move for it. */
 export const NOTICE_TOP_LINE_ATTR = 'data-notice-top-line';
 /** On the root while the offline banner shows: the notice region places its
@@ -330,8 +330,8 @@ export function noticeTopLimit(gutter: number): number {
 
 /**
  * How far the unpinned Inspector beside a node keeps clear of the floating
- * top chrome and of the notice band's line (GM r68: "with 12 px clear of
- * each"; r72: the band's line, not the bar's).
+ * top chrome and of the notice band's line (design: "with 12 px clear of
+ * each"; the band's line, not the bar's).
  */
 export const FLOATING_CHROME_CLEARANCE = 12;
 
@@ -352,7 +352,7 @@ export function floatingChromeTopLine(gutter: number): number {
  * new line (noticeRegion.css) instead of springing there: springing up from
  * where it sits with no bar, a notice showing crossed the bar that had just
  * arrived and covered Canvas actions and the zoom for the length of the spring
- * (GM - Design, round 7, the r6-zz-error-cinema.png question). The bar
+ * (design, the error-cinema screenshot question). The bar
  * growing (its Canvas actions panel opening) keeps the spring.
  */
 export const BOTTOM_BAR_SWITCH_ATTR = 'data-bottom-bar-switch';

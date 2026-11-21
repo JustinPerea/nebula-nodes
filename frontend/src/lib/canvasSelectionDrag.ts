@@ -2,11 +2,11 @@
  * A drag-select on the canvas (Canvas.tsx: onSelectionStart, onSelectionEnd).
  * While one is on, the unpinned Inspector stays open over the drag's
  * momentary empty selection; when it ends with nothing selected, the
- * Inspector closes (GM PR #205 r16 item 5; graphStore listens). Its own
+ * Inspector closes (design PR #205; graphStore listens). Its own
  * module, so the canvas's handlers reach no store code.
  *
  * React Flow ends a drag only from the pane's own pointerup. Every other way
- * a drag ends ends it here too (review 8 of PR #205, lines-inspector NIT-2),
+ * a drag ends ends it here too,
  * so the flag can't stay on and keep the Inspector open at none:
  * - a pointerup of the main button the pane never saw (anywhere on the page);
  * - a pointercancel (the browser took the pointer);

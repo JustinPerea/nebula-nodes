@@ -85,8 +85,8 @@ function sampleIndices(splats: IndexedWorldSplatSource): number[] {
 
 /** Each sampled Gaussian's largest axis scale in world units (the same
  * sample and opacity cut as sampleWorldSplatCenters): what an object's
- * radius falls back on when its centers collapse to a point (PR #203 r2
- * review, LOW 1). */
+ * radius falls back on when its centers collapse to a point (PR #203).
+ */
 export function sampleWorldSplatExtents(
   splats: IndexedWorldSplatSource,
   matrixWorld: Matrix4,
@@ -241,14 +241,14 @@ export function syncWorldFlyAngles(
 }
 
 /** How an object (a World v2 object splat: Idol) opens: a 3/4 view from its
- * front, YAW_DEGREES off-axis and PITCH_DEGREES above (GM, PR #203 r1), at
+ * front, YAW_DEGREES off-axis and PITCH_DEGREES above (design, PR #203), at
  * the distance where its bounding sphere fits the narrower half of the view
  * with MARGIN to spare. No auto-rotate. */
 export const OBJECT_VIEW_YAW_DEGREES = 30;
 export const OBJECT_VIEW_PITCH_DEGREES = 15;
-/** Measured live on the Space's backpack example (PR #203 round 2): 1.15
+/** Measured live on the Space's backpack example (PR #203): 1.15
  * filled 69% of the stage's height, 1.3 brings a typical object to about
- * 60% (GM). A shape that fills its bounding sphere (a ball) comes out
+ * 60% (design). A shape that fills its bounding sphere (a ball) comes out
  * larger, about 75%. */
 export const OBJECT_VIEW_MARGIN = 1.3;
 /** Orbit may zoom out to this many framing distances. */
@@ -279,7 +279,7 @@ export interface ObjectFraming {
   far: number;
 }
 
-/** The object viewer draws every object at this radius (review r3 LOW-3):
+/** The object viewer draws every object at this radius (review):
  * the mesh is scaled by objectUnitScale before it is framed, so the camera,
  * the orbit range and the clip planes are the same numbers at 1 mm and at
  * 10 km. In the file's own units, a ×20,000 object (radius about 7,000) went
@@ -372,7 +372,7 @@ export function objectFraming(
     resetTarget: [...center],
     orbitMaxDistance,
     orbitMinDistance,
-    // From the radius, at any scale (PR #203 r2 review, LOW 2 and 3): the
+    // From the radius, at any scale (PR #203): the
     // near plane well inside the closest zoom, the far one past the whole
     // object from the farthest.
     near: orbitMinDistance * 0.05,

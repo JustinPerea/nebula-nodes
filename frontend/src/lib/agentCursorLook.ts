@@ -2,7 +2,7 @@ import type { Point } from './agentCursorMotion';
 import { contrastRatio } from './agentCursorColor';
 
 /**
- * How an agent cursor reads (GM - Design, agent cursor §1 and §4): when its
+ * How an agent cursor reads (design, agent cursor §1 and §4): when its
  * name shows, where the say pill sits, the name's text colour, the fill for
  * each session of one agent, and how cursors keep off each other's tips.
  */
@@ -30,12 +30,12 @@ export const AGENT_CURSOR_PILL = { left: 15, top: 17, height: 20, gap: 4, ring: 
  *  (or whose shape at its target meets a placed cursor) joins that column,
  *  straight below it, never to the right. Its arrow's painted top sits
  *  `gapPx` under the earlier label block; `clearPx` is the least painted
- *  gap between any two cursors (GM - Design, PR #211 r14 and review 6;
+ *  gap between any two cursors (design, PR #211;
  *  stackStepPx, deStackLayout). Joins and steps are screen px, at any zoom.
  *  The target chain (targetChains; the backend's agent_presence.ARRIVAL_RADIUS)
  *  and the column insert's comparison use the same 16 in canvas units, so
- *  they agree at any zoom (#219 r62). The chain decides arrival only, never
- *  joining: joins stay this tab's, by screen px (GM - Design, #219 r24 Q2). */
+ *  they agree at any zoom (#219). The chain decides arrival only, never
+ *  joining: joins stay this tab's, by screen px (design, #219). */
 export const AGENT_CURSOR_STACK = { radiusPx: 16, clearPx: 2, gapPx: 4 } as const;
 export const AGENT_CURSOR_INK_DARK = '#0b0b0c';
 export const AGENT_CURSOR_INK_LIGHT = '#ffffff';
@@ -43,7 +43,7 @@ export const AGENT_CURSOR_INK_LIGHT = '#ffffff';
 // Agent log can name a cursor exactly as its pill does without this module.
 export { AGENT_CURSOR_TITLE_CHARS, cursorLabel, cutGraphemes, sessionName } from './agentCursorLabel';
 // The session shades and contrast maths live in agentCursorColor, which the
-// Agent log uses too (GM - Design, PR #211 r20).
+// Agent log uses too (design, PR #211).
 export {
   AGENT_CURSOR_SESSION_BAND,
   AGENT_CURSOR_SESSION_LIGHTNESS,
@@ -94,7 +94,7 @@ export function pillEdge(fillHex: string): 'both' | null {
  */
 export function nameVisible(o: { moving: boolean; peers: number; hovered: boolean; sinceFirstSightMs: number }): boolean {
   // Two or more cursors: the name holds its slot, moving or not, so the say
-  // pill under it never jumps (GM - Design, PR #211 r2).
+  // pill under it never jumps (design, PR #211).
   if (o.peers >= 2) return true;
   if (o.moving) return false;
   return o.hovered || o.sinceFirstSightMs < AGENT_CURSOR_NAME_FIRST_SIGHT_MS;
@@ -111,8 +111,8 @@ export function labelLayout(nameShown: boolean, sayShown: boolean): LabelLayout 
 interface StackEntry {
   key: string;
   target: Point;
-  /** When this cursor came to its spot: earlier ones keep their place (GM - Design, PR #211 r2),
-   *  in the backend's arrival order (r21). */
+  /** When this cursor came to its spot: earlier ones keep their place (design, PR #211),
+   *  in the backend's arrival order. */
   since: number;
   /** Ties in `since` are broken by this (the tab's own landing order). */
   seq?: number;
@@ -243,16 +243,16 @@ export interface CursorShape {
   arrowBox: Box;
   /** What the cursor owns: from its arrow's top to gapPx under its label
    *  block, across arrow and pills. Another arrow in here reads as this
-   *  label's owner (GM - Design, PR #211 r14). */
+   *  label's owner (design, PR #211). */
   unit: Box;
   /** A say pill on the left of the arrow owns its own box and gapPx under
    *  it; `unit` then covers the arrow, the name and the say row to their
-   *  right only (r17 item 2). */
+   *  right only. */
   sayUnit?: Box;
 }
 
 /** Where a say pill flipped to the left of its arrow ends: its right edge
- *  this far left of the tip (GM - Design, PR #211 r17 item 2). */
+ *  this far left of the tip (design, PR #211). */
 export const AGENT_CURSOR_SAY_LEFT_GAP_PX = 4;
 
 /** The tip of the arrow below the cursor's origin. */
@@ -263,7 +263,7 @@ const TIP = AGENT_CURSOR_ARROW_TIP;
  * A cursor as painted at `origin` (screen px). `say` draws its say pill:
  * true or 'right' under the name, as always; 'left' on the same row with
  * its right edge AGENT_CURSOR_SAY_LEFT_GAP_PX left of the tip, where a say
- * goes when its right side would touch another column (r17 item 2).
+ * goes when its right side would touch another column.
  */
 export function cursorShape(origin: Point, say: boolean | 'right' | 'left', nameW = DEFAULT_NAME_W, sayW = DEFAULT_SAY_W): CursorShape {
   const { top, height, gap, ring, left } = AGENT_CURSOR_PILL;
@@ -342,7 +342,7 @@ const stepCache = new Map<boolean, number>();
 
 /**
  * The step down, in whole screen px, from an earlier cursor to the one
- * stacked below it (GM - Design, PR #211 r14): the later arrow's painted
+ * stacked below it (design, PR #211): the later arrow's painted
  * top sits AGENT_CURSOR_STACK.gapPx below the bottom of the earlier
  * cursor's whole label block (name pill and ring, plus the say pill while
  * one shows), so each arrow sits by its own label only. 42 below a name;
@@ -350,7 +350,7 @@ const stepCache = new Map<boolean, number>();
  * pills and the earlier block) is the floor. The step is rounded up to
  * whole px so the pills stay on the pixel grid; with the arrow's painted
  * top at 0.8 px that leaves 4.8 px under a ringed name pill and 5.8 px
- * under a say pill (no ring), never under 4 (review 7 NIT-2).
+ * under a say pill (no ring), never under 4.
  */
 export function stackStepPx(earlierSay: boolean): number {
   const cached = stepCache.get(earlierSay);
@@ -368,11 +368,11 @@ export function stackStepPx(earlierSay: boolean): number {
  *  change of layout (a say, a join, a leave), and anything else moving the
  *  spot is a ride (a node carried, a zoom). `above` lists those members.
  *  `column` is the column's id: its earliest arrival's key (not always the
- *  top cursor: a later one aimed higher goes in above it, r24 Q1). In a
+ *  top cursor: a later one aimed higher goes in above it). In a
  *  column of four or more, the third slot stands for the rest: its cursor's
  *  spot carries `group` (itself and the later arrivals folded into it, in
  *  arrival order), and each folded cursor's carries `collapsedInto`, that
- *  slot's key (GM - Design, PR #211 r17 item 1, r21). */
+ *  slot's key (design, PR #211). */
 export interface StackSpot {
   at: Point;
   sig: string;
@@ -385,9 +385,9 @@ export interface StackSpot {
 /**
  * Each cursor's target chain: the other cursors linked to it through
  * targets AGENT_CURSOR_STACK.radiusPx apart or less, one link after another,
- * from targets alone, in canvas units at zoom 1 (GM - Design, #219 r24 Q2).
+ * from targets alone, in canvas units at zoom 1 (design, #219).
  * The backend's own (agent_presence._target_chains) decides when a carry is
- * an arrival; this one only previews it while a node is dragged (r47 Q1).
+ * an arrival; this one only previews it while a node is dragged.
  * Both run the shared fixture (backend/tests/fixtures/cursor_chains.json),
  * so they can't drift. It decides no join: joins are deStackLayout's.
  */
@@ -427,7 +427,7 @@ export function sameChain(a: ReadonlySet<string> | undefined, b: ReadonlySet<str
 }
 
 /** A column draws at most this many cursors: from the next member on, the
- *  last slot is one count cursor ("2 more") for all of them (r17 item 1). */
+ *  last slot is one count cursor ("2 more") for all of them. */
 export const AGENT_CURSOR_COLUMN_DRAWN = 3;
 
 /** The count cursor's pill: how many cursors its slot stands for. */
@@ -437,13 +437,13 @@ export function countLabel(count: number): string {
 
 /**
  * Where each cursor lands so no arrow sits beside or over a name or arrow
- * that isn't its own (GM - Design, PR #211 r14, review 6, r17 and r21).
+ * that isn't its own (design, PR #211).
  *
  * First every join is resolved: a cursor joins another's column when its
  * target is within 16 screen px of that cursor's target, or when its arrow
  * and name at its own target come within clearPx of an earlier cursor's
  * arrow or name where that one is drawn; and two columns join when any of
- * their drawn cursors meet. A say pill never makes a join (r17 item 2).
+ * their drawn cursors meet. A say pill never makes a join.
  * Joins are transitive, and resolved again until no drawn cursor meets
  * another column, so near and identical targets make one column.
  *
@@ -453,17 +453,17 @@ export function countLabel(count: number): string {
  * step under the last full cursor, standing for every later arrival
  * (StackSpot.group). The full cursors go down the column in a stable
  * insert, in arrival order: each just before the first one placed that
- * aims more than radiusPx canvas units below it, else last (GM - Design,
- * #219 r24 Q1; canvas units, like the target chain, r62).
+ * aims more than radiusPx canvas units below it, else last (design,
+ * #219; canvas units, like the target chain).
  * The top one sits on its own target; each next one at the lower of a
  * stackStepPx under the one above (its label block, say included) and its
- * own target, so it is never above its target (r23 item 1) nor more than
+ * own target, so it is never above its target nor more than
  * 2 steps + 2 radii below it. A cursor that changes slot when
  * columns merge or split glides there on the layout spring (its `sig`
  * changes). Only live cursors are passed in: a leaving one doesn't count.
  * Arrival is `since`, then `seq`, then the key. Targets and results are in
  * flow coordinates; joins and steps are in screen px at `zoom`, the
- * insert's comparison in canvas units (r62).
+ * insert's comparison in canvas units.
  */
 export function deStackLayout(cursors: readonly StackEntry[], zoom: number): Map<string, StackSpot> {
   const { radiusPx } = AGENT_CURSOR_STACK;
@@ -473,7 +473,7 @@ export function deStackLayout(cursors: readonly StackEntry[], zoom: number): Map
   const targets = ordered.map((c) => ({ x: c.target.x * zoom, y: c.target.y * zoom }));
   const nameW = ordered.map((c) => c.nameW ?? DEFAULT_NAME_W);
   const says = ordered.map((c) => Boolean(c.say));
-  // Arrow and name only: a say pill never makes a join (r17 item 2).
+  // Arrow and name only: a say pill never makes a join.
   const own = targets.map((t, i) => cursorShape(t, false, nameW[i]));
   const parent = ordered.map((_, i) => i);
   const find = (i: number): number => {
@@ -511,9 +511,9 @@ export function deStackLayout(cursors: readonly StackEntry[], zoom: number): Map
       // placed keep their order. So every member above one aims at most
       // radiusPx canvas units (radiusPx * zoom screen px) lower than it, and
       // no full cursor is drawn more than 2 steps + 2 radii below its own
-      // target. Cursors aimed near one point keep arrival order (GM - Design,
-      // #219 r24 Q1). Canvas units, as the target chain is, so the insert and
-      // the chain agree at any zoom (r62); the steps stay screen px.
+      // target. Cursors aimed near one point keep arrival order (design,
+      // #219). Canvas units, as the target chain is, so the insert and
+      // the chain agree at any zoom; the steps stay screen px.
       const order: number[] = [];
       for (const m of shown) {
         const at = order.findIndex((o) => ordered[o].target.y > ordered[m].target.y + radiusPx + 1e-9);
@@ -538,7 +538,7 @@ export function deStackLayout(cursors: readonly StackEntry[], zoom: number): Map
         // A step under the one before, never above its own target: a member
         // whose slot would sit above the point it aims at is drawn at that
         // point instead, and the slots under it shift down (a gap is fine).
-        // GM - Design, #211 follow-up r23 item 1.
+        // Design, #211 follow-up.
         place(m, prev === null ? { x, y: targets[m].y } : { x, y: Math.max(out[prev].tip.y + stackStepPx(says[prev]), targets[m].y) });
       }
       if (full) {
@@ -562,8 +562,8 @@ export function deStackLayout(cursors: readonly StackEntry[], zoom: number): Map
   // arrow and name at its target meeting an earlier one where it is drawn.
   // Then, while any drawn cursor meets another column, those columns join.
   // The first check's meeting is not redundant with the loop since members
-  // keep to their own targets (r23 item 1): without it, 739 of 50,000
-  // random sets lay out differently (#211 review 9, NIT-1, checked).
+  // keep to their own targets: without it, 739 of 50,000
+  // random sets lay out differently (#211, checked).
   let laid: Laid[] = [];
   for (let i = 0; i < n; i += 1) {
     const before = lay(i);
@@ -616,7 +616,7 @@ export function deStack(cursors: readonly StackEntry[], zoom: number): Map<strin
  *  metrics where there is one, else an estimate on the wide side. The
  *  canvas measures with the page's fonts as loaded now: a web font subset
  *  still loading measures as the fallback, so the layer measures again when
- *  fonts finish loading (AgentCursorLayer, review 7 MEDIUM-4). One context,
+ *  fonts finish loading (AgentCursorLayer). One context,
  *  made again only if the platform's OffscreenCanvas itself changes. */
 let textContext: { font: string; measureText(text: string): { width: number } } | null = null;
 let textContextFrom: unknown = null;

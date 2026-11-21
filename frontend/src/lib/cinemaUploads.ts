@@ -112,7 +112,7 @@ export function retryCinemaReferenceUpload(id: string) {
   const upload = useCinemaUploadStore.getState().uploads.find((item) => item.id === id);
   if (!upload || upload.status !== 'error' || !upload.canRetry || !files.has(id)
     || useGraphStore.getState().isImportingGraph || !hasTarget(upload.nodeId, upload.shotId)) return;
-  // A Try again is a new attempt: a stop by an import is behind it (GM PR #205 r14 item 4).
+  // A Try again is a new attempt: a stop by an import is behind it (design PR #205).
   const next = { ...upload, attempt: uuidv4(), status: 'uploading' as const, error: undefined, stopped: undefined };
   useCinemaUploadStore.getState().setUploads((current) => current.map((item) => item.id === id ? next : item));
   void finish(next);

@@ -4,7 +4,7 @@
  * main._canvas_revision, new on every clear and import), when the tab has
  * heard it. A write sends the one read when the person acted
  * (X-Nebula-Canvas-Revision), so Nebula refuses it once that canvas was
- * cleared or replaced (round 19 of PR #195, review 18 H-A). */
+ * cleared or replaced. */
 export interface ProjectContext { id: string; revision: string; canvas?: string }
 let context: ProjectContext | null = null;
 
@@ -35,6 +35,6 @@ export async function adoptCanvasRevisionFrom(response: unknown): Promise<void> 
 /** What the backend answers a canvas write sent for another project or an
  * older workspace (backend main._check_workspace_revision), word for word.
  * The canvas gives a write the same answer when it held it back for that
- * reason (graphStore.graphMutationFetch, review 17 H-1), so the person reads
+ * reason (graphStore.graphMutationFetch), so the person reads
  * what a refused write always said. */
 export const STALE_CANVAS_DETAIL = 'This canvas is out of date. Open the current project before editing or running it.';

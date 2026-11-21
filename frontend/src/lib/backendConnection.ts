@@ -3,7 +3,7 @@
  * banner shows (BackendConnectionStatus, which probes /api/health every few
  * seconds and notes each answer here).
  *
- * Offline means read-only (GM, round 14 of PR #114): "Edits are blocked while
+ * Offline means read-only (design): "Edits are blocked while
  * offline, not queued", because a restarted backend refuses replayed writes.
  * Every edit path asks `refuseEditWhileOffline()` before it changes anything
  * (graphStore wraps its edit actions with it; a file drop, Clear, chat /clear
@@ -16,7 +16,7 @@ let connection: BackendConnection = 'online';
 const listeners = new Set<() => void>();
 
 /** Probes are numbered as they start; an answer older than the newest one
- * applied is ignored (review 13, L4: a slow probe's late failure flipped a
+ * applied is ignored (a slow probe's late failure used to flip a
  * connected tab offline). */
 let probesStarted = 0;
 let newestApplied = 0;
@@ -100,7 +100,7 @@ export const BLOCKED_EDIT_PULSE_MS = 1_000;
 const pulseListeners = new Set<() => void>();
 let lastPulseAt = Number.NEGATIVE_INFINITY;
 
-/** The banner's nudge for a blocked edit: at most once a second (GM). */
+/** The banner's nudge for a blocked edit: at most once a second (design). */
 export function pulseOfflineBanner(now: number = Date.now()): boolean {
   if (now - lastPulseAt < BLOCKED_EDIT_PULSE_MS) return false;
   lastPulseAt = now;
@@ -116,7 +116,7 @@ export function subscribeOfflinePulse(listener: () => void): () => void {
 /**
  * The one gate every edit goes through: true (and the banner pulses) when
  * Nebula is offline, so the caller changes nothing and sends nothing. No
- * toast (GM, round 14: "No toast for a blocked edit").
+ * toast (design: "No toast for a blocked edit").
  */
 export function refuseEditWhileOffline(): boolean {
   if (!isBackendOffline()) return false;
@@ -128,8 +128,8 @@ export function refuseEditWhileOffline(): boolean {
 const blockedListeners = new Set<() => void>();
 
 /**
- * A write apiFetch refused to send because Nebula is offline (round 15 of
- * PR #114: one gate at the network layer). Every method but GET and HEAD is a
+ * A write apiFetch refused to send because Nebula is offline
+ * (PR #114: one gate at the network layer). Every method but GET and HEAD is a
  * write; nothing is sent, the banner pulses (refuseEditWhileOffline) and the
  * caller treats it as blocked: no toast, no line (errorCopy gives it no
  * copy). It catches every path a per-action gate can miss: autosave,
@@ -170,7 +170,7 @@ interface GateRule {
 const ID = '[A-Za-z0-9_-]{1,128}';
 
 /**
- * The writes sent while offline (round 16 of PR #114, M1): each one only
+ * The writes sent while offline: each one only
  * reduces work or spend, so a false offline never traps a run the person
  * wants stopped. Nothing that starts work, spends or lowers a safeguard is
  * here: the unlock, Forget ID, proposal Accept and Reject stay refused.
@@ -187,7 +187,7 @@ export const OFFLINE_CANCEL_ALLOWLIST: readonly GateRule[] = [
 ];
 
 /**
- * Background reports that aren't edits (L1): the selection and view agents
+ * Background reports that aren't edits: the selection and view agents
  * read, a price's input-size ask and the zoom manifest. Offline they are held
  * back without the banner's pulse (only an edit pulses); the selection and
  * view are sent again on reconnect (Canvas, CanvasViewReporter).
@@ -242,26 +242,26 @@ export function waitUntilOnline(): Promise<void> {
 
 /**
  * The backend process's id (main.py BACKEND_BOOT_ID), noted from every
- * socket hello and health answer whether or not a project is open (round 16
- * of PR #114, review 15 M4: the first hello arrives before the tab has a
+ * socket hello and health answer whether or not a project is open
+ * (PR #114: the first hello arrives before the tab has a
  * project, and a graph-level note dropped it). A different id later means
  * the backend restarted: anything it held in memory is gone.
  */
 let knownBootId: string | null = null;
 const restartListeners = new Set<() => void>();
-/** Review 10, N-4: the processes this tab has seen replaced. Each process
+/** The processes this tab has seen replaced. Each process
  * has its own id and never comes back, so a late message from one is not a
  * restart, and its syncs are dropped (isRetiredBackendBoot). */
 const retiredBootIds = new Set<string>();
-/** Review 11, L-4: when each process started (main.py BACKEND_BOOT_STARTED_AT,
+/** When each process started (main.py BACKEND_BOOT_STARTED_AT,
  * microseconds), as its hello or health answer said. */
 const bootStarts = new Map<string, number>();
 
-/** `startedAt`: when that process started, if it said. Review 11, L-4: of
+/** `startedAt`: when that process started, if it said. Of
  * two processes the later start is the newer, whatever order their messages
  * arrive in, so a late health answer from a short-lived middle process (two
  * quick restarts) is retired on arrival and never retires the live one. With
- * no start known for the current process (a backend before round 12), the
+ * no start known for the current process (a backend that sends none), the
  * newest id seen wins, as before. */
 export function noteBackendBootId(bootId: unknown, startedAt?: unknown): void {
   if (typeof bootId !== 'string' || !bootId) return;
@@ -306,8 +306,8 @@ export function subscribeBackendRestart(listener: () => void): () => void {
 
 const probeRequestListeners = new Set<() => void>();
 
-/** A reopened socket's first message proves the backend answers (review 15,
- * M3): the banner probes at once instead of up to 3 s later, so writes aren't
+/** A reopened socket's first message proves the backend answers:
+ * the banner probes at once instead of up to 3 s later, so writes aren't
  * refused while the socket is visibly connected. */
 export function requestHealthProbe(): void {
   for (const listener of [...probeRequestListeners]) listener();

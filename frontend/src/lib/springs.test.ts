@@ -11,7 +11,7 @@ import {
 describe('springEase (the mockup sampler)', () => {
   it('times the mockup POP spring (response 0.42 s, damping 0.85) to where it settles', () => {
     const pop = springEase(SPRING_POP);
-    // GM's index.html: springEase({ response: 0.42, dampingFraction: 0.85 }).
+    // The design's index.html: springEase({ response: 0.42, dampingFraction: 0.85 }).
     expect(pop.duration).toBeGreaterThan(0.57);
     expect(pop.duration).toBeLessThan(0.6);
     expect(pop.ease(0)).toBeCloseTo(0, 6);

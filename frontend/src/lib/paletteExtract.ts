@@ -10,7 +10,7 @@ export type { PaletteFailure } from './paletteNotice';
 export type PaletteResult = { ok: true; colors: string[]; mixed?: MixedCluster[] } | { ok: false; reason: PaletteFailure };
 
 /** A big cluster whose own nearest pixel is over ``MIXED_DELTA_E`` from its
- *  mean: possibly two areas mixed (GM r15's detector; it changes nothing). */
+ *  mean: possibly two areas mixed (the design's detector; it changes nothing). */
 export type MixedCluster = { mean: string; shown: string; deltaE: number };
 
 /** The backend's rule (cinema/color.py ``ALPHA_MIN``): a pixel under this
@@ -45,8 +45,8 @@ function srgbToLinear(c: number): number {
 // delta_e00.json is the table both sides are tested against, so they can't
 // drift. The merge itself differs: Extract also merges neutral near-blacks
 // (``NEUTRAL_NEAR_BLACK``) and the backend doesn't. Its ΔE00 5 merge
-// already leaves one black: 0 of 60 per-channel noisy-black seeds kept two
-// (review 5, N2), where Extract's ΔE00 3 left a dark photo with three.
+// already leaves one black: 0 of 60 per-channel noisy-black seeds kept two,
+// where Extract's ΔE00 3 left a dark photo with three.
 const XYZ_WHITE = [0.95047, 1.0, 1.08883];
 const RGB_TO_XYZ = [
   [0.4124564, 0.3575761, 0.1804375],
@@ -115,23 +115,23 @@ export function deltaE00(a: number[], b: number[]): number {
 }
 
 /** Swatches closer than this (CIEDE2000) read as one colour and are merged:
- *  about three just-noticeable steps, one threshold for every lightness (GM
- *  on #208, round 5). The metric is the moodboard palette's (backend
+ *  about three just-noticeable steps, one threshold for every lightness (design
+ *  on PR #208). The metric is the moodboard palette's (backend
  *  commons/measure.py ``_merge``); plain OKLab, used before (at 0.03), had no
  *  lightness toe and put #000000 and #010101 twice its threshold apart, so a
- *  noisy black gave three or four black swatches (review 3, M1). CIEDE2000
+ *  noisy black gave three or four black swatches. CIEDE2000
  *  puts grey-noise blacks 0.2 to 1.2 apart, and blacks noisy on each channel
  *  about 2 apart (CIEDE2000 doesn't shrink chroma near black), which 3
  *  merges in most images. At 3, studio-product.webp's #ededee and #f9f9f9
  *  (2.52) are one white. The backend merges at 5 (``EDGE_LINE_DELTA_E``); at
  *  5 Extract also merged two to three tones of most photos (see the notes
- *  for rounds 4 and 5). */
+ *  for). */
 export const MERGE_DELTA_E = 3;
 
 /** The neutral near-black merge: two swatches that are BOTH darker than
  *  ``maxL`` (CIELAB L*, 0-100) AND BOTH more neutral than ``maxC`` (CIELAB
  *  chroma C*) are one black, and merge whatever their ΔE00, weights adding
- *  up (GM r8 and r9 on #208). Why:
+ *  up (design on #208). Why:
  *  - under L* 6, displays can't tell blacks apart;
  *  - noise blacks (a JPEG or render black, each channel 0-7 on its own)
  *    peak at C* 1.98 over 200 seeds, so 3 leaves a margin; their k-means
@@ -220,7 +220,7 @@ export const FLAT_TOLERANCE = 2;
  *  ``MERGE_DELTA_E``, or both neutral near-blacks, ``NEUTRAL_NEAR_BLACK``)
  *  and empty ones dropped: the closest pair first, each merge a
  *  weight-averaged colour whose weights add up. Merged blacks are the
- *  exception (GM r11): the group shows its most populated black (the
+ *  exception (design): the group shows its most populated black (the
  *  heaviest swatch, or with pixels to read, their most populated black),
  *  and every swatch in it must meet the rule against that black, so a
  *  merge never chains. Specks fold into a near bigger swatch
@@ -239,7 +239,7 @@ export function mergeNearColors(
   const out: Swatch[] = colors
     .map((c, i) => ({ rgb: [...c.rgb], weight: c.weight, members: c.members ? [...c.members] : [i] }))
     .filter((c) => c.weight > 0);
-  // Each swatch as it came in: a merged black keeps one of these (GM r11).
+  // Each swatch as it came in: a merged black keeps one of these (design).
   const own = new Map<number, { rgb: number[]; weight: number }>();
   for (const c of out) for (const m of c.members) own.set(m, { rgb: c.rgb, weight: c.weight / c.members.length });
   for (;;) {
@@ -422,7 +422,7 @@ export function coreColour(own: FullPixel[]): number[] | null | undefined {
   return undefined;
 }
 
-/** GM r13 on #208: the evidence (256 px) decides which colours exist; the
+/** Design on #208: the evidence (256 px) decides which colours exist; the
  *  full image decides what each one is. Every swatch whose colour came
  *  from a reduction is named from the full-resolution pixels under its own
  *  footprint (``EdgeEvidence.footprint``) that are nearer its colour than
@@ -551,7 +551,7 @@ export const EDGE_BLEND_SHARE = 0.05;
 export const EDGE_LINE_DELTA_E = 5;
 
 /** ...and it is one only when at least this share of its pixels sit next to
- *  both of them (GM r6 on #208: "a blend lives only on edges, while an
+ *  both of them (design on #208: "a blend lives only on edges, while an
  *  accent has an interior"). A grey caption on a black-and-white logo has an
  *  interior, so it stays however small. */
 export const EDGE_EVIDENCE_SHARE = 0.7;
@@ -560,10 +560,10 @@ export const EDGE_EVIDENCE_SHARE = 0.7;
  *  ``EVIDENCE_MAX_DIM`` px. Two, so a blend one or two pixels wide (each
  *  pixel beside both ends, or each beside one end and the other within
  *  two) is an edge and folds, while a band three or more pixels wide has an
- *  interior and stays: "under 3 px at 256 folds, wider keeps" (GM r10 on
+ *  interior and stays: "under 3 px at 256 folds, wider keeps" (design on
  *  #208). A band w pixels wide has min(w, 2 * EDGE_REACH + 1 - w) / w of its
  *  pixels next to both: 1 at 1 and 2 px, 1/3 at 3, 0 from 4, so 0.7 cuts
- *  between 2 and 3. The notes (round 6) have the measured widths. */
+ *  between 2 and 3. The notes have the measured widths. */
 export const EDGE_REACH = 2;
 
 /** A swatch while the palette is reduced: its colour, weight and k-means
@@ -622,12 +622,12 @@ export const NOISE_SHARE = 0.1;
 
 /** A swatch's core at full resolution is its colour when it has at least
  *  this many pixels (about a 6×6 patch); fewer are noise that happened to
- *  repeat, and all its own pixels are read instead. 40, not 9 (GM r16 on
+ *  repeat, and all its own pixels are read instead. 40, not 9 (design on
  *  #208, measured): noisy UI bars come out at their true colour, and no
  *  real image or pinned case changes. */
 export const CORE_MIN = 40;
 
-/** The most populated real colour of ``cells`` (GM r11 on #208: "a palette
+/** The most populated real colour of ``cells`` (design on #208: "a palette
  *  never shows a colour the image doesn't contain"): the cells are put in
  *  bins of 4 levels a channel, the heaviest bin wins, and its heaviest exact
  *  colour is the answer. Cells inside a flat area count alone when there
@@ -678,7 +678,7 @@ export function mostPopulated(all: { rgb: number[]; weight: number; inside?: boo
 
 /** The flat colours in ``cells``, read along the line from ``a`` to ``b``:
  *  every flat peak separated from the others by a trough is its own colour
- *  (GM r13, review 6 M1). Only cells inside a flat area count (an edge
+ *  (design). Only cells inside a flat area count (an edge
  *  cuts no cell into a flat colour). Each cell's position is its
  *  projection on the sRGB segment, in ``BAND_BINS`` bins. A peak is a bin
  *  heavier than its neighbours; two peaks are apart when the lightest bin
@@ -687,7 +687,7 @@ export function mostPopulated(all: { rgb: number[]; weight: number; inside?: boo
  *  peak is a colour when it is flat (``BAND_MODE.flat`` of its weight
  *  within a bin of the peak) and either holds ``BAND_MODE.minSide`` of the
  *  inside weight or has an interior of its own, ``MODE_MIN_CELLS`` pixels
- *  (about 3 x 3 at 256 px), whatever its share (review 6 M3). Fewer than
+ *  (about 3 x 3 at 256 px), whatever its share. Fewer than
  *  two colours means a run (a ramp, one flat colour with its edges): []. */
 export function flatModes(all: EvidenceCell[], a: number[], b: number[]): { rgb: number[]; share: number }[] {
   const cells = all.filter((c) => c.inside);
@@ -740,7 +740,7 @@ export function flatModes(all: EvidenceCell[], a: number[], b: number[]): { rgb:
 }
 
 /** A cluster's colour this far (CIEDE2000) from every one of its pixels is
- *  a mix of two areas, not a colour of the image (GM r15). */
+ *  a mix of two areas, not a colour of the image (design). */
 export const MIXED_DELTA_E = 5;
 
 /** A cluster whose colour is in none of its pixels (``MIXED_DELTA_E``) mixes
@@ -748,7 +748,7 @@ export const MIXED_DELTA_E = 5;
  *  (dusk-harbour's 12 x 12 pink-red sign in the orange sky). Each flat
  *  colour among its pixels with an interior of ``MODE_MIN_CELLS`` (about
  *  3 x 3 at 256 px), and itself away from the cluster's colour, becomes its
- *  own swatch, as a run's flat colours do (GM r14, r15); the rest keeps the
+ *  own swatch, as a run's flat colours do (design); the rest keeps the
  *  cluster, at the mean of what is left. A cluster whose colour some pixel
  *  holds is never split, so a photo's areas stay as they are. */
 function splitMixedClusters(out: Swatch[], evidence: EdgeEvidence): void {
@@ -779,19 +779,19 @@ function splitMixedClusters(out: Swatch[], evidence: EdgeEvidence): void {
 
 /** The bins ``flatModes`` reads a run in, along its line. */
 export const BAND_BINS = 32;
-/** ``flatModes``'s tuning (see the round 7 and 8 notes for the cases it holds). */
+/** ``flatModes``'s tuning (see the notes for the cases it holds). */
 export const BAND_MODE = { minSide: 0.2, flat: 0.6, trough: 0.25 } as const;
 /** An interior this big (pixels inside a flat area at 256 px, about 3 x 3)
  *  is a colour whatever its share of the run. */
 export const MODE_MIN_CELLS = 9;
 
-/** One band (GM r10 on #208): a run of small swatches that all lie on the
+/** One band (design on #208): a run of small swatches that all lie on the
  *  line between the same two colours, strictly between them and within
  *  ``threshold`` (CIEDE2000), and touch one another in the image (read on
  *  the clusters' own grid), is one band, when it is continuous: an
  *  antialiased edge, a ramp, a stripe the downscale turned into three or
- *  four columns of blends (review 4, L1). Flat colours that touch stay each
- *  its own (``flatModes``; GM r11, r13). The band shows its most
+ *  four columns of blends. Flat colours that touch stay each
+ *  its own (``flatModes``; design). The band shows its most
  *  populated colour at the evidence's scale (``colour``), never a mean, with
  *  its weights adding up; without pixels to read, its heaviest part's. The
  *  evidence then decides the one swatch: next to both colours
@@ -823,7 +823,7 @@ function foldBands(out: Swatch[], threshold: number, evidence: EdgeEvidence): vo
         const root = (n: number): number => (group[n] === n ? n : (group[n] = root(group[n])));
         // A member that is itself the edge between the line's ends (next to
         // both) never links two accents: it joins a run only when it
-        // touches one group of accents, not two (review 6 M3, GM r13).
+        // touches one group of accents, not two (design).
         const edgeOf = on.map((s) => {
           const share = evidence.edge(out[s].members, out[a].members, out[b].members);
           return !Number.isNaN(share) && share >= EDGE_EVIDENCE_SHARE;
@@ -849,7 +849,7 @@ function foldBands(out: Swatch[], threshold: number, evidence: EdgeEvidence): vo
         for (const run of runs.values()) {
           if (run.length < 2) continue;
           // Only a continuous run is a band: flat colours that touch stay
-          // each its own colour (GM r11, r13).
+          // each its own colour (design).
           const cells = evidence.cells?.(run.flatMap((s) => out[s].members)) ?? [];
           const modes = flatModes(cells, out[a].rgb, out[b].rgb);
           found.push({ run, a, b, off: run.reduce((sum, s) => sum + offs.get(s)!, 0) / run.length, modes });
@@ -886,7 +886,7 @@ function foldBands(out: Swatch[], threshold: number, evidence: EdgeEvidence): vo
     const at = onSegment(merged.rgb, out[a].rgb, out[b].rgb);
     const share = evidence.edge(merged.members, out[a].members, out[b].members);
     // An edge at 256 px folds, unless the full image shows a solid colour
-    // of its own there (GM r13: a keyline a few pixels wide is kept).
+    // of its own there (design: a keyline a few pixels wide is kept).
     const others = out.filter((_, s) => !run.includes(s)).map((c) => c.rgb);
     const edge = (Number.isNaN(share) || share >= EDGE_EVIDENCE_SHARE) && !hasCore([...others, merged.rgb], others.length, members, evidence);
     const into = at && edge ? (at.t < 0.5 ? a : b) : -1;
@@ -924,7 +924,7 @@ function foldEdgeBlends(
       // product of the reduction, not a colour the person sees: at the end
       // it folds onto a line whatever its size (the 2 x 2 blocks of a
       // scattered 74%-clear mark mix charcoal and orange into a swatch
-      // heavier than the orange; review 4, M3).
+      // heavier than the orange).
       if (out[s].mode) continue;
       const unseen = unseenIsEdge && Number.isNaN(edgeEvidence.edge(out[s].members, [], []));
       if (size(out[s]) >= EDGE_BLEND_SHARE && !unseen) continue;
@@ -944,7 +944,7 @@ function foldEdgeBlends(
         return Number.isNaN(share) ? unseenIsEdge : share >= EDGE_EVIDENCE_SHARE;
       });
       // An edge at 256 px still stays when the full image shows a solid
-      // colour of its own under it (GM r13: 5-9 px frames keep their fill).
+      // colour of its own under it (design: 5-9 px frames keep their fill).
       if (line && hasCore(out.map((c) => c.rgb), s, out[s].members, edgeEvidence)) line = undefined;
       if (line) {
         const into = line.t < 0.5 ? line.a : line.b;
@@ -1027,7 +1027,7 @@ export function edgeEvidenceFromLabels(
     : undefined;
   // Two swatches touch where their pixels do: on the evidence's grid when
   // both have pixels there, so two tags that meet only through a blurred
-  // blend of the clusters' grid don't (GM r13, review 6 M3); on the
+  // blend of the clusters' grid don't (design); on the
   // clusters' own grid otherwise, where every cluster has pixels.
   const touching = (a: number[], b: number[]) => {
     const inA = new Set(a);
@@ -1089,8 +1089,8 @@ export function edgeEvidenceFromLabels(
  *  flat area: its colour (within ``FLAT_TOLERANCE`` a channel) on both
  *  sides along one axis and on at least one side along the other. A clear
  *  neighbour (``counted`` false) counts as the same colour; one off the
- *  image doesn't, so a line along the image's border is no interior
- *  (review 6, M2). */
+ *  image doesn't, so a line along the image's border is no interior.
+ */
 function insideFlat(
   x: number,
   y: number,
@@ -1291,9 +1291,9 @@ export function kMeansClusters(
 export const CLUSTER_MAX_DIM = 96;
 
 /** The edge evidence is read at this size (longest edge, px), finer than the
- *  clusters (GM r10 on #208): a deliberate keyline is a colour, and a 20 px
+ *  clusters (design on #208): a deliberate keyline is a colour, and a 20 px
  *  line on a 1000 px image is about 5 px here, wide enough to show an
- *  interior, where at 96 px it was 2 and read as an edge (review 4, L2). */
+ *  interior, where at 96 px it was 2 and read as an edge. */
 export const EVIDENCE_MAX_DIM = 256;
 
 /** Extract reads the picked image at up to this size (longest edge, px): a
@@ -1328,7 +1328,7 @@ export function gridFromRgba(data: Uint8ClampedArray, width: number): PixelGrid 
  *  coverage. Pixels under ``ALPHA_MIN`` are taken out first, so a haze never
  *  adds up to a colour. The browser's own downscale works on premultiplied
  *  8-bit colour, so a block of faint pixels came back hue-shifted: a
- *  phantom green-black on a 74%-clear mark (review 4, M3). With f = 1 it is
+ *  phantom green-black on a 74%-clear mark. With f = 1 it is
  *  ``gridFromRgba``, value for value wherever a pixel counts. */
 export function areaGrid(data: Uint8ClampedArray, width: number, height: number, maxDim: number): PixelGrid {
   const f = Math.max(width, height) <= maxDim ? 1 : Math.ceil(Math.max(width, height) / maxDim);
@@ -1343,9 +1343,9 @@ export function areaGrid(data: Uint8ClampedArray, width: number, height: number,
  *  longest edge is exactly ``maxDim`` (as it is when already smaller): the
  *  same alpha-weighted area average as ``areaGrid``, with fractional cells,
  *  each source pixel shared between the (at most 2 x 2) cells it overlaps
- *  by how much of it falls in each (GM r11 on #208). An integer block
+ *  by how much of it falls in each (design on #208). An integer block
  *  made the grid anything from 129 to 256 px, so how wide a band had to be
- *  to stay jumped with the image's size (review 5, L1). The evidence is
+ *  to stay jumped with the image's size. The evidence is
  *  read on it; the clusters keep ``areaGrid``, as the backend reduces. */
 export function exactAreaGrid(data: Uint8ClampedArray, width: number, height: number, maxDim: number): PixelGrid {
   const longest = Math.max(width, height);
@@ -1551,7 +1551,7 @@ function jobFrom(
   return { data, width: w, height: h, k, small: { data: small, width: sw } };
 }
 
-/** How the worker decodes the picked file (round 8c, GM r18 5): set out in
+/** How the worker decodes the picked file (design): set out in
  *  full, not left to defaults, so the pixels are the ones the page's
  *  ``<img>`` and canvas give (``readPaletteJob``). The image is turned as
  *  its EXIF says, as an ``<img>`` is; converted to sRGB from any embedded
@@ -1565,7 +1565,7 @@ export const BITMAP_OPTIONS: ImageBitmapOptions = {
 };
 
 /** Whether the worker's read gives the page's pixels byte for byte, from
- *  the file's first bytes. Measured in Chrome 156 (round 8c notes): PNG up
+ *  the file's first bytes. Measured in Chrome 156 (notes): PNG up
  *  to 8 bits a channel (any profile, gamma, palette, interlace, alpha, up to
  *  8K), GIF and BMP read the same. JPEG and WebP don't: Chrome's ``<img>``
  *  draws them from their YUV planes, the bitmap from RGB, 1-2 levels apart

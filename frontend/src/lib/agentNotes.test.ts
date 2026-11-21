@@ -64,7 +64,7 @@ describe('sanitizeNote', () => {
   });
 });
 
-describe('an asset proposal\'s Update (Q92 a)', () => {
+describe('an asset proposal\'s Update', () => {
   it('keeps how it ended, and treats it as done', () => {
     const kept = sanitizeNote({
       ...note({ source: 'nebula', about: 'proposal', refs: [] }),

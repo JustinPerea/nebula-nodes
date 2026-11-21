@@ -2,7 +2,7 @@ import { copyForStatus, curlApostrophes } from './errorCopy';
 
 /** The line under a chat image chip whose upload was refused (the chip
  * already shows the file's name). Its two written chip lines stay; else the
- * backend's written reason or GM's line for the status (error-copy round 2:
+ * backend's written reason or the design's line for the status (
  * never "Upload failed (503)"). */
 export function chatUploadChipError(status: number, detail: unknown): string {
   if (status === 413) return 'Image > 20MB';

@@ -1,6 +1,6 @@
 /**
  * Why the person's reopen in place can't go yet, and the one table of lines
- * for it (review 19 item 1 and GM r32 on PR #199). This file is what the
+ * for it (design on PR #199). This file is what the
  * entry chunk needs to read a verdict and place its line; the table of lines
  * itself is lib/reopenHoldLines.ts, loaded when a hold first arrives
  * (design; the entry chunk's budget).
@@ -33,8 +33,8 @@ export interface OpenHold {
 export type ReopenHold = OpenHold | { state: 'tabRun' } | { state: 'uncertain' };
 export type ReopenHoldState = ReopenHold['state'];
 
-/** Where the canvas line sits (GM r32, 2): by what clears it. The Marble
- * forms inside the World Labs notice at the top, as its second line (GM r33,
+/** Where the canvas line sits (design): by what clears it. The Marble
+ * forms inside the World Labs notice at the top, as its second line (design,
  * 6; the notice holds "I’ve checked Marble"), the Forget ID form by Run
  * History, the others by Stop. The `params` form sits in the notice's box
  * too (alone, when nothing else holds): the node's settings can be off

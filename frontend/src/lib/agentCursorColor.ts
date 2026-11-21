@@ -1,13 +1,13 @@
 /**
  * An agent cursor's colours: each session's shade of its agent's colour, and
- * the contrast maths (GM - Design, PR #211 r2-r8). Kept apart from
+ * the contrast maths (design, PR #211). Kept apart from
  * agentCursorLook so the Agent log, loaded with the app, can shade a line
  * exactly as its cursor is shaded without the cursor layer's geometry
- * (PR #211 r20).
+ * (PR #211).
  */
 import type { SessionLike } from './agentCursorLabel';
 
-/** OKLCH lightness offsets for an agent's sessions 1-5, cycling after five (GM - Design, PR #211 r2). */
+/** OKLCH lightness offsets for an agent's sessions 1-5, cycling after five (design, PR #211). */
 export const AGENT_CURSOR_SESSION_LIGHTNESS = [0, -0.1, 0.1, -0.2, 0.2] as const;
 /**
  * Every session's L sits inside `min`-`max` and at least `minGap` from every
@@ -19,7 +19,7 @@ export const AGENT_CURSOR_SESSION_BAND = { max: 0.92, min: 0.35, minGap: 0.05, c
 
 /** The colour of an agent whose own colour is missing or not a #rrggbb hex:
  *  its cursor, its Agent log line and the log's name tone all use it, so
- *  they never disagree (review 8). */
+ *  they never disagree. */
 // palette-exempt: per-agent identity colour fallback, not a status
 export const AGENT_FALLBACK_COLOR = '#E8825A';
 
@@ -71,16 +71,16 @@ const inGamut = (rgb: Rgb) => rgb.every((c) => c >= -1e-6 && c <= 1 + 1e-6);
 
 /**
  * The OKLCH lightness of an agent's session `ordinal`, from the agent's own L
- * (GM - Design, PR #211 r2, r7 and r8). Sessions take the offsets 0, −0.10,
+ * (design, PR #211). Sessions take the offsets 0, −0.10,
  * +0.10, −0.20, +0.20 in order, each the first of these that works: the
  * value itself, if it is inside 0.35-0.92 and at least 0.05 from every L in
  * use; past an edge, the edge (0.92 or 0.35), if it is at least 0.07 from
- * every L in use (r8: so a clamped session never sits at the bare minimum
+ * every L in use (so a clamped session never sits at the bare minimum
  * from a neighbour); else the next unused offset. When no unused offset
  * works, L steps on by 0.10 inside the band, nearest first. The offsets
  * cycle after five, so sessions 1 and 6 share a fill (their names differ,
- * and with two or more cursors names show). The band holds session 1 too
- * (r3): a base outside 0.35-0.92 is pulled to the nearer edge before any
+ * and with two or more cursors names show). The band holds session 1 too:
+ * a base outside 0.35-0.92 is pulled to the nearer edge before any
  * stepping, so black starts at L 0.35, visible on the dark canvas, and white
  * at 0.92.
  */
@@ -100,7 +100,7 @@ export function sessionLightness(rawBaseL: number, ordinal: number): number {
   taken.add(0);
   for (let k = 1; k <= index; k += 1) {
     const order = [...steps.keys()].map((j) => (k + j) % steps.length).filter((j) => !taken.has(j));
-    // The value itself, or past an edge the edge with 0.07 of room (r8).
+    // The value itself, or past an edge the edge with 0.07 of room.
     const fit = (delta: number): number | undefined => {
       const value = baseL + delta;
       if (value > max) return roomAt(max, clampGap) ? max : undefined;
@@ -114,8 +114,8 @@ export function sessionLightness(rawBaseL: number, ordinal: number): number {
       // Near either end of the band the edge is taken or too close, so no
       // unused offset works (from L 0.85, +0.20 finds 0.92 taken by +0.10).
       // Then step on by 0.10 inside the band, nearest first, until one is
-      // clear. Some step always is (every base 0 to 1 in 0.0001 steps,
-      // round 3c), so the offset pulled into the band is a last resort
+      // clear. Some step always is (every base 0 to 1 in 0.0001 steps),
+      // so the offset pulled into the band is a last resort
       // that never runs.
       chosen = order[0];
       L = Math.min(max, Math.max(min, baseL + steps[chosen]));
@@ -179,12 +179,12 @@ export function contrastRatio(a: string, b: string): number {
  * The tone to draw text in on `surface`: `fill` itself when it reads at
  * least `minContrast`:1 there, else the nearest tone of the same hue that
  * does (OKLCH lightness stepped in 0.005s either way, chroma lowered only
- * as far as sRGB needs). GM - Design, PR #211 r20: the Agent log's name
+ * as far as sRGB needs). Design, PR #211: the Agent log's name
  * text, whose dot keeps the cursor's own shade.
  */
 export function readableTone(rawFill: string, surface: string, minContrast = 4.5): string {
   // A colour that is not #rrggbb has no hue to keep: the shared fallback
-  // stands in for it, never the input itself (review 8, NIT-2).
+  // stands in for it, never the input itself.
   const fill = parseHex(rawFill) ? rawFill : AGENT_FALLBACK_COLOR;
   if (contrastRatio(fill, surface) >= minContrast) return fill;
   const base = hexToOklch(fill)!;
@@ -202,7 +202,7 @@ export function readableTone(rawFill: string, surface: string, minContrast = 4.5
  * One colour `over` another as Chrome paints it: the alpha is stored in
  * 8 bits (0.66 → 168/255) and each channel blends and rounds in 8 bits.
  * Blending with the exact alpha gives #0f0f10 for Restraint's log surface;
- * Chrome paints #0e0e10 (review 8, NIT-1).
+ * Chrome paints #0e0e10.
  */
 export function compositeOver(over: { rgb: readonly number[]; alpha: number }, under: readonly number[]): string {
   const a = Math.round(over.alpha * 255);
@@ -220,7 +220,7 @@ export function compositeOver(over: { rgb: readonly number[]; alpha: number }, u
 export const AGENT_LOG_SURFACE = compositeOver({ rgb: [22, 22, 24], alpha: 0.66 }, [0, 0, 0]);
 
 /**
- * An Agent log line's colours for a cursor (GM - Design, PR #211 r20): the
+ * An Agent log line's colours for a cursor (design, PR #211): the
  * dot in the cursor's own shade, exactly as the canvas fills it
  * (sessionFill), and the name text in that shade too, unless it reads
  * under 4.5:1 on the log's surface; then the nearest passing tone of the

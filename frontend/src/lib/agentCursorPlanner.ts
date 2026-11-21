@@ -7,20 +7,20 @@ import {
   AGENT_CURSOR_LEAN_SPRING,
 } from './agentCursorTuning';
 
-// The (t) numbers live in agentCursorTuning, one module GM retunes (r49).
+// The (t) numbers live in agentCursorTuning, the one module a design retune touches.
 export { AGENT_CURSOR_BOW, AGENT_CURSOR_DURATION, AGENT_CURSOR_LAND_SPRING, AGENT_CURSOR_LEAN, AGENT_CURSOR_LEAN_SPRING };
 
 /**
- * How an agent cursor travels (GM - Design, agent cursor §3): one arc per
+ * How an agent cursor travels (design, agent cursor §3): one arc per
  * move, timed by distance, with a spring on progress along it, then a landing
  * spring for the last stretch, and a lean toward where it's going.
  *
  * Pure, with no React and no React Flow, so the screen layer can reuse it.
  * Motion runs in flow coordinates; every threshold here is in screen px and
- * converts through the zoom. The values were tuned and measured by GM in the
+ * converts through the zoom. The values were tuned and measured in the design
  * prototype (reviews.justinperea.com/nebula/agent-cursor/).
  *
- * The motion steps at a fixed 120 Hz inside each frame, the rate GM measured
+ * The motion steps at a fixed 120 Hz inside each frame, the rate the design prototype measured
  * on, so the settle and follow-through are the same at any display rate.
  * `AGENT_CURSOR_SPRING` is not used here: pins, ghosts and the camera share it.
  */
@@ -31,7 +31,7 @@ export const AGENT_CURSOR_LAND_HANDOFF = 0.8;
 export const AGENT_CURSOR_PROGRESS_K = 6.64;
 /**
  * Once the tip is at rest, a lean under `deg` turning slower than
- * `degPerSecond` snaps to 0 and the loop sleeps (GM - Design, PR #211 r1).
+ * `degPerSecond` snaps to 0 and the loop sleeps (design, PR #211).
  * Why 3°/s: from upright, the lean spring (ω ≈ 13.4 rad/s, ζ ≈ 0.82) swings
  * at most 0.031 s × v further, so 3°/s leaves under 0.1° unshown. With the
  * 0.1° it may already have, the snap skips under 0.2°: a fraction of a pixel
@@ -57,7 +57,7 @@ export const AGENT_CURSOR_REPLAN_PX = 24;
 export const AGENT_CURSOR_ARRIVE_PX = 2;
 /**
  * The most the tip may run past its target after the hand-off, screen px
- * (GM - Design, PR #211 r2). Up to about 1500 px a hand-off at p = 0.80
+ * (design, PR #211). Up to about 1500 px a hand-off at p = 0.80
  * already keeps within it, and those moves are unchanged. On longer chords
  * the 20% left is far enough that the land spring (ζ ≈ 0.8) overshoots more
  * than 2 px even from a standstill (about 8 px from 600 px), so no clamp on
@@ -68,7 +68,7 @@ export const AGENT_CURSOR_MAX_FOLLOW_THROUGH_PX = 2;
 /**
  * When a new flight's arc would pass within this many screen px of another
  * cursor's flight still under way, the new one bows to the other side
- * (GM - Design, PR #211 r2), with the same 10% / 120 px cap.
+ * (design, PR #211), with the same 10% / 120 px cap.
  */
 export const AGENT_CURSOR_CROSS_PX = 24;
 /** The fixed motion step. */
@@ -78,7 +78,7 @@ export const AGENT_CURSOR_STEP_SECONDS = 1 / 120;
  * at 60 Hz, so one frame with no pointer event mid-drag doesn't count. An
  * action held by a fling (a target jumping further than
  * AGENT_CURSOR_REPLAN_PX every frame, so the tip can't arrive) fires then,
- * at the tip, wherever it is (GM - Design, PR #211 r9 item 5).
+ * at the tip, wherever it is (design, PR #211).
  */
 export const AGENT_CURSOR_DRAG_END_SECONDS = 0.03;
 
@@ -89,13 +89,13 @@ export const AGENT_CURSOR_DRAG_END_SECONDS = 0.03;
  * 60 Hz, far past any jank the eye follows as motion (a heavy frame is 30 to
  * 100 ms), and short enough that a return never shows a move as if it were
  * happening now. The cursor lands on its target with no arrival: no ring, no
- * wire (GM - Design, PR #211 r5: "the tip lands, and that's all").
+ * wire (design, PR #211: "the tip lands, and that's all").
  */
 export const AGENT_CURSOR_STALE_GAP_SECONDS = 0.25;
 /**
  * The longest a gliding cursor waits past its own rest for the rest of its
  * column (ms): the layer's rest gate holds a column's glide so it lands on
- * one frame (GM - Design, #219 r65), and this caps the hold (r66), so a drag
+ * one frame (design, #219), and this caps the hold, so a drag
  * that keeps retargeting one member can't keep the others unsettled for as
  * long as the person drags. A spring lands the members of one move within
  * about 220 ms of each other, so a column glide never reaches it.
@@ -151,16 +151,16 @@ export interface CursorMotion {
   lastRel: Point | null;
   /**
    * Riding: the tip is carried with its target at this offset, kinematically,
-   * with no spring, so it stops dead when the target stops (GM - Design,
-   * PR #211 r9 item 2). Set when a resting tip's target is carried (the
+   * with no spring, so it stops dead when the target stops (design,
+   * PR #211). Set when a resting tip's target is carried (the
    * person drags the node, a sync nudges it), or when a landing settles onto
    * a target that is still moving. It is the offset the tip already had, 0
-   * after any landing: a ride never takes a new offset (review 3, N1). The
+   * after any landing: a ride never takes a new offset. The
    * agent's next action ends it (planMove), and that flies on the planner.
    */
   attached: Point | null;
   /** The zoom it last stepped at: a zoom during a glide keeps the glide's
-   *  offset and speed in screen px (review 7, MEDIUM-3). */
+   *  offset and speed in screen px. */
   lastZoom: number | null;
   /** Consecutive frames the target has moved; a fling (an action held by a
    *  target that jumps every frame) and how long the target has held still. */
@@ -170,7 +170,7 @@ export interface CursorMotion {
   /** Its landing ended its last step within the rest distance and speed:
    *  it would come to rest now. The layer's column gate reads it, so the
    *  cursors one layout change sets gliding come to rest on one frame
-   *  (GM - Design, #219 r65). */
+   *  (design, #219). */
   nearRest?: boolean;
 }
 
@@ -213,7 +213,7 @@ const BOW_ROOM_ALONG = [0.2, 0.8] as const;
 
 /**
  * The bow for a new flight against every other flight still under way
- * (GM - Design, PR #211 r5): the default side when it is clear of all of
+ * (design, PR #211): the default side when it is clear of all of
  * them by AGENT_CURSOR_CROSS_PX, else the other side when that one is, else
  * whichever leaves the most room; the default side when neither has more.
  */
@@ -446,8 +446,8 @@ function substep(
     const aimY = live.y + rest.y;
     // Damping acts on the speed relative to the target (feed-forward), so a
     // target that keeps moving (a node being dragged) is caught with no
-    // steady lag: the tip can arrive on it while it moves (GM - Design,
-    // PR #211 r5). A still target gives the same spring as before.
+    // steady lag: the tip can arrive on it while it moves (design,
+    // PR #211). A still target gives the same spring as before.
     // The pull is toward where the target was at the start of this step, so
     // that after the step the tip is where the target is now (no lead of one
     // step's travel). For a still target both are the same.
@@ -512,7 +512,7 @@ export function stepMotion(
     /** Where on the target the tip comes to rest, as an offset from it (flow
      *  px): the layer's whole-device-pixel snap of the target, so a landing
      *  settles exactly where the cursor is drawn at rest, with no jump as it
-     *  comes off its own layer (GM - Design, PR #211 r10 item 1). Default 0. */
+     *  comes off its own layer (design, PR #211). Default 0. */
     restOffset?: Point;
     /** The person is moving the target's node (a drag, a keyboard nudge,
      *  Arrange). A tip already there rides it at any speed: a move past
@@ -524,15 +524,15 @@ export function stepMotion(
      *  say, a join, a leave): it lands there on the land spring. When the
      *  caller says no, the spot's moves on the carrier (a zoom changing the
      *  flow size of a screen-px step, the column's head carried) carry the
-     *  tip kinematically (GM - Design, PR #211 review 6, item 4). Default:
+     *  tip kinematically (design, PR #211). Default:
      *  any move of the spot on its carrier is a re-layout. */
     shifted?: boolean;
     /** The cursors gliding in its column come to rest together (the layer's
-     *  CursorField.restGate, GM - Design #219 r65): false holds its landing
+     *  CursorField.restGate; design, PR #219): false holds its landing
      *  on the spring past its own rest; true (each of them was within the
      *  rest distance and speed on the last frame) lets it rest, as it does
      *  with no column: on the step it is within them on this frame, so a
-     *  spot that moved on the gate's frame is never snapped to (r75.1).
+     *  spot that moved on the gate's frame is never snapped to.
      *  Default: it rests on its own. */
     restGate?: boolean;
   },
@@ -578,8 +578,7 @@ export function stepMotion(
   const jumped = jumpPx > replanPx && !(opts.dragged && !m.awaiting);
   // A zoom while it glides to a new spot (a say, a join, a leave): its
   // offset from the spot and its speed keep their size in screen px, as the
-  // column's steps do, so the glide rides the zoom as a resting cursor does
-  // (review 7, MEDIUM-3).
+  // column's steps do, so the glide rides the zoom as a resting cursor does.
   if (m.landing && !m.plan && prevLive && !jumped && m.lastZoom !== null && m.lastZoom !== zoom && zoom > 0) {
     const r = m.lastZoom / zoom;
     m.pos.x = live.x + (m.pos.x - prevLive.x) * r;
@@ -605,7 +604,7 @@ export function stepMotion(
   let arrived = false;
   if ((m.plan || m.landing) && jumped) {
     // The person's own drag latches it on its first jump: input that lands
-    // every other frame never makes two in a row (review 4, L2).
+    // every other frame never makes two in a row.
     const held = m.held || (m.awaiting && (Boolean(opts.dragged) || m.chase >= 2));
     planMove(m, live, { zoom, pointer });
     // A target jumping every frame (a fling): the tip can't arrive, so the
@@ -616,7 +615,7 @@ export function stepMotion(
   } else if (m.landing) {
     m.landing = { x: live.x, y: live.y };
     // The target stopped under a tip that already arrived and was settling
-    // onto it: it stops dead with it (GM - Design, PR #211 r9 item 2).
+    // onto it: it stops dead with it (design, PR #211).
     if (!m.awaiting && wasMoving && !movingNow && dist(m.pos, live) * zoom <= AGENT_CURSOR_ARRIVE_PX) {
       m.pos.x = live.x;
       m.pos.y = live.y;
@@ -661,7 +660,7 @@ export function stepMotion(
     // and speed. So on the gate's frame (true) it lands only if it is still
     // near rest on this frame's steps: a spot that moved on the gate's frame
     // (a crossing, a say, a join or a leave then, or the cap firing) starts
-    // a fresh glide, never a snap (#219 review 3, MEDIUM-1; GM r75.1).
+    // a fresh glide, never a snap (#219; design).
     const step = substep(m, at, h, zoom, opacityTarget, rest, opts.restGate !== false);
     if (step.arrived) arrived = true;
     if (step.handedOff) handedOff = true;
@@ -676,7 +675,7 @@ export function stepMotion(
 }
 
 /**
- * One frame of a cursor's exit (GM - Design, PR #211 review 4: every
+ * One frame of a cursor's exit (design, PR #211: every
  * removal). It stops where it is and fades to 0 on the same opacity spring
  * idle dimming uses, which also brings the lean to rest; the tip, the pill
  * and the say pill fade together, as one element. True once it is out (or

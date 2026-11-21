@@ -19,8 +19,8 @@ import {
   ON_KREA_PLAN, PAID_AND, PAID_NO_LISTED_PRICE, ROUTE_CANT_RUN, SIZE_UNREADABLE,
 } from './unpricedCopy';
 
-/** Why a paid node in a run adds to the "+ unpriced" chip (GM, PR #198 r7
- * item 3): it has no known price (also in `unpriced`), or its estimate
+/** Why a paid node in a run adds to the "+ unpriced" chip (design, PR #198):
+ * it has no known price (also in `unpriced`), or its estimate
  * leaves a cost out (`leftOut`, also in `plus`).
  * - `noPrice`: no list price for these settings, a setting it reads arrives
  *   by wire, or an estimate that isn't in USD;
@@ -31,7 +31,7 @@ import {
  * - `sizeUnreadable`: priced from its input's size, which can't be read;
  * - `leftOut`: priced, with a cost its price entry's `plus` names;
  * - `plan`: runs on the person's Krea plan (also in `plan`), never paid and
- *   never in the figure: its own line (GM, PR #203 r19 item 1). */
+ *   never in the figure: its own line (design, PR #203). */
 export type UnpricedReason =
   | { kind: 'noPrice' | 'cantRun' | 'plan' }
   | { kind: 'awaitingInput' | 'sizeUnreadable'; audio?: boolean }
@@ -73,8 +73,8 @@ export interface RunCost {
    * dialog's rows (lib/placeholderRunConfirm.ts). */
   ids?: { unpriced: string[]; plan: string[]; awaitingInput: string[]; free?: string[]; unavailable?: Record<string, string> };
   /** The run's only provider calls are sourced $0 nodes (summary `free`), so
-   * it is exact, not an estimate that rounds to zero (GM, PR #203 r11 item
-   * 4: "$0" against "~$0"; r18 item 1: such a node is free, never paid).
+   * it is exact, not an estimate that rounds to zero (design, PR #203:
+   * "$0" against "~$0"; such a node is free, never paid).
    * Present only when true. */
   sourcedZero?: true;
 }
@@ -87,17 +87,17 @@ export interface RunScopeSummary {
    * sourced $0. */
   paid: string[];
   /** Nodes that run on the person's Krea plan (costClass "plan"), never in
-   * `paid` or the figure (GM, PR #203 r19 item 1: "2 paid · 1 on Krea
+   * `paid` or the figure (design, PR #203: "2 paid · 1 on Krea
    * plan"). Present only when there are some. */
   plan?: string[];
   /** Nodes priced at a sourced $0 (costClass "free"), never in `paid` or
-   * `cost.lines` (GM, PR #203 r18 item 1). Present only when there are some. */
+   * `cost.lines` (design, PR #203). Present only when there are some. */
   free?: string[];
   /** Nodes on a route that may bill the person's own account because their
    * key is set (directRoute.keyBilling "mayCost": Idol with a Hugging Face
-   * token), never in `paid` or `cost` (GM, PR #203 r11 item 2: "2 paid · 1
+   * token), never in `paid` or `cost` (design, PR #203: "2 paid · 1
    * may cost"), with the account. Present only when there are some; the same
-   * route with no key is free and adds nothing (r12). */
+   * route with no key is free and adds nothing. */
   mayCost?: Array<{ name: string; account: string }>;
   /** Present once the price table has loaded. */
   cost?: RunCost;
@@ -106,28 +106,28 @@ export interface RunScopeSummary {
    *  run may skip them, and a skipped node costs nothing. */
   gated?: string[];
   /** Agents' placeholders (and what needs them) this run skips, left out of
-   *  `total`, `paid` and `cost` (Q125 item 3). Present only when there are some. */
+   *  `total`, `paid` and `cost`. Present only when there are some. */
   pendingSkipped?: PendingSkipSummary;
   /** Placeholders (and what needs them) the person's direct run of a node
    *  makes run, counted in `total`, `paid` and `cost`; the line under the
    *  cost says so. Present only when there are some. */
   pendingIncluded?: PendingSkipSummary;
   /** The provider each paid node's run goes through, by node id (selectRoute,
-   *  with the keys of the cost context): the confirm rows name it (GM - Design,
-   *  round 15, item 3). Present with a cost context. */
+   *  with the keys of the cost context): the confirm rows name it (design)
+   *  Present with a cost context. */
   routes?: Record<string, string>;
 }
 
 /** A node's name in a run's confirm and summary: the name the person gave
  * it; a node still under its model's own name is named by the route the
- * run takes (GM - Design, rounds 15 and 16: "Grok Imagine 2.0 via xAI" on the
- * person's xAI key, never the Krea copy's name; round 19, review 18 L-A:
+ * run takes (design: "Grok Imagine 2.0 via xAI" on the
+ * person's xAI key, never the Krea copy's name;
  * "Grok Imagine 2.0 via Krea" on Krea, never "Grok Imagine 2.0 (Krea)",
  * when its route depends on keys: nameOnRoute). */
 export function runNodeName(node: Node<NodeData>, provider: string | null | undefined): string {
   const definition = node.data?.definitionId ? NODE_DEFINITIONS[node.data.definitionId] : undefined;
   const label = node.data?.label;
-  // GM - Design, round 18: either form of the default title is unnamed.
+  // Design: either form of the default title is unnamed.
   if (label && !isDefaultTitle(definition, label)) return label;
   return definition ? nameOnRoute(definition, provider) : (label || node.id);
 }
@@ -315,7 +315,7 @@ function scopeOf(nodes: Node<NodeData>[], edges: Edge[], scope: RunScope): {
     included = nodes.filter((node) => ids.has(node.id));
   }
 
-  // Agents' placeholders (Q125 item 3), as the backend's run treats them
+  // Agents' placeholders, as the backend's run treats them
   // (main._skip_placeholders): every run skips each one and what needs it,
   // except the person's direct run of a node, which runs the placeholders in
   // its scope. So the cost prices what will run, as the spend check does.
@@ -386,8 +386,8 @@ export function summarizeRunScope(
     if (provider) routes[node.id] = provider;
     const name = definition.providerVia ? (node.data?.label || definition.displayName || node.id) : runNodeName(node, provider);
     // The one cost class (costClass). Free unless the person's key is set,
-    // and then it may bill their own account: never paid, never priced (GM,
-    // PR #203 r11 item 2, r12).
+    // and then it may bill their own account: never paid, never priced (design,
+    // PR #203).
     const apiKeys = costContext?.apiKeys ?? {};
     const keyed = withWiredBlockers(definition, params, ports);
     const billing = costClass(definition, keyed, apiKeys);
@@ -417,7 +417,7 @@ export function summarizeRunScope(
     const routed = withWiredBlockers(definition, params, ports);
     if (!noPrice && costClass(definition, routed, apiKeys) === 'plan') {
       // On the person's Krea plan: never paid, never in the figure, its own
-      // reason line (GM, PR #203 r19 item 1; review 9, MEDIUM-1).
+      // reason line (design, PR #203).
       plan.push(name);
       if (!pricing || !multipliers) continue;
       cost.plan.push(name);
@@ -439,7 +439,7 @@ export function summarizeRunScope(
     let priceKey: string | null;
     // No key for any of the node's providers (selectRoute's `unset`): a node
     // whose price depends on the provider then reads as a missing key, never
-    // as "no listed price" (PR #198 round 5 live check: a Seedream scene,
+    // as "no listed price" (PR #198 live check: a Seedream scene,
     // priced on BytePlus only, fell back to fal.ai with no key at all).
     let keyUnset = false;
     if (hasRoutes(definition)) {
@@ -476,7 +476,7 @@ export function summarizeRunScope(
     }
     const estimate = estimateNode(entry, definition, params, priceKey, ports.keys(), size);
     if (costClass(definition, routed, apiKeys, estimate) === 'free') {
-      // A sourced $0 is free (GM, PR #203 r18 item 1): never paid, never in
+      // A sourced $0 is free (design, PR #203): never paid, never in
       // the figure; a run of only these is a sourced "$0".
       paid.pop();
       if (behindGates.has(node.id)) gated.pop();
@@ -491,7 +491,7 @@ export function summarizeRunScope(
         cost.awaitingInput.push(name);
         ids.awaitingInput.push(node.id);
         if (size === null) cost.sizeUnreadable = [...(cost.sizeUnreadable ?? []), name];
-        // A price read from an audio file's length has its own wording (GM r118).
+        // A price read from an audio file's length has its own wording (design).
         const sizedPort = sizingPorts(entryForRoute(entry, priceKey))[0];
         const audio = definition.inputPorts?.find((port) => port.id === sizedPort)?.dataType === 'Audio';
         if (audio) cost.audioAwaiting = [...(cost.audioAwaiting ?? []), name];
@@ -543,14 +543,14 @@ export function repeatRun(summary: RunScopeSummary, passes: number): RunScopeSum
 }
 
 /** The Run chip: "~$0.04", "$0.04–0.43", "$0.04 + unpriced" when part of
- * the run has no known price (GM, PR #198 r6), "<$0.01" for a non-zero
- * amount under a cent (r1: "$0" only ever means free), "N paid" when none
+ * the run has no known price (design, PR #198), "<$0.01" for a non-zero
+ * amount under a cent ("$0" only ever means free), "N paid" when none
  * of it has a list price. Null when nothing is paid, on the Krea plan or may
- * cost: a free run shows no chip, a sourced $0 included (GM, PR #203 r20
- * item 1; its tooltip "This costs nothing to run." stays on the Run
+ * cost: a free run shows no chip, a sourced $0 included (design, PR #203;
+ * its tooltip "This costs nothing to run." stays on the Run
  * button). A run that may bill the person's own account (summary.mayCost)
  * and one on the Krea plan are counted apart, by the one chip rule
- * (costChip: "+" joins money, "·" joins classes; GM r20): "1 may cost",
+ * (costChip: "+" joins money, "·" joins classes; design): "1 may cost",
  * "2 paid · 1 on Krea plan", "$0.07 + unpriced · 1 on Krea plan". */
 export function runChipLabel({ paid, cost, mayCost, plan }: RunScopeSummary): string | null {
   const counts = (paidCount: number) => classCounts({ paid: paidCount, plan: plan?.length, mayCost: mayCost?.length });
@@ -560,25 +560,25 @@ export function runChipLabel({ paid, cost, mayCost, plan }: RunScopeSummary): st
 }
 
 /** "“Hero still” calls a paid provider." / "“A” and “B” call paid
- * providers.": the first sentence of a mixed cost tooltip (GM, PR #203 r14
- * item 3), the names by errorCopy nodeNameList (a count from 4). */
+ * providers.": the first sentence of a mixed cost tooltip (design, PR #203),
+ * the names by errorCopy nodeNameList (a count from 4). */
 export function paidSentence(names: string[]): string | null {
   if (names.length === 0) return null;
   return `${nodeNameList(names)} ${names.length === 1 ? 'calls a paid provider' : 'call paid providers'}.`;
 }
 
-/** The paid part as a sentence, never with "~" inside it (GM, PR #203 r14
- * item 3, r16 item 3): pricing chipTitle's "Estimated cost $0.13.",
+/** The paid part as a sentence, never with "~" inside it (design, PR #203):
+ * pricing chipTitle's "Estimated cost $0.13.",
  * "Estimated cost under $0.01.", "Up to $Y." and "Between $X and $Y.", and
  * an open estimate's priced part ("The priced part of this run costs up to
- * $0.43.", or '' for none). It covers the paid nodes only (GM r19 item 1). */
+ * $0.43.", or '' for none). It covers the paid nodes only (design). */
 export function estimateSentence(low: number, high: number, open: boolean): string {
   return chipTitle(chipEstimate(low, high, open));
 }
 
 /** What a cost tooltip says, from either chip's own parts. */
 export interface CostTitleParts {
-  /** Every paid node's name, with a list price or not (GM, PR #203 r17 item 3). */
+  /** Every paid node's name, with a list price or not (design, PR #203). */
   paid: string[];
   /** The priced paid part, or null when no paid node has a price (or the
    * price table hasn't loaded). */
@@ -588,18 +588,18 @@ export interface CostTitleParts {
   reasons: NonNullable<RunCost['reasons']>;
   mayCost?: RunScopeSummary['mayCost'];
   /** The run's only provider calls are sourced $0 nodes: "This costs
-   * nothing to run." and nothing else (GM, PR #203 r18 item 1). */
+   * nothing to run." and nothing else (design, PR #203). */
   sourcedZero?: boolean;
 }
 
 /**
  * Every cost tooltip: the toolbar's Run chip (runChipTitle) and the
  * proposal bar's Accept chip (canvasProposals acceptChipTitle), one
- * formatter (GM, PR #203 r16 item 3; r17 items 3 and 4). Line 1 names the
+ * formatter (design, PR #203). Line 1 names the
  * paid nodes, priced or not, then the priced part as a sentence: "“A”
  * calls a paid provider. Estimated cost $0.13." No heading. Each reason for
  * an unpriced part goes on its own line under line 1 ("“B” has no listed
- * price.": GM, PR #198 r9 bug 2), and the may-cost sentence comes last
+ * price.": design, PR #198), and the may-cost sentence comes last
  * ("“Idol” may use your Hugging Face credits"); with no reasons it is all one
  * line. Undefined when nothing is paid or may cost.
  */
@@ -607,7 +607,7 @@ export function costTitle({ paid, estimate, reasons, mayCost, sourcedZero }: Cos
   const may = mayCostSentence(mayCost);
   const priced = paid.length > 0 && estimate ? estimateSentence(estimate.low, estimate.high, estimate.open) : '';
   const groups = reasonGroups(reasons);
-  // GM, PR #203 r20 item 2: line 1 and a reason line naming the same nodes
+  // Design, PR #203: line 1 and a reason line naming the same nodes
   // are one sentence, "“Writer” and “Editor” call paid providers that have
   // no listed price."; lines naming other nodes stay their own. Line 1 with
   // a figure says more than the names, so it stays apart.
@@ -620,7 +620,7 @@ export function costTitle({ paid, estimate, reasons, mayCost, sourcedZero }: Cos
   return [lead, ...lines, may].filter(Boolean).join('\n') || undefined;
 }
 
-/** The sourced "$0" chip's tooltip (GM, PR #203 r11 item 4). */
+/** The sourced "$0" chip's tooltip (design, PR #203). */
 export const SOURCED_ZERO_TITLE = 'This costs nothing to run.';
 
 /** "“Idol” may use your Hugging Face credits": the may-cost sentence, last in the chip's tooltip, one per account
@@ -658,7 +658,7 @@ function mergedLead({ id, line, names }: ReasonGroup): string {
   return PAID_AND(list, several, line(list, several).slice(list.length + 1));
 }
 
-/** One group per reason (GM r7 item 3): the nodes sharing it named
+/** One group per reason (design): the nodes sharing it named
  * together (errorCopy nodeNameList), ordered as the nodes appear on the
  * canvas: left to right, the way a graph reads, then top to bottom (a node
  * with no position keeps its place after those that have one). */
@@ -679,7 +679,7 @@ function reasonGroups(reasons: NonNullable<RunCost['reasons']>): ReasonGroup[] {
       }
       case 'leftOut':
         line = Object.hasOwn(LEFT_OUT, reason.plus) ? LEFT_OUT[reason.plus] : LEFT_OUT_OTHER(reason.plus);
-        // Nodes leaving out the same cost are one sentence (GM r8).
+        // Nodes leaving out the same cost are one sentence (design).
         id = `leftOut:${reason.plus}`;
         break;
       case 'noPrice': id = 'noPrice'; line = NO_LISTED_PRICE; break;
@@ -690,7 +690,7 @@ function reasonGroups(reasons: NonNullable<RunCost['reasons']>): ReasonGroup[] {
         id = reason.audio ? 'audioUnreadable' : 'sizeUnreadable'; line = reason.audio ? AUDIO_UNREADABLE : SIZE_UNREADABLE; break;
       case 'plan': id = 'plan'; line = ON_KREA_PLAN; break;
       // A kind this build doesn't know (a newer backend's): the generic
-      // line, never a crash (review 9 of PR #203, NIT-2).
+      // line, never a crash.
       default: id = 'noPrice'; line = NO_LISTED_PRICE; break;
     }
     const group = groups.get(id) ?? { id, line, names: [] };
@@ -702,7 +702,7 @@ function reasonGroups(reasons: NonNullable<RunCost['reasons']>): ReasonGroup[] {
 
 /** The Run chip's tooltip, from the same parts as its label (costTitle,
  * the one cost-tooltip formatter): whenever the chip shows, its paid nodes
- * first, priced or not (GM, PR #203 r17 item 3), then the priced part, a
+ * first, priced or not (design, PR #203), then the priced part, a
  * sentence per reason, and the may-cost sentence last. */
 export function runChipTitle(summary: RunScopeSummary): string | undefined {
   const { paid, cost } = summary;
@@ -757,8 +757,8 @@ function runsLabel([low, high]: [number, number]): string {
 }
 
 /**
- * The Run buttons' title and screen-reader description (GM, PR #203 r19
- * item 2; review 9, LOW-1): how many nodes run, then the Run chip's own
+ * The Run buttons' title and screen-reader description (design, PR #203):
+ * how many nodes run, then the Run chip's own
  * tooltip (runChipTitle, the one cost formatter: the same names, figure and
  * reason lines, no per-node breakdown), then the placeholders it runs and
  * the gate note. "Runs 2 nodes.\n“A” calls a paid provider. Estimated cost
@@ -768,7 +768,7 @@ export function describeRunScope(summary: RunScopeSummary): string {
   const { total, gated, pendingIncluded } = summary;
   const nodes = `${total} ${total === 1 ? 'node' : 'nodes'}`;
   const cost = runChipTitle(summary);
-  // GM - Design, 2026-10-25: the run counts the placeholders it runs and says so.
+  // Design, 2026-10-25: the run counts the placeholders it runs and says so.
   const included = pendingIncludedLine(pendingIncluded);
   return [cost ? `Runs ${nodes}.` : `Runs ${nodes}. No paid providers.`, cost, included,
     gated?.length ? `${gatedNote(gated)}.` : null].filter(Boolean).join('\n');
@@ -783,7 +783,7 @@ function gatedNote(gated: string[]): string {
 /** The confirm text when a run's estimate reaches the user's threshold. */
 export function runCostConfirmMessage({ cost, gated, pendingIncluded }: RunScopeSummary): string {
   if (!cost) return 'Run it?';
-  // GM - Design, 2026-10-25: "a line under the cost".
+  // Design, 2026-10-25: "a line under the cost".
   const included = pendingIncludedLine(pendingIncluded);
   const lines = cost.lines.map((line) => `• ${line.name}: ${formatUsdRange(line.low, line.high)}${runsLabel(line.runs)}`);
   return [
@@ -804,7 +804,7 @@ export function runCostNotes({ cost, gated }: Pick<RunScopeSummary, 'cost' | 'ga
   if (gated?.length) notes.push(`${gatedNote(gated)}.`);
   if (!cost) return notes;
   if (cost.plus.length) notes.push(`Not included: ${cost.plus.join(', ')}.`);
-  // The placeholder dialog says these in its rows and its own footnote (GM - Design, round 6).
+  // The placeholder dialog says these in its rows and its own footnote (design).
   if (!prices) return notes;
   const unpriced = cost.unpriced.filter((name) => !cost.awaitingInput?.includes(name));
   if (unpriced.length) notes.push(`No list price for ${nameList(unpriced)}, so it may cost more.`);

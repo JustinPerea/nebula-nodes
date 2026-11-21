@@ -2,7 +2,7 @@ import { area, intersect, type Box, type Point } from './agentAnchorResolve';
 import { AGENT_CURSOR_CHIP } from './agentCursorTuning';
 
 /**
- * Where the canvas's edge chips go (PR #233 slice 9; GM - Design 7 and 8).
+ * Where the canvas's edge chips go (PR #233 slice 9; design).
  * Pure: client pixels in, boxes out, so placement is tested without a page.
  *
  * A canvas cursor whose tip is off screen gets a chip pointing to it:
@@ -349,7 +349,7 @@ export function planChips({ view, obstacles = [], chrome = [], cursors, sizes = 
     }
     // A pane with no area is not on screen: there is nowhere to draw a count.
     if (counted || view.width <= 0 || view.height <= 0) continue;
-    // Last resort (the coordinator's ruling on review 1, C8): chrome covers every free spot on every edge, or
+    // Last resort: chrome covers every free spot on every edge, or
     // the pane holds no count. The information that agents are off screen is never dropped: the count sits over
     // chrome at the least-covered spot on the edges, nearest the agent on a tie. It is a count, not a button
     // (pointer-events none), so it takes no clicks from what it sits over.
@@ -387,6 +387,6 @@ export function planChips({ view, obstacles = [], chrome = [], cursors, sizes = 
   return { chips, counts };
 }
 
-/** The accessible names (GM - Design 7 and 8): "Claude, show where it’s working", "+2 agents off screen". */
+/** The accessible names (design): "Claude, show where it’s working", "+2 agents off screen". */
 export const chipName = (label: string): string => `${label}, show where it’s working`;
 export const countName = (count: number): string => `+${count} agent${count === 1 ? '' : 's'} off screen`;

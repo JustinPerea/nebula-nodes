@@ -1,8 +1,8 @@
 import type { ExecutionValidationError } from './api';
 
 /**
- * What a node's card says when the pre-run check stopped its run (error copy
- * round 3e, GM - Design). Each check's `message` is the specific text agents
+ * What a node's card says when the pre-run check stopped its run (error copy,
+ * design). Each check's `message` is the specific text agents
  * keep word for word ("Missing API key: OPENAI_API_KEY"); `person` is the
  * line the card shows ("Add your OpenAI API key in Settings, then run the
  * node again."), written by the backend (ValidationErrorDetail.person).
@@ -11,7 +11,7 @@ import type { ExecutionValidationError } from './api';
  * messages joined with "; " and the lines with a space, the way the
  * backend's node_errors keeps them, so the card reads the same after a
  * reload. A check with no line (only an agent or a damaged saved graph
- * reaches it) makes the node read GM's general line with every message
+ * reaches it) makes the node read the design's general line with every message
  * behind Details (category "unknown", as node_errors stores it).
  */
 export interface ValidationReading {
@@ -19,7 +19,7 @@ export interface ValidationReading {
   errorPerson?: string;
   errorCategory?: 'unknown';
   /** The pre-call check refused the run: the card's heading is "Nebula
-   * couldn’t start the run." (GM, PR #203 r32; node_errors.record_validation). */
+   * couldn’t start the run." (design, PR #203; node_errors.record_validation). */
   errorNotStarted: true;
   /** Every one of its checks is a missing key: the card draws the line neutral (ValidationErrorDetail.missing_key). */
   errorMissingKey?: true;
@@ -28,7 +28,7 @@ export interface ValidationReading {
 /** A node in the run with nothing wrong of its own, while another has. */
 export const OTHER_NODE_LINE = 'Nothing ran. Another node in this run needs a fix first.';
 /** The refusal named no node (an older answer, or a replay with no errors). */
-// Round 3f, GM's rule 8: "run again" → "then run the node again."
+// The design's rule 8: "run again" → "then run the node again."
 export const NOTHING_RAN_LINE = 'Nothing ran. Check the inputs and API keys, then run the node again.';
 
 function reading(errors: Pick<ExecutionValidationError, 'message' | 'person' | 'missingKey'>[]): ValidationReading {

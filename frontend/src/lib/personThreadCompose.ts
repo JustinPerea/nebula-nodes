@@ -1,5 +1,5 @@
 /**
- * The Message box's composer half (GM r70's budget): the draft and the send,
+ * The Message box's composer half (the design's budget): the draft and the send,
  * the one API call. Only the deferred box (components/panels/MessageBox.tsx,
  * in the Agent log's chunk) sends, so none of this rides in the entry; the
  * store it writes to (store/personThreadStore.ts) is loaded with the app.
@@ -14,7 +14,7 @@ import { personUnconfirmed } from './personSession';
 /** The heading a failed send is read under (apiRequest's, failureMessage's). */
 export const SEND_HEADING = "Couldn’t send your message.";
 
-/** The Sending… threshold and hold (r50: after 300 ms, held at least 400 ms). */
+/** The Sending… threshold and hold (after 300 ms, held at least 400 ms). */
 export const SENDING_AFTER_MS = 300;
 export const SENDING_HOLD_MS = 400;
 
@@ -67,7 +67,7 @@ export function mergeMissing(current: readonly ThreadRow[], incoming: readonly T
 }
 
 /** A failed send's own words, for a failure that is neither the server's
- * nor the listener's (those two have r50's lines, which the box writes with
+ * nor the listener's (those two have their own lines, which the box writes with
  * the session's label): failureMessage's, never an Error's raw message. */
 export function otherFailureLine(error: unknown): string {
   return failureMessage(error, SEND_HEADING);
@@ -76,7 +76,7 @@ export function otherFailureLine(error: unknown): string {
 const now = () => Date.now();
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
-/** The draft, kept in tab memory (r50); the nodes selected when typing
+/** The draft, kept in tab memory; the nodes selected when typing
  * starts ride along, and an emptied draft lets them go. */
 export function setDraft(text: string, selectedIds?: () => string[]): void {
   usePersonThreadStore.setState((state) => {
@@ -89,7 +89,7 @@ export function setDraft(text: string, selectedIds?: () => string[]): void {
 }
 
 /** Sends the draft to a listener: one send in flight; a failure brings the
- * draft back (r50: kept across failures), unless another was begun. */
+ * draft back (kept across failures), unless another was begun. */
 export async function sendMessage(to: string): Promise<boolean> {
   // Not connected as the person (or not yet known): nothing goes and the draft stays, as
   // agentQuestionsStore.send does. The box locks its button the same way; this is the store's own guard.
@@ -113,7 +113,7 @@ export async function sendMessage(to: string): Promise<boolean> {
       draft: current.draft.trim() ? current.draft : text,
       contextIds: current.draft.trim() ? current.contextIds : pending.nodeIds,
     }));
-    // GM, #204 r3: a refusal only for not being connected as the person goes on the promote; the draft stays.
+    // Design, PR #204: a refusal only for not being connected as the person goes on the promote; the draft stays.
     clearLineOnPromote(error, () => usePersonThreadStore.getState().failure, failure, // clears-on-promote: thread.send
       () => usePersonThreadStore.setState({ failure: null }));
     return false;

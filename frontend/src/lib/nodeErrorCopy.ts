@@ -10,8 +10,8 @@ export const GEMINI_OMNI_REASON = 'Gemini Omni can edit a video but can’t make
   + '“Change the lighting and keep everything else the same”, or use Veo 3.1 to extend the video.';
 
 /**
- * What a node's card says when its run failed (error copy round 3c, GM -
- * Design). GM: "the person reads these on the node, so their lines shouldn't
+ * What a node's card says when its run failed (error copy).
+ * Design: "the person reads these on the node, so their lines shouldn't
  * carry ids or record names. ... The node's error stores the specific text
  * for agents (and the run record and MCP keep it), and the canvas shows the
  * written line." And the guard for the rest: "provider run errors often carry
@@ -24,18 +24,18 @@ export const GEMINI_OMNI_REASON = 'Gemini Omni can edit a video but can’t make
  * In order:
  * - the handler wrote the person's line (`errorPerson`): the heading over
  *   that line, and nothing else (the specific text is for agents), unless
- *   the line was written for a provider's answer (`providerText`, round 3d:
- *   "Meshy is busy. ...", Krea's refused input). GM: "Raw provider text
+ *   the line was written for a provider's answer (`providerText`:
+ *   "Meshy is busy....", Krea's refused input). Design: "Raw provider text
  *   stays behind Details in every case.", so that text goes behind Details;
  * - the backend's classifier named the failure (blocked, auth, quota, rate
  *   limit, timeout, network, invalid input): the heading over its line, the
  *   fact the person needs, with the raw text behind Details;
  * - any other run failure (category "unknown", or no line): the heading over
- *   GM's general line for a card, the raw text behind Details;
+ *   the design's general line for a card, the raw text behind Details;
  * - no category at all: a line Nebula wrote itself (a refused start, a
  *   pre-run check such as a missing key), shown as it is.
  *
- * Round 3f (GM): ""Couldn’t run the node." followed by "That didn't work."
+ * Design: ""Couldn’t run the node." followed by "That didn't work."
  * says the same thing twice, and reloading doesn't fix a provider failure.
  * On node cards and the Cinema shot panel → "Run the node again. If it keeps
  * failing, Details shows what {Provider} said." With no provider: "Run the
@@ -45,7 +45,7 @@ export const GEMINI_OMNI_REASON = 'Gemini Omni can edit a video but can’t make
  */
 export const RUN_NODE_HEADING = "Couldn’t run the node.";
 /** The one heading over a run Nebula refused at its pre-call check (node
- * data `errorNotStarted`): the card's, as the Agent log's (GM, PR #203 r32:
+ * data `errorNotStarted`): the card's, as the Agent log's (design, PR #203:
  * "the card, bar and log share one heading"). A run that started and failed
  * keeps RUN_NODE_HEADING, and so does a start the backend answered with
  * another status (busy, say): markNodesErrored leaves `errorNotStarted` unset
@@ -54,20 +54,20 @@ export const RUN_NOT_STARTED_HEADING = 'Nebula couldn’t start the run.';
 /** An agent's run stopped at a node only the person may run (the run's error
  * category "waiting": Idol's Hugging Face call with the person's token set).
  * A stop by design, not a failure: its own heading, in the notice style
- * (GM, PR #203 r39 item 1, verbatim). */
+ * (design, PR #203, verbatim). */
 export const WAITING_HEADING = 'Waiting for you to run it';
 /** The run's error category for that stop (backend engine, ProposalNeeded). */
 export const WAITING_CATEGORY = 'waiting';
-/** The Cinema shot panel's heading (GM, round 3f); the scene's card keeps RUN_NODE_HEADING. */
+/** The Cinema shot panel's heading (design); the scene's card keeps RUN_NODE_HEADING. */
 export const GENERATE_SHOT_HEADING = "Couldn’t generate the shot.";
 
 /** Where a run error shows: a node's card, or the Cinema shot panel. */
 export type NodeErrorSurface = 'node' | 'shot';
 
-/** GM's general line on a card, by what is behind Details. Round 3g (GM):
- * the shot panel says "Generate it again." where a card says "Run it again.",
+/** The design's general line on a card, by what is behind Details.
+ * The shot panel says "Generate it again." where a card says "Run it again.",
  * with the same provider (the shot output's errorProvider, only when that
- * provider answered). Error-copy round 5 (design): this follows "Nebula
+ * provider answered). Design: this follows "Nebula
  * couldn’t run the node." with no reason (none is known), so "it" is the node
  * and "Details" is the button's name. */
 export function cardGeneralLine(provider: string | undefined, hasDetails: boolean, surface: NodeErrorSurface = 'node'): string {
@@ -80,7 +80,7 @@ export function cardGeneralLine(provider: string | undefined, hasDetails: boolea
 }
 
 /**
- * The classifier's categories as the clause after "because" (design, error-copy round 5: "Name the provider
+ * The classifier's categories as the clause after "because" (design: "Name the provider
  * wherever it's known. "The provider" is only the fallback."). The frontend has the provider's name where the line
  * is built (the ErrorEvent's `provider`, node data `errorProvider`), and the backend's `friendly` line says only
  * "the provider", so the line is made here from the category, never read from the classifier's text.
@@ -108,11 +108,11 @@ export interface NodeErrorFields {
   friendly?: string;
   person?: string;
   /** The person's line was written for a provider's answer, whose own words
-   * are in `raw` (round 3d). */
+   * are in `raw`. */
   providerText?: boolean;
-  /** The provider the run called (round 3f): GM's general line names it. */
+  /** The provider the run called: the design's general line names it. */
   provider?: string;
-  /** Where it shows (round 3g): the shot panel's heading is GENERATE_SHOT_HEADING
+  /** Where it shows: the shot panel's heading is GENERATE_SHOT_HEADING
    * and its general line says "Generate the shot again." */
   surface?: NodeErrorSurface;
   /** A heading other than the surface's own. */

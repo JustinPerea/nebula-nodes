@@ -3,7 +3,7 @@
  * (`edit.tab`). That is how a tab tells the echo of its own edit from an edit
  * made somewhere else (an agent, another window), which becomes an undo step.
  *
- * Kept across a reload of the same tab (review 19 item 5 on PR #199): Nebula
+ * Kept across a reload of the same tab (PR #199): Nebula
  * lets only the window that saved a tab-local node say its delete, so a
  * reload must not make the tab a stranger to its own nodes. The id lives in
  * sessionStorage, and a page gives it up as it goes (`pagehide` marks it
@@ -14,9 +14,9 @@
  * id is fresh per page load, as before.
  *
  * The free mark alone lets two live tabs share an id when a tab is copied
- * while it shows another page and both then come back (review 20 LOW-4 on
+ * while it shows another page and both then come back (on
  * PR #199). So a live page also holds its id with a Web Lock named after it
- * (`nebula-tab:<id>`), and lets go of it at `pagehide` (review 21 LOW-1): a
+ * (`nebula-tab:<id>`), and lets go of it at `pagehide`: a
  * reload's new page finds it free at once and keeps the id. The claim never
  * waits (`ifAvailable`): a page whose id's lock another live page holds
  * makes a new id at once, on load and when it comes back from the
@@ -245,8 +245,8 @@ if (typeof window !== 'undefined' && typeof window.addEventListener === 'functio
 }
 
 /** The socket's form of the same claim (``?tab=1``): a browser can't set a socket's headers. It
- * only tells the backend this is a tab, not an agent, for what a shared Update shows (PR #204
- * round 4); it never makes the socket the person's (that is the hello's token). */
+ * only tells the backend this is a tab, not an agent, for what a shared Update shows (PR #204);
+ * it never makes the socket the person's (that is the hello's token). */
 export function withTabClaim(url: string): string {
   return `${url}${url.includes('?') ? '&' : '?'}tab=1`;
 }

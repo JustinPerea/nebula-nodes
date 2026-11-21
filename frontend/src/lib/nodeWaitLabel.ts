@@ -1,5 +1,5 @@
 /**
- * The header's wait label, full or short (GM - Design, PR #212 round 6, item 2):
+ * The header's wait label, full or short (design, PR #212):
  * "When the full label would cut the title to fewer than 8 characters,
  * ellipsis included, the label shortens to 'Waiting'." The accessible
  * description and the tooltip keep "Waiting for your OK".

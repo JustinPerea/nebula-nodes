@@ -46,7 +46,7 @@ export function buildCanvasViewReport(
 }
 
 export async function publishCanvasView(report: CanvasViewReport, signal?: AbortSignal): Promise<void> {
-  // A kept canvas isn't Nebula's (review 14 of PR #199, lock-order LOW-2).
+  // A kept canvas isn't Nebula's.
   if (isCanvasKept()) return;
   const response = await apiFetch('/api/canvas/view', {
     method: 'POST',

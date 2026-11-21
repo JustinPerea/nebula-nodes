@@ -3,7 +3,7 @@ import { RequestFailedError } from './errorCopy';
 
 /** Proposals outside the graph (backend services/asset_proposals.py, U16):
  * a cover the person pinned on a project, a board's “Moodboard notes to generators”, curating a
- * Commons reference (services/commons_proposals.py, Q63 b). The person
+ * Commons reference (services/commons_proposals.py). The person
  * decides where they work on that thing: the Projects screen, Moodboard
  * Studio, the Commons. */
 export type AssetProposalKind = 'project' | 'moodboard' | 'commons';
@@ -26,7 +26,7 @@ export interface AssetProposalView {
   change: {
     /** A project's cover: `null` is the automatic one. `lostPin`: the pin it
      * was proposed against while that pin's image is gone (it no longer
-     * counts, Q90 a), so `from` is the automatic cover. `auto`: the image the
+     * counts), so `from` is the automatic cover. `auto`: the image the
      * automatic cover shows now, or null when the project has none. */
     cover?: { from: string | null; to: string | null; fromBy: { kind: string; name: string } | null;
       lostPin?: { url: string; by: { kind: string; name: string } | null }; auto?: string | null };
@@ -43,7 +43,7 @@ export interface AssetProposalView {
   expiresAt: number;
   reason: string | null;
   applied: Record<string, unknown> | null;
-  /** The Update it posted in the corner (Q92 a), or null with no project open. */
+  /** The Update it posted in the corner, or null with no project open. */
   update?: { id: string; projectId: string } | null;
 }
 
@@ -70,7 +70,7 @@ export interface AssetProposalClosedEvent {
 }
 
 /** A refused accept, reject or list: heading + reason like every request's
- * error (GM, error-copy round 2); `status` stays for the store. */
+ * error (design); `status` stays for the store. */
 export class AssetProposalError extends RequestFailedError {
   constructor(status: number, reason: string, options: { heading?: string; detail?: unknown; code?: string | null; sentAt?: number | null; sentBeforePromote?: boolean } = {}) {
     super(options.heading ?? '', status, { reason, detail: options.detail, code: options.code,

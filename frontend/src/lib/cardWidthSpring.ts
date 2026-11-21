@@ -3,10 +3,10 @@ import type { RefObject } from 'react';
 import { useStoreApi } from '@xyflow/react';
 
 /**
- * The layout spring (#226, GM r68): the floating Inspector's height, top and
+ * The layout spring (#226, design): the floating Inspector's height, top and
  * left run on it (panels.css `--inspector-layout-spring`, which a test keeps
  * equal to these), and so does a node card's width when its own content
- * widens it (GM r107).
+ * widens it (design).
  */
 export const LAYOUT_SPRING_MS = 360;
 export const LAYOUT_SPRING_EASING = 'linear(0, 0.079, 0.247, 0.434, 0.606, 0.744, 0.847, 0.919, 0.965, 0.992, 1.006, 1.013, 1.014, 1.012, 1.01, 1.007, 1)';
@@ -50,7 +50,7 @@ function layoutMotion(from: number, to: number): Motion {
  * The layout spring as a damped oscillator (the curve above: about 1.4 %
  * overshoot, peaking at about three quarters of its 360 ms), so a change that
  * lands while a spring runs can carry on from where the card is, at the speed
- * it has, toward the new width (GM r114: typing a rename retargets on each
+ * it has, toward the new width (design: typing a rename retargets on each
  * keystroke, it never restarts from rest).
  */
 const SPRING_DAMPING = 0.806;
@@ -80,7 +80,7 @@ function retargetMotion(from: number, velocity: number, to: number): Motion {
 }
 
 /**
- * GM r107, r114: a card whose width changes from its own content (an Image
+ * Design: a card whose width changes from its own content (an Image
  * Input's preview landing, a rename) springs to its new width on the layout
  * spring, never in one frame. Its preview is `width: 100%; height: auto`, so
  * it scales with the card and keeps its ratio; the ports sit on the card's
@@ -197,7 +197,7 @@ export function useCardWidthSpring(ref: RefObject<HTMLElement | null>, onStart?:
  * the card at its new width when the card's spring starts, and it would not
  * hear of the spring's first frame until the next one (an observer reports a
  * shallower element only once a frame). So the wire would end at the new
- * width for a frame while the port is at the old one (GM r107, seen live:
+ * width for a frame while the port is at the old one (design, seen live:
  * 47 px). This measures the node again, at once, at the width the spring
  * starts from.
  */

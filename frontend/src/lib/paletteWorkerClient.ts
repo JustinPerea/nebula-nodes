@@ -1,5 +1,5 @@
 /** Extract from reference, worked out in a Web Worker so the canvas never
- *  freezes (GM r16 on #208). From round 8c (GM r18 5) the worker reads the
+ *  freezes (design on #208). From (design) the worker reads the
  *  picked file itself (``createImageBitmap`` and an ``OffscreenCanvas``), so
  *  the page does no pixel work: the same draws, in the same order, as the
  *  page's ``readPaletteJob``, and the same pure ``runPaletteJob``, so the
@@ -212,7 +212,7 @@ export function paletteOfFile(file: Blob, k = 6): Promise<PaletteResult> {
   return new Promise((resolve) => place({ file, k, job: null, resolve }));
 }
 
-/** The newest Extract per key, while it runs (review 8 NIT: a finished
+/** The newest Extract per key, while it runs (a finished
  *  key is forgotten, so the map holds only running ones). */
 const latest = new Map<string, number>();
 let latestSeq = 0;

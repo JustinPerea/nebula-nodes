@@ -7,7 +7,7 @@ import { joinedList } from './errorCopy';
 import { PORT_RULES, isPortCompatible } from './portCompatibility';
 
 /**
- * PR #199 round 16 (GM r21, 3): while the canvas is kept, a connection is
+ * PR #199 (design): while the canvas is kept, a connection is
  * the tab's own and isn't sent until [Save as a project] files the canvas,
  * so the checks the server's connect route would have run happen here, on
  * the same rules (backend services/port_contracts.validate_edge_contracts,
@@ -18,7 +18,7 @@ import { PORT_RULES, isPortCompatible } from './portCompatibility';
  * normal tab: the store's onConnect takes the old wire off first, and both
  * decide that with the same predicate, targetHandleAllowsMultiple.)
  *
- * Round 17 (GM r23, 1 and 2): the person's lines are the tab's own, written
+ * Design: the person's lines are the tab's own, written
  * from the types it knows ("Nebula couldn’t connect to “References”. It takes
  * images, not text."); the server's sentences are for agents.
  */
@@ -45,10 +45,10 @@ function inputPort(node: Node<NodeData>, handle: string | null | undefined): Por
 
 /** Whether an input keeps every connection drawn into it (several) or takes
  * one, the new one replacing the old: the store's onConnect and the kept
- * rules both ask this (review 15 kept-wires-ui LOW-2: a port marked
+ * rules both ask this (a port marked
  * `multiple` with maxConnections 1 isn't replaced, so it refuses at its
  * limit instead). The port is found as every lookup finds it: the node's
- * dynamic ports, then its definition's (review 16 kept-ui LOW-1: a Cinema
+ * dynamic ports, then its definition's (a Cinema
  * scene's empty dynamic input list made its Character refs take one). */
 export function targetHandleAllowsMultiple(node: Node<NodeData>, handleId: string | null | undefined): boolean {
   if (!handleId) return false;
@@ -82,7 +82,7 @@ export function wireMakesLoop(source: string, target: string, edges: readonly Ed
 
 const portName = (port: PortShape | undefined, fallback: string) => (port?.label ?? '').trim() || fallback;
 
-/** The person's names for port types (GM r23, 1): lowercase and plural. */
+/** The person's names for port types (design): lowercase and plural. */
 const TYPE_NAMES: Record<string, string> = {
   Image: 'images', Text: 'text', Video: 'video', Audio: 'audio', Mesh: '3D models', Array: 'lists',
   Mask: 'masks', SVG: 'SVG images', World: '3D worlds', CameraPose: 'camera poses', CameraPath: 'camera paths',
@@ -94,7 +94,7 @@ const TYPE_NAMES: Record<string, string> = {
 export const typeName = (type: string | null | undefined): string =>
   (type && TYPE_NAMES[type]) || (type ? type.toLowerCase() : 'something else');
 
-/** What an input takes, in the person's words (GM r25, 1): every type the
+/** What an input takes, in the person's words (design): every type the
  * shared rule lets into it, its own first, by the shared name-list join:
  * an Image input "images and masks", a Text input "text", Any "anything". */
 export function takesTypes(type: string | null | undefined): string {
@@ -103,8 +103,8 @@ export function takesTypes(type: string | null | undefined): string {
   return joinedList([...new Set([type, ...partners])].map(typeName));
 }
 
-/** Connection refusals (GM r23, 1; GM r25, 1): "Nebula couldn’t connect to
- * “References”. It takes images and masks, not text." A loop (GM r26, 3):
+/** Connection refusals (design): "Nebula couldn’t connect to
+ * “References”. It takes images and masks, not text." A loop (design):
  * "Nebula couldn’t connect to “Prompt”. It would make a loop." A missing port names
  * no input, so it says what happened. */
 export const keptWireLoop = (into: PortShape | undefined) =>
@@ -142,13 +142,13 @@ export function checkKeptWire(connection: Connection, nodes: readonly Node<NodeD
   }
   // The loop check needs no special case for the connection a replaced
   // input drops: an edge into the target never lies on a path from the
-  // target back to the source in a graph without loops (review 15: the
+  // target back to the source in a graph without loops (the
   // filter that left it out was dead, mutants F11, W5 and W8).
   if (wireMakesLoop(connection.source, connection.target, edges)) return { ok: false, line: keptWireLoop(into) };
   return { ok: true, duplicate: false };
 }
 
-/** The line for a connection the canvas refused as it was dropped (GM r26,
+/** The line for a connection the canvas refused as it was dropped (design,
  * 3: on kept and normal tabs alike, since a silent drop looks like a missed
  * drop). useIsValidConnection refuses only a wrong kind, a loop or a port it
  * can't find, so this says the same rules' line; a drop the rules would take
@@ -165,7 +165,7 @@ export function refusedConnectionLine(connection: Connection, nodes: readonly No
   return '';
 }
 
-/** The connection a drop the canvas refused would have made (GM r26, 3):
+/** The connection a drop the canvas refused would have made (design):
  * React Flow's final state names the handle it was dropped on; the drag
  * began at `from` (an output when its handleType is 'source'). Null when the
  * drop wasn't a refusal on a handle (a drop on empty space opens the
@@ -177,7 +177,7 @@ export function refusedDropConnection(from: DropStart, state: DropEnd): Connecti
   const to = state.toHandle;
   if (state.isValid !== false || !to?.nodeId) return null;
   // A handle of the same kind (an output on an output, an input on an
-  // input) makes no connection to describe (review 17 LOW-1): sameKindDrop.
+  // input) makes no connection to describe (sameKindDrop).
   if (to.type === from.handleType) return null;
   const fromSource = from.handleType === 'source';
   return {
@@ -188,16 +188,16 @@ export function refusedDropConnection(from: DropStart, state: DropEnd): Connecti
   };
 }
 
-/** GM r28 (1), verbatim: a drop on a handle of the same kind as the one
- * the drag began at. Its own line, never another failure's (review 17
- * LOW-1: React Flow refuses it in Strict mode with a `toHandle`, which was
+/** Design (1), verbatim: a drop on a handle of the same kind as the one
+ * the drag began at. Its own line, never another failure's (React Flow
+ * refuses it in Strict mode with a `toHandle`, which was
  * read as an input and said "isn’t on the node anymore" or a loop). */
 export const SAME_KIND_DROP_LINES = {
   source: 'Nebula couldn’t connect two outputs. Drag from an output to an input.',
   target: 'Nebula couldn’t connect two inputs. Drag from an output to an input.',
 } as const;
 
-/** The line a drop the canvas refused says (GM r26, 3; GM r28, 1), or null
+/** The line a drop the canvas refused says (design), or null
  * when the drop wasn't a refusal on a handle (a drop on empty space opens
  * the connection popup; a release on the handle the drag began at, a
  * click, says nothing). '' for a refusal with nothing to say. */
@@ -227,7 +227,7 @@ function endName(wire: DroppedWire, end: 'source' | 'target', nameOf: (id: strin
   return null;
 }
 
-/** Why one connection was left out, after "because" (GM r23, 2). */
+/** Why one connection was left out, after "because" (design). */
 function droppedReason(wire: DroppedWire, from: string | null, to: string | null): string {
   switch (wire.kind) {
     case 'loop': return 'it connected the node to itself';
@@ -258,8 +258,8 @@ function connectionNamed(from: string | null, to: string | null): string {
 }
 
 /**
- * The connections Save as a project left out, in the tab's words (GM r23,
- * 2; GM r24: the second sentence of the notice that confirms the save, on
+ * The connections Save as a project left out, in the tab's words (design,
+ * 2; design: the second sentence of the notice that confirms the save, on
  * every ending): one is named with why ("Nebula left out the connection from
  * “A” to “B” because it connected the node to itself."); from 2 on, "Nebula
  * left out 2 connections that couldn’t be kept." naming up to 3 by the

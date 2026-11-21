@@ -2,7 +2,7 @@ import { fetchAgentNotes, surfaceKey } from './agentNotes';
 import { EMPTY_LIST, useAgentNotesStore, type SurfaceList } from '../store/agentNotesStore';
 
 /**
- * A board's own Updates for the corner in Moodboard Studio (Justin's Q113 c).
+ * A board's own Updates for the corner in Moodboard Studio (Justin's call).
  * The startup store (store/agentNotesStore.ts) only keeps what the socket
  * says, so no message is missed; loading a board's list and choosing the
  * board in view live here, in the corner's deferred chunk, to keep the

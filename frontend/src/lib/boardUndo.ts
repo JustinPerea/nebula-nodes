@@ -17,7 +17,7 @@ import type { MoodboardOp } from './moodboardEdits';
  * carries the `restore` that redoes it, checked the same way.
  *
  * A board field (Direction, Avoid, the pinned colours, strength...) is a step
- * too (Q83): one per field, made when the field loses focus or a control's
+ * too: one per field, made when the field loses focus or a control's
  * change is done. It has no ops; its undo is the `restore` each PUT that
  * saved it answered with (components/moodboard-studio/fieldSteps.ts).
  *
@@ -40,7 +40,7 @@ export interface BoardUndoStep {
   /** Same-thing edits that join it while it waits (a note being typed). */
   joinKey?: string;
   /** A note's step: it takes the same note's edits until the box loses focus
-   *  (seal), even after part of it was saved (Q83). */
+   *  (seal), even after part of it was saved. */
   open?: boolean;
   /** The server's `undo.ops` for its batch, once it landed. */
   undo: MoodboardOp[] | null;
@@ -94,7 +94,7 @@ interface BoardUndoState {
   record: (key: string, epoch: number, label: string, ops: MoodboardOp[], joinKey?: string, open?: boolean) => string;
   /** A text box lost focus: no step takes more of its typing. */
   seal: (key: string) => void;
-  /** A new field step for `fields` (Q83): it waits until its PUT lands. */
+  /** A new field step for `fields`: it waits until its PUT lands. */
   recordFields: (key: string, epoch: number, label: string, fields: readonly string[]) => string;
   /** The step's batch landed: its undo is `undo` (before any earlier batch's, which it undoes after). */
   landed: (key: string, stepId: string, undo: MoodboardOp[]) => void;

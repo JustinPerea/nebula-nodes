@@ -1,5 +1,5 @@
 /**
- * PR #204 round 18 (GM r28 2): the notice stack is centred above the bottom bar, and it never
+ * PR #204 (design): the notice stack is centred above the bottom bar, and it never
  * draws over an open side panel: it moves clear of one, or narrows to fit. The region measures
  * the side panels that reach down to its band (the notices' line) while it holds a notice, and
  * writes how much each side takes as --notice-left-clearance and --notice-right-clearance on the

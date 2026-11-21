@@ -17,7 +17,7 @@ export function aboutLabel(about: AgentNoteAbout): string {
     case 'removedLook':
     case 'changedWords': return 'Restore';
     case 'proposal': return 'waiting for your OK';
-    // "{agent} has a question." says it already (GM, Q125 item 1).
+    // "{agent} has a question." says it already (design).
     case 'question': return '';
     default: return '';
   }
@@ -44,7 +44,7 @@ export function noteDone(note: Pick<AgentNote, 'about' | 'dismissedAt' | 'actedA
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-/** "12:14" today; "Oct 19, 16:02" on an earlier day (24-hour, as GM's still). */
+/** "12:14" today; "Oct 19, 16:02" on an earlier day (24-hour, as the design's still). */
 export function clockTime(at: string, now: Date): string {
   const when = new Date(at);
   if (!at || Number.isNaN(when.getTime())) return '';
@@ -55,7 +55,7 @@ export function clockTime(at: string, now: Date): string {
   return sameDay ? time : `${MONTHS[when.getMonth()]} ${when.getDate()}, ${time}`;
 }
 
-/** A done card's video length in its thumbnail's corner (Q125 item 3): m:ss. */
+/** A done card's video length in its thumbnail's corner: m:ss. */
 export function clipDuration(seconds: number): string {
   const total = Math.max(0, Math.floor(seconds));
   return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
@@ -161,7 +161,7 @@ export function noteControls(
   return { buttons, state };
 }
 
-/** The question set an Update asks (Q125 item 1), or null for any other update. */
+/** The question set an Update asks, or null for any other update. */
 export function questionSetId(note: Pick<AgentNote, 'about' | 'actions' | 'questionsId'>): string | null {
   if (note.about !== 'question') return null;
   if (note.questionsId) return note.questionsId;
@@ -218,9 +218,9 @@ export function roomBelow(
   return limit - box.top;
 }
 
-/** GM r108 c: Open on a reply's Update keeps its visible word and says what
+/** Design: Open on a reply's Update keeps its visible word and says what
  * it opens, starting with it: "Open Claude Code’s reply in “Coast”" (an
- * unnamed project reads “Untitled”, GM r108 d). */
+ * unnamed project reads “Untitled”, design). */
 export function threadOpenLabel(label: string, author: string, projectName: string | null | undefined): string {
   return `${label} ${author}’s reply in “${(projectName ?? '').trim() || 'Untitled'}”`;
 }

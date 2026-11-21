@@ -1,7 +1,7 @@
 import { useLayoutEffect, useSyncExternalStore } from 'react';
 
 /**
- * GM r13 (2), PR #204 round 9, verbatim: "The band reserves the tallest single notice (three
+ * Design (2), PR #204, verbatim: "The band reserves the tallest single notice (three
  * lines). Two notices covering the picker's last row breaks the stacking rule, since notices
  * shouldn't land on an open popover's content. While a capped popover is open, show only the
  * newest notice in the band. The others wait and appear when it's dismissed or the popover

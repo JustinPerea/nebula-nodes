@@ -1,23 +1,23 @@
 import { useSyncExternalStore } from 'react';
 
 /**
- * The app's one notice region holds one stack (GM - Design, 2026-10-23: "One
+ * The app's one notice region holds one stack (design, 2026-10-23: "One
  * region, one stack, and nothing else draws toasts."). Each kind of item has
  * a slot in it, listed here top to bottom as the column draws them, so the
  * order never depends on which item mounted first. Bottom up: the canvas
  * notice (its Undo or Redo, an error) right above the bar; then a restore's
- * late count, above the newer notice it arrived after (GM - Design, round 4:
+ * late count, above the newer notice it arrived after (design:
  * "With two notices showing, put the late line above the newer one, so the
  * notice with a button stays nearest the bar."); then a written line that
- * arrived while the canvas notice offers Undo or Redo (review 7, L3: it
+ * arrived while the canvas notice offers Undo or Redo (it
  * never replaces the offer; the same rule puts it above); then the scenes'
- * stop lines, a state above every event (GM r28: one line per cause, never
+ * stop lines, a state above every event (design: one line per cause, never
  * pushed out); then the toasts about the person's own last action (an asset
  * moved to the trash, a board step, a pin that couldn't save, a project moved
- * to the trash), and a scene's clash prompt (GM r9 decision 2: it waits for
+ * to the trash), and a scene's clash prompt (design: it waits for
  * Keep mine or Use theirs); then the lines about the
  * app and the agents (the project an agent switched to, a project over the
- * save limit pausing or resuming its saves (Q118), the tab that isn't the
+ * save limit pausing or resuming its saves, the tab that isn't the
  * person's); then the proposal's run-later notice; and on top the proposal
  * bar ("The order from the bottom up is notices, then the proposal bar.").
  *

@@ -105,7 +105,7 @@ export interface RunRecord {
   /** When each node's result landed in this tab, for this tab's own run
    *  (node id -> epoch ms): its output, its skip or its failure. Nebula
    *  compares a node's landing with an agent's newer result by this, not by
-   *  the whole run's end (review 20 of PR #199, NIT-2). A renumber moves the
+   *  the whole run's end. A renumber moves the
    *  keys with the node (projectStore remapSnapshotIds). */
   nodeLandedAt?: Record<string, number>;
 }
@@ -603,7 +603,7 @@ export function applyProviderRecoveriesToHistory(
  * fields paramsWithProviderRecovery writes it to: an Environment's
  * `resume_operation_id` or `existing_world_id`, an Export's
  * `resume_operation_id`. What the tab matches a record by when it can't tell
- * the record's project (review 20 of PR #199, LOW-2): never by node id alone. */
+ * the record's project: never by node id alone. */
 export function paramsHoldRecoveryId(
   definitionId: string,
   params: Record<string, unknown> | undefined,
@@ -762,7 +762,7 @@ export const WORLD_LABS_RECOVERY_READY_NOTE =
   'Recovery ID restored. Recover resumes the accepted World Labs work without submitting a new paid operation.';
 
 export const WORLD_LABS_RECONNECTING_NOTE =
-  // GM, round 3f.
+  // The design's words for a reconnecting World Labs run.
   "Reconnecting to this World Labs run. You can’t run it again until Nebula hears back about it.";
 
 export const EXECUTION_RECONNECTING_NOTE =

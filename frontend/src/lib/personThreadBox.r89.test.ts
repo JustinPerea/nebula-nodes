@@ -21,7 +21,7 @@ import {
   withdrawnLine,
 } from './personThreadBox';
 
-/** GM r89 on #225 review 2 (items 1, 3, 4, 5) and review 2's NIT-1 and F10: the pure parts. */
+/** Design on #225: the pure parts. */
 
 const CLAUDE_CODE = { id: 'a1', name: 'Claude Code', color: '#E8825A', verified: true };
 const KEY = '0123456789ab';
@@ -34,7 +34,7 @@ function listener(over: Partial<ChannelListener> = {}): ChannelListener {
     since: 100, seenAt: 100, session: { key: KEY, ordinal: 1 }, ...over };
 }
 
-describe('r89.1: one rule for what counts as a reply', () => {
+describe('one rule for what counts as a reply', () => {
   it('a reply and a pin answer count; the person’s rows, pins, questions, proposals and notes don’t', () => {
     expect(KINDS.filter((kind) => countsAsReply({ kind }))).toEqual(['reply', 'pinReply']);
   });
@@ -50,8 +50,8 @@ describe('r89.1: one rule for what counts as a reply', () => {
   });
 });
 
-describe('r89.3: why the "Answering" chip went', () => {
-  it('the cause from the set’s status; none while open or for a set this tab no longer holds (F13)', () => {
+describe('why the "Answering" chip went', () => {
+  it('the cause from the set’s status; none while open or for a set this tab no longer holds', () => {
     expect(answerGoneCause('withdrawn')).toBe('withdrawn');
     expect(answerGoneCause('answered')).toBe('answered');
     expect(answerGoneCause('dismissed')).toBe('closed');
@@ -59,19 +59,19 @@ describe('r89.3: why the "Answering" chip went', () => {
     expect(answerGoneCause(undefined)).toBeNull();
   });
 
-  it('GM r89.3’s lines, word for word; the withdrawn one names the asker', () => {
+  it('the lines, word for word; the withdrawn one names the asker', () => {
     expect(ANSWERED_ELSEWHERE_LINE).toBe('You answered this question in another tab. Send again to post your text as a message every agent can read.');
     expect(CLOSED_ELSEWHERE_LINE).toBe('You closed this question in another tab. Send again to post your text as a message every agent can read.');
     expect(answerGoneLine({ cause: 'answered', label: 'Claude' })).toBe(ANSWERED_ELSEWHERE_LINE);
     expect(answerGoneLine({ cause: 'closed', label: 'Claude' })).toBe(CLOSED_ELSEWHERE_LINE);
     expect(answerGoneLine({ cause: 'withdrawn', label: 'Claude Code · 2' })).toBe(withdrawnLine('Claude Code · 2'));
-    // GM r94.1 (F13): a set this tab no longer holds, true whatever the cause.
+    // Design: a set this tab no longer holds, true whatever the cause.
     expect(GONE_ELSEWHERE_LINE).toBe('This question is closed. Send again to post your text as a message every agent can read.');
     expect(answerGoneLine({ cause: 'gone', label: 'Claude' })).toBe(GONE_ELSEWHERE_LINE);
   });
 });
 
-describe('r89.4: one label for the field and the lock line', () => {
+describe('one label for the field and the lock line', () => {
   it('ready: the recipient; stopped: the listener that stopped; not connected: the product', () => {
     expect(availabilityLabel(availability([listener()], false, null, {}))).toBe('Claude Code');
     expect(availabilityLabel(availability([listener({ session: { key: KEY, ordinal: 2 } })], false, null, {}))).toBe('Claude Code · 2');
@@ -90,7 +90,7 @@ describe('r89.4: one label for the field and the lock line', () => {
   });
 });
 
-describe('r89.5: the shared cut keeps the closers of what its words open', () => {
+describe('the shared cut keeps the closers of what its words open', () => {
   const FOLD = 'Claude Code is working · Changed “Prompt” on “Hero shot”';
 
   it('the working fold: “Changed “Prompt” on “Hero…””', () => {
@@ -125,7 +125,7 @@ describe('r89.5: the shared cut keeps the closers of what its words open', () =>
   });
 });
 
-describe('review 2, NIT-1: straight quotes pair with themselves', () => {
+describe('straight quotes pair with themselves', () => {
   it('keeps "warm" whole; an open one gets its closer', () => {
     expect(cutAtWord('Use the "warm" palette for the hero shot please', byLength(16))).toBe('Use the "warm"…');
     expect(cutAtWord('Use the "warm palette" for the hero', byLength(16))).toBe('Use the "warm…"');
@@ -139,7 +139,7 @@ describe('review 2, NIT-1: straight quotes pair with themselves', () => {
   });
 });
 
-describe('review 2, F10: a pin’s run ends on a reply on that pin only', () => {
+describe('a pin’s run ends on a reply on that pin only', () => {
   it('a pin answer on another pin leaves the run going', () => {
     const pin: ThreadRow = { id: 'pin1', kind: 'pin', at: 1_000, text: 'warmer', pinId: 'pin_1' };
     const other: ThreadRow = { id: 'pr2', kind: 'pinReply', at: 2_000, text: 'ok', pinId: 'pin_2', agent: CLAUDE_CODE };
@@ -149,7 +149,7 @@ describe('review 2, F10: a pin’s run ends on a reply on that pin only', () => 
   });
 });
 
-describe('GM r94: a quote that ends in its own mark takes no period after it', () => {
+describe('a quote that ends in its own mark takes no period after it', () => {
   it.each(['.', '?', '!'])('typed words ending in “%s”', (mark) => {
     const words = `From the other tab${mark}`;
     expect(answeredLine([{ choices: [], text: words }])).toBe(`You answered “${words}”`);

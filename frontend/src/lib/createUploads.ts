@@ -33,7 +33,7 @@ async function finishUpload(sessionId: string, id: string, attempt: string) {
     useCreateDraftStore.getState().updateDraft(sessionId, (draft) => {
       if (!draft.uploads.some((upload) => upload.id === id && upload.attempt === attempt && upload.status === 'uploading')) return {};
       return { uploads: draft.uploads.map((upload) => upload.id === id
-        // uploadReference's error names the file and the reason (error-copy round 2).
+        // uploadReference's error names the file and the reason.
         ? { ...upload, status: 'error', error: failureMessage(error, `Couldn’t upload ${upload.name ? quoted(upload.name) : 'the file'}.`) }
         : upload) };
     });

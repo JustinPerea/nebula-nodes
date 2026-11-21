@@ -43,35 +43,35 @@ export interface AgentNote {
   actedAt: string | null;
   /** The label of the action that ran ("Undo the sort"), once one did. */
   actedWith: string | null;
-  /** An asset proposal's Update (Q92 a), once the proposal closed: when, and
+  /** An asset proposal's Update, once the proposal closed: when, and
    * how it ended in one short line ("Accepted: the cover changed"). */
   resolvedAt?: string | null;
   outcome?: string | null;
-  /** A question set's Update (Q125 item 1): the set it asks. Its questions
+  /** A question set's Update: the set it asks. Its questions
    * and answers are never on the Update (store/agentQuestionsStore.ts). */
   questionsId?: string | null;
   /** That set's count of questions (1 to 5) and when it was asked (ms), from
    * its ref, never the text: what a held tab's Agents panel counts and orders
-   * by (GM, 2026-10-29). Older refs have neither. */
+   * by (design, 2026-10-29). Older refs have neither. */
   questionsCount?: number | null;
   questionsSince?: number | null;
-  /** A done card (Q125 item 3): the agent's run that ended, as Nebula posted it. */
+  /** A done card: the agent's run that ended, as Nebula posted it. */
   run?: AgentNoteRun | null;
   /** A proposal's Update: what its structured ref says of the change (backend
    * agent_notes.proposal_detail). Only the kind of cover and the edit count. */
   proposal?: AgentNoteProposal | null;
 }
 
-/** A proposal Update's ref beyond its id and target (GM, PR #200 follow-up 2):
+/** A proposal Update's ref beyond its id and target (design, PR #200):
  * a cover's kind, never which image; a Commons ask's count of edits. */
 export interface AgentNoteProposal {
   cover?: 'automatic' | 'image';
   changes?: number;
-  /** A Commons ask only to take a reference out of the inbox (GM, PR #202 r1). */
+  /** A Commons ask only to take a reference out of the inbox (design, PR #202). */
   inbox?: true;
-  /** PR #202 review 2 LOW-A: when the ask was made (its createdAt, ms), so a held tab orders as the promoted line does. */
+  /** When the ask was made (PR #202; its createdAt, ms), so a held tab orders as the promoted line does. */
   since?: number;
-  /** PR #204 review 1 MEDIUM-1: an asset Update one agent's open asks on one
+  /** PR #204: an asset Update one agent's open asks on one
    * target share says how many (`asks`) and the oldest one's createdAt
    * (`firstSince`), so a held tab counts and orders as the promoted one does. */
   asks?: number;
@@ -130,7 +130,7 @@ export interface AgentNotesEvent {
 
 // palette-exempt: per-agent identity colour fallback, not a status
 export const DEFAULT_AGENT_COLOR = '#E8825A';
-/** Argon's lavender, the reader's colour in GM's mockups. */
+/** Argon's lavender, the reader's colour in the design's mockups. */
 export const READER_COLOR = '#B4A7FF';
 export const MAX_NOTE_BUTTONS = 2;
 
@@ -224,7 +224,7 @@ function sanitizeActions(raw: unknown): AgentNoteAction[] {
     const action = item as Record<string, unknown>;
     const op = action.op as Record<string, unknown> | undefined;
     if (typeof action.label !== 'string' || !op || typeof op !== 'object' || typeof op.kind !== 'string') continue;
-    // GM r9 3 (#204 round 7): an old stored Update's Accept and Reject are no longer offered.
+    // Design, PR #204: an old stored Update's Accept and Reject are no longer offered.
     // They become one Review of the same canvas proposal, so every row decides through the
     // one full view (the bar). `legacy` lets the corner grey it when the proposal is gone.
     if (op.kind === 'proposal.accept' || op.kind === 'proposal.reject') {
@@ -312,7 +312,7 @@ function base(surface: AgentNotesSurface): string {
 
 export async function fetchAgentNotes(surface: AgentNotesSurface): Promise<AgentNotesListing> {
   // This tab says it is a tab (X-Nebula-Tab, which agents never send), so a shared Update keeps
-  // what it stands for here even before the tab is connected as the person (PR #204 round 4).
+  // what it stands for here even before the tab is connected as the person (PR #204).
   const response = await apiRequest("Couldn’t load the updates.", base(surface), { headers: { [TAB_HEADER]: TAB_ID } });
   return (await response.json()) as AgentNotesListing;
 }

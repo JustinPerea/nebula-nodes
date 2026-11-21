@@ -18,14 +18,14 @@ export interface PaletteCommand {
   keywords?: string;
   /** When false the command is shown disabled and cannot be run. */
   enabled?: boolean;
-  /** GM PR #205 r2 item 3: why a locked row is locked, shown as the row's
+  /** Design, PR #205: why a locked row is locked, shown as the row's
    * own secondary text (a tooltip never shows on a row reached by the arrow
    * keys) and named by its aria-describedby. */
   lockLine?: string;
   /** The palette stays open: the command changes what it shows ("Ask the
-   * agent…" opens its agent prompt; review 11). Others close it first. */
+   * agent…" opens its agent prompt). Others close it first. */
   keepsOpen?: boolean;
-  /** Round 23 (review 22, L-3): the command changes the canvas (run, load,
+  /** The command changes the canvas (run, load,
    * ask the agent, insert a node), so it takes the canvas lock: disabled,
    * marked and refused while the tab follows an agent's switch or Nebula is
    * offline. Commands without it only look (fit, focus, panels, views) or
@@ -51,7 +51,7 @@ export interface PaletteContext {
   running?: boolean;
   /** What the canvas waits for (lib/runLock's canvasWait): a locked Run,
    * Save or Load says that wait's line, an import's or Create's preparation
-   * as well as a run's (GM PR #205 r3 item 2). `running` means 'run'. */
+   * as well as a run's (design PR #205). `running` means 'run'. */
   wait?: LockWait | null;
   /** Existing nodes on the canvas, for search-and-focus. */
   canvasNodes: Array<{ id: string; label: string }>;
@@ -69,7 +69,7 @@ const PANELS: Array<[PanelKey, string]> = [
   ['history', 'run history'],
 ];
 
-/** A row a wait locks says its lock line (GM PR #205 r2 item 3, r3 item 2). */
+/** A row a wait locks says its lock line (design PR #205). */
 function runLocked(ctx: PaletteContext, enabled: boolean, verb: string): Pick<PaletteCommand, 'lockLine'> {
   const wait = ctx.wait ?? (ctx.running ? 'run' : null);
   return wait && !enabled ? { lockLine: lockLine(verb, wait) } : {};
@@ -77,7 +77,7 @@ function runLocked(ctx: PaletteContext, enabled: boolean, verb: string): Pick<Pa
 
 export function buildCommands(ctx: PaletteContext): PaletteCommand[] {
   const cmds: PaletteCommand[] = [
-    // GM PR #205 r2 item 3: "canvas", the word the rest of the app uses.
+    // Design, PR #205: "canvas", the word the rest of the app uses.
     { id: 'action:run', title: 'Run canvas', group: 'Actions', keywords: 'execute play graph', enabled: ctx.canRun, acts: true, perform: ctx.runGraph,
       ...runLocked(ctx, ctx.canRun, RUN_LOCK_VERBS.runCanvas) },
     { id: 'action:save', title: 'Save canvas', group: 'Actions', keywords: 'export json download graph', enabled: ctx.canSave, perform: ctx.save,

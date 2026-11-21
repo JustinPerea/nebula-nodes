@@ -4,7 +4,7 @@
  * returns it as `previewSize`, and a node it creates holds it). The
  * Inspector's preview takes it as `width`/`height`, which gives the `<img>`
  * its aspect ratio before it decodes, so the floating Inspector measures its
- * whole body on the first frame it opens (#226, GM r82). Once the image has
+ * whole body on the first frame it opens (#226, design). Once the image has
  * loaded its own ratio wins (CSS `aspect-ratio: auto w / h`), so a stale size
  * never distorts it.
  */

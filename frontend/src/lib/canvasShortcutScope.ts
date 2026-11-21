@@ -11,7 +11,7 @@ const CANVAS_OWNED = [
   '.workspace-rail',
   '.workspace-header--canvas',
   '.panel-launcher--chat',
-  // The Updates chip and its card (on every screen, Q107 a) keep no keys of
+  // The Updates chip and its card (every screen) keep no keys of
   // their own but Escape; their open list is a dialog, which does.
   '.agent-notes-chip',
   '.agent-note-card',
@@ -23,7 +23,7 @@ const CANVAS_OWNED = [
 ].join(', ');
 
 /**
- * Whether a modal dialog is shown (review 9, nit a): one inside a hidden,
+ * Whether a modal dialog is shown: one inside a hidden,
  * inert or display:none ancestor is on the page but not in front of anyone,
  * so it never holds the keys.
  */
@@ -52,7 +52,7 @@ function layerOf(dialog: Element): number | null {
 /**
  * Whether a modal dialog is open anywhere in the app (the paid placeholder
  * confirm, a prompt, the keyboard shortcuts…). While one is, no key acts on
- * the graph behind it, wherever focus is: review 7, M-1 found focus could fall
+ * the graph behind it, wherever focus is: found focus could fall
  * to the page under an open confirm, and Cmd+Enter then ran the graph behind
  * it. Read from the page, so every dialog that says it is modal counts,
  * including ones added later.
@@ -61,7 +61,7 @@ export function isModalDialogOpen(): boolean {
   return shownModalDialogs().length > 0;
 }
 
-/** The modal dialog on top, or null: the last one opened (review 9, nit b),
+/** The modal dialog on top, or null: the last one opened,
  * by ModalPortal's layers, wherever it sits on the page; a modal outside a
  * layer is above what comes before it on the page, as before. */
 export function topModalDialog(): Element | null {
@@ -75,7 +75,7 @@ export function topModalDialog(): Element | null {
 
 /**
  * Whether a document- or window-wide key listener yields because a modal
- * dialog is open (review 8, L-d: one guard for every one of them, so no key
+ * dialog is open (one guard for every one of them, so no key
  * acts behind an open dialog, focus on the page included). With no `owner`
  * (the canvas, Moodboard Studio, the video editors, the rail), any open modal
  * dialog blocks it. With one (a dialog's or a popup's own Escape, Tab or

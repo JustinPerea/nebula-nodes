@@ -2,7 +2,7 @@ import { groupedCount } from './groupedCount';
 
 /**
  * What the canvas says when nodes are deleted and when undo brings them back
- * (GM - Design, 2026-10-23, item 1): "Make undo complete. ... When it lands,
+ * (design, 2026-10-23): "Make undo complete. ... When it lands,
  * every delete path becomes "Deleted {n} nodes." / "Deleted the node." with
  * Undo. One condition: reopen a proposal only if it's still valid against the
  * restored graph. If one can't be reopened, the Undo notice says so:
@@ -12,7 +12,7 @@ import { groupedCount } from './groupedCount';
  * RemovalRecord per node: the pins it detached, the proposals it closed), the
  * canvas keeps the records in the undo step, and the restore that brings the
  * nodes back names them again (backend main._undo_removals checks each one).
- * The delete confirm of round 3f is gone with it.
+ * The delete confirm of an earlier version is gone with it.
  */
 
 /** One delete of one node, as the backend answered it (DELETE
@@ -21,7 +21,7 @@ import { groupedCount } from './groupedCount';
  * clear starts them again at n1), so a record is bound to the project and
  * model it was made for, and a later delete of the same node names the one
  * it supersedes (`replaces`): only that record is renewed, never one that
- * merely has the same node id (second review). */
+ * merely has the same node id. */
 export interface RemovalRecord {
   id: string;
   nodeId: string;
@@ -32,13 +32,13 @@ export interface RemovalRecord {
   replaces?: string;
 }
 
-/** GM - Design, round 12 addendum (a), verbatim: a Cmd+Z pressed while a
+/** Design, verbatim: a Cmd+Z pressed while a
  * change was still on its way to Nebula that the canvas dropped instead of
  * undoing something else (a newer step landed on top, the 15 s limit, a
  * project switch). No button, and no promise that a retry works. */
 export const DROPPED_UNDO_TEXT = 'Nothing was undone. Your last change was still saving.';
 
-/** GM, PR #198 r39 item 3 and r40 item 2, verbatim: an Undo pressed while a
+/** Design, PR #198, verbatim: an Undo pressed while a
  * Delete was still on its way waits for the Delete's answer, then restores.
  * When that restore is refused or fails, or the Delete gives no answer in
  * 15 s, one neutral line names what didn't come back, read live (the card
@@ -49,8 +49,8 @@ export function bringBackFailedText(names: string): string {
   return `Nebula couldn\u2019t bring back ${names}. Try Undo again.`;
 }
 
-/** GM - Design, round 13, verbatim: several Cmd+Z held together, some of
- * which went through and some of which were dropped (review 12, L-1). The
+/** Design, verbatim: several Cmd+Z held together, some of
+ * which went through and some of which were dropped. The
  * restore's own line comes first ("Restored the node."), then this; Redo
  * stays, since something was restored. DROPPED_UNDO_TEXT is only for a batch
  * in which no undo went through. */
@@ -58,7 +58,7 @@ export function skippedUndoText(count: number): string {
   return skippedPressText(count, 0);
 }
 
-/** GM - Design, round 14, item 3, verbatim (review 13, L-4): the dropped
+/** Design, verbatim: the dropped
  * Cmd+Z and Cmd+Shift+Z presses counted apart, undos first, a kind with none
  * left out: "1 redo was skipped while a change was saving.", "2 undos and 1
  * redo were skipped while a change was saving." It follows the line of the
@@ -72,7 +72,7 @@ export function skippedPressText(undos: number, redos: number): string {
   return `${parts.join(' and ')} ${one ? 'was' : 'were'} skipped while a change was saving.`;
 }
 
-/** GM - Design, round 14, item 3: no press went through and every one
+/** Design: no press went through and every one
  * dropped was a redo. Undos only, or both kinds: DROPPED_UNDO_TEXT. */
 export const DROPPED_REDO_TEXT = 'Nothing was redone. Your last change was still saving.';
 
@@ -88,7 +88,7 @@ export function notReopenedText(count: number): string {
 }
 
 /** What couldn't go back with the nodes. A pin counts only when its node came
- * back as another model (GM, 2026-10-23): "1 pin couldn't be re-attached.",
+ * back as another model (design, 2026-10-23): "1 pin couldn't be re-attached.",
  * and with proposals "1 pin and 2 proposals couldn't be restored.". */
 export function notRestoredText(notReattached: number, notReopened: number): string {
   if (notReattached === 0) return notReopened > 0 ? notReopenedText(notReopened) : '';
@@ -101,11 +101,11 @@ export function notRestoredText(notReattached: number, notReopened: number): str
 /**
  * What a restore's answer couldn't put back, on a line of its own, when the
  * "Restored …" line no longer applies because the person moved on before the
- * answer arrived (GM - Design, 2026-10-23, round 3: "Yes, show it as a plain
- * notice with no button, using the standard timeout ... Losing that count
- * silently is the one thing to avoid.").
+ * answer arrived (design, 2026-10-23: show it as a plain
+ * notice with no button, using the standard timeout; losing that count
+ * silently is the one thing to avoid).
  *
- * GM's lines, round 4, verbatim: "LATE LINES: drop the node word, which fixes
+ * The design's lines, verbatim: "LATE LINES: drop the node word, which fixes
  * the mismatch for good. "After the restore, 1 proposal couldn't be
  * reopened." / "…{n} proposals couldn't be reopened." "After the restore, 1
  * pin couldn't be re-attached." / "…{n} pins couldn't be re-attached."

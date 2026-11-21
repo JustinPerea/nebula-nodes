@@ -14,7 +14,7 @@ import { canonicalBackendAssetUrls } from './backend';
  * these live here, in the startup entry, and graphFile re-exports them.
  * The .nebula writer is here too (serializeGraph, saveBlobWithPicker): a
  * stale tab's unsaved edits that Nebula refused for good are downloaded with
- * it (Q116 a), and that screen shows up when Nebula was updated under the
+ * it, and that screen shows up when Nebula was updated under the
  * tab, exactly when an old build's deferred chunk may be gone.
  */
 
@@ -35,8 +35,8 @@ export const GRAPH_BUNDLE_MAX_IMPORT_BYTES = GRAPH_BUNDLE_MAX_TOTAL_BYTES + 16 *
 
 // A graph's limits (graphFile.ts re-exports them): the node, wire, depth and
 // value counts the shape walk (assertGraphComplexityWithinLimits) allows. Its
-// size has no limit of its own: a plain .nebula (Q118) and a bundle's
-// graph.json (Q121 a; the backend's RESTORE_MAX_GRAPH_BYTES) both open up to
+// size has no limit of its own: a plain .nebula and a bundle's
+// graph.json (the backend's RESTORE_MAX_GRAPH_BYTES) both open up to
 // GRAPH_BUNDLE_MAX_IMPORT_BYTES, and a graph over the 16 MiB save limit opens
 // with saving paused.
 export const GRAPH_MAX_NODES = 10_000;
@@ -45,8 +45,8 @@ export const GRAPH_MAX_DEPTH = 64;
 export const GRAPH_MAX_VALUES = 1_000_000;
 
 /** A graph past one of those limits (a written line: the save or load alert
- * puts its own heading over it; error copy round 3e). One error, two fields
- * (GM PR #205 r10 item 4): `reason`, the person's line, worded for where the
+ * puts its own heading over it; error copy). One error, two fields
+ * (design PR #205): `reason`, the person's line, worded for where the
  * check ran; `detail`, the engine's exact reason, for the log. */
 export class GraphStructureLimitError extends FailureNotice {
   readonly detail: string;
@@ -66,17 +66,17 @@ export class GraphStructureLimitError extends FailureNotice {
  * canvas coming in (Import CLI canvas). */
 export type GraphCheckUse = 'save' | 'open' | 'import';
 
-/** The step a Save's shape line offers, by the newest Undo step (GM PR #205
- * r13 item 1): the person's, an agent's (named as "Undid Claude’s edit."
+/** The step a Save's shape line offers, by the newest Undo step (design, PR #205):
+ * the person's, an agent's (named as "Undid Claude’s edit."
  * names it), or none at all, when there is nothing to undo. */
 export type SaveUndoStep = { kind: 'person' } | { kind: 'agent'; name: string } | { kind: 'unknown' } | { kind: 'none' }
-  // GM PR #205 r16 item 1: the canvas fits again only after this many Undos (2 or more).
+  // Design, PR #205: the canvas fits again only after this many Undos (2 or more).
   | { kind: 'steps'; count: number };
 
-/** A Save's shape line (GM PR #205 r10 item 4, r13 item 1): the cause, then
+/** A Save's shape line (design PR #205): the cause, then
  * the Undo that can fix it, never one that can't. */
 export function saveShapeLine(kind: 'complex' | 'value', step: SaveUndoStep = { kind: 'person' }): string {
-  // GM PR #205 r12 item 1: the "because" form, one whole line (no heading over it).
+  // Design, PR #205: the "because" form, one whole line (no heading over it).
   const cause = kind === 'complex' ? 'Nebula couldn’t save the canvas because it’s too complex.'
     : 'Nebula couldn’t save the canvas because part of it holds a value it can’t store.';
   if (step.kind === 'none') return cause;
@@ -85,7 +85,7 @@ export function saveShapeLine(kind: 'complex' | 'value', step: SaveUndoStep = { 
   return `${cause} Undo ${whose} last change, then try again.`;
 }
 
-/** GM PR #205 r9 item 2, r12 item 1: the node and connection limits, in the
+/** Design, PR #205: the node and connection limits, in the
  * person's words ("edges" is ours). One whole line in the "because" form, with
  * the limit and, where the person can act, a step: a Save says to delete some,
  * a file or the CLI's canvas (which the person can't edit in the app) has none.
@@ -99,7 +99,7 @@ const tooManyLine = (limit: number, noun: 'nodes' | 'connections', use: GraphChe
 export const tooManyNodesLine = (limit: number, use: GraphCheckUse = 'save') => tooManyLine(limit, 'nodes', use);
 export const tooManyEdgesLine = (limit: number, use: GraphCheckUse = 'save') => tooManyLine(limit, 'connections', use);
 
-/** GM PR #205 r10 item 4 and its addendum: the shape walk's reasons, which
+/** Design, PR #205 and its addendum: the shape walk's reasons, which
  * the person can't act on, as a cause they understand. Too many values or
  * too deep: `complex`; a non-finite number or a circular value: `value`.
  * A Save can be undone into shape; a file can't be fixed in Nebula, so its
@@ -113,7 +113,7 @@ const SHAPE_LINES: Record<GraphCheckUse, Record<'complex' | 'value', string>> = 
     complex: 'This file is too complex to open.',
     value: 'Part of this file holds a value Nebula can’t read.',
   },
-  // GM PR #205 r13 item 2: the CLI's canvas isn't a file the person picked.
+  // Design, PR #205: the CLI's canvas isn't a file the person picked.
   import: {
     complex: 'This canvas is too complex to open.',
     value: 'Part of this canvas holds a value Nebula can’t read.',
@@ -121,7 +121,7 @@ const SHAPE_LINES: Record<GraphCheckUse, Record<'complex' | 'value', string>> = 
 };
 
 /** One of those lines, for a check that ran somewhere else (the backend's
- * restore of a bundle's graph.json, GM PR #205 r11 item 2). */
+ * restore of a bundle's graph.json, design, PR #205). */
 export const shapeLine = (use: GraphCheckUse, kind: 'complex' | 'value'): string => SHAPE_LINES[use][kind];
 
 /** True when JSON.stringify failed because the text is longer than the engine
@@ -136,7 +136,7 @@ export function isStringLengthLimit(error: unknown): boolean {
   return error instanceof RangeError && !/call stack/i.test(error.message);
 }
 
-/** GM - Design, 2026-10-25: the line under "Couldn't download your edits." and
+/** Design, 2026-10-25: the line under "Couldn't download your edits." and
  * "Couldn't download a copy." for that case. It matches Save graph's "It's too
  * big to save in a browser.", so the two read as a pair with only the verb
  * changed. */
@@ -250,7 +250,7 @@ export function assertGraphComplexityWithinLimits(value: unknown, use: GraphChec
  * value once, the deepest depth (from `baseDepth`, the value's own depth in
  * the file), and whether it holds a value the walk refuses (a non-finite
  * number, a circular value). For measuring a canvas a node at a time: the
- * Undo that fixes a refused Save (GM PR #205 r16 item 1). */
+ * Undo that fixes a refused Save (design PR #205). */
 export interface ShapeMeasure { count: number; depth: number; bad: boolean }
 export function measureShape(value: unknown, baseDepth = 0): ShapeMeasure {
   type Frame = { kind: 'value'; value: unknown; depth: number } | { kind: 'children'; iterator: Iterator<unknown>; depth: number }
@@ -407,7 +407,7 @@ export interface SaveFileType {
  * A picker that fails before a file was chosen falls back to the plain
  * download. With `reportWriteFailure`, a write that fails after the person
  * chose the file (a full disk, say) rejects instead, after discarding the
- * partial file: the unsaved edits' download (Q116 a, GM's line 2) must say
+ * partial file: the unsaved edits' download (the design's line 2) must say
  * the file wasn't written, and a plain download in its place could fail just
  * as silently while the screen said the edits were saved.
  */
@@ -463,7 +463,7 @@ class SaveFileWriteError extends Error {
 const UNSAFE_FILE_NAME = /[\u0000-\u001f\u007f/\\:*?"<>|]+/g;
 const FILE_NAME_MAX = 80;
 
-/** The unsaved edits file's name (Q116 a): the project's name made safe for a
+/** The unsaved edits file's name: the project's name made safe for a
  * file name, then " - unsaved edits.nebula". */
 export function editsFileName(projectName: string): string {
   const safe = projectName.normalize('NFC').replace(UNSAFE_FILE_NAME, ' ').replace(/\s+/g, ' ')
@@ -488,8 +488,8 @@ function editsFile(snapshot: Pick<ProjectSnapshot, 'nodes' | 'edges' | 'viewport
  * shape walk's limits, checked the way the reader checks a plain .nebula
  * (inspectGraphFileWithinLimit, then the walk over the parsed file). The
  * backend refuses a recovered copy past its own versions of those limits
- * (413), so a held copy can be one Load graph won't open (Q116 a review).
- * Since Q118 a copy over the 16 MiB save limit opens (and the canvas pauses
+ * (413), so a held copy can be one Load graph won't open (review).
+ * Since copy over the 16 MiB save limit opens (and the canvas pauses
  * saving it), so size alone fails only past the bundle ceiling.
  * `file` is `text` parsed, the form the reader walks. */
 export function editsFileReopens(text: string, file: unknown): boolean {
@@ -507,7 +507,7 @@ export function editsFileReopens(text: string, file: unknown): boolean {
  * rename it in the save picker), and whether Load graph will open it. */
 export interface SavedEditsFile { name: string; reopens: boolean }
 
-/** Download a held recovered copy (Q116 a "Download your edits"). The file is
+/** Download a held recovered copy ("Download your edits"). The file is
  * written whatever its size, so nothing is lost; `reopens` says whether Load
  * graph can open it. Resolves to null when the person cancelled the save
  * picker; rejects when the file couldn't be written. */
@@ -516,7 +516,7 @@ export async function saveEditsToFile(snapshot: Pick<ProjectSnapshot, 'nodes' | 
   return writeGraphText(downloadText(editsFile(snapshot, projectName)), editsFileName(projectName));
 }
 
-/** "Download a copy" in the over-the-limit panel (Q118): the whole open
+/** "Download a copy" in the over-the-limit panel: the whole open
  * project's canvas as a plain .nebula, "{project}.nebula", the same writer and
  * format as the edits download, so Load graph opens it again. A .nebula holds
  * no run history or Create draft. */
@@ -530,7 +530,7 @@ export function projectFileName(projectName: string): string {
   return editsFileName(projectName).replace(/ - unsaved edits\.nebula$/, '.nebula');
 }
 
-/** GM PR #205 r9 item 2: the file pickers' labels (the extensions stay), on
+/** Design, PR #205: the file pickers' labels (the extensions stay), on
  * every picker: Load canvas, Save canvas, Download a copy and Download your edits. */
 export const GRAPH_PICKER_LABEL = 'Nebula canvas';
 export const GRAPH_BUNDLE_PICKER_LABEL = 'Nebula canvas bundle';

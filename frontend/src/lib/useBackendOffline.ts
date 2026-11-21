@@ -2,11 +2,11 @@ import { useSyncExternalStore } from 'react';
 import { isBackendOffline, subscribeBackendConnection } from './backendConnection';
 
 /**
- * Whether Nebula is offline, for read-only cues (round 14 of PR #114).
+ * Whether Nebula is offline, for read-only cues.
  *
- * Round 15: read-only is React state, not DOM patching. Every control that
+ * Read-only is React state, not DOM patching. Every control that
  * edits reads this and renders `disabled` itself (with `offlineMark`), so a
- * reconnect simply re-renders it, and nothing watches the DOM (review 14,
+ * reconnect simply re-renders it, and nothing watches the DOM (
  * H1: the old MutationObserver re-triggered itself and froze the tab).
  */
 export function useBackendOffline(): boolean {
@@ -18,12 +18,12 @@ export function useBackendOffline(): boolean {
  * banner (BackendConnectionStatus). */
 export const OFFLINE_MARK = 'data-offline-disabled';
 
-/** PR #204 round 18k (GM r41): the studio offline row's line id (components/StudioOfflineRow), a
+/** PR #204 (design): the studio offline row's line id (components/StudioOfflineRow), a
  * control's reason while it is locked offline (aria-describedby: the Commons close-batch button).
  * One row per screen. */
 export const STUDIO_OFFLINE_LINE_ID = 'studio-offline-line';
 
-/** PR #204 round 18l (review 17 LOW-1): whether the studio offline row shows its line now (it opens
+/** PR #204: whether the studio offline row shows its line now (it opens
  * STUDIO_BANNER_DELAY_MS after going offline), so a control points at that id only once it exists. */
 let offlineRowShown = false;
 const offlineRowListeners = new Set<() => void>();
@@ -45,17 +45,17 @@ export function offlineMark(offline: boolean): { 'data-offline-disabled'?: '' } 
 
 /** The attribute a paid or saving action carries while it is disabled
  * offline: it drops its accent (orange Generate, Export) for the neutral
- * control look (App.css), as Run does on the canvas (GM, PR #198 r2). */
+ * control look (App.css), as Run does on the canvas (design, PR #198). */
 export const OFFLINE_NEUTRAL = 'data-offline-neutral';
 
 /**
- * Spread on an action that saves or spends (GM, PR #198 r2: Cinema's
+ * Spread on an action that saves or spends (design, PR #198: Cinema's
  * Generate shot, Generate N, Generate all and Add shot, Create's Generate,
  * Remotion's adds, REC and Export): disabled while offline, with the offline
  * mark (cursor, dimming, a press pulses the banner) and the neutral look.
  * `disabled` is the action's own reason to be off. One helper, so every
  * studio reads the same. Its tooltip is `offlineTitle` below (the Cinema
- * studio's actions use it; GM - Design, PR #198 round 5).
+ * studio's actions use it; design, PR #198).
  */
 export function offlineAction(offline: boolean, disabled = false): {
   disabled: boolean; 'data-offline-disabled'?: ''; 'data-offline-neutral'?: '';
@@ -66,15 +66,15 @@ export function offlineAction(offline: boolean, disabled = false): {
 }
 
 /**
- * The tooltip of an action disabled because Nebula is offline (GM - Design,
- * PR #198 round 5): "You can <verb> when Nebula reconnects." ("You can
+ * The tooltip of an action disabled because Nebula is offline (design,
+ * PR #198): "You can <verb> when Nebula reconnects." ("You can
  * generate when Nebula reconnects."), or, with no verb, the generic
  * "This works again when Nebula reconnects." Shared by every surface (#200
  * reads it too); the action's own title comes back once it reconnects.
  */
 export const OFFLINE_RECONNECT_FALLBACK = 'This works again when Nebula reconnects.';
 
-/** GM's verbs (PR #200 r2 item 4), each read as "You can <verb> when Nebula
+/** The design's verbs (PR #200), each read as "You can <verb> when Nebula
  * reconnects.". Anything not listed reads OFFLINE_RECONNECT_FALLBACK; a text
  * field goes read-only with no tooltip (the offline banner says why). Run
  * history stays live while it shows runs already loaded; only a history that
@@ -100,9 +100,9 @@ export const OFFLINE_VERBS = {
   createProjects: 'create projects',
   /** Run history, only where opening it needs the server. */
   seeRunHistory: 'see run history',
-  /** Run history's Rerun (GM, PR #200 r4 item 2). */
+  /** Run history's Rerun (design, PR #200). */
   rerun: 'rerun it',
-  /** Run history's Run failed nodes again and Recover (PR #200 fix round 3, design's round 3
+  /** Run history's Run failed nodes again and Recover (PR #200, the design's 
    * answers). */
   retry: 'run its failed nodes again',
   recover: 'recover it',
@@ -112,7 +112,7 @@ export function offlineReason(verb?: OfflineVerb): string {
   return reconnectsLine(verb);
 }
 
-/** The one place the line is built: offlineReason takes GM's listed verbs;
+/** The one place the line is built: offlineReason takes the design's listed verbs;
  * errorCopy's offlineDisabledReason (PR #200) also takes the per-surface
  * verbs #200 shipped ("add swatches", "send notes"). */
 export function reconnectsLine(verb?: string): string {

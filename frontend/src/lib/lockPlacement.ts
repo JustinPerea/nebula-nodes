@@ -1,22 +1,22 @@
 /**
- * PR #204 round 11 (GM r18): where a person lock's line sits (components/PersonLock
+ * PR #204 (design): where a person lock's line sits (components/PersonLock
  * PersonLockLine `place`). One rule: directly under the heading of what it covers. A group's
  * line under the group's heading, a whole tab's at the top of the tab, a form's or a single
  * control's right under the control it locks (a form's submit button).
  *
- * Round 12 (GM r20 1): 'page', a page's own line row (`data-page-lines`, the Commons' banner row
+ * (design): 'page', a page's own line row (`data-page-lines`, the Commons' banner row
  * below its header): a control in a toolbar row keeps the row's height, so its line goes to the
  * page's one row for page-level lines, under that row's because line when one shows, else alone.
  */
-// Round 17 (review 13 NIT-3): the attributes and the place type live in lib/lineAttrs, so the
+// The attributes and the place type live in lib/lineAttrs, so the
 // lines that carry them stay out of this module; it reads them.
 import { LOCK_PLACE_ATTR, PAGE_LINES_ATTR, type LockPlace } from './lineAttrs';
 export { LOCK_PLACE_ATTR, PAGE_LINES_ATTR, type LockPlace };
 
-/** PR #204 round 11 (GM r19 1): the elements styles/disabled-buttons.css gives a person lock's one
+/** PR #204 (design): the elements styles/disabled-buttons.css gives a person lock's one
  * disabled look. A locked control outside them would look live (lockPlacementProblems fails it). */
 export const LOCK_LOOK_SELECTORS = [
-  // Round 13 (review 10 MEDIUM-1): :where(), so a listed filled style keeps its grey fill.
+  // ::where(), so a listed filled style keeps its grey fill.
   ":where(button, a, [role='button'], [role='menuitem'], [role='option'], summary)[data-person-lock]:not([data-held-pending])",
   ":is(select, input:not([type='checkbox']):not([type='radio']), textarea)[data-person-lock]:not([data-held-pending])",
   "input[type='checkbox'][data-person-lock]:not([data-held-pending])",
@@ -79,7 +79,7 @@ export function lockPlacementProblems(root: ParentNode = document): string[] {
     }
   }
   // Every locked control past the first moment points at a line on screen (none skips the rule),
-  // unless its line is held back on purpose (data-lock-line-held, PR #204 round 14: offline comes
+  // unless its line is held back on purpose (data-lock-line-held, PR #204: offline comes
   // first, or Add waiting for the page's because line). The look applies either way.
   for (const control of root.querySelectorAll<HTMLElement>('[data-person-lock]:not([data-held-pending])')) {
     const ids = (control.getAttribute('aria-describedby') ?? '').split(/\s+/).filter(Boolean);

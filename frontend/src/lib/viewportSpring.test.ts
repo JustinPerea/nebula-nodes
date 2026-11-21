@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { springProgress, springViewport } from './viewportSpring';
 
-// The board camera's spring, as 0 → 1 progress (GM r5: a filled placeholder's
+// The board camera's spring, as 0 → 1 progress (design: a filled placeholder's
 // image rides it in), and the camera move built on it.
 
 function frames() {

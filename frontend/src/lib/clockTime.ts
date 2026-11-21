@@ -1,4 +1,4 @@
-/** Local time written like "12:00 AM" (GM, error copy round 3f: "{time}
+/** Local time written like "12:00 AM" (design, error copy: "{time}
  * should be local time, written like "12:00 AM""), the same in every locale:
  * the browser's own format is "00:00" in many, and puts a narrow no-break
  * space before "AM" in newer ones. */

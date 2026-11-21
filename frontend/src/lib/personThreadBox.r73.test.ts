@@ -2,14 +2,14 @@ import { describe, expect, it } from 'vitest';
 import type { ThreadRow } from './personThread';
 import { answerRows, cutAtWord, foldActions } from './personThreadBox';
 
-/** GM - Design r73 on #225: the one word-boundary cut (item 3) and the
- * typed answer's You row, derived and never stored (item 2). */
+/** Design on #225: the one word-boundary cut and the
+ * typed answer's You row, derived and never stored. */
 
 const byLength = (max: number) => (candidate: string) => candidate.length <= max;
 const R73 = 'Use the same palette on the other three shots, or keep the warm one only for the hero?';
 
-describe('r73 item 3: cutAtWord', () => {
-  it('the r73 example: cut at a word, the trailing comma dropped before the ellipsis', () => {
+describe('cutAtWord', () => {
+  it('the example: cut at a word, the trailing comma dropped before the ellipsis', () => {
     expect(cutAtWord(R73, byLength(48))).toBe('Use the same palette on the other three shots…');
     // Every width that can't take ", or" lands on the same words.
     for (const max of [47, 48]) expect(cutAtWord(R73, byLength(max))).toBe('Use the same palette on the other three shots…');
@@ -45,7 +45,7 @@ describe('r73 item 3: cutAtWord', () => {
   });
 
   it('the joined answers of "You answered" cut the same way', () => {
-    // The caller writes “ before and ”. after: its closer closes “Cool (GM r89.5's closers stay the caller's).
+    // The caller writes “ before and ”. after: its closer closes “Cool (the design's closers stay the caller's).
     expect(cutAtWord('Warm”, “Cool” and “Neutral please', byLength(16), '“')).toBe('Warm”, “Cool…');
     // Free-standing words keep the pair they close.
     expect(cutAtWord('Warm”, “Cool” and “Neutral please', byLength(16))).toBe('Warm”, “Cool”…');
@@ -70,7 +70,7 @@ function answered(closedAt: number, answers: { choices: string[]; text: string |
   return { view: { status, closedAt, answers } };
 }
 
-describe('r73 item 2: the typed answer is a derived You row', () => {
+describe('the typed answer is a derived You row', () => {
   it('only words with no option picked; at the set’s closedAt', () => {
     const rows = [question('q1', 1_000), question('q2', 2_000), question('q3', 3_000), question('q4', 4_000)];
     const sets = {

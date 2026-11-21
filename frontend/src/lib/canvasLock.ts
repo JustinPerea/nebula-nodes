@@ -6,13 +6,13 @@ import { offlineDisabledReason } from './errorCopy';
 import { isCanvasKept, keptCanvasTakesTyping, keptLockTitle, refuseEditWhileKept, useKeptCanvas, type KeptAction } from './keptCanvas';
 
 /**
- * Round 22 of PR #195 (GM - Design, blocker A): the one read-only state
+ * PR #195 (design): the one read-only state
  * every action surface of the canvas shares. The canvas is read-only while
  * the tab follows an agent's switch (lib/canvasFollow) and while Nebula is
  * offline (PR #114); each surface reads both from here, never one on its
  * own, so none can drift (tests/round22Surfaces walks the sources).
  *
- * GM's words: while following, every control that acts (the selection
+ * The design's words: while following, every control that acts (the selection
  * toolbar's Run, Ask, Note, Duplicate and Delete; the Inspector's Run,
  * Duplicate and Delete in the panel and the popover; node card buttons,
  * context menus, anything else that acts) is disabled in the neutral
@@ -20,14 +20,14 @@ import { isCanvasKept, keptCanvasTakesTyping, keptLockTitle, refuseEditWhileKept
  * and Copy stay enabled (they change nothing). Offline plus following:
  * disabled too, with the following tooltip.
  *
- * PR #198 review 6, M2 (GM r9 answer 3): this tab's own run is a third
+ * PR #198 (design): this tab's own run is a third
  * reason, for the controls it locks too (a run, a delete, a duplicate, an
  * undo). One order everywhere (PR #199 put kept before it: see below): the
  * run, then following, then offline, then the control's own title. A control the run lock wins on says only the
  * run's line and carries neither mark, so a press never pulses the project
  * bar or the banner for a reason its tooltip doesn't give.
  *
- * PR #199 (GM r16, 4; GM r19, 4): the canvas kept in this tab after a
+ * PR #199 (design): the canvas kept in this tab after a
  * restore is a reason only the person can fix ([Save as a project], or
  * discarding the kept edits), so it goes first, before the reasons that clear
  * by themselves: kept, then the run, following, offline and the control's own
@@ -37,16 +37,16 @@ import { isCanvasKept, keptCanvasTakesTyping, keptLockTitle, refuseEditWhileKept
  * following and offline as before.
  */
 export const FOLLOWING_MARK = 'data-following-disabled';
-/** GM r16 on PR #199, 4: a control disabled because the canvas is kept in
+/** PR #199 (design): a control disabled because the canvas is kept in
  * this tab after a restore (lib/keptCanvas). The same disabled look; a
  * press pulses the kept line. */
 export const KEPT_MARK = 'data-kept-disabled';
 
 /**
- * GM r26 (4) on PR #199: a node duplicated or pasted on a normal tab keeps a
+ * PR #199 (design): a node duplicated or pasted on a normal tab keeps a
  * tab-local id (not `nN`) until the project is next opened, so no agent can
  * address it yet: Ask and Note on a selection holding one are locked, in
- * the shared lock's disabled look, with GM's lines naming what unlocks them
+ * the shared lock's disabled look, with the design's lines naming what unlocks them
  * today. While kept, the kept lines win (kept comes first in `act`).
  * STOPGAP: the bulk-create PR (Duplicate and Paste making real nodes at
  * once) deletes TAB_LOCAL_MARK, TAB_LOCAL_LINES and every `tabLocal` use.
@@ -65,7 +65,7 @@ export interface CanvasLock {
   locked: boolean;
   following: FollowingSwitch | null;
   offline: boolean;
-  /** The canvas is kept in this tab after a restore (GM r15): every
+  /** The canvas is kept in this tab after a restore (design): every
    * control that writes or spends is disabled (`act`), typing isn't. */
   kept: boolean;
   /** The marks a control disabled by the lock carries: the not-allowed
@@ -73,14 +73,14 @@ export interface CanvasLock {
    * (following) or the offline banner. Empty when unlocked. */
   mark: Record<string, ''>;
   /** A control that acts: `disabled` (its own reasons too), the marks, and
-   * while following GM's tooltip in place of its own. `offline` (a verb, or
-   * true for none): offline, GM's "You can <verb> when Nebula reconnects."
-   * in place of its own (fix round 1 of PR #200, answer 1). `run` (PR #198):
+   * while following the design's tooltip in place of its own. `offline` (a verb, or
+   * true for none): offline, the design's "You can <verb> when Nebula reconnects."
+   * in place of its own. `run` (PR #198):
    * the run lock holds it now (the caller reads isExecuting, or a wider
    * condition such as a run that is starting, so a card that draws no run
    * lock never re-renders when a run starts); its line then wins over
-   * following and offline. Kept (PR #199, GM r19, 4) comes first of all:
-   * GM's kept line for the control's `kept` action, unless it is 'live'. */
+   * following and offline. Kept (PR #199, design) comes first of all:
+   * The design's kept line for the control's `kept` action, unless it is 'live'. */
   act(own: LockOwn, options?: RunLock & LockShown): ActProps;
   /** The tooltip `act` gives, for a control that isn't disabled by it (a
    * read-only field). */
@@ -94,27 +94,27 @@ export interface LockTitleOwn {
   offline?: string | true;
 }
 
-/** A control's own state for `act`: `kept` names which of GM's kept lines
- * it shows (PR #199, r16, 4; r17: every control names its own, so the
+/** A control's own state for `act`: `kept` names which of the design's kept lines
+ * it shows (PR #199: every control names its own, so the
  * field is required), or 'live' for a control that only changes this tab's
- * canvas (r17, r18: typing, Duplicate, Delete, Arrange, Undo), which the
+ * canvas (typing, Duplicate, Delete, Arrange, Undo), which the
  * kept state leaves on. */
 export interface LockOwn extends LockTitleOwn {
   kept: KeptAction | 'live';
-  /** GM r26 (4), a stopgap (above): the control acts on a node with a
+  /** A stopgap (above; design): the control acts on a node with a
    * tab-local id, so it is locked with that line, after kept. */
   tabLocal?: TabLocalAction;
 }
 
-/** The run lock's hold on one control (M2). A control the run can hold
- * names its own line with it (GM r39 item 2: "You can <verb> when the run
+/** The run lock's hold on one control. A control the run can hold
+ * names its own line with it (design: "You can <verb> when the run
  * finishes.", lib/runLock's table, or a reason of its own such as a shot
  * that is rendering): there is no shared default, so a new lock can't fall
  * back to a generic line. */
 export type RunLock = { run?: undefined; runTitle?: undefined } | { run: boolean; runTitle: string };
 
 /**
- * GM, PR #205 round 1: when a control's lock reason is already on screen
+ * Design, PR #205: when a control's lock reason is already on screen
  * beside it (the deferred run notice's line, Cinema's line under Generate),
  * a tooltip only repeats it and covers what is next to it. `shown` names that
  * line (its element's id and its text): when the reason a locked control
@@ -138,7 +138,7 @@ export function tellOnce<P extends ActProps>(props: P, shown?: LockShown['shown'
 export interface ActProps {
   disabled: boolean;
   title: string | undefined;
-  /** Set by `shown` (GM PR #205 r1): the on-screen line that gives the reason. */
+  /** Set by `shown` (design PR #205): the on-screen line that gives the reason. */
   'aria-describedby'?: string;
   'data-following-disabled'?: '';
   'data-offline-disabled'?: '';
@@ -149,22 +149,22 @@ export interface ActProps {
 /**
  * An acting control that also reads PR #198's offline look (the Cinema studio
  * and the other studios' paid or saving actions): the lock (`act`: disabled,
- * the marks, GM's wait line while following) and, offline and not following,
- * GM's offline line for its verb ("You can generate when Nebula
+ * the marks, the design's wait line while following) and, offline and not following,
+ * the design's offline line for its verb ("You can generate when Nebula
  * reconnects.", lib/useBackendOffline offlineReason; the generic line with
  * none) in place of its own title. `neutral` drops its accent offline
  * (OFFLINE_NEUTRAL: an orange Generate, an Export), as offlineAction does.
- * Following plus offline keeps the following tooltip (GM round 22, A).
+ * Following plus offline keeps the following tooltip (design).
  */
 export function lockedAction(lock: CanvasLock, own: LockOwn,
   options: { verb?: OfflineVerb; neutral?: boolean; offlineTooltip?: boolean } & RunLock & LockShown = {}): ActProps & { 'data-offline-neutral'?: '' } {
   const props: ActProps & { 'data-offline-neutral'?: '' } = lock.act(own, options);
-  // Kept first (GM r19, 4): the offline line never replaces the kept line.
+  // Kept first (design): the offline line never replaces the kept line.
   if (props[KEPT_MARK] !== undefined) return props;
   if (!lock.offline || options.run) return props;
   if (options.neutral) props[OFFLINE_NEUTRAL] = '';
   // Create's and Remotion's actions keep their own title offline for now
-  // (GM deferred their offline tooltips: `offlineTooltip: false`). A
+  // (their offline tooltips are deferred: `offlineTooltip: false`). A
   // control that names its own offline verb (PR #200's `own.offline`)
   // keeps the line act gave it.
   if (!lock.following && options.offlineTooltip !== false && !(own.offline && !options.verb)) props.title = offlineReason(options.verb);
@@ -182,11 +182,11 @@ export function canvasLockOf(following: FollowingSwitch | null, offline: boolean
   return {
     locked, following, offline, kept, mark, title,
     act: (own, options = {}) => {
-      // Kept first (GM r19, 4): its own line and its mark only (a press
+      // Kept first (design): its own line and its mark only (a press
       // pulses the kept line). A control that only changes this tab's
       // canvas stays on.
       if (kept && own.kept !== 'live') return { [KEPT_MARK]: '', disabled: true, title: keptLockTitle(own.kept) };
-      // GM r26 (4), a stopgap the bulk-create PR deletes: a node with a
+      // A stopgap the bulk-create PR deletes (design): a node with a
       // tab-local id waits for the project's next open. Only the person
       // fixes it, so it goes before the reasons that clear by themselves.
       if (own?.tabLocal) return { [TAB_LOCAL_MARK]: '', disabled: true, title: TAB_LOCAL_LINES[own.tabLocal] };
@@ -212,7 +212,7 @@ export function canvasLockNow(): CanvasLock {
 }
 
 /**
- * Round 23 (review 22, M-1): the gate a store action that edits the canvas
+ * The gate a store action that edits the canvas
  * asks, the same two states useCanvasLock reads. True when it refused: the
  * project bar pulses while following (first: the canvas is about to go), the
  * offline banner while offline; the caller then changes nothing and sends
@@ -220,13 +220,13 @@ export function canvasLockNow(): CanvasLock {
  */
 export function refuseCanvasEdit(): boolean {
   // And while the canvas is kept in this tab after a restore (PR #199),
-  // first, as `act` orders it (GM r19, 4): only the tab-only edits join the
+  // first, as `act` orders it (design): only the tab-only edits join the
   // kept edits (refuseTabOnlyEdit, the store's gates).
   return refuseEditWhileKept() || refuseEditWhileFollowing() || refuseEditWhileOffline();
 }
 
 /**
- * PR #199 (GM r18): the gate for an edit that only changes this tab's
+ * PR #199 (design): the gate for an edit that only changes this tab's
  * canvas, as typing does (a param written with updateNodeData: an applied
  * rewrite, a mask). Refused while following or offline, as refuseCanvasEdit;
  * while the canvas is kept it goes through (the store's KEPT_TAB_ONLY gate

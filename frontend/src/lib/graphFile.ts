@@ -41,10 +41,10 @@ import {
   GRAPH_BUNDLE_PICKER_LABEL,
 } from './graphFileShared';
 
-/** The Toolbar's "Save graph" / "Load graph", as GM's headings (round 2). */
+/** The Toolbar's "Save graph" / "Load graph", as the design's headings. */
 const SAVE_GRAPH = "Nebula couldn’t save the canvas.";
 const LOAD_GRAPH = "Nebula couldn’t load the canvas.";
-/** GM - Design, 2026-10-24: "Nebula couldn’t save the canvas. It's too big to save in
+/** Design, 2026-10-24: "Nebula couldn’t save the canvas. It's too big to save in
  * a browser." (under SAVE_GRAPH). */
 const TOO_BIG_FOR_THE_BROWSER = "It’s too big to save in a browser.";
 
@@ -76,13 +76,13 @@ export { GRAPH_PARAMS_VERSION };
 // Shared with startup code (lib/graphFileShared.ts); re-exported for this module's callers.
 export { GRAPH_BUNDLE_MAX_ASSET_BYTES, GRAPH_BUNDLE_MAX_IMPORT_BYTES, GRAPH_BUNDLE_MAX_TOTAL_BYTES, normalizeRuntimeMediaParams };
 // The .nebula writer lives in the startup entry (graphFileShared) so a held
-// recovered copy can be downloaded even when this chunk can't load (Q116 a).
+// recovered copy can be downloaded even when this chunk can't load.
 export { serializeGraph };
 export { saveStepToFit } from './saveFixStep';
 export type { NebulaFile };
 // Load graph's limits and its shape walk live there too, so the unsaved
 // edits download can tell whether Load graph will open its file
-// (editsFileReopens), from the same numbers (Q116 a review).
+// (editsFileReopens), from the same numbers (review).
 export {
   GRAPH_MAX_DEPTH, GRAPH_MAX_EDGES, GRAPH_MAX_NODES, GRAPH_MAX_VALUES,
   GraphStructureLimitError, assertGraphComplexityWithinLimits,
@@ -104,7 +104,7 @@ export interface GraphBundleAssetSummary {
   totalBytes: number;
 }
 
-/** GM PR #205 r11 item 1, person-led and whole: "Nebula saved the canvas
+/** Design, PR #205, person-led and whole: "Nebula saved the canvas
  * without {n} of its files. They may be missing when you open the canvas
  * somewhere else." (singular: "without 1 of its files. It may be missing…"). */
 export function skippedFilesLine(skipped: number): string {
@@ -113,7 +113,7 @@ export function skippedFilesLine(skipped: number): string {
     : `Nebula saved the canvas without ${skipped} of its files. They may be missing when you open the canvas somewhere else.`;
 }
 
-/** GM PR #205 r9 item 2: "This canvas is {n} MB. Nebula opens canvases up to
+/** Design, PR #205: "This canvas is {n} MB. Nebula opens canvases up to
  * {m} MB." (the same pattern for the JSON and the finished bundle). */
 export function graphSizeLine(bytes: number, limitBytes: number): string {
   const { size, limit } = sizeAndLimit(bytes, limitBytes);
@@ -123,7 +123,7 @@ export function graphSizeLine(bytes: number, limitBytes: number): string {
 /** The reason a canvas too large to save gives: "it’s over the 528 MB Nebula can save." */
 export const graphSaveTooLargeReason = (limitBytes: number) => `It’s over the ${sizeText(limitBytes)} Nebula can save.`;
 
-// GM PR #205 r9 item 2: the file pickers' labels live beside the downloads.
+// Design, PR #205: the file pickers' labels live beside the downloads.
 export { GRAPH_PICKER_LABEL, GRAPH_BUNDLE_PICKER_LABEL } from './graphFileShared';
 
 function warnAboutSkippedBundleAssets(summary: GraphBundleAssetSummary): void {
@@ -131,7 +131,7 @@ function warnAboutSkippedBundleAssets(summary: GraphBundleAssetSummary): void {
   showNotice(skippedFilesLine(summary.skipped), 'info');
 }
 
-// Error copy round 3e (GM): the file's own size and shape limits are written
+// Error copy (design): the file's own size and shape limits are written
 // lines (FailureNotice with no heading: the save or load alert puts its own
 // heading over them). A file that fails its shape checks reads one written
 // line; the check's text ("nodes[0] must be an object") is `detail`, for the
@@ -145,13 +145,13 @@ export class GraphBundleImportTooLargeError extends FailureNotice {
 
 const GRAPH_FILE_DAMAGED_COPY = 'This file is damaged or isn’t a Nebula canvas.';
 const GRAPH_FILE_NEWER_COPY = 'This file is from a newer Nebula. Update Nebula, then open it again.';
-/** GM PR #205 r12: a bundle whose files Nebula couldn't copy into its output
+/** Design, PR #205: a bundle whose files Nebula couldn't copy into its output
  * folder (the restore's 500), under "Nebula couldn’t load the canvas.". */
 const BUNDLE_FILES_NOT_COPIED_COPY = 'Its files couldn’t be copied. Try again.';
-/** GM PR #205 r16 item 3: a node type, a port or a param this version of
+/** Design, PR #205: a node type, a port or a param this version of
  * Nebula doesn't have (mostly version drift: one line). */
 const GRAPH_FILE_UNKNOWN_NODE_COPY = 'This file uses a node this version of Nebula doesn’t have.';
-/** GM PR #205 r16 item 3: a bundle's file over the member limit, and a bundle
+/** Design, PR #205: a bundle's file over the member limit, and a bundle
  * over the upload limit, in the size lines' MB (graphSizeLine). */
 const sizedLine = (subject: string, bytes: number, limitBytes: number, opens: string) => {
   const { size, limit } = sizeAndLimit(bytes, limitBytes);
@@ -159,7 +159,7 @@ const sizedLine = (subject: string, bytes: number, limitBytes: number, opens: st
 };
 export const bundleMemberSizeLine = (bytes: number, limitBytes: number) => sizedLine('One of its files', bytes, limitBytes, 'files');
 export const bundleUploadSizeLine = (bytes: number, limitBytes: number) => sizedLine('This file', bytes, limitBytes, 'files');
-/** GM PR #205 r17 item 3: with no size (a streamed upload with no
+/** Design, PR #205: with no size (a streamed upload with no
  * Content-Length is refused before its end arrives), the limit is still
  * known, so the line names it. A member's size always comes with its
  * refusal; its form is the same, for a refusal that leaves it out. */
@@ -181,17 +181,17 @@ export class GraphFileInvalidError extends FailureNotice {
 export interface GraphFileSelection {
   file: Blob;
   isZip: boolean;
-  /** The picked file's name, for the canvas's line after it opens (Q118). */
+  /** The picked file's name, for the canvas's line after it opens. */
   name?: string;
 }
 
 /** Inspect only four signature bytes, retaining ZIPs as Blobs so fetch can
  * stream them to the backend without first duplicating the whole selection in
  * JavaScript memory. A plain JSON file is read up to the same ceiling as a
- * bundle (Q118, Justin: "Let Load graph open bigger .nebula files (up to the
+ * bundle (Justin: "Let Load graph open bigger.nebula files (up to the
  * 512 MiB it already allows for a bundle)"); one over the 16 MiB save limit
  * opens, and the canvas pauses saving until it is trimmed. A bundle's graph
- * opens the same way (Q121 a). The shape walk's
+ * opens the same way. The shape walk's
  * limits still apply once it is parsed. */
 export async function inspectGraphFileWithinLimit(file: Blob): Promise<GraphFileSelection> {
   if (file.size > GRAPH_BUNDLE_MAX_IMPORT_BYTES) {
@@ -633,9 +633,9 @@ export async function addGraphAssetsToBundle(
 
 /** The Agent log's line for a Save its shape check refused with no step to
  * offer: Nebula's line, then which limit, in Nebula's words, so an agent can
- * help (never the walk's own English: review 7 of PR #205, limits LOW). */
+ * help (never the walk's own English). */
 function saveLimitLogLine(error: GraphStructureLimitError): string {
-  // GM PR #205 r17 item 1: the "because" form, no colon, one whole
+  // Design, PR #205: the "because" form, no colon, one whole
   // sentence per limit (never the person's reason spliced into a template).
   if (error.detail.includes('values')) return `Nebula couldn’t save the canvas because it holds more than ${GRAPH_MAX_VALUES.toLocaleString()} values.`;
   if (error.detail.includes('nested')) return `Nebula couldn’t save the canvas because part of it is nested more than ${GRAPH_MAX_DEPTH} levels deep.`;
@@ -684,7 +684,7 @@ export async function saveToFile(
       if (isStringLengthLimit(error)) throw new GraphStructureLimitError(TOO_BIG_FOR_THE_BROWSER);
       throw error;
     }
-    // Q121 a: a graph over the 16 MiB save limit still saves as a bundle; one
+    // A graph over the 16 MiB save limit still saves as a bundle; one
     // past the bundle's ceiling never fits, so it's refused before any asset
     // is fetched.
     const graphBytes = new TextEncoder().encode(graphJson).byteLength;
@@ -692,9 +692,9 @@ export async function saveToFile(
       throw new GraphStructureLimitError(graphSaveTooLargeReason(GRAPH_BUNDLE_MAX_IMPORT_BYTES));
     }
   } catch (error) {
-    // The log keeps the engine's exact reason (GM PR #205 r10 item 4).
+    // The log keeps the engine's exact reason (design PR #205).
     console.error('[nebula] graph save', error instanceof GraphStructureLimitError ? error.detail : error);
-    // With nothing to undo the line offers no step (GM PR #205 r13 item 1),
+    // With nothing to undo the line offers no step (design PR #205),
     // so the Agent log says which limit it hit, for an agent to help.
     if (error instanceof GraphStructureLimitError && error.shape && stepNow()?.kind === 'none') {
       window.dispatchEvent(new CustomEvent('nebula:agent-log-entry', { detail: { source: 'system',
@@ -726,7 +726,7 @@ export async function saveToFile(
     return null;
   }
   // Named after the open project, as "Download a copy" is, so Load graph
-  // names the project it opens after it again (Q120).
+  // names the project it opens after it again.
   const suggestedName = projectName
     ? `${projectFileName(projectName)}.zip`
     : `${file.name.replace(/[^a-zA-Z0-9-_ ]/g, '')}.nebula.zip`;
@@ -1010,7 +1010,7 @@ function validatedRestoreMapping(value: unknown): Map<string, string> {
 }
 
 /** The link reading Load graph does, for the shared parity test with the
- * backend's port (services/graph_file_links.py, Q123 a): agents open a bundle
+ * backend's port (services/graph_file_links.py): agents open a bundle
  * there, and tests/graphFileLinksParity.test.ts runs these on the same cases.
  * Nothing else calls them through here. */
 export const graphFileLinksForTests = {
@@ -1021,15 +1021,15 @@ export const graphFileLinksForTests = {
   validatedRestoreMapping,
 };
 
-/* Round 16 (GM: "lead with what the person pressed"): the bundle restore
+/* Design ("lead with what the person pressed"): the bundle restore
  * runs only as part of Load graph, so its refusal uses Load graph's own
  * heading ("Nebula couldn’t load the canvas."), not "Couldn't restore the asset.",
  * which belongs to a Restore control on an asset. */
 
-/** GM PR #205 r11 item 2 and r12: the person's line for a bundle the
+/** Design, PR #205: the person's line for a bundle the
  * backend's restore refused, picked by the answer's `code` (never its words;
  * backend main._graph_file_refusal): the line the same check gives a plain
- * file, and for the zip's own checks GM's lines (damaged, too complex, or
+ * file, and for the zip's own checks the design's lines (damaged, too complex, or
  * the files that couldn't be copied). Null for any other answer, which
  * keeps the backend's words. A limit the answer carries is used only when
  * it is a positive whole number; otherwise the line falls back to this
@@ -1057,7 +1057,7 @@ export function bundleRefusalLine(body: unknown): string | null {
     case 'bundle_size_metadata':
     case 'bundle_missing_graph':
       return GRAPH_FILE_DAMAGED_COPY;
-    // The import's own checks (GM PR #205 r16 item 3), for a plain file and a
+    // The import's own checks (design PR #205), for a plain file and a
     // bundle's graph.json alike: backend _import_stage_refusal.
     case 'unknown_definition':
     case 'graph_unknown_port':
@@ -1093,9 +1093,9 @@ export function bundleRefusalLine(body: unknown): string | null {
 /** The person's line for a load the backend refused (a bundle's restore, a
  * plain file's import): the line for its code (bundleRefusalLine), and for
  * any other refusal of the file (no code, a code with no line, an empty
- * body) GM's damaged-file line. The person never reads the backend's words;
- * they stay in the console, and agents keep them (review 8 of PR #205,
- * limits LOW-4 and lines-inspector LOW-3). Null for an answer that isn't
+ * body) the design's damaged-file line. The person never reads the backend's words;
+ * they stay in the console, and agents keep them (
+ * limits and lines-inspector). Null for an answer that isn't
  * the file's refusal, which keeps its own line: a server failure (5xx), a
  * conflict (409, a run is active), the person gate's refusal, or a limit
  * of the project store's or the project's size. */

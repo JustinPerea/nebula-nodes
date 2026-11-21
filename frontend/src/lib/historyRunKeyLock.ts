@@ -5,7 +5,7 @@ import { currentRunSnapshot, type RunRecord } from './runHistory';
 import { canKeyLock, runKeyLockNodeLine, type LockSettings } from './runKeyLock';
 
 /**
- * A Run history replay's key lock (GM, PR #203 r8 item 3): the saved graph a
+ * A Run history replay's key lock (design, PR #203): the saved graph a
  * Rerun or Retry sends (each saved node at its saved settings, an agent's
  * placeholder still marked as the live canvas has it), over what that replay
  * would run (a node's replay with what feeds it, a whole-canvas replay
@@ -38,7 +38,7 @@ export function historyRunKeyLock(record: RunRecord, live: readonly Node<NodeDat
 
 /** The live canvas's agent placeholders, as a key that changes only when one
  * comes or goes (not on a drag): the one thing of the live canvas a replay's
- * lock reads (review r5 NIT-1 of PR #203). */
+ * lock reads (review of PR #203). */
 export function placeholderKey(live: readonly Node<NodeData>[]): string {
   return live.filter((node) => cleanPending(node.data?.pending)).map((node) => node.id).sort().join(' ');
 }

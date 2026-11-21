@@ -1,5 +1,5 @@
 /**
- * GM r29 item 1 and GM r30 item 1 (PR #200 fix round 20): the note dialog's
+ * PR #200 (design): the note dialog's
  * heading names its node, "Note for agents on “Text Input”". A name too long
  * for one line is cut inside the quotes, by grapheme (never inside an emoji,
  * a flag or a syllable), with no space before the "…" and the closing quote
@@ -15,16 +15,16 @@ export function graphemesOf(text: string): string[] {
 }
 
 /** What comes before and after the name; the name between them is isolated
- * in a <bdi> where it's drawn (GM r33, review 18 LOW-1), so a Hebrew or Arabic
+ * in a <bdi> where it's drawn (design), so a Hebrew or Arabic
  * name keeps its "…" at its own end: “<bdi>name…</bdi>”. */
 export const HEADING_START = 'Note for agents on “';
 export const HEADING_END = '”';
 
-// GM r33 (review 18 NIT-R21-1): the spaces and the separating punctuation a
+// Design: the spaces and the separating punctuation a
 // cut ends on go before the "…" ("Lighthouse…”", never "Lighthouse,…”"),
-// and so does a "…" the name already had there (review 19 NIT-2: never
+// and so does a "…" the name already had there (never
 // "……"). Closing brackets and quotes stay: they close something the name
-// opened. A straight " or ' is both (review 19 NIT-1, fix round 23): it goes
+// opened. A straight " or ' is both: it goes
 // only when it opens a word at the cut (after a space, a dash or an opening
 // mark), so “A lighthouse "warm"…” and “The keepers'…” keep theirs.
 const CUT_TRAIL = /[\s,.;:!?·،؛、。，；：…\p{Pd}\p{Ps}\p{Pi}«‹]+$/u;
@@ -40,15 +40,15 @@ function trimCut(text: string): string {
 
 /** The name as the heading shows it: whole, or its first `keep` graphemes
  * with the trailing spaces and punctuation dropped, then "…". Never a bare
- * "…" (GM r33, NIT-R21-2; review 19 NIT-3): a cut that would keep nothing
+ * "…" (design): a cut that would keep nothing
  * visible keeps up to the name's first visible grapheme, and a name with
  * nothing but punctuation keeps its first `keep` graphemes (at least one). */
 export function noteHeadingName(title: string, keep?: number, graphemes: string[] = graphemesOf(title)): string {
   if (keep === undefined || keep >= graphemes.length) return title;
-  // Review 20 NIT-5, PR #202 review 1 NIT-5: a cut never shows a run of "…".
+  // PR #202: a cut never shows a run of "…".
   // In every branch the kept part's own "…" runs fold into one (the tooltip
   // has the name whole), and a kept part that already ends on "…" takes no
-  // second: a name of nothing but "…" shows one, its own (GM, PR #202 r1).
+  // second: a name of nothing but "…" shows one, its own (design, PR #202).
   let kept = foldEllipses(trimCut(graphemes.slice(0, Math.max(0, keep)).join('')));
   if (!kept) {
     const first = graphemes.findIndex((g) => trimCut(g) !== '');
@@ -72,13 +72,13 @@ export function noteHeading(title: string, keep?: number, graphemes: string[] = 
   return `${HEADING_START}${noteHeadingName(title, keep, graphemes)}${HEADING_END}`;
 }
 
-/** GM r31 nit, GM r32 (PR #200 fix rounds 21-22): the most graphemes of a
+/** PR #200 (design): the most graphemes of a
  * word a cut may drop to end on the space before it. */
 export const WORD_STEP_BACK = 8;
 const SPACE = /^\s+$/u;
 
 /**
- * Where a cut after `keep` graphemes should end (GM r32, verbatim: "any name
+ * Where a cut after `keep` graphemes should end (design, verbatim: "any name
  * with spaces between words steps back to the last space within 8
  * graphemes; scripts without spaces cut by grapheme. Key it on whether
  * there's a space before the cut, NOT on the script"). A cut inside a word

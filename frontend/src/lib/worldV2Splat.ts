@@ -20,7 +20,7 @@ export function worldProviderName(provider: string | undefined | null): string |
 }
 
 /** "Idol · Speridlabs": the model and maker as their makers spell them
- * (GM: "Speridlabs" on the card, never the id). */
+ * (design: "Speridlabs" on the card, never the id). */
 export function splatSourceLine(world: WorldValueV2): string {
   const model = world.session.model ? MODEL_NAMES[world.session.model] ?? world.session.model : null;
   const provider = worldProviderName(world.session.provider);

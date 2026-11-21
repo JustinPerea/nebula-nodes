@@ -5,10 +5,10 @@ import { usesKreaAccount } from './kreaConnection';
 /**
  * The cost classes of a node that calls a provider: what every cost surface
  * counts it as. Only "paid" is in "N paid", the paid lead and the figure;
- * "plan" runs on the person's Krea plan ("1 on Krea plan"; GM, PR #203 r19
- * item 1); "mayCost" may bill the person's own account with their key (Idol
+ * "plan" runs on the person's Krea plan ("1 on Krea plan"; design, PR #203);
+ * "mayCost" may bill the person's own account with their key (Idol
  * with a Hugging Face token); "free" is a key-billing route with no key, or a
- * sourced $0 (GM, PR #203 r18 item 1).
+ * sourced $0 (design, PR #203).
  */
 export type CostClass = 'paid' | 'plan' | 'mayCost' | 'free';
 
@@ -50,7 +50,7 @@ export function classCounts({ paid = 0, plan = 0, mayCost = 0 }: { paid?: number
 }
 
 /**
- * A cost chip from its parts, by one rule (GM, PR #203 r20): "+" joins
+ * A cost chip from its parts, by one rule (design, PR #203): "+" joins
  * money, "·" joins classes. `money` is the amount, already joined by "+" to
  * any unpriced part ("$0.07 + unpriced": pricing formatChipEstimate), and
  * `classes` are the counted classes (classCounts), so the chip reads

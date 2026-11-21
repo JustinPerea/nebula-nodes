@@ -178,7 +178,7 @@ async function probeBackendBaseUrl(baseUrl: string): Promise<string | null> {
   }
 }
 
-/** The last "not found" logged, so a reconnect loop warns once (GM: keep it in the console). */
+/** The last "not found" logged, so a reconnect loop warns once (design: keep it in the console). */
 let lastNotFound: string | null = null;
 
 async function discoverBackendBaseUrl(): Promise<string> {
@@ -213,7 +213,7 @@ async function discoverBackendBaseUrl(): Promise<string> {
     const ports = pinned === null
       ? `Nebula backend not found on localhost ports ${configuredBackendPorts().join(', ')}`
       : `Nebula backend not found on port ${pinned} (VITE_NEBULA_BACKEND_PORT); not scanning other ports`;
-    // A plain browser tab with no backend (GM, error-copy round 2): GM's line
+    // A plain browser tab with no backend (design): the design's line
     // for the person, the ports it tried for the console. No answer at all,
     // so it is a ConnectionLostError (status 0) like a dropped request.
     if (lastNotFound !== ports) console.warn(`[nebula] ${ports}`);
@@ -304,9 +304,9 @@ function shouldRetryWithDiscovery(baseUrl: string, response?: Response): boolean
 // checked live in the desktop pass; the backend's opaque-origin CORS branch
 // only matters if that changes. See desktop_renderer_cors in backend/main.py.)
 const PERSON_READ_PREFIXES = ['/api/agent/spend', '/api/krea/', '/api/personal-agents'];
-// Settings answers saved keys' endings only to the person (Justin, Q55 a);
+// Settings answers saved keys' endings only to the person (Justin);
 // everyone else learns which keys are set. The line at the top of Settings
-// (settings.restored's, GM, PR #203 r38 item 5) is the person's only.
+// (settings.restored's, design, PR #203) is the person's only.
 const PERSON_READ_PATHS = ['/api/settings', '/api/settings/notice'];
 
 function wantsPersonHeader(path: string, method: string): boolean {
@@ -318,10 +318,10 @@ function wantsPersonHeader(path: string, method: string): boolean {
 
 function notePersonRequired(response: Response): void {
   if (response.status !== 403 || typeof response.clone !== 'function') return;
-  // An answer to a request sent before the latest promote is the old state's (review 3
-  // LOW-1): the server has since promoted this tab, so it holds nothing.
+  // An answer to a request sent before the latest promote is the old state's:
+  // the server has since promoted this tab, so it holds nothing.
   if (sentBeforePromote(response)) return;
-  // Review 4 LOW-1 (round 6): read again once the body is in; a promote while it was parsed
+  // Read again once the body is in; a promote while it was parsed
   // makes this the old state's answer too.
   void response.clone().json()
     .then((body: { code?: unknown } | null) => {
@@ -403,14 +403,14 @@ function classifyBodyReads(response: Response, heading: string): Response {
 }
 
 /** `options.project`: the project the caller read when the person acted (a
- * graph write that waited behind an undo: graphStore.graphMutationFetch,
- * review 17 H-1). Its revision is the one sent, never one read later. */
+ * graph write that waited behind an undo: graphStore.graphMutationFetch).
+ * Its revision is the one sent, never one read later. */
 export async function apiFetch(path: string, init?: RequestInit,
   options?: { project?: ProjectContext | null }): Promise<Response> {
   // Capture at admission, before discovery can await a later project switch.
   const project = options && 'project' in options ? options.project ?? null : getProjectContext();
   const method = String(init?.method ?? 'GET').toUpperCase();
-  // Offline is read-only (round 15 of PR #114): a write is refused here,
+  // Offline is read-only: a write is refused here,
   // before anything is sent, whichever path asked for it.
   refuseWriteWhileOffline(method, path);
   const baseUrl = await getBackendBaseUrl();
@@ -421,12 +421,12 @@ export async function apiFetch(path: string, init?: RequestInit,
   headers.set(PARAMS_VERSION_HEADER, String(GRAPH_PARAMS_VERSION));
   if (project && method !== 'GET' && method !== 'HEAD') {
     headers.set('X-Nebula-Workspace-Revision', project.revision);
-    // Which canvas it was made for (round 19): Nebula refuses it after a clear or an import.
+    // Which canvas it was made for: Nebula refuses it after a clear or an import.
     if (project.canvas !== undefined) headers.set('X-Nebula-Canvas-Revision', project.canvas);
   }
   // Which tab wrote, so this tab can tell its own edits' graphSync echoes
   // from edits made elsewhere (lib/tabId.ts). Never an id the page doesn't
-  // hold yet (review 21 LOW-1 on PR #199): a write waits for the claim.
+  // hold yet (PR #199): a write waits for the claim.
   if (method !== 'GET' && method !== 'HEAD') {
     if (!tabIdConfirmed()) await tabIdReady();
     headers.set(TAB_HEADER, TAB_ID);
@@ -446,12 +446,12 @@ export async function apiFetch(path: string, init?: RequestInit,
     }
   }
   // No answer at all is said in words here, where every request is made, so
-  // no screen shows the browser's "Failed to fetch" (error-copy, GM): a
+  // no screen shows the browser's "Failed to fetch" (error-copy, design): a
   // ConnectionLostError, still a TypeError, with fetch's own as its cause.
   // The caller's own abort comes back as fetch threw it.
-  // Which promote each request was sent under (review 3 LOW-1, PR #204 r5), recorded on its
-  // answer and compared whenever it is read (review 4 LOW-1, round 6). Taken as each request
-  // goes out, so a discovery replay after a promote carries its own (review 5 NIT-2, round 7).
+  // Which promote each request was sent under (PR #204), recorded on its
+  // answer and compared whenever it is read. Taken as each request
+  // goes out, so a discovery replay after a promote carries its own.
   // One request is in flight at a time here (the replay goes after the first answer).
   let lastSent = personPromotions();
   const send = (url: string) => {
@@ -468,7 +468,7 @@ export async function apiFetch(path: string, init?: RequestInit,
     noteSentUnder(response, lastSent);
     return response;
   };
-  // One stamp and one check for every answer (review 4 NIT-2, round 6), the discovery replay's too.
+  // One stamp and one check for every answer, the discovery replay's too.
   const answered = (response: Response): Response => {
     stamp(response);
     notePersonRequired(response);

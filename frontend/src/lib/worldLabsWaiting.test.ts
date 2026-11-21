@@ -1,28 +1,28 @@
 /**
  * The canvas notice when a delete keeps nodes that hold World Labs state
- * (GM - Design, rounds 4 and 4b, and the copy round of 2026-10-24: every node
+ * (design, and the copy round of 2026-10-24: every node
  * in a several-node delete held, forget form, reads "Couldn't delete them.
  * They're waiting on World Labs. Check Marble and Run history.").
  */
 import { describe, expect, it } from 'vitest';
 import { RECOVERY_ID_SAVED_TAIL, WORLD_LABS_NEEDS_CHECK, deleteRefusalText, heldDeleteText } from './worldLabsWaiting';
 
-// The backend's round 13 lines (GM): an unconfirmed start, and a saved recovery ID.
+// The backend's lines (design): an unconfirmed start, and a saved recovery ID.
 const NODE_WAITING_UNLOCK = WORLD_LABS_NEEDS_CHECK;
 const NODE_WAITING_FORGET = `“World Labs Environment”${RECOVERY_ID_SAVED_TAIL}`;
 
 describe('heldDeleteText', () => {
-  it("every node held, forget: GM's 2026-10-24 line", () => {
+  it("every node held, forget: the design's 2026-10-24 line", () => {
     expect(heldDeleteText(2, false, 2))
       .toBe("Nebula couldn’t delete these 2 nodes because they’re waiting on World Labs. Check Marble and run history.");
     expect(heldDeleteText(5, false, 5))
       .toBe("Nebula couldn’t delete these 5 nodes because they’re waiting on World Labs. Check Marble and run history.");
   });
 
-  // GM, round 15 of PR #114: the one-node lines get back what round 4's
+  // Design, PR #114: the one-node lines get back what an earlier
   // trim dropped, "Couldn't delete “<node>”. <reason line>", with the shared
   // World Labs reason and the button named.
-  it("one node: GM's round 15 line, named; 'the node' with no name", () => {
+  it("one node: the design's line, named; 'the node' with no name", () => {
     expect(heldDeleteText(1, true, 1, '“Harbor world”')).toBe(
       "Nebula couldn’t delete “Harbor world” because a World Labs run needs your check first. Use the notice at the top of the screen.");
     expect(heldDeleteText(1, false, 1, '“Harbor world”')).toBe(
@@ -50,7 +50,7 @@ describe('heldDeleteText', () => {
   });
 });
 
-describe("GM's World Labs wording (round 13 of PR #114), exact", () => {
+describe("the design's World Labs wording, exact", () => {
   it('the lines, labels and dialog', async () => {
     const wl = await import('./worldLabsWaiting');
     expect(wl.WORLD_LABS_STARTING).toBe('A World Labs run is still starting. Try again in a moment.');
@@ -58,14 +58,14 @@ describe("GM's World Labs wording (round 13 of PR #114), exact", () => {
     expect(`“Harbor world”${wl.RECOVERY_ID_SAVED_TAIL}`).toBe(
       '“Harbor world” has a saved World Labs recovery ID. Check the run in Marble, then forget the ID in Run history.');
     expect(wl.UNLOCK_LABEL).toBe("I’ve checked Marble");
-    // Round 14: the name comes quoted from recordNodeName.
+    // The name comes quoted from recordNodeName.
     const nodes = [{ id: 'n2', data: { label: 'Harbor world' } }];
     expect(wl.unlockAriaLabel(wl.recordNodeName(nodes, 'n2'))).toBe("I’ve checked Marble. Unlock “Harbor world”.");
     expect(wl.FORGET_LABEL).toBe('Forget ID');
     expect(wl.forgetHeading(wl.recordNodeName(nodes, 'n2'))).toBe('Forget the recovery ID for “Harbor world”?');
   });
 
-  it("round 14's gap wording (GM - Design, 2026-10-27), exact", async () => {
+  it("the gap wording (design, 2026-10-27), exact", async () => {
     const wl = await import('./worldLabsWaiting');
     const { noteNodeLabels, forgetNodeLabelsForTests } = await import('./lastNodeLabels');
     forgetNodeLabelsForTests();

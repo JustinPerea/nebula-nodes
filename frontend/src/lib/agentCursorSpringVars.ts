@@ -20,7 +20,7 @@ import { SPRING_SOFT, springFromStiffness, springLinear } from './springs';
 
 /** The CSS springs and the expression's numbers, sampled once from
  *  lib/springs.ts, lib/agentCursorExpression.ts and lib/agentCursorTuning.ts
- *  (agentCursor.css reads them): GM retunes in the tuning module alone. */
+ *  (agentCursor.css reads them): a retune is made in the tuning module alone. */
 let springVars: Record<`--${string}`, string> | null = null;
 export function cursorSpringVars(): Record<`--${string}`, string> {
   if (springVars) return springVars;

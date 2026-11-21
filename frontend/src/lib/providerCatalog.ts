@@ -35,7 +35,7 @@ export interface ProviderKeySpec {
    *  goes (design, PR #203; Idol's "Open Hugging Face tokens"). Every provider
    *  has one. It is the one source of the row's credential noun
    *  (`credentialNoun`): its buttons, notices and
-   *  screen-reader names say the link's word (GM, PR #203 r25 item 3). */
+   *  screen-reader names say the link's word (design, PR #203). */
   keyLink: string;
 }
 
@@ -47,7 +47,7 @@ const LINK_WORD = / (keys|tokens|service accounts)$/;
 
 /** What the provider calls the credential, as its link says it: "key" for
  * "Open OpenAI keys", "token" for "Open Hugging Face tokens" and "Open
- * Replicate tokens" (GM, PR #203 r25 item 3: every provider, from one
+ * Replicate tokens" (design, PR #203: every provider, from one
  * source). */
 export function credentialNoun(spec: Pick<ProviderKeySpec, 'keyLink'>): string {
   const word = LINK_WORD.exec(spec.keyLink)?.[1];
@@ -57,12 +57,12 @@ export function credentialNoun(spec: Pick<ProviderKeySpec, 'keyLink'>): string {
 /** The row's credential by name, its noun said once: "Hugging Face token",
  * "Replicate token", "OpenAI API key", "Google · Gemini API key", "Google ·
  * Vertex AI service account key", "Krea · API key", "Krea · usage key"
- * (review 12, copy LOW-1: never "Krea · API key API key"). The one name
- * screen readers hear for the row's Add, field, Show and Remove (GM, PR #203
- * r27 item 6). */
+ * (never "Krea · API key API key"). The one name
+ * screen readers hear for the row's Add, field, Show and Remove (design, PR #203).
+ */
 export function credentialName(spec: Pick<ProviderKeySpec, 'keyLink' | 'label'>): string {
   // Google Cloud's service-account key isn't an API key: "Google · Vertex AI
-  // service account key" (GM, PR #203 r27 item 6).
+  // service account key" (design, PR #203).
   if (LINK_WORD.exec(spec.keyLink)?.[1] === 'service accounts') return `${spec.label} service account key`;
   const noun = credentialNoun(spec);
   if (noun !== 'key') return `${spec.label} ${noun}`;
@@ -111,9 +111,9 @@ export const PROVIDER_KEYS: readonly ProviderKeySpec[] = [
   { key: 'BFL_API_KEY', label: 'Black Forest Labs', keyLink: 'Open Black Forest Labs keys', placeholder: 'bfl_...', url: 'https://dashboard.bfl.ai',
     brand: ['FLUX'], note: 'FLUX on Black Forest Labs’ own API', lead: 'flux-3-image' },
   // Optional for the Idol node on Speridlabs' Hugging Face Space: it runs
-  // without a token (the first live call, PR #203 round 7), and a token gives
-  // its runs the person's own ZeroGPU allowance. Copy: GM, PR #203 r12 item 3
-  // (the helper) and r11 item 1 (the instruction, the link and the caveat, in
+  // without a token (the first live call, PR #203), and a token gives
+  // its runs the person's own ZeroGPU allowance. Copy: Design, PR #203
+  // (the helper) and (the instruction, the link and the caveat, in
   // that order). The token kind is a product decision: fine-grained, with no
   // repository access. Hugging Face's docs don't say a token with no
   // permissions counts toward ZeroGPU quota; unconfirmed until the live run
@@ -128,7 +128,7 @@ export const PROVIDER_KEYS: readonly ProviderKeySpec[] = [
     instruction: 'Create a fine-grained token in your Hugging Face settings and give it no repository access. '
       + 'Nebula uses it only for Idol’s GPU time on Hugging Face.',
     keyLink: 'Open Hugging Face tokens',
-    // GM, PR #203 r14 item 1, verbatim.
+    // Design, PR #203, verbatim.
     caveat: 'With your token, Idol runs on your Hugging Face allowance. With Hugging Face PRO, time past your '
       + 'allowance uses your prepaid Hugging Face credits.' },
   // BytePlus Service Specific Terms (Model Services): "The BytePlus Model

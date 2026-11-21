@@ -8,7 +8,7 @@ import { FailureNotice } from './errorCopy';
  */
 export async function enhancePrompt(prompt: string): Promise<string> {
   // The backend's reason (no key, a provider error) after the heading; a
-  // FastAPI field list is no reason the person can read (GM's fallback line).
+  // FastAPI field list is no reason the person can read (the design's fallback line).
   const res = await apiRequest("Couldn’t enhance the prompt.", '/api/enhance-prompt', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

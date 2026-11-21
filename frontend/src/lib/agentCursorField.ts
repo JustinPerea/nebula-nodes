@@ -1,5 +1,5 @@
 /**
- * Where `type` shows its caret or underline (GM - Design's cursor spec, §2):
+ * Where `type` shows its caret or underline (the design's cursor spec, §2):
  * the target card's free-text field, with the caret at the end of its text;
  * or, for a param edit at a port, the row's label, underlined. Only read when
  * a type state starts and when the field's text changes, never per frame.

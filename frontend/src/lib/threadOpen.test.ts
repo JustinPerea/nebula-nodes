@@ -14,7 +14,7 @@ import { usePersonThreadStore } from '../store/personThreadStore';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
-/** GM r100.3: the reply's Update ("Claude Code replied in “Coast”.") opens
+/** Design: the reply's Update ("Claude Code replied in “Coast”.") opens
  * the thread of the message it answered, in that message's project. */
 
 let header: HTMLElement | null = null;
@@ -58,7 +58,7 @@ describe('openThreadIn', () => {
     expect(useUIStore.getState().agentLogOpen).toBe(true);
   });
 
-  it('says why when it can’t, in the because form, with Try again only where it helps (GM r108 string 6)', async () => {
+  it('says why when it can’t, in the because form, with Try again only where it helps', async () => {
     useProjectStore.setState({ activeProject: project('p1'), open: vi.fn(async () => {}),
       projects: [{ id: 'p2', name: 'Coast' }], trash: [{ id: 'p3', name: 'Old' }] } as never);
     await expect(openThreadIn(undefined)).rejects.toThrow(exactly('Nebula couldn’t open this thread because this Update doesn’t say which project it’s in.'));
@@ -72,7 +72,7 @@ describe('openThreadIn', () => {
   });
 });
 
-describe('GM r108 D2: Open focuses the reply’s row, its ring inside the log’s scroll area', () => {
+describe('Open focuses the reply’s row, its ring inside the log’s scroll area', () => {
   function thread(ids: string[]) {
     const scroller = document.createElement('div');
     scroller.className = 'agent-log__body message-box__thread';
@@ -126,12 +126,12 @@ describe('GM r108 D2: Open focuses the reply’s row, its ring inside the log’
     expect(css).toMatch(/\.message-box__item\[data-focus-target\]\s*\{\s*padding: 4px 6px;\s*margin: -4px -6px 8px;/);
     // Brought in clear of the scroll fade at the thread's top and bottom.
     expect(css).toMatch(/\.message-box__item\s*\{[^}]*scroll-margin-block:/);
-    // Nothing else rings the header after Open (round 5's clipped ring).
+    // Nothing else rings the header after Open (the clipped ring).
     expect(readFileSync(join(__dirname, 'threadOpen.ts'), 'utf8')).toMatch(/focusRow\(row\)/);
   });
 });
 
-describe('GM r108 string 6: every line an Updates action shows uses curly apostrophes', () => {
+describe('every line an Updates action shows uses curly apostrophes', () => {
   // The files whose thrown lines an Update's action shows in the corner.
   const files = ['lib/threadOpen.ts', 'lib/canvasProposalReview.ts', 'lib/assetProposalReview.ts', 'lib/goToCanvas.ts',
     'components/agent-notes/AgentNotesCorner.tsx'];

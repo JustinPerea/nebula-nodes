@@ -72,7 +72,7 @@ const overlap = (a: Rect, b: Rect, pad = 0) =>
 
 /**
  * Where a parked cursor's pills go so they stay inside the panel and clear
- * of the arrow and the chevron (GM r136, ruling 4). The pills sit right of
+ * of the arrow and the chevron (design). The pills sit right of
  * the arrow and below its top by default; a say wider than the room to the
  * panel's edge, or one that would run under the panel's bottom, is moved:
  * slid left to fit, and when that puts it on the arrow or the chevron, or

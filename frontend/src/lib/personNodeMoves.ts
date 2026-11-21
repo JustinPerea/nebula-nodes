@@ -1,5 +1,5 @@
 /**
- * Which node moves the person caused (GM - Design, PR #211 review 5, item 5:
+ * Which node moves the person caused (design, PR #211:
  * the cause decides, not the position). The agent cursor layer reads it: a
  * cursor resting on a node the person moves (a drag's drop, a keyboard
  * nudge, an Arrange, their own undo or redo) rides it at 0 px; a move anyone

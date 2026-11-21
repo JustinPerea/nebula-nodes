@@ -144,7 +144,7 @@ export function canvasSpace(store: FlowStoreApi): CursorSpace {
 }
 
 /** The point a resolution parks a cursor at, or null when there is none (the
- *  cursor then holds its last spot, GM r6). The edge park and the launcher
+ *  cursor then holds its last spot, design). The edge park and the launcher
  *  park fly to their point like an exact item: their chevron and dot are the
  *  later slices' (the resolution's `kind` is how they tell them apart). */
 export function resolutionPoint(resolution: Resolution): Point | null {
@@ -169,7 +169,7 @@ export interface ScreenSpaceOptions {
   canvasMounted: () => boolean;
   /** Where a canvas anchor is on screen (client px), or null when it isn't
    *  drawn or is outside the canvas's box: the screen layer's flight back to
-   *  the canvas aims here while the canvas is mounted (GM r137). Absent: a
+   *  the canvas aims here while the canvas is mounted (design). Absent: a
    *  canvas anchor resolves to nothing while the canvas is mounted. */
   canvasPoint?: (anchor: AgentCursorAnchor, waitRest?: boolean) => Point | null;
   /** Where a cursor rests on a launcher that is a canvas node (a Character
@@ -179,7 +179,7 @@ export interface ScreenSpaceOptions {
    *  beside it. */
   launcherRest?: (launcher: Element) => Point | null;
   /** The item this anchor names no longer exists (a removed image): the
-   *  cursor holds its spot, GM r4. Decided by the caller; the resolver only
+   *  cursor holds its spot, design. Decided by the caller; the resolver only
    *  takes it as an input. */
   gone: (anchor: AgentCursorAnchor) => boolean;
   /** What wakes a resting cursor: the page scrolled or resized, an anchor or
@@ -281,7 +281,7 @@ export interface FlowStoreLike {
  * Wakes `wake` (one call a frame at most) when the canvas viewport pans or
  * zooms or a node moves: a React Flow transform change fires no DOM event, so
  * a cursor parked at a Moodboard node on the canvas would stay behind
- * (review of PR #233, finding 1). Reads two store fields on a store change,
+ * (review of PR #233). Reads two store fields on a store change,
  * and no layout; the wake itself is the space's one re-read.
  */
 export function watchFlowStore(store: FlowStoreLike, wake: () => void): () => void {

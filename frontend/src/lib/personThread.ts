@@ -1,12 +1,12 @@
 /**
- * The Message box (GM - Design r50, r55; backend services/person_thread.py):
+ * The Message box (design; backend services/person_thread.py):
  * the person messages a Claude Code session that listens through the Nebula
  * channel, from the composer in the Agent log, and reads its replies there.
  *
  * The eager part: the rows and the listeners, which the store
  * (store/personThreadStore.ts, loaded with the app) needs to take every
  * socket event (the wake path). Everything only the deferred box uses lives
- * in the Agent log's chunk (GM r61, r70's budget): its words, states and
+ * in the Agent log's chunk (the design's budget): its words, states and
  * folds in lib/personThreadBox.ts, the draft and the send (the one API
  * call) in lib/personThreadCompose.ts.
  */
@@ -64,11 +64,11 @@ export interface ThreadRow {
   proposalId?: string;
   noteId?: string;
   pinId?: string;
-  /** A reply: the message its session's listener had taken when it replied (NIT-4). */
+  /** A reply: the message its session's listener had taken when it replied. */
   replyTo?: string | null;
-  /** A question row, once its set closed (GM r79.5): the person's own record, never an agent's. */
+  /** A question row, once its set closed (design): the person's own record, never an agent's. */
   outcome?: QuestionOutcome;
-  /** Raised by each change to the row (review 3 LOW-4): the newer copy wins a merge. */
+  /** Raised by each change to the row: the newer copy wins a merge. */
   rev?: number;
 }
 
@@ -91,7 +91,7 @@ export interface ChannelListener {
   session: AgentPresenceSession | null;
 }
 
-/** GM r89.1: THE one rule for what counts as a reply to the person: a reply
+/** Design: THE one rule for what counts as a reply to the person: a reply
  * and a pin answer (addressed to the person). The "New reply" pill, the
  * "N unread replies" badge and the spoken "… replied." all read it. */
 export function countsAsReply(row: Pick<ThreadRow, 'kind'>): boolean {
@@ -195,7 +195,7 @@ export function sanitizeListener(raw: unknown): ChannelListener | null {
 /** Rows merged by id, oldest first (a changed row replaces its old copy). */
 export function mergeRows(current: readonly ThreadRow[], incoming: readonly ThreadRow[]): ThreadRow[] {
   const byId = new Map(current.map((row) => [row.id, row]));
-  // A copy older than the one held (a lower rev) never replaces it (review 3 LOW-4).
+  // A copy older than the one held (a lower rev) never replaces it.
   for (const row of incoming) if ((byId.get(row.id)?.rev ?? 0) <= (row.rev ?? 0)) byId.set(row.id, row);
   return [...byId.values()].sort((a, b) => a.at - b.at || a.id.localeCompare(b.id));
 }
@@ -206,7 +206,7 @@ export function mergeRows(current: readonly ThreadRow[], incoming: readonly Thre
 export function syncRows(current: readonly ThreadRow[], snapshot: readonly ThreadRow[]): ThreadRow[] {
   const newest = snapshot.reduce((at, row) => Math.max(at, row.at), -Infinity);
   const ids = new Set(snapshot.map((row) => row.id));
-  // At or after the snapshot's newest (review 4 NIT-4): a row the tab holds
+  // At or after the snapshot's newest: a row the tab holds
   // with the same time as the snapshot's newest isn't older than it.
   return mergeRows(current.filter((row) => ids.has(row.id) || row.at >= newest), snapshot);
 }
@@ -214,9 +214,9 @@ export function syncRows(current: readonly ThreadRow[], snapshot: readonly Threa
 /** The last event of an agent session (by cursor key): when, and its action line. */
 export interface SessionActivity { at: number; line: string | null; /** The line is Nebula's own words (the backend's log), not the agent's say. */ nebula?: boolean }
 
-// -- availability (the Message box's and the shortcut sheet's, GM r89.4, r94.2) ------
+// -- availability (the Message box's and the shortcut sheet's, design) ------
 
-/** The product, named literally (r61 answer 3): the composer's label with no session to name (GM r89.4). */
+/** The product, named literally: the composer's label with no session to name (design). */
 export const PRODUCT_LABEL = 'Claude Code';
 
 export type Availability =
@@ -240,7 +240,7 @@ export function availability(listeners: readonly ChannelListener[], offline: boo
 }
 
 /**
- * GM r89.4: THE label the composer names its agent by, in every state: the
+ * Design: THE label the composer names its agent by, in every state: the
  * field's placeholder and aria-label ("Message Claude Code") and the lock
  * line ("Claude Code stopped listening…") read it, as the agent's rows do
  * (its cursor label). Ready: the recipient. Stopped: the listener that

@@ -92,8 +92,8 @@ function allowedBackend(origin: string): boolean {
 }
 
 /** Whether this page runs in the desktop app (its shell hands over the
- * person token), not a plain browser tab. Error copy reads it (GM,
- * error-copy round 2): a reload helps in the app, a fresh link in a tab. */
+ * person token), not a plain browser tab. Error copy reads it (design):
+ * a reload helps in the app, a fresh link in a tab. */
 export function inDesktopShell(): boolean {
   return hasDesktopBridge();
 }
@@ -176,7 +176,7 @@ export function browserPersonCredential(): PersonCredential | null {
     // A fresh link supersedes whatever this tab held before.
     memoryCredential = fromLink;
     writeStored(fromLink);
-    // GM r29 item 3 (fix round 19): the same link reopened (the banner's own
+    // Design: the same link reopened (the banner's own
     // fix) is said hello with too, so the server can promote this tab again.
     window.dispatchEvent(new CustomEvent(PERSON_CONNECTED_EVENT));
     return fromLink;
@@ -250,7 +250,7 @@ export function forgetPersonCredential(): void {
 }
 
 /**
- * Justin, 2026-10-31 (PR #204 round 14): a browser tab drops its stored person token when the
+ * Justin, 2026-10-31 (PR #204): a browser tab drops its stored person token when the
  * backend answers explicitly that the token it sent is invalid: the canvas socket refusing the
  * hello that carried it (the backend's `personRequired` answer to that hello), or a Commons call
  * refused with 401 after the token was looked up again. Then the tab is a plain never-connected
@@ -281,9 +281,9 @@ export function personUnavailableReason(): PersonUnavailableReason {
 
 export function personRequiredMessage(reason: PersonUnavailableReason = personUnavailableReason()): string {
   switch (reason) {
-    // GM, round 4 (2026-10-23), verbatim: a banner stays up, so it fits one
+    // Design (2026-10-23), verbatim: a banner stays up, so it fits one
     // line at the region's 560 px (the dev-renderer one is developer-only and
-    // may wrap). Line 3 on the refusal still says what to do. GM r14 (#204 round 9) dropped
+    // may wrap). Line 3 on the refusal still says what to do. A later design change (PR #204) dropped
     // the debug-port line's "Debug mode:" lead.
     case 'debug-port':
       return 'A debugging port is open, so Settings, proposals and chats are off.';
@@ -291,24 +291,24 @@ export function personRequiredMessage(reason: PersonUnavailableReason = personUn
       return "Dev mode: the Vite renderer can’t use your token. Set NEBULA_DESKTOP_DEV_PERSON=1 to allow it.";
     case 'untrusted-sender':
     case 'desktop-unavailable':
-      // GM, round 4 (2026-10-23), verbatim: one line, ending like the app
+      // Design (2026-10-23), verbatim: one line, ending like the app
       // banner, since the window can close while Nebula keeps running in the Dock.
       return "Nebula couldn’t confirm this window is yours. Quit Nebula and open it again.";
     default:
       // The desktop app gets here when its backend refuses the token the
-      // shell handed over (desktopReason stays null then): GM's app banner
-      // (round 4, 2026-10-23, verbatim). A quit and reopen starts a fresh
+      // shell handed over (desktopReason stays null then): The design's app banner
+      // (verbatim). A quit and reopen starts a fresh
       // backend with a fresh token; a reload asks the same shell for the same
       // token, which the same backend refuses again.
       if (hasDesktopBridge()) {
         return "This window isn’t connected as you. Quit Nebula and open it again.";
       }
-      // GM - Design, round 4 (2026-10-23), verbatim.
+      // Design (2026-10-23), verbatim.
       return "This tab isn’t connected as you. Open the link Nebula printed when it started.";
   }
 }
 
-// GM r24 (PR #200 fix round 15): whether the person-gate banner is showing
+// Design (PR #200): whether the person-gate banner is showing
 // now, its line or null. PersonRequiredBanner keeps it; the note dialog
 // reads it (Send note waits for the tab to be connected, and a refused
 // send's toast leaves the fix to the banner).
@@ -327,16 +327,16 @@ export function subscribePersonBanner(listener: () => void): () => void {
 }
 
 /**
- * GM r27 item 2 (PR #200 fix round 18): the banner's × hides the banner, not
+ * Design (PR #200): the banner's × hides the banner, not
  * the condition. Whether this tab is known not to be connected as the person:
  * set by any person-only refusal (PERSON_REQUIRED_EVENT, which also shows the
  * banner), cleared only when a person link connects the tab. The note dialog
  * holds Send note on it, so after × Send note stays disabled with its reason
- * and never brings up the Q116a toast.
+ * and never brings up a toast.
  */
 let personGateHeldNow = false;
 /**
- * GM, PR #204 r5 item 2 ("held is a state, not a path"): whether this page's
+ * Design, PR #204 ("held is a state, not a path"): whether this page's
  * canvas socket has answered who it is since the page loaded, either way: the
  * person-only `proposalSync` (promoted) or a refusal (`personRequired`, no
  * token, a 403 person_required). Until then the tab isn't confirmed as the
@@ -347,7 +347,7 @@ let personGateHeldNow = false;
 let personGateAnsweredNow = import.meta.env.MODE === 'test';
 const personGateListeners = new Set<() => void>();
 /**
- * PR #204 round 11 (review 9 gates-trace MEDIUM-1): when the current hold began, so the held
+ * PR #204 (gates-trace): when the current hold began, so the held
  * rule's 150 ms (a quick reconnect never switches a view) runs from the hold itself, not from
  * whenever a view mounts. A tab held long ago that opens the Commons or Settings is past it from
  * its first frame. One timer here tells the subscribers when the 150 ms are up.
@@ -369,7 +369,7 @@ function setPersonGateHeld(held: boolean): void {
 /** Tells the subscribers once the hold has lasted the 150 ms. A timer can fire up to a
  * millisecond before Date.now shows its full delay (the timer and Date.now round different
  * clocks), and personHeldSettled reads Date.now: so when it isn't settled yet, wait the rest
- * rather than tell no one and leave every held view unswitched (PR #204 round 18b, CI). */
+ * rather than tell no one and leave every held view unswitched (PR #204, CI). */
 function settleWhenDue(): void {
   settleTimer = setTimeout(() => {
     settleTimer = null;
@@ -384,13 +384,13 @@ export const personGateHeld = (): boolean => personGateHeldNow;
 /** The socket has answered since load (promoted or refused). */
 export const personGateAnswered = (): boolean => personGateAnsweredNow;
 /** Not confirmed as the person: held, or no answer yet since load. One state
- * for every lock on what only the person may open (GM r5 item 2). */
+ * for every lock on what only the person may open (design). */
 export const personUnconfirmed = (): boolean => personGateHeldNow || !personGateAnsweredNow;
 export function subscribePersonGate(listener: () => void): () => void {
   personGateListeners.add(listener);
   return () => { personGateListeners.delete(listener); };
 }
-// GM r29 item 3 (fix round 19): the hold follows the server's state both
+// Design: the hold follows the server's state both
 // ways. Demoted (a hello the server refuses, its `personRequired` frame, or a
 // person-only request refused 403 person_required, all PERSON_REQUIRED_EVENT):
 // the hold and the banner come back. Promoted (notePersonPromoted, from the
@@ -400,7 +400,7 @@ if (typeof window !== 'undefined') {
 }
 
 /**
- * Review 3 LOW-1 (#204 r5): how many times the server has promoted this tab,
+ * (#204): how many times the server has promoted this tab,
  * and which answers came to requests sent before the latest promote. A
  * refusal of such a request is the old state's answer, not the tab's now:
  * it holds nothing (lib/backend notePersonRequired), and a line it puts up
@@ -408,17 +408,17 @@ if (typeof window !== 'undefined') {
  */
 let personPromotionsNow = 0;
 export const personPromotions = (): number => personPromotionsNow;
-/** PR #204 round 10 (GM r17 item 6): whether the server has promoted this tab at all. A held tab
+/** PR #204 (design): whether the server has promoted this tab at all. A held tab
  * that was promoted is a demoted one (hooks/useTabHeld useDemotedView); the count above never
  * resets (its stamps compare against it), this does, with the session in tests. */
 let personWasPromotedNow = false;
 export const personWasPromoted = (): boolean => personWasPromotedNow;
 /** A demote that has lasted the held rule's 150 ms, from the demote itself: the server promoted
- * this tab once and holds it now. Round 13 (review 10 held-calls MEDIUM-2): what holds the Commons
+ * this tab once and holds it now. (held-calls): what holds the Commons
  * (hooks/useTabHeld useDemotedView, lib/commonsApi send) is personHeldSettled, any hold, since a
  * reloaded tab is held without a promote on this page. */
 export const personDemotedSettled = (): boolean => personHeldSettled() && personWasPromotedNow;
-/** Review 4 LOW-1 (round 6): the promote count each answer's request was sent under, recorded
+/** The promote count each answer's request was sent under, recorded
  * at send time, so "sent before the promote" is read against the promotes so far whenever it is
  * asked (at parse, at a line's registration), never frozen when the answer was parsed. */
 const sentUnder = new WeakMap<object, number>();

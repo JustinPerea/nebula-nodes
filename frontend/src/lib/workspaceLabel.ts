@@ -9,7 +9,7 @@ const LABELS: Record<ViewMode, string> = {
 export function workspaceLabel(view: ViewMode): string { return LABELS[view]; }
 
 /**
- * PR #204 round 18d follow-up (GM r33 3): where a screen's back button goes, and what it says, from
+ * PR #204 follow-up (design): where a screen's back button goes, and what it says, from
  * one place so the two never disagree. With a project open it goes back to the screen the person
  * came from ("← Canvas"); with none open (the Commons-off view after a reload) it goes to the
  * Projects home and says so ("← Projects", its accessible name starting "Projects").

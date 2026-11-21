@@ -31,7 +31,7 @@ export const PORT_COLORS: Record<PortDataType, string> = {
  * Which output types may feed which input types: one rule shared with the
  * backend (backend/data/port_rules.json; the same bytes as ./portRules.json,
  * pinned by a test on each side), so the tab's checks and the server's
- * connect route can't differ (PR #199 round 17). An output fits an input when
+ * connect route can't differ (PR #199). An output fits an input when
  * either is Any, they're the same type, or the pair is listed in
  * alsoCompatible (either way round).
  */

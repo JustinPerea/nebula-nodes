@@ -3,7 +3,7 @@ import { curlApostrophes } from './errorCopy';
 /**
  * The hold after the spend record was found unreadable (review of PR #242): for 24 hours every
  * agent spending limit counts as used up. The backend sends when it ends (`until`, epoch
- * seconds); the lines here are GM - Design's, verbatim, and the live form is drawn by the app so it
+ * seconds); the lines here are the design's, verbatim, and the live form is drawn by the app so it
  * goes the moment the hold does.
  */
 
@@ -19,7 +19,7 @@ export const LEDGER_CANT_READ = 'Nebula can’t open its record of what agents h
 export const COUNTED_AS_USED_UP = 'Counted as used up';
 
 /** The figure of a row set to "No limit" while the hold is on: what the record counts then covers
- * only the time since it was found unreadable, so there is no true amount to show (GM - Design). */
+ * only the time since it was found unreadable, so there is no true amount to show (design). */
 export const AMOUNT_UNKNOWN = 'Amount unknown';
 
 /** A row's usage figure during the hold: used up where it has a limit, unknown where it has none. */
@@ -27,7 +27,7 @@ export function holdFigure(hasLimit: boolean): string {
   return hasLimit ? COUNTED_AS_USED_UP : AMOUNT_UNKNOWN;
 }
 
-/** The same two inside a paragraph (the outside agents' help), as full sentences (GM - Design). */
+/** The same two inside a paragraph (the outside agents' help), as full sentences (design). */
 export function holdSentence(hasLimit: boolean): string {
   return hasLimit ? 'This limit is counted as used up.' : 'The amount spent isn’t known.';
 }

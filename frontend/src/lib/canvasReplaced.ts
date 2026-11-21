@@ -1,5 +1,5 @@
 /**
- * Round 23 of PR #195 (review 22, M-1 and L-2): the canvas the tab shows was
+ * The canvas the tab shows was
  * replaced (a project loaded over it, an import, a clear, a sync that brought
  * another canvas). Node ids start again at n1 in every canvas, so anything
  * still holding an id of the canvas that went (the note dialog's target)
@@ -9,8 +9,8 @@
 const listeners = new Set<() => void>();
 let replacements = 0;
 
-/** What replaced the canvas, as far as the tab knows (fix round 1 of PR
- * #200, GM answer 4: the chat's Apply says why it can't apply any more).
+/** What replaced the canvas, as far as the tab knows (PR
+ * #200, design: the chat's Apply says why it can't apply any more).
  * `opened`: another project's canvas came (an agent's switch, or one with
  * no agent behind it); `cleared`: a clear emptied it; `changed`: anything
  * else (an import, a load, a sync that brought another canvas). */
@@ -45,14 +45,14 @@ export function subscribeCanvasReplaced(listener: () => void): () => void {
 }
 
 /**
- * GM - Design, PR #200 answer 4 (2026-10-27), verbatim: the tooltip of the
+ * Design, PR #200 (2026-10-27), verbatim: the tooltip of the
  * chat's "Apply to @n2" once the canvas it was written for was replaced.
  *   switched: "Codex opened “Second canvas” after this was written."
  *     (no agent: "Nebula opened “Second canvas” after this was written.")
  *   cleared: "The canvas was cleared after this was written."
  * `projectNow`: the project open now, when the cause didn't name one. Any
- * other replacement (an import, a load) has no GM line yet: "The canvas
- * changed after this was written." (asked of GM).
+ * other replacement (an import, a load) has no design line yet: "The canvas
+ * changed after this was written." (asked of design).
  */
 export function replacedSinceWrittenLine(cause: CanvasReplacement, projectNow: string | null): string {
   if (cause.kind === 'cleared') return 'The canvas was cleared after this was written.';

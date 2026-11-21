@@ -2,7 +2,7 @@ import { becauseLine, nodeNameList } from './errorCopy';
 import { agentNameInSentence } from './personalAgentName';
 
 /**
- * GM - Design, round 19 (PR #195, review 18 G-1), verbatim. A project switch
+ * Design (PR #195), verbatim. A project switch
  * or an import waits for the saves on their way (15 s at most); one that
  * failed or didn't land in time is said on the new canvas, in place of the
  * out-of-date line:
@@ -19,26 +19,26 @@ import { agentNameInSentence } from './personalAgentName';
  */
 export interface CutOffSave {
   /** The node's id (never shown): two nodes with the same title are two
-   * changes (round 21, review 20 L-8). Lines written before it key on the title. */
+   * changes. Lines written before it key on the title. */
   nodeId?: string | null;
   /** The node's title as its card showed it. */
   node: string | null;
   /** The setting's label on the card (never a raw key). */
   setting: string | null;
-  /** The node's place on its canvas when the save was made: GM's lists
-   * read in canvas order (fix round 1 of PR #200). Unknown goes last. */
+  /** The node's place on its canvas when the save was made: The design's lists
+   * read in canvas order. Unknown goes last. */
   order?: number;
 }
 
 export type CutOffEnding = { kind: 'switch' } | { kind: 'import' }
   /** `byAgent` false: the switch had no agent behind it (a script, or one
-   * found after a reconnect): GM's no-agent form (round 23). */
+   * found after a reconnect): the design's no-agent form. */
   | { kind: 'agent'; agent: string | null; copy?: { id: string; name: string } | null; byAgent?: boolean }
-  /** An agent's clear (round 20): agentClearedLine, no project. */
+  /** An agent's clear: agentClearedLine, no project. */
   | { kind: 'agentClear'; agent: string | null }
-  /** Round 22 (review 21, L-a): a sync with no edit found another canvas (a
-   * restart, a missed change): changesNotSavedLine, no project. Round 23
-   * (GM): `copy`, the recovered copy the edits it cut off were saved to. */
+  /** A sync with no edit found another canvas (a
+   * restart, a missed change): changesNotSavedLine, no project. 
+   * (design): `copy`, the recovered copy the edits it cut off were saved to. */
   | { kind: 'reconnect'; copy?: { id: string; name: string } | null };
 
 function ending(how: CutOffEnding): string {
@@ -60,7 +60,7 @@ export function savingCutOffLine(saves: CutOffSave[], project: string, how: CutO
 /** Which node a save is for: its id, or its title when it has none. */
 const nodeKey = (save: CutOffSave): string => (save.nodeId ? `id:${save.nodeId}` : `title:${save.node}`);
 
-/** Each setting of each node once (a save named twice is one change), by node id (L-8). */
+/** Each setting of each node once (a save named twice is one change), by node id. */
 export function distinctSaves(saves: CutOffSave[]): CutOffSave[] {
   const seen = new Set<string>();
   return saves.filter((save) => {
@@ -78,18 +78,18 @@ function quotedList(items: string[]): string {
 }
 
 /**
- * GM - Design, round 20 (follow-up 2, 2026-10-27), verbatim: an agent's
+ * Design (2026-10-27), verbatim: an agent's
  * switch whose handoff save failed, as one line, not two (the toast no
  * longer says "Edits saved as a copy." beside it):
  *   "Couldn't save “<setting>” for “<node>” in “<old project>” when <agent>
  *    switched projects. Your edits were saved as a copy, “<copy name>”."
  *   Several settings use the undo counting: "Couldn't save 3 changes in
- *   “<old project>”…". One it can't name: "your last change" (as round 19).
+ *   “<old project>”…". One it can't name: "your last change" (as).
  * The copy is a whole new project in Projects (POST /api/projects/recover),
  * "Recovered <old project>", then "Recovered <old project> 2", 3 and so on
- * (GM round 21, G5: Nebula names it; GM r23 on PR #199, a: no parentheses);
+ * (design, PR #199: Nebula names it, no parentheses);
  * the line's "Open copy" opens it.
- * GM round 21 (polish): non-breaking spaces inside the quoted project names,
+ * Design (polish): non-breaking spaces inside the quoted project names,
  * so a name wraps as one piece.
  */
 export function handoffFailedLine(saves: CutOffSave[], project: string, agent: string | null, copyName: string): string {
@@ -113,7 +113,7 @@ function keepTogether(name: string): string {
 }
 
 /**
- * GM - Design, round 20 (item 3 and follow-up 4, 2026-10-27), verbatim: an
+ * Design (2026-10-27), verbatim: an
  * AGENT's clear that dropped what the person was editing (typing not yet
  * saved, a write on its way that Nebula then refused, a rename):
  *   One: "<Agent> cleared the canvas while you were editing “<s>” for
@@ -141,18 +141,18 @@ export function agentClearedLine(saves: CutOffSave[], agent: string | null): str
 }
 
 /**
- * Round 22 (review 21, L-a: "never lose it with no line"): typing Nebula
+ * The rule is "never lose it with no line": typing Nebula
  * didn't keep because the canvas it was for is no longer the one Nebula
  * holds, found by a sync with no edit (a restart that lost Nebula's canvas
  * revisions, then showed another canvas). Not an agent's clear, so not its
- * line (GM follow-up 4). GM - Design's failed-save wording (round 23,
+ * line (design). The design's failed-save wording (
  * 2026-10-27), verbatim:
  *   One node, one setting: "Couldn't save “<setting>” for “<node>”."
  *   One node, 2–3 settings: "Couldn't save “a” and “b” for “Hero still”." /
  *    "“a”, “b” and “c”"
  *   One node, 4+ settings: "Couldn't save 4 settings for “Hero still”."
  *   Two or three nodes: "Couldn't save your changes to “Hero still” and
- *    “Hero prompt”." Same titles grouped with a count (GM 2026-10-27):
+ *    “Hero prompt”." Same titles grouped with a count (design 2026-10-27):
  *    "…to 2 “Text” nodes.", "…to “Brief” and 2 “Text” nodes."
  *   Four+ nodes: "Couldn't save your changes to 4 nodes."
  *   None it can name: "Couldn't save your last change."
@@ -163,16 +163,16 @@ export function changesNotSavedLine(saves: CutOffSave[]): string | null {
   if (settings.length === 0) return "Couldn’t save your last change.";
   const nodes = new Map<string, string>();
   const at = (save: CutOffSave) => save.order ?? Number.POSITIVE_INFINITY;
-  // Canvas order (GM, PR #200 answer 3), not the order the saves came in.
+  // Canvas order (design, PR #200), not the order the saves came in.
   for (const save of [...settings].sort((a, b) => at(a) - at(b))) if (!nodes.has(nodeKey(save))) nodes.set(nodeKey(save), save.node!);
-  // Several nodes: the shared name list (errorCopy nodeNameList, GM
+  // Several nodes: the shared name list (errorCopy nodeNameList, design
   // 2026-10-27): two nodes titled “Text” read "2 “Text” nodes"; 4+, "4 nodes".
   // The PR #198 ’ sweep keeps the curly apostrophe.
   if (nodes.size > 1) return becauseLine({ heading: `Couldn’t save your changes to ${nodeNameList([...nodes.values()])}.`, reason: '' });
   return becauseLine({ heading: `Couldn’t save ${settingsOnOneNode(settings.map((save) => save.setting!))} for “${settings[0].node}”.`, reason: '' });
 }
 
-/** One node's settings as GM counts them (round 23): “a”; “a” and “b”;
+/** One node's settings as design counts them: “a”; “a” and “b”;
  * “a”, “b” and “c”; then "4 settings". The canvas's own failed-save line
  * (graphStore.paramSaveFailedLine) says the same. */
 export function settingsOnOneNode(settings: string[]): string {
@@ -180,12 +180,12 @@ export function settingsOnOneNode(settings: string[]): string {
 }
 
 /**
- * GM - Design, round 23 (2026-10-27), verbatim: a replacement found with no
+ * Design (2026-10-27), verbatim: a replacement found with no
  * agent behind it (after a reconnect or a restart), or a switch with no
  * agent, whose cut-off edits were saved as a copy. No "when <agent>
  * switched projects":
  *   "Couldn't save “Text” for “Hero prompt”. Your edits were saved as a
- *    copy, “Recovered Round r20”."
+ *    copy, “Recovered Round ”."
  * The head is the failed-save line above; the copy's name wraps as one piece.
  */
 export function changesSavedAsCopyLine(saves: CutOffSave[], copyName: string): string {

@@ -10,7 +10,7 @@ export interface OpenStudios {
 
 /**
  * The anchor's item no longer exists: an image removed from its board, or a
- * reference view removed from its Character (GM - Design 4). The cursor then
+ * reference view removed from its Character (design). The cursor then
  * holds its spot. Only while that item's Studio is open on its board or
  * Character and the sub-item isn't there: a panel that closed isn't a removal.
  * A whole board or Character that is gone is the backend's to say (the

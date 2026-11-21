@@ -1,5 +1,5 @@
 /**
- * What an agent cursor expresses, and for how long (GM - Design's cursor
+ * What an agent cursor expresses, and for how long (the design's cursor
  * spec, §2): the state machine behind the halo, the press and ring, the
  * shake, the caret and the mark slot. Pure, with no React and no DOM, so
  * each rule is tested on its own (tests/agentCursorExpression.test.ts).

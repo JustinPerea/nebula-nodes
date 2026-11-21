@@ -27,7 +27,7 @@ export function ghostKeyWarning(
 }
 
 /**
- * The bar's not-ready lines (GM, PR #203 r11 item 5): inside the bar the
+ * The bar's not-ready lines (design, PR #203): inside the bar the
  * control is Accept, so while Accept is key-locked, a row in a route's own
  * missing-key words says the Accept line instead ("You can accept this after
  * you add your Hugging Face token in Settings."), once. Every other row keeps
@@ -39,16 +39,16 @@ export function notReadyBarLines(
   acceptRowShown = true,
 ): Array<{ key: string; text: string; accept?: true }> {
   const lines: Array<{ key: string; text: string; accept?: true }> = [];
-  // Nodes with the same reason say one line, whatever their names (GM, PR
-  // #203 r28; r27 item 7 merged only the same name), by the reason the
+  // Nodes with the same reason say one line, whatever their names (design, PR
+  // #203; merged only the same name), by the reason the
   // backend sent (row.reason: person_line.NOT_READY_PREDICATES), never by
-  // the words (review 14, copy LOW-1): the line's index, the reason and
+  // the words: the line's index, the reason and
   // every node's name in order.
   const same = new Map<string, { index: number; reason: NotReadyReason; names: string[] }>();
   let said = false;
   for (const row of rows) {
     if (row.routeKeyLine && acceptLock) {
-      // A kept canvas holds Accept first (GM, #203 follow-up r240): its
+      // A kept canvas holds Accept first (design, PR #203): its
       // key row is not drawn until the canvas is back, and no node row
       // says the same key in its place.
       if (!said && acceptRowShown) lines.push({ key: row.ref, text: acceptLock, accept: true });
@@ -58,7 +58,7 @@ export function notReadyBarLines(
     const text = notReadyLine(row);
     const reason = row.person?.trim() && isReason(row.reason) ? row.reason : null;
     if (!reason) {
-      // A route's own line, or a backend older than round 15: a line each.
+      // A route's own line, or a backend older than: a line each.
       lines.push({ key: row.ref, text });
       continue;
     }
@@ -82,8 +82,8 @@ function isReason(value: unknown): value is NotReadyReason {
 
 /** One reason said for several nodes: their names through the shared
  * name-list rule (errorCopy.nodeNameList: up to 3 by name, a same-name group
- * as its own item, a count from 4 nodes), then the reason's own plural (GM,
- * PR #203 r28): "“Writer” and “Editor” need your Anthropic API key. Add it
+ * as its own item, a count from 4 nodes), then the reason's own plural (design,
+ * PR #203): "“Writer” and “Editor” need your Anthropic API key. Add it
  * in Settings.", "2 “Claude” nodes and “Writer” need …", "4 nodes need …".
  * One node says its singular after its quoted name. */
 export function mergedNotReadyLine(names: string[], reason: NotReadyReason): string {
@@ -92,18 +92,18 @@ export function mergedNotReadyLine(names: string[], reason: NotReadyReason): str
 
 /**
  * What the bar shows of its not-ready nodes, by the shared rule
- * (errorCopy.countsInstead; GM, PR #203 r24): up to 3 nodes, a line each;
+ * (errorCopy.countsInstead; design, PR #203): up to 3 nodes, a line each;
  * from 4, one line that counts them ("4 nodes can’t run here yet."), and
  * every node's line in the details, opened by NOT_READY_DISCLOSURE. The
  * count is of nodes, whatever lines notReadyBarLines merged.
  */
 /** The not-ready list's disclosure: one name, open or closed ("Show the
- * list" / "Hide the list"; GM, PR #203 r26). The heading inside is "Can’t
+ * list" / "Hide the list"; design, PR #203). The heading inside is "Can’t
  * run here". Every surface that lists not-ready nodes reads it. */
 export const NOT_READY_DISCLOSURE = { closed: 'Show the list', open: 'Hide the list' } as const;
 /** The disclosure when the details hold the list and something else too
  * (what Accept writes, the whole note): "Show the details" / "Hide the
- * details" (GM, PR #203 r27 item 4). */
+ * details" (design, PR #203). */
 export const DETAILS_DISCLOSURE = { closed: 'Show the details', open: 'Hide the details' } as const;
 
 /** The bar's details toggle, by what the details hold: the not-ready list
@@ -125,14 +125,14 @@ export function notReadyShown(
   const lines = notReadyBarLines(rows, acceptLock, acceptRowShown);
   if (!countsInstead(rows.length)) return { lines, inDetails: [] };
   // The Accept line stays in view whatever the count: it says why Accept is
-  // locked (review 13 of PR #203, copy NIT-3).
+  // locked.
   const accept = lines.filter((line) => line.accept);
   return { lines: [{ key: 'count', text: `${groupedCount(rows.length)} nodes can’t run here yet.` }, ...accept], inDetails: lines };
 }
 
 /** The person's line ("“GPT Image 2” needs your OpenAI API key. Add it in
- * Settings.", round 3f, the name quoted at its source since GM, PR #203 r20
- * item 3: node_readiness.instance_missing_line); from a backend older than
+ * Settings.", the name quoted at its source since the design, PR #203:
+ * node_readiness.instance_missing_line); from a backend older than
  * 3f, find_nodes' words:
  * "GPT Image 2 (n3) needs OPENAI_API_KEY in Settings > Providers". */
 export function notReadyLine(row: ProposalNotReady): string {
@@ -141,7 +141,7 @@ export function notReadyLine(row: ProposalNotReady): string {
   return curlApostrophes(row.missing.startsWith(row.name) ? `${row.ref}: ${row.missing}` : `${row.name} (${row.ref}) ${row.missing}`);
 }
 
-/** A ghost card's warning for its not-ready row: the person's line (round 3f), else find_nodes' words. */
+/** A ghost card's warning for its not-ready row: the person's line, else find_nodes' words. */
 export function notReadyWarning(row: ProposalNotReady | undefined): string | null {
   if (!row) return null;
   return curlApostrophes(row.person?.trim() || row.missing);
@@ -152,7 +152,7 @@ export function notReadyWarning(row: ProposalNotReady | undefined): string | nul
  * (costClass, the class every cost surface reads): a token
  * added after the agent proposed makes Idol "may cost", one removed makes
  * it "free", on the ghost card, in the run's counts and so on the bar and
- * the Accept chip (GM, PR #203 r15 items 1 and 2; review 7, NIT-5). The
+ * the Accept chip (design, PR #203). The
  * backend's listing does the same for agents (canvas_proposals.live_cost).
  * `paramsOf` reads the params a run node would run with: a new node's as
  * Accept writes them, a canvas node's with the proposal's changes on top
@@ -169,7 +169,7 @@ export function liveKeyBilling(
     const billing = costClass(definition, params, apiKeys);
     if (billing !== 'free' && billing !== 'mayCost') return cost;
     // The one cost class and its label (costClass,
-    // keyBillingAccount, keyBillingLabel; review 8 of PR #203, LOW-3).
+    // keyBillingAccount, keyBillingLabel).
     const account = keyBillingAccount(definition, params, apiKeys) ?? '';
     const label = keyBillingLabel(billing, account);
     if (billing === cost.kind && label === cost.label) return cost;
@@ -201,12 +201,12 @@ export function liveKeyBilling(
   });
   // Free runs are those whose kind is "free"; a kind this canvas doesn't
   // name stays in the backend's paid count, never in the free one (backend
-  // canvas_proposals.class_counts; review 11 of PR #203, NIT-4).
+  // canvas_proposals.class_counts).
   return { ...view, nodes, cost: { ...view.cost, nodes: entries, mayCostRuns: may.length, mayCost,
     freeRuns: entries.filter((entry) => entry.kind === 'free').length } };
 }
 
-/** The card's plan line under the note (GM - Design, 2026-11-01): what
+/** The card's plan line under the note (design, 2026-11-01): what
  * Accept changes and runs, by node name; the model and who pays for a single
  * paid run; the run chip's price. The backend writes it (services/
  * canvas_proposals.plan_line), so agents read the same words in `nebula
@@ -221,7 +221,7 @@ export function proposalPlan(view: ProposalView): string {
 export function proposalEstimateLabel(view: ProposalView): string | null {
   const estimate = view.cost.estimate;
   if (!estimate || view.run.length === 0) return null;
-  // A sourced $0 is free and never priced (GM, PR #203 r18 item 1), so an
+  // A sourced $0 is free and never priced (design, PR #203), so an
   // estimate here is a paid part: one that rounds to zero is "~$0".
   return formatChipEstimate(estimate.low, estimate.high, Boolean(estimate.open));
 }
@@ -232,10 +232,10 @@ function mayCostRows(view: ProposalView): Array<{ name: string; account: string 
   return (view.cost.mayCostRuns ?? 0) > 0 ? (view.cost.mayCost ?? []) : [];
 }
 
-/** The primary button's words. "Accept" when accepting runs nothing (GM -
- * Design, round 5, item 3): Accept starts no run for it (it would skip every
+/** The primary button's words. "Accept" when accepting runs nothing (design):
+ * Accept starts no run for it (it would skip every
  * node: backend main._skip_placeholders), and nothing is queued for when the
- * agent finishes. The paid count left the label (GM - Design, 2026-11-01):
+ * agent finishes. The paid count left the label (design, 2026-11-01):
  * the plan line right above it says what's paid. */
 export function acceptLabel(view: ProposalView): string {
   if (view.run.length === 0 || runsNothing(view)) return 'Accept';
@@ -255,7 +255,7 @@ const REASON_KINDS = new Set<string>(['noPrice', 'cantRun', 'awaitingInput', 'si
 /** A node's reason from the backend (model_pricing.estimate_run reasons) as
  * the Run chip records it (runScope UnpricedReason). A kind this build
  * doesn't know (a newer backend's) reads as no listed price, never a crash
- * in the bar's render (review 9 of PR #203, NIT-2). */
+ * in the bar's render. */
 export function entryReason(why: ProposalCostReason): UnpricedReason {
   switch (why.kind) {
     case 'missingKey': return { kind: 'missingKey', key: keyPhrase(Array.isArray(why.keys) ? why.keys : []) };
@@ -266,7 +266,7 @@ export function entryReason(why: ProposalCostReason): UnpricedReason {
 
 /**
  * The Accept chip's tooltip, by the Run chip's formatter (runScope
- * costTitle; GM, PR #203 r17 item 4: the same reason lines, one formatter):
+ * costTitle; design, PR #203: the same reason lines, one formatter):
  * "“A” and “B” call paid providers. Estimated cost $0.13.", then "“B” has
  * no listed price." on its own line, the may-cost sentence last. Null when
  * the chip doesn't show. `canvasName` names a canvas node the run starts
@@ -285,7 +285,7 @@ export function acceptChipTitle(
     ?? entry.nodeId ?? entry.ref;
   const atOf = (entry: Entry) => (entry.nodeId === null ? ghosts.get(entry.ref)?.position : canvasAt?.(entry.nodeId));
   const paid = view.cost.paidRuns > 0 ? view.cost.nodes.filter((entry) => entry.kind === 'paid') : [];
-  // Runs on the Krea plan: never paid, a reason line of their own (GM, PR #203 r19 item 1).
+  // Runs on the Krea plan: never paid, a reason line of their own (design, PR #203).
   const plan = view.cost.nodes.filter((entry) => entry.kind === 'plan');
   const estimate = view.cost.estimate;
   // A proposal made before reasons were sent: its unpriced nodes have no listed price.
@@ -305,13 +305,13 @@ export function acceptChipTitle(
   }) ?? null;
 }
 
-/** The count chip beside "Accept and run" (GM, PR #203 r11 item 2): "1
+/** The count chip beside "Accept and run" (design, PR #203): "1
  * paid", "2 paid · 1 may cost", "1 may cost" (a run that may bill the
  * person's own account, never counted as paid). Null when its run is free
  * or Accept runs nothing. */
 export function acceptCountChip(view: ProposalView): string | null {
   if (view.run.length === 0 || runsNothing(view)) return null;
-  // The one chip rule (costChip, GM, PR #203 r20): classes joined by "·".
+  // The one chip rule (costChip, design, PR #203): classes joined by "·".
   return costChip(null, classCounts({ paid: view.cost.paidRuns, plan: view.cost.planRuns ?? 0,
     mayCost: view.cost.mayCostRuns ?? 0 }));
 }
@@ -367,7 +367,7 @@ export interface ChangeLine {
 }
 
 /** One wire in the panel: “Prompt” → “Second take” · Prompt, the target's
- * port muted (GM - Design, PR #216 r2-r3). */
+ * port muted (design, PR #216). */
 export interface WireLine {
   id: string;
   from: string;
@@ -387,12 +387,12 @@ export interface ChangeGroup {
 const QUOTE_MARKS = '“”"\'‘’';
 
 /** A node's name on the card, in curly quotes once: quotes the name carries
- * itself come off first (review 2 L4; the plan line's rule, backend
+ * itself come off first (the plan line's rule, backend
  * canvas_proposals._plan_name), so “Hero” never reads ““Hero””. */
 export function cardQuoted(name: string): string {
   let text = name.trim();
   // Only quotes that wrap it, at both ends: an apostrophe the name ends in
-  // stays ("Artists'", review 3 NIT-3), as the backend's plan_name.
+  // stays ("Artists'"), as the backend's plan_name.
   while (text.length >= 2 && QUOTE_MARKS.includes(text[0]) && QUOTE_MARKS.includes(text[text.length - 1])) {
     text = text.slice(1, -1).trim();
   }
@@ -420,7 +420,7 @@ export function proposalChanges(view: ProposalView, values?: ProposalPersonValue
     const params = values?.nodes[node.ref] ?? node.params ?? {};
     groups.push({
       id: node.ref,
-      // By name, never by ref (GM - Design, 2026-11-01): New “Krea 2”; a name
+      // By name, never by ref (design, 2026-11-01): New “Krea 2”; a name
       // the agent gave it (`rename`) shows with the model it is.
       title: `New ${cardQuoted(node.name)}${node.model ? ` · ${node.model}` : ''}`,
       kind: 'new',
@@ -432,20 +432,20 @@ export function proposalChanges(view: ProposalView, values?: ProposalPersonValue
     const entries = Object.entries(exact ?? change.changes);
     groups.push({
       id: change.nodeId,
-      // “Hero shot” · Krea 2 (GM - Design, 2026-11-01). `name` carries the
+      // “Hero shot” · Krea 2 (design, 2026-11-01). `name` carries the
       // node's id for agents; a backend without `title` falls back to it.
       title: change.title
         ? `${cardQuoted(change.title)}${change.model && change.model !== change.title ? ` · ${change.model}` : ''}`
         : change.name,
       kind: 'edit',
       // The same model set again: its inputs are read again, never "X → X"
-      // (GM - Design, PR #216 r4 8: "Krea 2 · inputs updated").
+      // (design, PR #216: "Krea 2 · inputs updated").
       lines: entries.map(([key, diff]) => (change.inputsUpdated?.key === key
         ? { key, to: `${change.inputsUpdated.name} · inputs updated` }
         : changeLine(key, diff.to, diff.from, true))),
     });
   }
-  // Every wire Accept makes or removes, one line each (GM - Design, PR #216 r2-r3).
+  // Every wire Accept makes or removes, one line each (design, PR #216).
   // The backend names both ends on each wire; an older view's own names fill in.
   const names: Record<string, string> = {
     ...Object.fromEntries(view.params.filter((change) => change.title).map((change) => [change.nodeId, change.title!])),
@@ -465,7 +465,7 @@ export function proposalChanges(view: ProposalView, values?: ProposalPersonValue
 
 /**
  * How many changes Accept makes: the backend's `changeCount`, the one number
- * the card, the Update and MCP read (GM - Design, PR #216 r3): each new node,
+ * the card, the Update and MCP read (design, PR #216): each new node,
  * changed node, new wire and removed wire. An older backend's view without it
  * counts the panel the same way: one per node group, one per wire line.
  */
@@ -487,7 +487,7 @@ export function changeTag(changes: Record<string, { from: unknown; to: unknown }
 }
 
 /** What the notice region's polite line says once a keyboard Accept or
- * Reject closes the proposal (#216 round 3l, GM r69 a), wherever focus then
+ * Reject closes the proposal (#216, design), wherever focus then
  * is (ProposalBar). */
 export function decisionLine(kind: 'accept' | 'reject', agent: string): string {
   return `${kind === 'accept' ? 'Accepted' : 'Rejected'} the proposal from ${agentNameInSentence(agent)}.`;

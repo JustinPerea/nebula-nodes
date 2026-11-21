@@ -7,7 +7,7 @@ import { AGENT_CURSOR_IDLE_OPACITY } from './agentCursorPlanner';
 import { springLinear, SPRING_SOFT } from './springs';
 
 /**
- * The launcher's activity dot (PR #233 slice 8, GM - Design 2): while a cursor
+ * The launcher's activity dot (PR #233 slice 8, design): while a cursor
  * is parked at a launcher because its surface isn't open, the launcher shows a
  * 6 px dot in the agent colour. Two agents give two dots side by side; from
  * three, the earliest two keep one and "+N" counts the agents without a dot. The dot dims with its

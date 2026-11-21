@@ -27,7 +27,7 @@ import type { AgentCursorAnchor } from './wsClient';
  *     surface: a launcher is space-separated tokens, matched with `~=`).
  *  4. **The canvas launcher** `canvas` (a Studio's "Back to Canvas"), for a
  *     canvas target when no canvas is mounted.
- *  5. **Nothing:** the caller holds the cursor's last spot (GM r6).
+ *  5. **Nothing:** the caller holds the cursor's last spot (design).
  *
  * Steps 2 to 4 are launcher parks: the tip sits 6 px right of the launcher,
  * at its middle; when the launcher is one of a row of controls (a control sits
@@ -69,7 +69,7 @@ export type Resolution =
   | { kind: 'edge'; point: Point; toward: Point; angle: number; element: Element; clip: Box }
   /** A launcher park: `point` is the tip, 6 px right of the launcher. */
   | { kind: 'launcher'; step: LauncherStep; point: Point; element: Element; box: Box }
-  /** A canvas node's place on screen (client px), for the screen layer's flight back to the canvas (GM r137): aim here. */
+  /** A canvas node's place on screen (client px), for the screen layer's flight back to the canvas (design): aim here. */
   | { kind: 'canvas'; point: Point }
   /** The item itself is gone (the caller says so): hold the last spot, or fall back to the board. */
   | { kind: 'gone' }

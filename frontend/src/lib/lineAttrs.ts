@@ -1,5 +1,5 @@
 /**
- * PR #204 round 17 (review 13 NIT-3): the attributes the line surfaces carry, on their own so a
+ * PR #204: the attributes the line surfaces carry, on their own so a
  * surface in the first load (PersonLock, LineBox, CommonsErrorLine, CommonsPageLines) names them
  * without bringing in the modules that read them (hooks/useFocusHandover, lib/lockPlacement).
  */

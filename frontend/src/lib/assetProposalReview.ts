@@ -8,7 +8,7 @@ import { writtenLine } from './errorCopy';
 import { COMMONS_OFF_REVIEW_LINE, commonsOffNow } from './commonsOff';
 
 /**
- * Review on an asset proposal's Update (Justin's Q92 a): take the person to
+ * Review on an asset proposal's Update (Justin's call): take the person to
  * where they accept or reject it. A cover on the Projects screen at that
  * project's card, “Moodboard notes to generators” in Moodboard Studio on that board, a Commons
  * curation on that reference's detail. The strip there brings itself into
@@ -27,7 +27,7 @@ export async function reviewAssetProposal(op: Record<string, unknown>): Promise<
   // another of its sections, where unsaved labels keep.
   if (kind !== 'commons') refuseWhileCommonsUnsaved();
   const ui = useUIStore.getState();
-  // Round 18h (GM r37): a tab that loaded with the Commons off, or one whose Commons calls since
+  // Design: a tab that loaded with the Commons off, or one whose Commons calls since
   // heard it is off (lib/commonsOff: a restart without it, live check), says why and how.
   if (kind === 'commons' && (!ui.commonsEnabled || commonsOffNow())) {
     throw writtenLine(COMMONS_OFF_REVIEW_LINE);
@@ -37,7 +37,7 @@ export async function reviewAssetProposal(op: Record<string, unknown>): Promise<
     await useProjectStore.getState().goHome();
     return;
   }
-  // The corner shows on Projects too (Q107 a): the Studio and the Commons
+  // The corner shows on Projects too: the Studio and the Commons
   // live in the open project's workspace, so open it first.
   await openWorkspace();
   if (kind === 'moodboard') {

@@ -22,7 +22,7 @@ export interface NodeWait {
 type ProposalsState = ReturnType<typeof useCanvasProposalsStore.getState>;
 
 /**
- * The waiting state on a node (GM - Design, PR #212 round 2): the open
+ * The waiting state on a node (design, PR #212): the open
  * proposals whose held run waits on it. The reason line itself stays off the
  * node: the bar and the Updates card show it.
  */
@@ -37,7 +37,7 @@ export function waitFor(state: Pick<ProposalsState, 'proposals'>, nodeId: string
   for (const view of waiting) {
     const bar = curlApostrophes(view.wait?.barLine ?? '');
     if (!bar) continue;
-    // The hold sentence the bar adds for sighted readers (review of PR #242 round 2, L6).
+    // The hold sentence the bar adds for sighted readers (review of PR #242, L6).
     const held = proposalHoldLine(view.wait?.ledgerHold, now);
     if (held) holdEnd = Math.min(holdEnd ?? Infinity, view.wait!.ledgerHold!.until);
     const line = withHoldLine(bar, held);
@@ -58,10 +58,10 @@ export function waitReasonId(nodeId: string): string {
   return `node-wait-reason-${nodeId}`;
 }
 
-/** The header's accessible description (GM - Design, PR #212 round 3, item 1):
+/** The header's accessible description (design, PR #212):
  * the count the label no longer draws, then each waiting proposal's reason.
  * One proposal: "A proposal is waiting for your OK." (new copy, the singular
- * of GM's "2 proposals are waiting for your OK"). */
+ * of the design's "2 proposals are waiting for your OK"). */
 export function waitDescription(wait: NodeWait): string {
   const count = wait.count > 1 ? `${wait.count} proposals are waiting for your OK.` : 'A proposal is waiting for your OK.';
   return wait.reason ? `${count} ${wait.reason}` : count;
