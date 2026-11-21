@@ -45,7 +45,6 @@
   "backend/handlers/replicate_universal.py": 1,
   "backend/handlers/speridlabs_idol.py": 15,
   "backend/handlers/worldlabs.py": 10,
-  "backend/main.py": 1388,
   "backend/mcp_channel.py": 129,
   "backend/mcp_server.py": 38,
   "backend/models/events.py": 9,
