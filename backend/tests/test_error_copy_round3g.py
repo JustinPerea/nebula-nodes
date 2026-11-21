@@ -11,7 +11,7 @@ Design, verbatim (2026-10-23):
    “Prompt” brings something it can't take." "Connect an image to
    “Character Refs”.""
 3. "World Labs: keep the quotes." (already pinned by
-   test_error_copy_round3f.test_review_rule_5_the_lines_the_label_guard_found_quote_their_fields)
+   test_error_copy_round3f.test_the_lines_the_label_guard_found_quote_their_fields)
 - "Gemini Omni: the period inside the quote followed by a comma reads badly.
   → "Gemini Omni can edit a video but can’t make it longer. Describe the
   change as an edit, like “Change the lighting and keep everything else the

@@ -293,13 +293,13 @@ def test_startup_saves_the_check_on_boards_saved_before_it(tmp_path, monkeypatch
     path.write_text(json.dumps(gm_board()), encoding="utf-8")
     trash = tmp_path / "moodboards" / ".trash"
     trash.mkdir()
-    (trash / "gmtestboard2.json").write_text(json.dumps(gm_board(id="gmtestboard2")), encoding="utf-8")
+    (trash / "testboard2.json").write_text(json.dumps(gm_board(id="testboard2")), encoding="utf-8")
 
     asyncio.run(main_module._moodboard_brief_fields_startup())
     saved = json.loads(path.read_text())
     assert saved["colorCheck"]["basis"] == moodboard_brief.colour_check_basis(saved)
     assert {f["hex"] for f in saved["colorCheck"]["findings"]} >= {BRICK, SALMON, RUST}
-    assert "colorCheck" in json.loads((trash / "gmtestboard2.json").read_text())
+    assert "colorCheck" in json.loads((trash / "testboard2.json").read_text())
     assert {k: v for k, v in saved.items() if k != "colorCheck"} == gm_board()
 
     calls = []

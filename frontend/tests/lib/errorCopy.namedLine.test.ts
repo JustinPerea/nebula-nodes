@@ -67,7 +67,7 @@ const HAND_BUILT: { file: string; text: string; why: string }[] = [
   { file: 'lib/errorCopy.ts', text: '`Nebula couldn’t ${what} because this window isn’t connected as you. ${fix}`',
     why: "the approved because form (PR #204) in the desktop window: the tail is one of its two fixed sentences" },
   { file: 'lib/errorCopy.ts', text: '`${GENERATE_HEADING} ${CLUSTER_NOT_ADDED} ${personRequiredCopy(desktop, reason)}`',
-    why: "the approved Generate refusal, nodes not added (PR #204): two fixed sentences, then personRequiredCopy's fixed sentences" },
+    why: "the approved Generate refusal, nodes not added (PR #204; the heading came later): two fixed sentences, then personRequiredCopy's fixed sentences" },
   { file: 'lib/settingsWrites.ts', text: "`Nebula couldn’t save ${it}, but your Keychain has it. ${fix ? curlApostrophes(fix) : 'Try again, or remove it.'}`",
     why: "the approved Keychain line (PR #203): the tail is the fixed sentence or the backend's fix sentence, never a named line" },
   // The "Couldn’t …. You can …" run-lock lines are gone: PR #205 made the key-press
@@ -354,10 +354,10 @@ describe('ratchet: no new straight apostrophe in person copy (design)', () => {
  */
 const COLON_NAMES = new Set(['title', 'aria-label', 'ariaLabel']);
 const COLON_REVIEWED: { file: string; text: string; why: string }[] = [
-  { file: 'MoodboardBrief.tsx', text: ': pick', why: 'the color field\'s picker, "<label>: pick" (a colon in a title; reworded later)' },
-  { file: 'MoodboardBrief.tsx', text: ': hex', why: 'the color field\'s hex input, "<label>: hex" (a colon in a title; reworded later)' },
+  { file: 'MoodboardBrief.tsx', text: ': pick', why: 'the color field\'s picker, "<label>: pick" (older than the no-colon rule; still to be reworded)' },
+  { file: 'MoodboardBrief.tsx', text: ': hex', why: 'the color field\'s hex input, "<label>: hex" (older than the no-colon rule; still to be reworded)' },
   { file: 'MoodboardListView.tsx', text: 'Open the moodboard on this image. Nothing moves: no image changes number.',
-    why: "the cover button title (a colon in a title; reworded later)" },
+    why: "the cover button title (older than the no-colon rule; still to be reworded)" },
 ];
 
 /** The literal text holding a colon in each title or aria-label value in `text`. */

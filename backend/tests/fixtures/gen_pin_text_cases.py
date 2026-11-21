@@ -98,6 +98,8 @@ tokens14 = [FAMILY, "\U0001F600\ufe0f", "\U0001F469\ufe0f", THUMB, "‍", "a", "
 rng23 = random.Random(20261031)
 tokens23 = ["葛", "辻", "一", "a", "\U000E0100", "\U000E0101", "\U000E0109", "\U000E010A", "\U000E01EF", "\ufe0f",
             "\ufe00", "\u180b", "ᠠ", "\u200d", FAMILY, "\U0001F600", "\u2764", "\U0001F469\U0001F3FD\u200d\U0001F52C"]
+# Shares the "selectors and joins" prefix with the named cases above, so one
+# prefix filter in the frontend test selects both.
 fuzz += [["selectors and joins fuzz %d" % i, "".join(rng23.choice(tokens23) for _ in range(rng23.randint(1, 40)))] for i in range(200)]
 fuzz += [["fuzz family tokens %d" % i, "".join(rng14.choice(tokens14) for _ in range(rng14.randint(1, 40)))] for i in range(200)]
 
