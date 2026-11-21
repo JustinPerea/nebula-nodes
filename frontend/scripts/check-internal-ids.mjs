@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve, sep } from 'node:path';
+import { createRequire } from 'node:module';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 // Design: the repo is public, so comments and test titles say "design" and carry no internal
@@ -18,8 +19,11 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 //     (LOW-N, MED-N, MEDIUM-N, HIGH-N, NIT-N; a one-letter H-N, L-N, M-N or N-N only right after
 //     a review id or another severity id, since "N-1" alone is arithmetic);
 //   - the word "lane", only inside text people and agents read: a JS/TS string or template
-//     literal, JSX text, a test title, a Python string or docstring, or a CSS string. An identifier,
-//     a CSS class or a grid-area named lane is code and does not count.
+//     literal (its literal text, never a ${} expression), JSX text, a test title, or any Python
+//     string (docstrings, triple-quoted constants and f-strings included; never an f-string
+//     replacement field). The TypeScript parser finds those in .ts, .tsx, .js, .jsx, .mjs and .cjs.
+//     An identifier, a comment, a CSS class or a grid-area named lane is code and does not count,
+//     and stylesheets are not read for it at all.
 // Round, question and review ids are restricted to comments and titles so identifiers, SVG
 // attributes and CSS values never trip the check. "round N" is skipped when it reads as
 // arithmetic (a decimal point, "decimal places", digits) and a question id after "quarter" or
@@ -63,7 +67,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 // table, is not followed.
 
 export const SCAN_DIRS = ['frontend/src', 'frontend/scripts', 'frontend/tests', 'backend', 'scripts'];
-export const SCAN_EXT = new Set(['ts', 'tsx', 'js', 'mjs', 'cjs', 'css', 'py', 'sh']);
+export const SCAN_EXT = new Set(['ts', 'tsx', 'js', 'jsx', 'mjs', 'cjs', 'css', 'py', 'sh']);
 // Directories skipped anywhere in the path: dependencies and build output.
 const SKIP_DIR_NAMES = new Set(['node_modules', 'dist', 'build', 'coverage', '.next', '.venv', 'venv', '__pycache__', '.git']);
 // Path prefixes (repo-relative) that hold data rather than prose.
@@ -85,10 +89,10 @@ export const KINDS = ['gm', 'round', 'question', 'review', 'lane'];
 
 const GM_RE = /\bGM\b/g;
 // "lane" is how the studio organises its own work, not a Nebula word; agents and people read
-// "session". Counted as a whole word in any case, only inside a string span (JS/TS string or
-// template literal, JSX text, test title, Python string or docstring, CSS string): the text people
-// and agents read. Never in a comment, where "the scrollbar lane" is ordinary English, and never in
-// code, where an identifier, a CSS class or a grid-area may be named lane.
+// "session". Counted as a whole word in any case, only inside the text people and agents read (a
+// JS/TS string or template literal, JSX text, a test title, a Python string). Never in a comment,
+// where "the scrollbar lane" is ordinary English, and never in code, where an identifier, a CSS
+// class or a grid-area may be named lane.
 const LANE_RE = /\blanes?\b/gi;
 const ROUND_RE = /\br\d{1,3}[a-z]?\b|\bround\s+\d{1,3}[a-z]?\b/gi;
 const ROUND_BEFORE = /(?:\b(?:design|review|since|per)|PR\s*#\d+|#\d+)[,\s]*$/i;
@@ -115,29 +119,58 @@ const EACH_TAIL = /(?:^|[^.\w$])(?:it|test|describe)(?:\.(?:skip|only|concurrent
 
 /**
  * Find comment and title spans in source. Returns [{start, end, kind}] with kind comment|title.
- * With `strings`, every string literal (quotes included) is also returned, as kind string.
+ * In Python files the literal text of every string is also returned, as kind string.
  */
-export function findSpans(path, text, strings = false) {
+export function findSpans(path, text) {
   const ext = path.slice(path.lastIndexOf('.') + 1);
-  if (ext === 'py' || ext === 'sh') return hashSpans(text, ext === 'py', strings);
-  return jsSpans(text, ext !== 'css', strings);
+  if (ext === 'py' || ext === 'sh') return hashSpans(text, ext === 'py');
+  return jsSpans(text, ext !== 'css');
 }
 
-// An opening JSX tag (attribute values and one level of {expression} allowed), then its text up to
-// the next tag or expression.
-const JSX_TEXT_RE = /<[A-Za-z][\w.:-]*(?:"[^"]*"|'[^']*'|\{[^{}]*\}|[^<>"'{}])*>([^<>{}]*)/g;
+const require = createRequire(import.meta.url);
+let tsApi;
+/** The TypeScript compiler API, loaded on first use from frontend's node_modules. */
+function loadTs() {
+  if (!tsApi) tsApi = require('typescript');
+  return tsApi;
+}
 
-/** Spans of JSX text in a .tsx or .jsx file, skipping anything inside a comment or a string. */
-function jsxTextSpans(path, text, spans) {
+const SCRIPT_KINDS = { ts: 'TS', mts: 'TS', cts: 'TS', tsx: 'TSX', js: 'JSX', jsx: 'JSX', mjs: 'JSX', cjs: 'JSX' };
+
+/**
+ * Spans of the text people and agents read in a JS/TS-family file, found with the TypeScript parser:
+ * the literal text of every string, no-substitution template, template head, middle and tail (never
+ * the ${} expressions), and JSX text. Import and export module paths are code, not prose, and are
+ * skipped. Comments, identifiers and types never count. A file whose text has no "lane" cannot hold
+ * a match, so it is not parsed.
+ */
+function readableSpansJs(path, text) {
   const ext = path.slice(path.lastIndexOf('.') + 1);
-  if (ext !== 'tsx' && ext !== 'jsx') return [];
+  const kind = SCRIPT_KINDS[ext];
+  if (!kind || !/lane/i.test(text)) return [];
+  const ts = loadTs();
+  const sf = ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true, ts.ScriptKind[kind]);
+  const K = ts.SyntaxKind;
   const out = [];
-  for (const m of text.matchAll(JSX_TEXT_RE)) {
-    if (m[1] === '' || m[1].includes(';')) continue;
-    const start = m.index + m[0].length - m[1].length;
-    if (spans.some((s) => start >= s.start && start < s.end)) continue;
-    out.push({ start, end: start + m[1].length, kind: 'string' });
-  }
+  const visit = (node) => {
+    switch (node.kind) {
+      case K.StringLiteral:
+        if (!((node.parent.kind === K.ImportDeclaration || node.parent.kind === K.ExportDeclaration) && node.parent.moduleSpecifier === node)) {
+          out.push({ start: node.getStart(sf), end: node.getEnd(), kind: 'string' });
+        }
+        break;
+      case K.NoSubstitutionTemplateLiteral:
+      case K.TemplateHead:
+      case K.TemplateMiddle:
+      case K.TemplateTail:
+      case K.JsxText:
+        out.push({ start: node.getStart(sf), end: node.getEnd(), kind: 'string' });
+        break;
+      default:
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sf);
   return out;
 }
 
@@ -162,7 +195,7 @@ function isTitleStart(text, start) {
   return CALLEE_TAIL.test(text.slice(Math.max(0, j - 47), j + 1));
 }
 
-function jsSpans(text, isScript, strings = false) {
+function jsSpans(text, isScript) {
   const spans = [];
   const n = text.length;
   let i = 0;
@@ -196,7 +229,6 @@ function jsSpans(text, isScript, strings = false) {
         i++;
       }
       i++;
-      if (strings) spans.push({ start, end: Math.min(i, n), kind: 'string' });
       if (isScript && isTitleStart(text, start)) {
         spans.push({ start: start + 1, end: Math.min(i - 1, n), kind: 'title' });
       }
@@ -272,7 +304,41 @@ function isDocstringStart(lines, idx, col) {
   return false;
 }
 
-function hashSpans(text, isPython, strings = false) {
+// Does the string literal whose opening quote is at `q` carry an f (or rf, fr) prefix?
+function isFString(text, q) {
+  let k = q - 1;
+  let prefix = '';
+  while (k >= 0 && /[A-Za-z]/.test(text[k]) && prefix.length < 3) prefix = text[k--] + prefix;
+  return (k < 0 || !/[\w$]/.test(text[k])) && /^(?:[rR][fF]|[fF][rR]?|[fF])$/.test(prefix);
+}
+
+// Push the readable parts of a Python string whose body is [from, to): the whole body, or for an
+// f-string the text outside its {replacement fields} ({{ and }} are literal braces).
+function pushPyString(spans, text, start, from, to, fstring) {
+  if (!fstring) {
+    spans.push({ start: from, end: to, kind: 'string' });
+    return;
+  }
+  let segStart = from;
+  let depth = 0;
+  for (let k = from; k < to; k++) {
+    const ch = text[k];
+    if (depth === 0) {
+      if (ch === '{' && text[k + 1] === '{') k++;
+      else if (ch === '{') {
+        if (k > segStart) spans.push({ start: segStart, end: k, kind: 'string' });
+        depth = 1;
+      }
+    } else if (ch === '{') depth++;
+    else if (ch === '}') {
+      depth--;
+      if (depth === 0) segStart = k + 1;
+    }
+  }
+  if (depth === 0 && to > segStart) spans.push({ start: segStart, end: to, kind: 'string' });
+}
+
+function hashSpans(text, isPython) {
   const spans = [];
   const n = text.length;
   const lines = isPython ? text.split('\n') : [];
@@ -311,6 +377,7 @@ function hashSpans(text, isPython, strings = false) {
         if (isDocstringStart(lines, idx, i - lineStarts[idx])) {
           spans.push({ start: i, end: Math.min(j + 3, n), kind: 'comment' });
         }
+        pushPyString(spans, text, i, i + 3, Math.min(j, n), isFString(text, i));
         i = j + 3;
         continue;
       }
@@ -322,7 +389,7 @@ function hashSpans(text, isPython, strings = false) {
         i++;
       }
       i++;
-      if (strings && isPython) spans.push({ start, end: Math.min(i, n), kind: 'string' });
+      if (isPython) pushPyString(spans, text, start, start + 1, Math.max(start + 1, Math.min(i - 1, n)), isFString(text, start));
       continue;
     }
     i++;
@@ -429,15 +496,12 @@ function joinPieces(pieces) {
 
 /** Every match in one file: [{line, text, kind: 'gm'|'round'|'question'|'review'|'lane', match}]. */
 export function scanSource(path, text) {
-  const allSpans = findSpans(path, text, true);
+  const allSpans = findSpans(path, text);
   const spans = allSpans.filter((s) => s.kind !== 'string');
-  // Text people and agents read: string literals, JSX text, and Python docstrings (comment spans
-  // that open with a quote).
-  const readable = [
-    ...allSpans.filter((s) => s.kind === 'string'),
-    ...spans.filter((s) => s.kind === 'comment' && /^["']/.test(text.slice(s.start, s.end))),
-    ...jsxTextSpans(path, text, allSpans.filter((s) => s.kind !== 'title')),
-  ];
+  // Text people and agents read: every Python string, and the strings and JSX text the TypeScript
+  // parser finds. Stylesheets and shell scripts hold none.
+  const ext = path.slice(path.lastIndexOf('.') + 1);
+  const readable = ext === 'py' ? allSpans.filter((s) => s.kind === 'string') : readableSpansJs(path, text);
   const lineStarts = [0];
   for (let k = 0; k < text.length; k++) if (text[k] === '\n') lineStarts.push(k + 1);
   const lineOf = (offset) => {
@@ -743,7 +807,7 @@ export function main(argv) {
   let code = 0;
   if (failures.length > 0) {
     code = 1;
-    console.error('internal-ids: internal ids in a public repo. Write "design" instead and drop the id (studio initials, round ids, question ids, review ids, the word lane inside a string, JSX text, a test title or a Python docstring; an identifier, a CSS class or a grid-area named lane is fine).');
+    console.error('internal-ids: internal ids in a public repo. Write "design" instead and drop the id (studio initials, round ids, question ids, review ids, the word lane inside a string, JSX text, a test title or a Python string; an identifier, a CSS class or a grid-area named lane is fine).');
     for (const f of failures) {
       console.error(`\n  ${f.file}: ${f.count} match(es), baseline allows ${f.allowed}`);
       for (const l of f.lines) console.error(l);

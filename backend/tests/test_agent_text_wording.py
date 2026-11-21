@@ -41,7 +41,7 @@ def _walk_parser(parser: argparse.ArgumentParser, path: str = "nebula"):
 
 
 def _param_specs(params: dict):
-    """(where, spec) for every parameter schema: top-level and nested properties, and $defs."""
+    """(where, spec) for every parameter schema: top-level and nested properties, $defs, items, additionalProperties and anyOf/oneOf/allOf."""
     def walk(schema, where):
         if not isinstance(schema, dict):
             return
@@ -51,8 +51,11 @@ def _param_specs(params: dict):
         for name, spec in (schema.get("$defs") or {}).items():
             yield f"{where}$defs.{name}", spec
             yield from walk(spec, f"{where}$defs.{name}.")
-        for key in ("items",):
+        for key in ("items", "additionalProperties"):
             yield from walk(schema.get(key), where)
+        for key in ("anyOf", "oneOf", "allOf"):
+            for sub in schema.get(key) or []:
+                yield from walk(sub, where)
     yield from walk(params, "")
 
 
