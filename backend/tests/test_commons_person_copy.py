@@ -193,7 +193,12 @@ def test_a_refusal_whose_person_line_is_the_fallback_leaves_the_line_out_and_age
     from services import refusal_copy
     agent_actor = SimpleNamespace(is_human=False)
     assert refusal_copy.refusal_detail("op must be set", FALLBACK, actor=agent_actor) == "op must be set"
-    assert refusal_copy.refusal_detail("op must be set", FALLBACK, actor=None) == ""
+    # The shared helper stays neutral (other routers' lines pass through it); Commons' refuse() leaves the line out.
+    assert refusal_copy.refusal_detail("op must be set", FALLBACK, actor=None) == FALLBACK
+    from routes import commons as commons_routes
+    assert commons_routes.refuse(None, 422, "op must be set", FALLBACK, "corrections").detail == ""
+    assert commons_routes.refuse(agent_actor, 422, "op must be set", FALLBACK, "corrections").detail == "op must be set"
+    assert commons_routes.refuse(None, 422, "op must be set", "Pick a folder.", "corrections").detail == "Pick a folder."
 
 
 def test_person_field_leaves_out_only_the_fallback():

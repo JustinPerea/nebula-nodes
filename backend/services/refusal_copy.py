@@ -74,14 +74,11 @@ def _log(route: str | None, specific: str) -> None:
 def refusal_detail(specific: str, person: str, *, actor: Any = BY_REQUEST, route: str | None = None,
                    log: Callable[[str | None, str], None] | None = None) -> str:
     """The detail a refusal carries: `person` for the person (the specific
-    text then goes to the log), else `specific`, unchanged. The Commons' no-reason line (person_copy.FALLBACK)
-    is left out: the detail is empty and the frontend says the line for its own shell (reload the page in a
-    browser, View > Reload in the desktop app)."""
+    text then goes to the log), else `specific`, unchanged."""
     if not person_reads(actor):
         return specific
     (log or _log)(route, specific)
-    from commons.person_copy import FALLBACK
-    return "" if person == FALLBACK else person
+    return person
 
 
 def refusal(status: int, specific: str, person: str, *, actor: Any = BY_REQUEST, route: str | None = None,

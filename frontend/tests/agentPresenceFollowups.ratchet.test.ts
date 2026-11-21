@@ -2273,7 +2273,6 @@ const SWEEP_LATER = new Set([
   'styles/moodboard-studio.css: moodboard-analysis button',
   'styles/moodboard-studio.css: moodboard-rail__new',
   'styles/nodes.css: model-node button',
-  'styles/panels.css: chat-panel__connect-btn',
   'styles/panels.css: context-menu__item',
   'styles/paper-source-node.css: paper-source-node button',
   'styles/personal-agents.css: permission-card button',
@@ -2584,10 +2583,33 @@ function cssTokens(): Map<string, string> {
   }
   return tokens;
 }
+/** Every var() in `value`, innermost last: the name, then the fallback up to the var()'s own closing
+ * parenthesis (so a fallback may hold var() and rgb() to any depth). */
 function resolveVar(value: string, tokens: Map<string, string>, depth = 0): string {
   if (depth > 8) return value;
-  return value.replace(/var\((--[\w-]+)\s*(?:,\s*((?:[^()]|\([^()]*\))*))?\)/g, (_m, name: string, fallback?: string) =>
-    resolveVar(tokens.get(name) ?? fallback ?? 'transparent', tokens, depth + 1)).replace(/\s*!important/, '').trim();
+  let out = '';
+  let at = 0;
+  for (;;) {
+    const start = value.indexOf('var(', at);
+    if (start === -1) return (out + value.slice(at)).replace(/\s*!important/, '').trim();
+    let level = 0;
+    let end = start + 3;
+    for (; end < value.length; end += 1) {
+      if (value[end] === '(') level += 1;
+      else if (value[end] === ')' && (level -= 1) === 0) break;
+    }
+    const inner = value.slice(start + 4, end);
+    let comma = -1;
+    for (let i = 0, nest = 0; i < inner.length && comma === -1; i += 1) {
+      if (inner[i] === '(') nest += 1;
+      else if (inner[i] === ')') nest -= 1;
+      else if (inner[i] === ',' && nest === 0) comma = i;
+    }
+    const name = (comma === -1 ? inner : inner.slice(0, comma)).trim();
+    const fallback = comma === -1 ? undefined : inner.slice(comma + 1).trim();
+    out += value.slice(at, start) + resolveVar(tokens.get(name) ?? fallback ?? 'transparent', tokens, depth + 1);
+    at = end + 1;
+  }
 }
 type Rgba = { r: number; g: number; b: number; a: number };
 const over = (top: Rgba, under: Rgba): Rgba => ({ r: top.r * top.a + under.r * (1 - top.a), g: top.g * top.a + under.g * (1 - top.a),

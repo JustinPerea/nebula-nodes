@@ -18,6 +18,8 @@ import {
 // for a disabled control, and for the icon-only controls named in ICON_ONLY below (an icon needs 3:1
 // and .40 clears it). Hierarchy between two text lines is carried by size and weight.
 //
+// A second rule, below ("Thin text weight"): text at 9px or 10px takes weight 500.
+//
 // What fails: a TEXT declaration that resolves to white at an alpha above 0 and under .55. White at .20
 // (--sr-ink-faint) and anything dimmer fail; alpha 0 (transparent text) is outside the check.
 // TEXT properties are `color` (a ::placeholder rule's color included), `-webkit-text-fill-color`,
@@ -475,6 +477,170 @@ function collectFiles(dir, extensions) {
   return out;
 }
 
+// ---- Thin text weight ----------------------------------------------------------------
+// Design's ink rule for 9-10px text: weight 500. A rule that sets a 9px or 10px font-size (literal, or
+// var(--sr-type-micro) / var(--sr-type-meta)) and does not set a weight of 500 or more in the same rule
+// reads as weight 400 on the app's 400 base, and fails. Exempt: a mono face (font-family naming mono or
+// monospace, or var(--sr-mono)), and the rules in THIN_TEXT_BASELINE: the rules that predate this check,
+// by `file::selector`. The baseline only shrinks: a baseline entry whose rule no longer breaks the rule
+// (fixed, deleted or renamed) fails the check until it is removed from the list. A new rule is never added
+// to it: give the text weight 500, or put it in a mono face.
+// Known limits: the weight is read from the same rule only (a weight set on an ancestor or by another rule
+// for the same element is not seen, so such a rule is listed or given its own weight); `font:` shorthand is
+// read for its weight word or number; em/rem/calc sizes are not read; nested rules are skipped.
+export const THIN_SIZES = new Set(['9px', '10px']);
+const THIN_TOKENS = new Set(['--sr-type-micro', '--sr-type-meta']);
+export const THIN_TEXT_BASELINE = new Set([
+  "components/agent-notes/agentNotes.css::.agent-notes-entry__who .agent-notes-dot",
+  "components/agent-notes/agentNotes.css::.agent-questions-form__head .agent-notes-dot",
+  "components/agent-notes/agentRoster.css::.agent-roster__row .agent-notes-dot",
+  "components/brand/BrandShowcase.css::.nn-bs-card__state",
+  "components/brand/BrandShowcase.css::.nn-bs-card__telemetry",
+  "extraction/extraction.css::.ex-box-role",
+  "extraction/extraction.css::.ex-origin",
+  "styles/asset-move.css::.asset-move__caret",
+  "styles/asset-proposals.css::.asset-proposal__edit-why",
+  "styles/asset-trash.css::body.app-slava-restraint .asset-trash__note, body.app-slava-restraint .asset-trash__error",
+  "styles/asset-trash.css::body.app-slava-restraint .asset-trash__sub",
+  "styles/asset-trash.css::body.app-slava-restraint .moodboard-node__open-error, body.app-slava-restraint .character-node__open-error",
+  "styles/batch-node.css::body.app-slava-restraint .batch-carousel__note",
+  "styles/batch-node.css::body.app-slava-restraint .batch-node__guidance",
+  "styles/camera-rig-node.css::body.app-slava-restraint .camera-rig-node__guidance",
+  "styles/camera-rig-node.css::body.app-slava-restraint .camera-rig-node__slider-label",
+  "styles/canvasProposals.css::.proposal-ghost__caption",
+  "styles/canvasProposals.css::.proposal-ghost__category",
+  "styles/canvasProposals.css::.proposal-ghost__cost",
+  "styles/canvasProposals.css::.proposal-ghost__more",
+  "styles/canvasProposals.css::.proposal-ring__tag",
+  "styles/character-node.css::body.app-slava-restraint .character-node__thumb-placeholder",
+  "styles/character-studio.css::body.app-slava-restraint .character-def__hint",
+  "styles/character-studio.css::body.app-slava-restraint .character-def__ref-badge",
+  "styles/character-studio.css::body.app-slava-restraint .character-def__thumb-empty",
+  "styles/character-studio.css::body.app-slava-restraint .character-rail__sub, body.app-slava-restraint .character-palette__sub",
+  "styles/cinema-node.css::body.app-slava-restraint .cinema-scene-node__input-label",
+  "styles/cinema-node.css::body.app-slava-restraint .cinema-scene-node__shot-label",
+  "styles/cinema-node.css::body.app-slava-restraint .cinema-scene-node__thumb-placeholder",
+  "styles/cinema-studio.css::body.app-slava-restraint .cinema-shared-controls__ref-link",
+  "styles/cinema-studio.css::body.app-slava-restraint .cinema-shared-controls__swatch-remove",
+  "styles/cinema-studio.css::body.app-slava-restraint .cinema-shots-rail__badge",
+  "styles/command-palette.css::.command-palette__group-label",
+  "styles/commons-evaluation.css::.commons-evaluation small, .commons-eyebrow",
+  "styles/commons-evaluation.css::.evaluation-axis>div",
+  "styles/commons.css::body.app-slava-restraint .commons-badge",
+  "styles/commons.css::body.app-slava-restraint .commons-region__label",
+  "styles/commons.css::body.app-slava-restraint .commons-source",
+  "styles/jev-result.css::body.app-slava-restraint .jev-result__footer",
+  "styles/jev-result.css::body.app-slava-restraint .jev-result__more",
+  "styles/jev-result.css::body.app-slava-restraint .jev-result__scale",
+  "styles/jev-result.css::body.app-slava-restraint .model-node__jev-field-note",
+  "styles/moodboard-node.css::body.app-slava-restraint .moodboard-node__output",
+  "styles/moodboard-node.css::body.app-slava-restraint .moodboard-node__preview",
+  "styles/moodboard-studio.css::body.app-slava-restraint .moodboard-color__flag",
+  "styles/moodboard-studio.css::body.app-slava-restraint .moodboard-image-colors__item",
+  "styles/moodboard-studio.css::body.app-slava-restraint .moodboard-rail__sub",
+  "styles/moodboard-studio.css::body.app-slava-restraint .moodboard-rail__thumb",
+  "styles/moodboard-studio.css::body.app-slava-restraint .moodboard-tile__cover",
+  "styles/moodboard-studio.css::body.app-slava-restraint .moodboard-tile__note-hint",
+  "styles/nodes.css::.model-node__error-details summary",
+  "styles/nodes.css::.model-node__source-stale",
+  "styles/outside-image-note.css::.outside-image-note",
+  "styles/panels.css::.chat-panel__thinking-caret",
+  "styles/panels.css::body.app-slava-restraint .chat-panel__scope-hint",
+  "styles/paper-source-node.css::.paper-source-node__history",
+  "styles/paper-source-node.css::.paper-source-node__identity code",
+  "styles/paper-source-node.css::.paper-source-node__note, .paper-source-node__error",
+  "styles/paper-source-node.css::.paper-source-node__output",
+  "styles/paper-source-node.css::.paper-source-node__preview figcaption",
+  "styles/paper-source-node.css::.paper-source-node__status",
+  "styles/personal-agents.css::.permission-card__kind",
+  "styles/personal-agents.css::.permission-card__timer",
+  "styles/provider-switcher.css::body.app-slava-restraint .provider-switcher__block",
+  "styles/provider-switcher.css::body.app-slava-restraint .provider-switcher__info",
+  "styles/reference-set-node.css::body.app-slava-restraint .reference-set-node__guidance",
+  "styles/reference-set-node.css::body.app-slava-restraint .reference-set-node__preview-empty",
+  "styles/reference-set-node.css::body.app-slava-restraint .reference-set-node__preview-weight",
+  "styles/reference-set-node.css::body.app-slava-restraint .reference-set-node__weight-value",
+  "styles/run-history.css::.run-history__paper-details",
+  "styles/run-history.css::.run-history__paper-snapshot code",
+  "styles/run-history.css::.run-history__paper-stale",
+  "styles/run-history.css::.run-history__replay",
+  "styles/run-history.css::.run-history__replay-blocked",
+  "styles/run-history.css::.run-history__safeguards",
+  "styles/run-history.css::.run-history__status",
+  "styles/run-history.css::.run-history__status-note",
+  "styles/slava-restraint.css::body.app-slava-restraint .agent-log__source",
+  "styles/slava-restraint.css::body.app-slava-restraint .connection-popup__category-label",
+  "styles/slava-restraint.css::body.app-slava-restraint .edit-node__title",
+  "styles/slava-restraint.css::body.app-slava-restraint .editor-transport__label",
+  "styles/slava-restraint.css::body.app-slava-restraint :is(.model-node--text-input, .model-node--image-surface) .model-node__port-label",
+  "styles/spatial-preview.css::.spatial-preview__subtitle",
+  "styles/structured-preview.css::body.app-slava-restraint .structured-preview .structured-preview__swatch-label",
+  "styles/world-preview.css::.world-modal__download-error",
+  "styles/world-preview.css::body.app-slava-restraint .world-modal__eyebrow",
+  "styles/world-preview.css::body.app-slava-restraint .world-modal__help",
+  "styles/world-preview.css::body.app-slava-restraint .world-preview__badge",
+  "styles/world-preview.css::body.app-slava-restraint .world-preview__copy span",
+  "styles/world-preview.css::body.app-slava-restraint .world-preview__cta",
+]);
+
+function thinSize(value) {
+  const v = value.trim().replace(/\s*!important$/i, '').trim().toLowerCase();
+  if (THIN_SIZES.has(v)) return v;
+  const wrapped = /^var\(\s*(--[\w-]+)\s*(?:,\s*([\s\S]*))?\)$/.exec(v);
+  if (!wrapped) return null;
+  if (THIN_TOKENS.has(wrapped[1])) return v;
+  return null;
+}
+
+function weightOf(decls) {
+  let weight = null;
+  for (const { prop, value } of decls) {
+    const v = value.trim().replace(/\s*!important$/i, '').trim().toLowerCase();
+    if (prop === 'font-weight') {
+      weight = v === 'normal' ? 400 : v === 'bold' ? 700 : v === 'bolder' ? 700 : v === 'lighter' ? 300 : Number.parseFloat(v);
+      if (!Number.isFinite(weight)) weight = 400;
+    } else if (prop === 'font') {
+      const word = /(?:^|\s)(normal|bold|bolder|lighter|[1-9]00)(?=\s)/.exec(v);
+      if (word) weight = word[1] === 'normal' ? 400 : /^bold/.test(word[1]) ? 700 : word[1] === 'lighter' ? 300 : Number(word[1]);
+    }
+  }
+  return weight;
+}
+
+const MONO = /mono/i;
+
+/** The rules that set a 9px or 10px size with no weight of 500 or more and no mono face. */
+export function findThinText(files) {
+  const hits = [];
+  for (const { file, source } of files) {
+    const css = stripComments(source);
+    const lineStarts = computeLineStarts(css);
+    for (const rule of parseRules(css)) {
+      if (rule.nested) continue;
+      const decls = parseDeclarations(rule.body, rule.bodyStart);
+      const size = decls.find((d) => (d.prop === 'font-size' || d.prop === 'font') && thinSize(d.prop === 'font' ? (/(?:^|\s)(9px|10px)(?:\/|\s|$)/.exec(d.value.toLowerCase())?.[1] ?? '') : d.value));
+      if (!size) continue;
+      const family = decls.filter((d) => d.prop === 'font-family' || d.prop === 'font');
+      if (family.some((d) => MONO.test(d.value))) continue;
+      const weight = weightOf(decls);
+      if (weight !== null && weight >= 500) continue;
+      hits.push({ file, line: lineForOffset(lineStarts, size.offset), selector: compact(rule.selector), key: `${file}::${compact(rule.selector)}`, size: size.value, weight: weight ?? 'none (400)' });
+    }
+  }
+  return hits;
+}
+
+/** The failures: a thin-text rule not in the baseline, and a baseline entry that no longer applies. */
+export function thinTextFailures(files, baseline = THIN_TEXT_BASELINE) {
+  const hits = findThinText(files);
+  const keys = new Set(hits.map((hit) => hit.key));
+  return {
+    fresh: hits.filter((hit) => !baseline.has(hit.key)),
+    stale: [...baseline].filter((key) => !keys.has(key)),
+  };
+}
+
+
 export function scan(cssFiles, tsxFiles) {
   const { dimVars, definedVars } = collectDimVars(cssFiles);
   return [...findCssTextInk(cssFiles, dimVars, definedVars), ...findTsxTextInk(tsxFiles, dimVars, definedVars)];
@@ -488,6 +654,13 @@ function main() {
   if (process.argv.includes('--json')) {
     console.log(JSON.stringify(hits, null, 1));
     return;
+  }
+  const thin = thinTextFailures(cssFiles);
+  if (thin.fresh.length > 0 || thin.stale.length > 0) {
+    console.error('Text at 9px or 10px takes weight 500, or a mono face. Set font-weight: 500 on the rule, or use var(--sr-mono).');
+    for (const hit of thin.fresh) console.error(`  src/${hit.file}:${hit.line} ${hit.selector} sets font-size: ${hit.size} with weight ${hit.weight}`);
+    for (const key of thin.stale) console.error(`  THIN_TEXT_BASELINE lists ${key}, which no longer breaks the rule: remove it from the list (it only shrinks)`);
+    process.exit(1);
   }
   if (hits.length > 0) {
     console.error(FAILURE_MESSAGE);

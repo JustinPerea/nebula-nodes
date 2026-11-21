@@ -148,7 +148,7 @@ describe('the Connect section’s words', () => {
     render(<ChatPanel />);
     await waitFor(() => expect(connect().textContent).toContain('Claude Code connected'));
     expect(connect().textContent).not.toMatch(/Connect Claude\b(?! Code)|Claude connected/);
-    expect(connect().querySelector('.chat-panel__connect-commands-label')?.textContent).toBe('Or run one in a terminal:');
+    expect(connect().querySelector('.chat-panel__connect-commands-label')?.textContent).toBe('Run one in a terminal:');
     expect([...connect().querySelectorAll('.chat-panel__connect-commands code')].map((c) => c.textContent))
       .toEqual(['claude auth login --claudeai', 'claude auth login --console', 'claude auth status']);
   });
@@ -208,7 +208,15 @@ describe('the Connect section’s words', () => {
     expect(rule(sheet, 'body.app-slava-restraint .chat-panel__connect-btn:hover:not(:disabled)')).toContain('var(--sr-button-fill-hover)');
     expect(rule(sheet, 'body.app-slava-restraint .chat-panel__connect-btn--primary:hover:not(:disabled)')).toContain('var(--sr-button-primary-fill-hover)');
     expect(rule(sheet, 'body.app-slava-restraint .chat-panel__connect-btn:focus-visible')).toContain('var(--sr-focus-outline)');
-    expect(rule(sheet, 'body.app-slava-restraint .chat-panel__connect-btn:disabled')).toContain('opacity');
+    // The disabled look is the app's one grey (styles/disabled-buttons.css): no rule of the button's own, no opacity.
+    expect(sheet).not.toMatch(/\.chat-panel__connect-btn(?:--primary)?:disabled/);
+    expect(css('panels.css')).not.toMatch(/\.chat-panel__connect-btn[^{]*\{[^}]*(?:opacity|border:|padding:)/);
+    const shared = css('disabled-buttons.css');
+    // Filled list (Connect, like the proposal bar's Accept) and ghost list (Use a device code, like Show).
+    const lists = [...shared.matchAll(/:is\(([^)]*)\):is\(:disabled/g)].map((m) => m[1]);
+    expect(lists.filter((l) => /\.chat-panel__connect-btn--primary\b/.test(l)).every((l) => /\.proposal-bar__button--primary\b/.test(l))).toBe(true);
+    expect(lists.filter((l) => /\.chat-panel__connect-btn--primary\b/.test(l))).toHaveLength(2);
+    expect(lists.filter((l) => /\.chat-panel__connect-btn(?![\w-])/.test(l))).toHaveLength(2);
     // The tokens themselves are defined once, in the palette block.
     expect(sheet.match(/--sr-button-fill: /g)).toHaveLength(1);
     expect(proposals).not.toMatch(/--sr-button-fill: /);
@@ -234,6 +242,42 @@ describe('Stop says Stopping and Stopped', () => {
     const stopping = await screen.findByRole('button', { name: 'Stopping' });
     expect(stopping).toHaveAttribute('title', 'Waiting for the reply to stop');
     expect(screen.queryByRole('button', { name: /Cancellation requested/ })).toBeNull();
+  });
+
+  it('a tool still running when Stop is confirmed reads "stopped", not "canceled"', async () => {
+    apiMocks.fetchClaudeStatus.mockResolvedValue(claude());
+    render(<ChatPanel />);
+    await waitFor(() => expect(ChatTestSocket.instances).toHaveLength(1));
+    const socket = ChatTestSocket.instances[0];
+    await act(async () => socket.open());
+    const input = screen.getByPlaceholderText('Message…');
+    fireEvent.change(input, { target: { value: 'Hello' } });
+    await act(async () => { fireEvent.keyDown(input, { key: 'Enter', shiftKey: false }); });
+    await act(async () => socket.receive({ type: 'tool_use', toolUseId: 't1', tool: 'Bash', input: { command: 'ls' } }));
+    await act(async () => { fireEvent.click(await screen.findByRole('button', { name: 'Stop response' })); });
+    await act(async () => socket.receive({ type: 'cancellation', status: 'confirmed' }));
+    await act(async () => { fireEvent.click(await screen.findByText('Bash')); });
+    expect(document.querySelector('.chat__tool-output')?.textContent).toBe('(stopped before this tool returned)');
+  });
+
+  it('the terminal label says "Or" only beside a button: Claude Code has none, Codex has two', async () => {
+    apiMocks.fetchClaudeStatus.mockResolvedValue(claude());
+    apiMocks.fetchCodexStatus.mockResolvedValue(codex({ loggedIn: false }));
+    render(<ChatPanel />);
+    await waitFor(() => expect(connect().querySelector('.chat-panel__connect-commands-label')?.textContent).toBe('Run one in a terminal:'));
+    expect(connect().querySelector('button.chat-panel__connect-btn')).toBeNull();
+    await pickCodex();
+    await waitFor(() => expect(connect().querySelector('.chat-panel__connect-commands-label')?.textContent).toBe('Or run one in a terminal:'));
+    expect(connect().querySelectorAll('button.chat-panel__connect-btn')).toHaveLength(2);
+  });
+
+  it('the status words are weight 500 in the UI face (thin 10px text), and the session id stays mono', () => {
+    const sheet = css('slava-restraint.css');
+    const status = /body\.app-slava-restraint \.chat-panel__meta \.chat-panel__status \{([^}]*)\}/.exec(sheet);
+    expect(status?.[1]).toMatch(/font-weight:\s*500/);
+    const mono = /body\.app-slava-restraint \.chat-panel__meta,\s*body\.app-slava-restraint \.chat-panel__session \{([^}]*)\}/.exec(sheet);
+    expect(mono?.[1]).toMatch(/font-family:\s*var\(--sr-mono\)/);
+    expect(mono?.[1]).not.toMatch(/font-weight/);
   });
 });
 

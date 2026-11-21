@@ -109,8 +109,9 @@ function chatBackendPort(): number {
 }
 const CHAT_BACKEND_PORT = chatBackendPort();
 const BACKEND_START_COMMAND = `backend/.venv/bin/python backend/devserver.py --port ${CHAT_BACKEND_PORT} --open`;
-/** The label above the terminal commands in the connect section (not above the one command that starts Nebula). */
-const COMMANDS_LABEL = 'Or run one in a terminal:';
+/** The label above the terminal commands in the connect section (not above the one command that starts Nebula).
+ *  "Or" only where the section has a button the commands are an alternative to (canStartLogin). */
+const commandsLabel = (hasButton: boolean) => (hasButton ? 'Or run one in a terminal:' : 'Run one in a terminal:');
 const CHAT_PANEL_RESIZE_CURSORS: Record<string, string> = {
   l: 'ew-resize',
   r: 'ew-resize',
@@ -809,7 +810,7 @@ export function ChatPanel() {
         detail: activeCatalog?.agent === 'claude' && chatAuthUsesProviderBilling(activeCatalog.auth.mode)
           ? 'Claude Code is billed to your API key or cloud account, not your Claude plan. Sign in with `claude auth login --claudeai` to use your plan.'
           : 'Uses your existing Claude Code login on this machine.',
-        commandsLabel: COMMANDS_LABEL,
+        commandsLabel: commandsLabel(false),
         canStartLogin: false,
         commands: [
           'claude auth login --claudeai',
@@ -847,7 +848,7 @@ export function ChatPanel() {
         title: needsConnection ? 'Connect ChatGPT account' : 'ChatGPT account connected',
         status: codexStatusLabel,
         detail,
-        commandsLabel: COMMANDS_LABEL,
+        commandsLabel: commandsLabel(true),
         canStartLogin: true,
         commands: [
           'codex login',
@@ -1348,7 +1349,7 @@ export function ChatPanel() {
                 parts: [
                   ...msg.parts.map((p) =>
                     p.kind === 'tool' && p.result === undefined
-                      ? { ...p, result: '(canceled before this tool returned)', isError: true }
+                      ? { ...p, result: '(stopped before this tool returned)', isError: true }
                       : p,
                   ),
                   { kind: 'system', ...notice },
@@ -2051,7 +2052,7 @@ export function ChatPanel() {
           {commonsEnabled && <p className="chat-panel__scope-hint">Private reference chats: Claude or Codex.</p>}
           <div className="chat-panel__meta" onMouseDown={(e) => e.stopPropagation()}>
             {personal ? (
-              <span data-chat-personal-agent={personalAgent?.id ?? ''} title={sessionTitle}>
+              <span data-chat-personal-agent={personalAgent?.id ?? ''} className="chat-panel__status" title={sessionTitle}>
                 <span className="chat-panel__personal-dot" style={{ background: personalAgent?.color ?? '#888' }} aria-hidden="true" />
                 {agentDisplayName}
               </span>

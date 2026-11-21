@@ -375,3 +375,30 @@ async def test_codex_signed_in_with_an_api_key_has_its_own_code_and_lines(monkey
     monkeypatch.setattr(chat_models, "_codex_catalog", AsyncMock(
         return_value=({"mode": None, "planType": None, "authenticated": False}, [])))
     assert (await chat_models.get_chat_models("codex", refresh=True))["error"]["code"] == "auth_required"
+
+
+@pytest.mark.asyncio
+async def test_codex_auth_required_lines_point_to_the_connect_button_and_claude_keeps_its_terminal_line(monkeypatch):
+    """Nebula needs a ChatGPT account for Codex, so Codex's not-signed-in lines (picker and chat) name the
+    Connect ChatGPT account button, not a terminal command. Claude Code's line keeps `claude`."""
+    assert chat_models.catalog_message("auth_required", "codex") == (
+        "Codex isn’t signed in, so Nebula can’t list its models. "
+        "Use Connect ChatGPT account above the message box, then try again.")
+    assert chat_models.chat_refusal_message("auth_required", "codex", "fallback") == (
+        "Codex isn’t signed in, so Nebula can’t list its models. "
+        "Use Connect ChatGPT account above the message box, then send again.")
+    assert chat_models.catalog_message("auth_required", "claude") == (
+        "Claude Code isn’t signed in, so Nebula can’t list its models. "
+        "Run `claude` in a terminal and sign in, then try again.")
+
+
+@pytest.mark.asyncio
+async def test_only_the_api_key_mode_gets_the_api_key_line(monkeypatch):
+    """account/read reports an API key as type "apiKey". Any other signed-in mode with no models (here
+    amazonBedrock) is catalog_unavailable, not the API-key line."""
+    monkeypatch.setattr(chat_models, "_capture", AsyncMock(return_value=("1.0\n", 0)))
+    monkeypatch.setattr(chat_models, "_catalog_env", lambda _agent: {})
+    for mode, code in (("apiKey", "auth_api_key"), ("amazonBedrock", "catalog_unavailable")):
+        monkeypatch.setattr(chat_models, "_codex_catalog", AsyncMock(
+            return_value=({"mode": mode, "planType": None, "authenticated": True}, [])))
+        assert (await chat_models.get_chat_models("codex", refresh=True))["error"]["code"] == code, mode

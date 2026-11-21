@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import ts from 'typescript';
-import { DECORATION, FAILURE_MESSAGE, ICON_ONLY, dropNonScoping, expandAlternatives, isDisabledScoped, isDimLiteral, lastCompound, normaliseCombinators, scan, splitTopLevel } from '../scripts/check-text-ink.mjs';
+import { DECORATION, FAILURE_MESSAGE, ICON_ONLY, dropNonScoping, expandAlternatives, isDisabledScoped, isDimLiteral, lastCompound, normaliseCombinators, scan, splitTopLevel, findThinText, thinTextFailures, THIN_TEXT_BASELINE } from '../scripts/check-text-ink.mjs';
 
 /**
  * scripts/check-text-ink.mjs runs in `npm run lint` (design: text takes the light ink; white at .40
@@ -592,5 +592,45 @@ describe('check-text-ink: further colour forms and parse errors', () => {
 
   it('passes a file that parses cleanly', () => {
     expect(tsx('const a = 1;')).toEqual([]);
+  });
+});
+
+describe('check-text-ink: thin text takes weight 500', () => {
+  const thin = (rules: string) => findThinText([{ file: 'fixture.css', source: rules }]);
+
+  it.each([
+    ['a 10px size and no weight', '.a { font-size: 10px; }'],
+    ['a 9px size and weight 400', '.a { font-size: 9px; font-weight: 400; }'],
+    ['weight normal', '.a { font-size: 10px; font-weight: normal; }'],
+    ['the meta size token', '.a { font-size: var(--sr-type-meta); }'],
+    ['the micro size token', '.a { font-size: var(--sr-type-micro, 9px); }'],
+    ['the prefixed twin', 'body.app-slava-restraint .a { font-size: 10px; font-family: var(--sr-ui); }'],
+    ['the font shorthand', '.a { font: 400 10px/1.2 Inter; }'],
+  ])('fails %s', (_name, rules) => {
+    expect(thin(rules)).toHaveLength(1);
+  });
+
+  it.each([
+    ['weight 500', '.a { font-size: 10px; font-weight: 500; }'],
+    ['weight 600', '.a { font-size: var(--sr-type-meta); font-weight: 600; }'],
+    ['bold', '.a { font-size: 9px; font-weight: bold; }'],
+    ['a mono face', '.a { font-size: 10px; font-family: var(--sr-mono); }'],
+    ['monospace', '.a { font-size: 10px; font-family: ui-monospace, monospace; }'],
+    ['11px', '.a { font-size: 11px; }'],
+    ['the font shorthand at 500', '.a { font: 500 10px/1.2 Inter; }'],
+  ])('passes %s', (_name, rules) => {
+    expect(thin(rules)).toHaveLength(0);
+  });
+
+  it('fails a new rule, and a baseline entry that no longer breaks the rule (the list only shrinks)', () => {
+    const files = [{ file: 'fixture.css', source: '.a { font-size: 10px; }\n.b { font-size: 10px; font-weight: 500; }' }];
+    expect(thinTextFailures(files, new Set()).fresh.map((hit) => hit.key)).toEqual(['fixture.css::.a']);
+    const listed = thinTextFailures(files, new Set(['fixture.css::.a', 'fixture.css::.b', 'fixture.css::.gone']));
+    expect(listed.fresh).toEqual([]);
+    expect(listed.stale).toEqual(['fixture.css::.b', 'fixture.css::.gone']);
+  });
+
+  it('the status words under Choose model are not in the baseline', () => {
+    expect([...THIN_TEXT_BASELINE].filter((key) => /chat-panel__(status|meta)/.test(key))).toEqual([]);
   });
 });

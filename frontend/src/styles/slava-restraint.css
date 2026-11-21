@@ -1094,9 +1094,10 @@ body.app-slava-restraint .chat-panel__session {
 }
 
 /* The status words ("Claude Code · Max plan", "Codex · your ChatGPT plan", "thinking…") are sentences in the
- * UI face; only the session id, which is an identifier, stays mono. */
+ * UI face at weight 500 (thin 10px text); only the session id, which is an identifier, stays mono. */
 body.app-slava-restraint .chat-panel__meta .chat-panel__status {
   font-family: var(--sr-ui);
+  font-weight: 500;
 }
 
 body.app-slava-restraint .chat-panel__model-picker {
@@ -5012,8 +5013,8 @@ body.app-slava-restraint .code-glue .code-span {
 
 /* Connect Claude Code / Connect ChatGPT account (the chat's connect section): the app's primary button for
  * Connect and its secondary for Use a device code, through the same --sr-button-* tokens as the proposal
- * bar's Accept and Show (canvasProposals.css), so the two can't drift. Hover, focus and disabled follow
- * those buttons. */
+ * bar's Accept and Show (canvasProposals.css), so the two can't drift. Hover and focus follow
+ * those buttons; disabled is the app's one grey look (disabled-buttons.css). */
 body.app-slava-restraint .chat-panel__connect-btn {
   justify-content: center;
   height: var(--sr-button-height);
@@ -5028,10 +5029,6 @@ body.app-slava-restraint .chat-panel__connect-btn {
 
 body.app-slava-restraint .chat-panel__connect-btn:hover:not(:disabled) {
   background: var(--sr-button-fill-hover);
-}
-
-body.app-slava-restraint .chat-panel__connect-btn:disabled {
-  opacity: 0.5;
 }
 
 body.app-slava-restraint .chat-panel__connect-btn:focus-visible {

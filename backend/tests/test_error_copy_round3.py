@@ -617,7 +617,9 @@ def test_a_library_with_references_says_how_many(commons, tmp_path):
 
 
 def _shown(exc) -> str:
-    """What the person's UI reads for an EvaluationError (routes/commons.py _evaluation_refused)."""
+    """The line an EvaluationError carries: its own written line, else the Commons' FALLBACK sentinel. Over
+    HTTP, routes/commons.py refuse() sends an empty detail for FALLBACK and the UI shows its shell's line
+    (reload the page in a browser, View > Reload in the desktop app); this helper reads the error itself."""
     return exc.person or str(exc)
 
 

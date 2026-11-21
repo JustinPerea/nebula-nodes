@@ -111,6 +111,7 @@
   .workspace-header__back,
   .inspector__action-button,
   .proposal-bar__button,
+  .chat-panel__connect-btn,
   .world-splat-preview__open,
   .cinema-shot-panel__reset,
   .cinema-reference-upload__retry,
@@ -147,6 +148,7 @@
   .workspace-header__back,
   .inspector__action-button,
   .proposal-bar__button,
+  .chat-panel__connect-btn,
   .world-splat-preview__open,
   .cinema-shot-panel__reset,
   .cinema-reference-upload__retry,
@@ -426,6 +428,7 @@ input[type='checkbox'][data-person-lock]:not([data-held-pending])::before {
   .canvas-undo-notice__action,
   .moodboard-board-toast__action,
   .workspace-rail__item--primary,
+  .chat-panel__connect-btn--primary,
   .proposal-bar__button--primary
 ):is(:disabled, [aria-disabled='true']:not([data-held-pending])),
 :is(
@@ -455,6 +458,7 @@ input[type='checkbox'][data-person-lock]:not([data-held-pending])::before {
   .canvas-undo-notice__action,
   .moodboard-board-toast__action,
   .workspace-rail__item--primary,
+  .chat-panel__connect-btn--primary,
   .proposal-bar__button--primary
 ):is(:disabled, [aria-disabled='true']:not([data-held-pending])):hover {
   background: var(--disabled-fill, rgb(255 255 255 / 0.42)) !important;

@@ -349,7 +349,7 @@
   "frontend/src/components/panels/AgentLogEntryRow.tsx": 2,
   "frontend/src/components/panels/AssetsPanel.test.tsx": 5,
   "frontend/src/components/panels/AssetsPanel.tsx": 6,
-  "frontend/src/components/panels/ChatModelPicker.tsx": 7,
+  "frontend/src/components/panels/ChatModelPicker.tsx": 6,
   "frontend/src/components/panels/ChatPanel.tsx": 62,
   "frontend/src/components/panels/DeferredMaskPainter.tsx": 5,
   "frontend/src/components/panels/FilePreviewFrame.tsx": 5,

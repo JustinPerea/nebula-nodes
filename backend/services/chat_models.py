@@ -48,7 +48,8 @@ PICK_ANOTHER_MODEL = "Pick another with the model button at the top of the chat,
 _CLI_AUTH_CHECK = {"claude": "claude auth status", "codex": "codex login status"}
 _CLI_SIGN_IN = {
     "claude": "Run `claude` in a terminal and sign in",
-    "codex": "Run `codex` in a terminal and sign in with your ChatGPT account",
+    # Nebula needs a ChatGPT account for Codex, and the Connect ChatGPT account button (above the message box) signs in.
+    "codex": "Use Connect ChatGPT account above the message box",
 }
 _RELOAD = "Nebula couldn\u2019t read that message. Reload the page, then send again."
 
@@ -430,8 +431,9 @@ async def _discover(agent: str) -> dict[str, Any]:
                 result["models"] = models
                 if models:
                     result["status"] = "ready"
-                elif agent == "codex" and auth["authenticated"] and auth["mode"] != "chatgpt":
-                    # Signed in, but with an API key: the ChatGPT model list needs a ChatGPT sign-in.
+                elif agent == "codex" and auth["mode"] == "apiKey":
+                    # Signed in with an API key (account/read type "apiKey"): the ChatGPT model list needs a
+                    # ChatGPT sign-in. Any other signed-in mode falls to catalog_unavailable below.
                     raise _DiscoveryError("auth_api_key", "Codex is signed in with an API key.", "not_authenticated")
                 elif not auth["authenticated"]:
                     raise _DiscoveryError("auth_required", "Sign in through the local official CLI to select chat models.", "not_authenticated")

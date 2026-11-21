@@ -109,6 +109,14 @@ describe('Personal agents in the chat panel', () => {
     expect(document.querySelector('.chat-panel__meta')?.textContent).toBe('Fake Agent');
   });
 
+  it('a personal agent’s name is in the status class, so the whole status line is in the UI face', async () => {
+    await connected();
+    await pickFake();
+    const name = document.querySelector('[data-chat-personal-agent="fake"]');
+    expect(name).not.toBeNull();
+    expect(name?.classList.contains('chat-panel__status')).toBe(true);
+  });
+
   it('PR #204: a demoted tab lists no personal agents and says why under the heading', async () => {
     await connected();
     act(() => reportPersonRequired());
