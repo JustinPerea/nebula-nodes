@@ -263,6 +263,34 @@ describe('check-internal-ids: what counts', () => {
     expect(count('a.ts', 'const GmsLine = 1;')).toBe(1);
   });
 
+  it('counts a $ prefix, a leading underscore before a capital and an acronym hump', () => {
+    expect(count('a.sh', 'export $GM_TOKEN=x\nexport $gm_board=y\nexport $gmBoard=z\n')).toBe(3);
+    expect(count('a.ts', 'const d = _gmBoard; const e = _gmsLine;')).toBe(2);
+    expect(count('a.ts', 'class GMPanel {}\nconst f = readsGMLine; const g = xGM9;')).toBe(3);
+    expect(count('a.ts', 'const h = $gmBoard;')).toBe(1);
+    // an acronym hump reads as the initials only before a capital-lowercase pair or a digit
+    expect(count('a.ts', 'const i = BGMVolume; const j = playBGM;')).toBe(0);
+    expect(count('a.ts', 'const k = toGMTString; const l = PNGMeta; const m = aGM; const n = myGM;')).toBe(0);
+    // kebab case is not an identifier shape
+    expect(count('a.ts', '// gm-board gm-card\nconst el = 1;')).toBe(0);
+    expect(count('a.css', '.a { /* gm-board gm-card */ }')).toBe(0);
+  });
+
+  it('does not count a bare Gm or Gms standing alone, or the initials inside a string', () => {
+    expect(count('a.ts', 'const a = Gm; const b = Gms;')).toBe(0);
+    expect(count('a.ts', 'const chords = "Am F C Gm7 Gm";')).toBe(0);
+    // string literal text is blanked out: a gm shape inside one never counts
+    expect(count('a.ts', 'const s = "aGm3 gms9 gm_board GM_LINE readsGmsLine $GM_TOKEN _gmBoard GMPanel";')).toBe(0);
+    expect(count('a.ts', 'const id = \'ed_gm7val00000001\';')).toBe(0);
+    expect(count('a.ts', 'const t = `tpl gm_board x`;')).toBe(0);
+    expect(count('a.py', 'x = "p_gm mb_gm ed_gm7run"\n')).toBe(0);
+    expect(count('a.py', 'cmd = "nebula moodboard show mb_gm"\n')).toBe(0);
+    // a shell file has no string spans, so its quotes change nothing
+    expect(count('a.sh', 'echo "mb_gm ed_gm7run"\n')).toBe(2);
+    // comments are still read
+    expect(count('a.ts', '// gm_board readsGmsLine $GM_TOKEN _gmBoard GMPanel')).toBe(5);
+  });
+
   it('does not count the initials inside a word or as a bare lowercase token', () => {
     expect(count('a.ts', 'const s = "segment, pigment, enigma, gmail, gmock";')).toBe(0);
     expect(count('a.ts', 'const gmt = 1; const gmail2 = 2; const gmock = 3;')).toBe(0);
@@ -283,23 +311,78 @@ describe('check-internal-ids: what counts', () => {
   it('counts round, review and question ids inside a Python def test_ name', () => {
     expect(kinds('a.py', 'def test_gm_r901_foo():\n    pass\n')).toEqual(['gm', 'round']);
     expect(kinds('a.py', 'def test_r901_foo():\n    pass\n')).toEqual(['round']);
-    expect(kinds('a.py', 'def test_follow_r901_item():\n    pass\n')).toEqual(['round']);
+    expect(kinds('a.py', 'def test_r23a_x():\n    pass\n')).toEqual(['round']);
+    expect(kinds('a.py', 'def test_r6_N4_a_terminal():\n    pass\n')).toEqual(['round', 'review']);
+    expect(kinds('a.py', 'def test_gm_r25_5_copy_names():\n    pass\n')).toEqual(['gm', 'round']);
+    expect(kinds('a.py', 'def test_review15_nit4_a_stray():\n    pass\n')).toEqual(['review', 'review']);
+    expect(kinds('a.py', 'def test_q4_the_note():\n    pass\n')).toEqual(['question']);
     expect(kinds('a.py', 'def test_round_901_foo():\n    pass\n')).toEqual(['round']);
     expect(kinds('a.py', 'def test_round_901e_foo():\n    pass\n')).toEqual(['round']);
     expect(kinds('a.py', 'def test_review_901_foo():\n    pass\n')).toEqual(['review']);
     expect(kinds('a.py', 'def test_review_rule_901_foo():\n    pass\n')).toEqual(['review']);
+    expect(kinds('a.py', 'def test_foo_review_rule():\n    pass\n')).toEqual(['review']);
     expect(kinds('a.py', 'def test_q901_foo():\n    pass\n')).toEqual(['question']);
-    expect(kinds('a.py', 'def test_the_q901b_foo():\n    pass\n')).toEqual(['question']);
+    expect(kinds('a.py', 'def test_q21b_x():\n    pass\n')).toEqual(['question']);
     expect(kinds('a.py', 'def test_gms_line():\n    pass\n')).toEqual(['gm']);
     expect(kinds('a.py', 'def test_reads_gms_line():\n    pass\n')).toEqual(['gm']);
     expect(kinds('a.py', 'def test_nit1_foo():\n    pass\n')).toEqual(['review']);
-    expect(kinds('a.py', 'def test_the_LOW4_foo():\n    pass\n')).toEqual(['review']);
     expect(kinds('a.py', 'def test_medium1_foo():\n    pass\n')).toEqual(['review']);
     expect(kinds('a.py', 'def test_lr1_foo():\n    pass\n')).toEqual(['review']);
     expect(kinds('a.py', 'def test_Le_foo():\n    pass\n')).toEqual(['review']);
     expect(kinds('a.py', 'def test_H1_foo():\n    pass\n')).toEqual(['review']);
+    // a gm segment is also caught by the identifier rule; the id counts once, not twice
+    expect(count('a.py', 'def test_gm_r901_foo():\n    pass\n')).toBe(2);
+    expect(count('a.py', 'def test_gm7_x():\n    pass\n')).toBe(1);
     // the same shapes in comments were not already counted, so each name yields one match
     expect(count('a.py', 'def test_review_901_foo():\n    pass\n')).toBe(1);
+    // the whole pair id is the match text, not the bare word
+    const [r] = scanSource('a.py', 'def test_round_901():\n    pass\n');
+    const [v] = scanSource('a.py', 'def test_review_901():\n    pass\n');
+    const [w] = scanSource('a.py', 'def test_review_rule_5():\n    pass\n');
+    expect(r.match).toBe('round_901');
+    expect(v.match).toBe('review_901');
+    expect(w.match).toBe('review_rule_5');
+  });
+
+  it('counts only the leading run of a def test_ name, so a domain token up front still fires', () => {
+    // a leading run of id-shaped segments ends at the first ordinary word; after it only
+    // round_N and review_N / review_rule(_N) count
+    expect(kinds('a.py', 'def test_the_q901b_foo():\n    pass\n')).toEqual([]);
+    expect(kinds('a.py', 'def test_follow_r901_item():\n    pass\n')).toEqual([]);
+    expect(kinds('a.py', 'def test_the_LOW4_foo():\n    pass\n')).toEqual([]);
+    expect(count('a.py', 'def test_jpeg_q90_output():\n    pass\n')).toBe(0);
+    expect(count('a.py', 'def test_deepseek_r1_reply():\n    pass\n')).toBe(0);
+    expect(count('a.py', 'def test_runs_on_M4():\n    pass\n')).toBe(0);
+    expect(count('a.py', 'def test_the_plan_records_q113():\n    pass\n')).toBe(0);
+    expect(count('a.py', 'def test_grace_low1_x():\n    pass\n')).toBe(0);
+    // a bare number keeps the run going but is not itself an id
+    expect(kinds('a.py', 'def test_r21_3_x():\n    pass\n')).toEqual(['round']);
+    // residual collisions, counted on purpose: a domain token as the leading word
+    expect(kinds('a.py', 'def test_r2_bucket_upload():\n    pass\n')).toEqual(['round']);
+    expect(kinds('a.py', 'def test_L2_norm():\n    pass\n')).toEqual(['review']);
+    expect(kinds('a.py', 'def test_q4_k_m_quant():\n    pass\n')).toEqual(['question']);
+    expect(kinds('a.py', 'def test_high1_low1_thresholds():\n    pass\n')).toEqual(['review', 'review']);
+    // putting a word first is the fix: the domain token falls out of the leading run
+    expect(count('a.py', 'def test_cloudflare_r2_bucket_upload():\n    pass\n')).toBe(0);
+  });
+
+  it('skips a def test_ name inside a string or a comment and round_N before an arithmetic word', () => {
+    expect(count('a.py', 'SRC = """\ndef test_r2_x():\n"""\n')).toBe(0);
+    expect(count('a.py', 'x = "def test_q9_y"\n')).toBe(0);
+    expect(count('a.py', '# def test_q9_y\nx = 1\n')).toBe(0);
+    // a real def on a later line is still read
+    expect(kinds('a.py', 'SRC = "a"\ndef test_q9_y():\n    pass\n')).toEqual(['question']);
+    // class Test... and def testCamel are out of scope
+    expect(count('a.py', 'class TestR901:\n    pass\n')).toBe(0);
+    expect(count('a.py', 'def testR901():\n    pass\n')).toBe(0);
+    // round_N is skipped when the next segment is an arithmetic word, as in comments
+    for (const name of [
+      'test_round_2_decimals', 'test_round_2_places', 'test_round_3_digits',
+      'test_round_4_dp', 'test_round_2_sig',
+    ]) {
+      expect(count('a.py', `def ${name}():\n    pass\n`), name).toBe(0);
+    }
+    expect(kinds('a.py', 'def test_round_2_items():\n    pass\n')).toEqual(['round']);
   });
 
   it('does not read a domain value or a word in a def test_ name as an id', () => {
@@ -310,7 +393,8 @@ describe('check-internal-ids: what counts', () => {
       'test_s2v_shape', 'test_e2e_generate', 'test_o3_endpoint', 'test_t2_meshy',
       'test_e00_matches_reference', 'test_b64_mime', 'test_m4a_audio', 'test_r2v_endpoint',
       'test_wan26_r2v_video', 'test_f_rest_zero', 'test_qc_node', 'test_vp8l_alpha',
-      'test_H264_stream', 'test_H265_stream',
+      'test_H264_stream', 'test_H265_stream', 'test_r1234_foo', 'test_q1234_foo',
+      'test_L40s_gpu', 'test_jpeg_q90_output', 'test_deepseek_r1_reply',
     ]) {
       expect(count('a.py', `def ${name}():\n    pass\n`), name).toBe(0);
     }
@@ -401,9 +485,9 @@ describe('check-internal-ids: what counts', () => {
     expect(count('a.sh', 'echo hi # round 901\n')).toBe(1);
   });
 
-  it('reports the line and text of a match', () => {
+  it('reports the line, column and text of a match', () => {
     const [m] = scanSource('a.ts', 'const a = 1;\n// GM r901 1: gap\n');
-    expect(m).toMatchObject({ line: 2, kind: 'gm' });
+    expect(m).toMatchObject({ line: 2, col: 4, kind: 'gm', match: 'GM' });
     expect(m.text).toBe('// GM r901 1: gap');
   });
 });
@@ -563,12 +647,13 @@ describe('check-internal-ids: agent-facing markdown', () => {
 });
 
 describe('check-internal-ids: baseline', () => {
-  const matches = { 'a.ts': [{ line: 3, text: '// GM wants it', kind: 'gm', match: 'GM' }] };
+  const matches = { 'a.ts': [{ line: 3, col: 4, text: '// GM wants it', kind: 'gm', match: 'GM' }] };
 
-  it('fails when a count rises, naming file:line and the text', () => {
+  it('fails when a count rises, naming file:line:col, the match and the text', () => {
     const { failures } = compareToBaseline({ 'a.ts': 2 }, matches, { 'a.ts': 1 });
     expect(failures).toHaveLength(1);
-    expect(failures[0].lines[0]).toContain('a.ts:3');
+    expect(failures[0].lines[0]).toContain('a.ts:3:4');
+    expect(failures[0].lines[0]).toContain('[gm "GM"]');
     expect(failures[0].lines[0]).toContain('GM wants it');
   });
 
