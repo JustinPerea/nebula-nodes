@@ -40,7 +40,7 @@ logger = logging.getLogger(__name__)
 # Resume Operation ID field"." Each raise keeps its specific text, word for
 # word, for agents, the run record and MCP; the line rides beside it
 # (execution/person_line.py), and the card shows it under "Couldn't run the
-# node.". Design: "People never see the word "start"; they ran a World Labs
+# node.". The design rule: "People never see the word "start"; they ran a World Labs
 # job." Later (design, PR #173), whatever the earlier text says: a field is
 # named as the node shows it, in quotes, “Resume Operation ID”, not "the
 # node's Resume Operation ID field".

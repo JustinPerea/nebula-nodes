@@ -571,8 +571,8 @@ async def handle_cinema_scene(
             # are how the Cinema panel reads the failure, the way a node card
             # reads its run error (PR #170, lib/nodeErrorCopy.ts).
             category, friendly, _retryable = classify_error(str(exc), job_failure=is_job_failure(exc))
-            # The base node's own line, else the general line (design) for the
-            # provider's answer, naming the provider the base called (PR #172).
+            # The base node's own line, else the provider status line for the
+            # provider's answer (design, PR #172), naming the provider the base called.
             card = card_line(exc, base_model, base_node.params if base_node is not None else {}, api_keys)
             fields = {"errorCategory": category, "errorFriendly": friendly,
                       "errorPerson": card.person, "errorProviderText": card.provider_text,

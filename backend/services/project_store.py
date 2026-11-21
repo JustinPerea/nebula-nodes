@@ -606,7 +606,8 @@ def _waiting_record(found: Any) -> dict[str, Any] | None:
                       **({"overSaveLimit": True} if saved.get("overSaveLimit") is True else {}),
                       # After a restore notice named a canvas.
                       **({"another": True} if saved.get("another") is True else {})}
-            # Every canvas filed together (PR #199), each marked when it is over the save limit.
+            # Every canvas filed together (PR #199), each marked when it is
+            # over the save limit.
             filed = saved.get("filed")
             if isinstance(filed, list) and all(isinstance(row, dict) and isinstance(row.get("id"), str)
                                                and isinstance(row.get("name"), str) for row in filed):

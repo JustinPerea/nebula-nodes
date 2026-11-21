@@ -1260,10 +1260,10 @@ class DailyWait:
         return [self.names.get(node_id) or node_id for node_id in self.unpriced]
 
     def _cannot_count(self) -> str:
-        """Design (PR #212), verbatim: the line when only a node with no
-        list price makes the run wait. "“Sketch” has no list price, so
-        Nebula can\u2019t count it toward the $5 daily total." (several:
-        "have no list price" and "them")."""
+        """The line when only a node with no list price makes the run wait
+        (design, PR #212), verbatim:
+        "“Sketch” has no list price, so Nebula can\u2019t count it toward the $5 daily total."
+        (several: "have no list price" and "them")."""
         names = self._unpriced_names() or ["A node"]
         one = len(names) == 1
         return (f"{node_name_list(names) if self.unpriced else names[0]} {'has' if one else 'have'} no list price, "

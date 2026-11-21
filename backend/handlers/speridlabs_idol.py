@@ -182,11 +182,11 @@ def quota_error(message: str, *, signed_in: bool) -> IdolSpaceError:
     return with_provider_line(IdolSpaceError(text), line)
 
 
-# Design, PR #203: an anonymous run (no token) that finds the free GPU
-# time used up, from the quota and the Space-limit refusals alike. Nobody
-# knows whose pool a server-side call with no token draws on (no X-IP-Token
-# reaches the Space), so the line names no allowance numbers. Re-ruled once
-# the real text is seen live.
+# The anonymous-run line (design, PR #203): an anonymous run (no token)
+# that finds the free GPU time used up, from the quota and the Space-limit
+# refusals alike. Nobody knows whose pool a server-side call with no token
+# draws on (no X-IP-Token reaches the Space), so the line names no allowance
+# numbers. Re-ruled once the real text is seen live.
 ANONYMOUS_ALLOWANCE_OUT = ("Hugging Face’s free GPU time for Idol is used up for now. Try again later, "
                            "or add your Hugging Face token in Settings to use your own allowance.")
 
@@ -222,8 +222,7 @@ def duration_token_not_applied_error(*, detail: str) -> IdolSpaceError:
     # (spaces then gives the anonymous cap), or that a free ("regular")
     # account's per-task cap, which isn't published, is under the Space's
     # ask. The text is the same for both (spaces 0.51.3 zero/client.py), so
-    # the first live run settles it; until then the token line is shown
-    # (design).
+    # the first live run settles it; until then the token line is shown (design).
     return with_provider_line(
         IdolSpaceError("HF_TOKEN was sent, but ZeroGPU refused the Idol Space's per-run GPU ask as over the "
                        "maximum: either the token didn't apply, or a free account's per-task cap is under the ask "
@@ -368,14 +367,14 @@ class IdolProposalNeeded(run_origin.ProposalNeeded):
     (its person line)."""
 
 
-# Design, PR #203, verbatim: the stop is by design, not a failure.
+# (design, PR #203), verbatim. The stop is intended, not a failure.
 # The card shows WAITING under its own neutral heading ("Waiting for you to
 # run it", frontend nodeErrorCopy, by the event's category "waiting").
 AGENT_STOP_PERSON = ("An agent’s run stopped here because this node could bill your Hugging Face account, and only "
                      "you can start that. Run the node yourself to go ahead.")
 
 
-# Design, PR #203, verbatim: Run clicked in a canvas tab that isn't
+# (design, PR #203), verbatim, for Run clicked in a canvas tab that isn't
 # connected as the person, with the token set (the same stop, under the same
 # heading; only the body differs).
 TAB_STOP_PERSON = ("This node could bill your Hugging Face account, so only you can run it. You can run it when this "
