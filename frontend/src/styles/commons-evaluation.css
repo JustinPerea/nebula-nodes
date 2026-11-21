@@ -68,6 +68,7 @@
   letter-spacing:1.5px;
   color:var(--evaluation-eyebrow-ink);
   font-size:10px;
+  font-weight: 500;
 }
 /* A section's eyebrow line: its name (the h2) and its descriptor, in the
  * eyebrow style above (GM review of PR #157, round 2). The words are written
@@ -241,6 +242,7 @@
   justify-content:space-between;
   align-items:center;
   font-size:10px;
+  font-weight: 500;
 }
 .evaluation-form .evaluation-role {
   display:flex;

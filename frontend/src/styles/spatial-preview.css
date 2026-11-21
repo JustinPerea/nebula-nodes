@@ -81,6 +81,7 @@
   display: -webkit-box;
   overflow: hidden;
   font-size: 10px;
+  font-weight: 500;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
 }

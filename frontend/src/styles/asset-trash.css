@@ -50,6 +50,7 @@ body.app-slava-restraint .asset-trash__error {
   margin: 0;
   color: var(--sr-ink-light);
   font-size: 10px;
+  font-weight: 500;
   line-height: 1.45;
 }
 
@@ -95,7 +96,7 @@ body.app-slava-restraint .asset-trash__name {
   white-space: nowrap;
 }
 
-body.app-slava-restraint .asset-trash__sub { color: var(--sr-ink-light); font-size: 10px; line-height: 1.35; }
+body.app-slava-restraint .asset-trash__sub { color: var(--sr-ink-light); font-size: 10px; font-weight: 500; line-height: 1.35; }
 
 body.app-slava-restraint .asset-trash__actions {
   grid-column: 1 / -1;
@@ -211,6 +212,7 @@ body.app-slava-restraint .character-node__open-error {
   margin-top: 4px;
   color: var(--sr-error);
   font-size: 10px;
+  font-weight: 500;
   line-height: 1.35;
 }
 

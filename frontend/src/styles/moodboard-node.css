@@ -44,6 +44,7 @@ body.app-slava-restraint .moodboard-node__preview {
   background: rgba(0, 0, 0, 0.22);
   color: var(--sr-ink-light);
   font-size: 10px;
+  font-weight: 500;
   text-transform: uppercase;
 }
 
@@ -97,6 +98,7 @@ body.app-slava-restraint .moodboard-node__output {
   transform: translateX(100%);
   color: var(--sr-ink-light);
   font-size: 10px;
+  font-weight: 500;
   pointer-events: none;
 }
 

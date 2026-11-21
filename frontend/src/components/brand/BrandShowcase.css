@@ -262,6 +262,7 @@
   display: flex;
   justify-content: space-between;
   font-size: 9px;
+  font-weight: 500;
   letter-spacing: 0.18em;
   text-transform: uppercase;
   color: var(--sr-ink-light);
@@ -314,6 +315,7 @@
 
 .nn-bs-card__state {
   font-size: 9px;
+  font-weight: 500;
   letter-spacing: 0.16em;
   color: rgb(180, 240, 250);
 }

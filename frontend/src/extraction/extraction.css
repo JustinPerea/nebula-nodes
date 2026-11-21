@@ -221,6 +221,7 @@ body { background: #111; }
   border-radius: 999px;
   background: var(--ex-fill-selected);
   font-size: 10px;
+  font-weight: 500;
   line-height: 16px;
   color: var(--ex-muted);
 }
@@ -274,6 +275,7 @@ body { background: #111; }
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 10px;
+  font-weight: 500;
   line-height: 14px;
   background: #000;
   color: #fff;

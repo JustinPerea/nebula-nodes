@@ -1,7 +1,7 @@
 /* A Studio toolbar's Move menu (components/asset-move/AssetMoveMenu.tsx). The
  * button takes the toolbar's own class; this adds the caret and the menu. */
 .asset-move__trigger:disabled { opacity: var(--sr-disabled-opacity, 0.45); cursor: default; }
-.asset-move__caret { margin-left: 5px; font-size: 9px; line-height: 1; opacity: 0.7; }
+.asset-move__caret { margin-left: 5px; font-size: 9px; font-weight: 500; line-height: 1; opacity: 0.7; }
 
 .asset-move__menu {
   /* A short, slightly underdamped spring for the open, like the provider switcher's. */
