@@ -40,6 +40,22 @@ def _walk_parser(parser: argparse.ArgumentParser, path: str = "nebula"):
                 yield from _walk_parser(sub, f"{path} {name}")
 
 
+def _param_specs(params: dict):
+    """(where, spec) for every parameter schema: top-level and nested properties, and $defs."""
+    def walk(schema, where):
+        if not isinstance(schema, dict):
+            return
+        for name, spec in (schema.get("properties") or {}).items():
+            yield f"{where}{name}", spec
+            yield from walk(spec, f"{where}{name}.")
+        for name, spec in (schema.get("$defs") or {}).items():
+            yield f"{where}$defs.{name}", spec
+            yield from walk(spec, f"{where}$defs.{name}.")
+        for key in ("items",):
+            yield from walk(schema.get(key), where)
+    yield from walk(params, "")
+
+
 def _lane_hits(texts):
     return [where for where, text in texts if LANE.search(text)]
 
@@ -49,6 +65,9 @@ def test_the_checker_itself_catches_lane_and_lets_other_words_through():
     assert LANE.search("two lanes of one agent")
     assert not LANE.search("a plane, laneway and Elaney")
     assert _lane_hits([("a", "fine"), ("b", "per lane")]) == ["b"]
+    nested = {"properties": {"a": {"description": "x", "properties": {"b": {"description": "y"}}}},
+              "$defs": {"D": {"description": "z", "properties": {"c": {"description": "w"}}}}}
+    assert [w for w, _ in _param_specs(nested)] == ["a", "a.b", "$defs.D", "$defs.D.c"]
 
 
 def test_no_mcp_tool_doc_says_lane():
@@ -56,9 +75,13 @@ def test_no_mcp_tool_doc_says_lane():
     assert len(tools) > 50  # the registry is really read
     texts = [(f"tool {t.name}", t.description or "") for t in tools]
     for t in tools:
-        for prop, spec in (t.parameters or {}).get("properties", {}).items():
-            texts.append((f"tool {t.name}({prop})", str(spec.get("description", ""))))
-    texts += [("mcp_server.INSTRUCTIONS", mcp_server.INSTRUCTIONS), ("mcp_channel.INSTRUCTIONS", mcp_channel.INSTRUCTIONS)]
+        # Today no tool's parameter schema (top-level, nested or $defs) carries a description, so
+        # this loop finds no text; it stays so a described parameter is checked the day one appears.
+        params = t.parameters or {}
+        for where, spec in _param_specs(params):
+            texts.append((f"tool {t.name}({where})", str(spec.get("description", ""))))
+    # What the server serves, not the INSTRUCTIONS constant alone: it adds the Commons guide.
+    texts += [("mcp_server.mcp.instructions", mcp_server.mcp.instructions or ""), ("mcp_channel.INSTRUCTIONS", mcp_channel.INSTRUCTIONS)]
     assert _lane_hits(texts) == []
 
 
@@ -69,10 +92,20 @@ def test_no_cli_help_description_or_epilog_says_lane():
     assert _lane_hits(texts) == []
 
 
-def test_the_skill_and_the_mcp_setup_doc_never_say_lane():
-    for rel in ("skills/nebula/SKILL.md", "docs/MCP-SETUP.md"):
-        text = (REPO / rel).read_text(encoding="utf-8")
-        assert [n for n, line in enumerate(text.splitlines(), 1) if LANE.search(line)] == [], rel
+def _agent_read_docs():
+    """Every skill file an agent can read (the Codex runner puts .agents/skills into the in-app
+    agent's prompt) and the MCP setup doc."""
+    paths = sorted(REPO.glob("skills/**/*.md")) + sorted(REPO.glob(".agents/skills/**/*.md"))
+    return paths + [REPO / "docs/MCP-SETUP.md"]
+
+
+def test_every_skill_file_and_the_mcp_setup_doc_never_say_lane():
+    paths = _agent_read_docs()
+    assert any(p.name == "SKILL.md" and ".agents" in p.parts for p in paths)  # the trees are really read
+    assert REPO / "skills/nebula/SKILL.md" in paths
+    for path in paths:
+        text = path.read_text(encoding="utf-8")
+        assert [n for n, line in enumerate(text.splitlines(), 1) if LANE.search(line)] == [], str(path.relative_to(REPO))
 
 
 def test_point_at_and_the_cli_help_read_the_session_wording():

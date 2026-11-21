@@ -53,7 +53,7 @@ So an `api-token` node runs on Google once a Google key is saved; a person
 who wants Krea's API for it removes the key or picks the Krea plan. On the
 Google route the node fills `image`, `images` and `artifacts` (no Krea `job`).
 
-Google lane (2026-10-14, `backend/execution/maker_routes_google.py`):
+Google route (2026-10-14, `backend/execution/maker_routes_google.py`):
 
 - `krea-image-google-nano-banana-2-1` -> `gemini-nano-banana-2.1` on
   `GOOGLE_API_KEY` (Interactions API); `thinking_level` reaches Google.

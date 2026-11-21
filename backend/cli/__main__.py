@@ -34,8 +34,9 @@ your cursor on the person's canvas:
                         "Claude Code · 2". Unset under Claude Code, the CLI uses
                         your Claude Code session, which subagents share, so
                         every subagent moves its parent's cursor. To give each
-                        subagent its own, set a value for each, the same on every
-                        call it makes: NEBULA_AGENT_SESSION=agent-a nebula point n2
+                        subagent its own, give each a different value and send
+                        it on every call it makes:
+                        NEBULA_AGENT_SESSION=agent-a nebula point n2
                         It also keys your scene reads, so read and write with it.
                         Only the person's canvas shows sessions; nebula look and
                         nebula agents list one cursor per agent."""

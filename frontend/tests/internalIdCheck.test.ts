@@ -155,6 +155,18 @@ describe('check-internal-ids: what counts', () => {
     expect(count('a.ts', 'const s = "plane, laneway, lanewise, Elaney";')).toBe(0);
   });
 
+  it('counts lane only in text people read, never in code', () => {
+    expect(count('a.ts', 'const lane = 1;')).toBe(0);
+    expect(count('a.css', '.swim-lane { grid-area: lane; }')).toBe(0);
+    expect(count('a.tsx', 'const lane = 1;\nconst x = <div>{lane}</div>;')).toBe(0);
+    expect(count('a.ts', "const t = 'each lane';")).toBe(1);
+    expect(count('a.ts', 'const t = `each lane ${x}`;')).toBe(1);
+    expect(count('a.tsx', 'const x = <p>each lane</p>;')).toBe(1);
+    expect(count('a.tsx', 'const x = (\n  <p className="a">\n    each lane\n  </p>\n);')).toBe(1);
+    expect(count('a.py', 'def f():\n    """Give each lane a cursor."""\n    lane = 1\n')).toBe(1);
+    expect(count('a.py', 'lane = 1\ndef lane(): pass\n')).toBe(0);
+  });
+
   it('does not count GMT or a word that contains the initials', () => {
     expect(count('a.ts', '// 12:00 GMT, GMAIL, aGM, GM_FLAG')).toBe(0);
   });
@@ -421,7 +433,7 @@ describe('check-internal-ids: command line on a scratch tree', () => {
     expect(r.code).toBe(1);
     expect(r.out).toContain('frontend/src/a.ts:3');
     expect(r.out).toContain('"design"');
-    expect(r.out).toContain('neutral name');
+    expect(r.out).toContain('grid-area');
   });
 
   it('fails a new file with a match', () => {

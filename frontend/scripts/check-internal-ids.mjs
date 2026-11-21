@@ -4,7 +4,7 @@ import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 // Design: the repo is public, so comments and test titles say "design" and carry no internal
-// ids. Four kinds of id are counted per file:
+// ids. Five kinds are counted per file:
 //   - the studio initials as a standalone uppercase word, anywhere in the file;
 //   - a round id, only inside a comment or a test title (the first string argument of
 //     it/test/describe): the phrase "round N[letter]" anywhere there, or the letter r with one to
@@ -16,7 +16,10 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 //   - a question id (the letter Q and one to three digits), only inside the same places;
 //   - a review id, only inside the same places: "Review N" in any case, or a severity id
 //     (LOW-N, MED-N, MEDIUM-N, HIGH-N, NIT-N; a one-letter H-N, L-N, M-N or N-N only right after
-//     a review id or another severity id, since "N-1" alone is arithmetic).
+//     a review id or another severity id, since "N-1" alone is arithmetic);
+//   - the word "lane", only inside text people and agents read: a JS/TS string or template
+//     literal, JSX text, a test title, a Python string or docstring, or a CSS string. An identifier,
+//     a CSS class or a grid-area named lane is code and does not count.
 // Round, question and review ids are restricted to comments and titles so identifiers, SVG
 // attributes and CSS values never trip the check. "round N" is skipped when it reads as
 // arithmetic (a decimal point, "decimal places", digits) and a question id after "quarter" or
@@ -82,8 +85,10 @@ export const KINDS = ['gm', 'round', 'question', 'review', 'lane'];
 
 const GM_RE = /\bGM\b/g;
 // "lane" is how the studio organises its own work, not a Nebula word; agents and people read
-// "session". Counted as a whole word in any case, in strings, titles and Python docstrings (the
-// MCP tool docs agents read), never in a comment, where "the scrollbar lane" is ordinary English.
+// "session". Counted as a whole word in any case, only inside a string span (JS/TS string or
+// template literal, JSX text, test title, Python string or docstring, CSS string): the text people
+// and agents read. Never in a comment, where "the scrollbar lane" is ordinary English, and never in
+// code, where an identifier, a CSS class or a grid-area may be named lane.
 const LANE_RE = /\blanes?\b/gi;
 const ROUND_RE = /\br\d{1,3}[a-z]?\b|\bround\s+\d{1,3}[a-z]?\b/gi;
 const ROUND_BEFORE = /(?:\b(?:design|review|since|per)|PR\s*#\d+|#\d+)[,\s]*$/i;
@@ -108,11 +113,32 @@ const REGEX_PRECEDERS = '(,=:[!&|?{};+-*%~^';
 const CALLEE_TAIL = /(?:^|[^.\w$])(?:it|test|describe)(?:\.(?:skip|only|todo|concurrent|fails|sequential))?$/;
 const EACH_TAIL = /(?:^|[^.\w$])(?:it|test|describe)(?:\.(?:skip|only|concurrent|fails|sequential))?\.each\s*$/;
 
-/** Find comment and title spans in source. Returns [{start, end, kind}] with kind comment|title. */
-export function findSpans(path, text) {
+/**
+ * Find comment and title spans in source. Returns [{start, end, kind}] with kind comment|title.
+ * With `strings`, every string literal (quotes included) is also returned, as kind string.
+ */
+export function findSpans(path, text, strings = false) {
   const ext = path.slice(path.lastIndexOf('.') + 1);
-  if (ext === 'py' || ext === 'sh') return hashSpans(text, ext === 'py');
-  return jsSpans(text, ext !== 'css');
+  if (ext === 'py' || ext === 'sh') return hashSpans(text, ext === 'py', strings);
+  return jsSpans(text, ext !== 'css', strings);
+}
+
+// An opening JSX tag (attribute values and one level of {expression} allowed), then its text up to
+// the next tag or expression.
+const JSX_TEXT_RE = /<[A-Za-z][\w.:-]*(?:"[^"]*"|'[^']*'|\{[^{}]*\}|[^<>"'{}])*>([^<>{}]*)/g;
+
+/** Spans of JSX text in a .tsx or .jsx file, skipping anything inside a comment or a string. */
+function jsxTextSpans(path, text, spans) {
+  const ext = path.slice(path.lastIndexOf('.') + 1);
+  if (ext !== 'tsx' && ext !== 'jsx') return [];
+  const out = [];
+  for (const m of text.matchAll(JSX_TEXT_RE)) {
+    if (m[1] === '' || m[1].includes(';')) continue;
+    const start = m.index + m[0].length - m[1].length;
+    if (spans.some((s) => start >= s.start && start < s.end)) continue;
+    out.push({ start, end: start + m[1].length, kind: 'string' });
+  }
+  return out;
 }
 
 // Is the string that starts at `start` the first argument of it( / test( / describe( or an
@@ -136,7 +162,7 @@ function isTitleStart(text, start) {
   return CALLEE_TAIL.test(text.slice(Math.max(0, j - 47), j + 1));
 }
 
-function jsSpans(text, isScript) {
+function jsSpans(text, isScript, strings = false) {
   const spans = [];
   const n = text.length;
   let i = 0;
@@ -170,6 +196,7 @@ function jsSpans(text, isScript) {
         i++;
       }
       i++;
+      if (strings) spans.push({ start, end: Math.min(i, n), kind: 'string' });
       if (isScript && isTitleStart(text, start)) {
         spans.push({ start: start + 1, end: Math.min(i - 1, n), kind: 'title' });
       }
@@ -245,7 +272,7 @@ function isDocstringStart(lines, idx, col) {
   return false;
 }
 
-function hashSpans(text, isPython) {
+function hashSpans(text, isPython, strings = false) {
   const spans = [];
   const n = text.length;
   const lines = isPython ? text.split('\n') : [];
@@ -287,6 +314,7 @@ function hashSpans(text, isPython) {
         i = j + 3;
         continue;
       }
+      const start = i;
       i++;
       // Python strings end at the line; shell strings may span lines.
       while (i < n && text[i] !== c && (!isPython || text[i] !== '\n')) {
@@ -294,6 +322,7 @@ function hashSpans(text, isPython) {
         i++;
       }
       i++;
+      if (strings && isPython) spans.push({ start, end: Math.min(i, n), kind: 'string' });
       continue;
     }
     i++;
@@ -400,7 +429,15 @@ function joinPieces(pieces) {
 
 /** Every match in one file: [{line, text, kind: 'gm'|'round'|'question'|'review'|'lane', match}]. */
 export function scanSource(path, text) {
-  const spans = findSpans(path, text);
+  const allSpans = findSpans(path, text, true);
+  const spans = allSpans.filter((s) => s.kind !== 'string');
+  // Text people and agents read: string literals, JSX text, and Python docstrings (comment spans
+  // that open with a quote).
+  const readable = [
+    ...allSpans.filter((s) => s.kind === 'string'),
+    ...spans.filter((s) => s.kind === 'comment' && /^["']/.test(text.slice(s.start, s.end))),
+    ...jsxTextSpans(path, text, allSpans.filter((s) => s.kind !== 'title')),
+  ];
   const lineStarts = [0];
   for (let k = 0; k < text.length; k++) if (text[k] === '\n') lineStarts.push(k + 1);
   const lineOf = (offset) => {
@@ -421,8 +458,7 @@ export function scanSource(path, text) {
   };
   for (const m of text.matchAll(GM_RE)) push(m.index, 'gm', m[0]);
   for (const m of text.matchAll(LANE_RE)) {
-    const span = spans.find((s) => s.kind === 'comment' && m.index >= s.start && m.index < s.end);
-    if (span && !/^["']/.test(text.slice(span.start, span.end))) continue;
+    if (!readable.some((s) => m.index >= s.start && m.index < s.end)) continue;
     push(m.index, 'lane', m[0]);
   }
   const seen = new Set();
@@ -707,7 +743,7 @@ export function main(argv) {
   let code = 0;
   if (failures.length > 0) {
     code = 1;
-    console.error('internal-ids: internal ids in a public repo. Write "design" instead and drop the id (studio initials, round ids, question ids, review ids, the word lane in a string; in code, use a neutral name).');
+    console.error('internal-ids: internal ids in a public repo. Write "design" instead and drop the id (studio initials, round ids, question ids, review ids, the word lane inside a string, JSX text, a test title or a Python docstring; an identifier, a CSS class or a grid-area named lane is fine).');
     for (const f of failures) {
       console.error(`\n  ${f.file}: ${f.count} match(es), baseline allows ${f.allowed}`);
       for (const l of f.lines) console.error(l);
