@@ -672,8 +672,8 @@ open. Each node that lost a connection that way is a line in `warnings`
 ("Removed the connection to shot port s2 on “Opening”, node n4. That shot no
 longer exists."; `nebula load` and `nebula project open` print them as
 `note:`); every dropped port is in `canvas.replaced`'s `droppedPorts`.
-Round 3f rewrote the card lines to GM's rules; nothing you read changed (a
-proposal's `cost.notReady` rows add a `person` line and a `reason`
+The card lines were rewritten to Nebula's copy rules; nothing you read changed
+(a proposal's `cost.notReady` rows add a `person` line and a `reason`
 (`{one, many}`, the line without the name, which the bar merges by) beside
 `missing`: read `missing`). A job the
 provider ran and then reported failed is never `category: "auth"`, even when

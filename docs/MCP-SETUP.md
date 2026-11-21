@@ -288,7 +288,7 @@ The server exposes these tools for building and running (see
   (see [Spending limits](#spending-limits)). An in-app chat's turn reads
   only its own workspace, and the read follows no links.
 - `load_graph_file`: opens a graph file (`path`) as the person's Load canvas
-  does (`nebula load <file>`, Q123 a): a plain `.nebula` or `.json`, or a
+  does (`nebula load <file>`): a plain `.nebula` or `.json`, or a
   `.nebula.zip` bundle (a graph plus its files). A bundle streams to `POST
   /api/outputs/restore?rewriteLinks=true` with your own headers: its files
   are restored into Nebula's output folder and the graph comes back with its
@@ -653,7 +653,7 @@ The server exposes these tools for building and running (see
   <id|current>` (`--json` prints this result).
 - `project_size`: a project's size against the save limit and what takes the
   space (`project_id`, default `"current"`), through
-  `GET /api/projects/{id}/size` (Q118). Read-only. The size is what a save
+  `GET /api/projects/{id}/size`. Read-only. The size is what a save
   measures (`services/project_size.py`: the snapshot as `json.dumps` writes
   it, UTF-8); for the open project, its stored snapshot with the live canvas
   overlaid. Returns `sizeBytes`, `limitBytes` (16 MiB, shown as "16 MB"),
@@ -815,7 +815,7 @@ The server exposes these tools for building and running (see
   `brand`): `commons_search` and `commons_get` read references;
   `commons_add` adds one to a collection's inbox; `commons_comment` comments
   (`membership_id` picks the collection's thread); `commons_borrow` records
-  an attribute taken from one. Since 2026-10-20 (Justin's Q63 b):
+  an attribute taken from one. Since 2026-10-20 (Justin's call):
   `commons_collections` lists the collections (`{"collections": [...]}`;
   `commons_add` takes one's id), `commons_status` the analysis queue,
   worker and meters as structured state (not the Commons toolbar's
@@ -827,9 +827,10 @@ The server exposes these tools for building and running (see
   `commons_fidelity` checks a borrowing against the output it was used in
   and saves the result. A reference whose analysis failed has
   `asset.analysis_state` `analysis_failed`, `asset.last_error` (the reader's
-  own text, unchanged) and, since error-copy round 3, `asset.last_error_kind`:
-  `unavailable` (network, a timeout or the provider down), `unreadable` (the
-  model declined or couldn't read the image), `other`, or `transparent`
+  own text, unchanged) and `asset.last_error_kind` (records from before it
+  was added have none): `unavailable` (network, a timeout or the provider
+  down), `unreadable` (the model declined or couldn't read the image),
+  `other`, or `transparent`
   (below). The reader sees a
   reference with transparency composited onto #0a0a0a, the tile and stage
   surface (rgba(255, 255, 255, 0.04) over the black canvas); one too
@@ -860,7 +861,7 @@ The server exposes these tools for building and running (see
   `executionMode`, `batchSizeCap`, `exportFolder` and `kreaConnectionMode`.
   No part of a key comes back. The route itself sends a set key's last 4
   characters only to the app (its person token); any other caller, `curl`
-  or `nebula keys` included, gets a bare `***` (Justin, Q55 a). Only the
+  or `nebula keys` included, gets a bare `***` (Justin's call). Only the
   person changes settings. CLI: `nebula keys` (set or not set; `--json`
   prints this result). It turns each key into true or false as this tool
   does, so even a reply that carried an ending would print none; the CLI
@@ -1562,24 +1563,24 @@ Then, each time (the command it prints, with the full path):
 NEBULA_APP_TOKEN_FILE=/path/to/your/app-token-file NEBULA_AGENT_SESSION="cc-$(date +%s)-$$" claude --mcp-config ~/.nebula-listen.mcp.json --dangerously-load-development-channels server:nebula-listen --disallowedTools "mcp__nebula__*"
 ```
 
-`NEBULA_APP_TOKEN_FILE=…` gives the session's own shell the token file's
-path (never the token), so `nebula reply` and the other `nebula` commands
-Claude runs there are the same agent as its tools (J2, below).
-`NEBULA_AGENT_SESSION="cc-$(date +%s)-$$"` is evaluated by your shell at
-each launch (the time and the shell's own process id, POSIX tools only),
-so each Claude Code you start this way is its own session: its listener,
-its cursor and its shell's `nebula` commands share one fresh session id
-(D2, round 5), and two terminals running the same command are two
-sessions, each with its own cursor label. The command is for macOS, Linux
-and WSL shells; Windows shells (cmd, PowerShell) can't run the
-`NAME=value command` form.
-`--disallowedTools "mcp__nebula__*"` takes the saved server's copies of the
-same tools out of the session, so `nebula-listen` serves both the tools and the
-pushes. It has to: the listener learns which proposals and runs are Claude's,
-and when a turn is under way, from the tool calls it serves. Claude
-Code first shows **WARNING: Loading development channels**; choose **I am
-using this for local development**. In the debug log (`claude --debug-file
-<file> ...`) the server then shows `Channel notifications registered`.
+`NEBULA_APP_TOKEN_FILE=…` gives the session's own shell the token file's path
+(never the token), so `nebula reply` and the other `nebula` commands Claude runs
+there are the same agent as its tools (see "The session's own shell is the same
+agent", below). `NEBULA_AGENT_SESSION="cc-$(date +%s)-$$"` is evaluated by your
+shell at each launch (the time and the shell's own process id, POSIX tools
+only), so each Claude Code you start this way is its own session: its listener,
+its cursor and its shell's `nebula` commands share one fresh session id (see
+"One session, one listener process", below), and two terminals running the same
+command are two sessions, each with its own cursor label. The command is for
+macOS, Linux and WSL shells; Windows shells (cmd, PowerShell) can't run the
+`NAME=value command` form. `--disallowedTools "mcp__nebula__*"` takes the saved
+server's copies of the same tools out of the session, so `nebula-listen` serves
+both the tools and the pushes. It has to: the listener learns which proposals
+and runs are Claude's, and when a turn is under way, from the tool calls it
+serves. Claude Code first shows **WARNING: Loading development channels**;
+choose **I am using this for local development**. In the debug log (`claude
+--debug-file <file> ...`) the server then shows `Channel notifications
+registered`.
 
 **What the development flag does.** It lets the one server you name put text
 in front of Claude, skipping Anthropic's channel allowlist for that entry
@@ -1703,7 +1704,7 @@ lines as real newlines inside `<pin>…</pin>` (the channel's content is plain
 text that already spans many lines, and with `<` and `>` replaced a line
 can't leave the tag); every other quoted text is one line.
 
-**What a woken turn may do** (plan v2.7 Q42 a and Q51 a). Some pushes are
+**What a woken turn may do.** Some pushes are
 gated (`gate="change"`): Claude may look (the read tools), point and say
 something (`point_at`), post an Update (`post_note`), reply to you in the
 Message box (`reply_to_person`, and read it with `read_thread`), answer a pin and propose
@@ -1918,8 +1919,8 @@ or on a Team org with Channels off, still reads "listening".
   doesn't ask Nebula, like `nebula channel`: `listeners` is null, `token`
   false, and `detail` says "This Nebula server has no agent token, so
   Nebula can’t tell which listeners are yours. Run this command, then
-  start Claude Code as it says." with the command on the next line
-  (review 3, NIT-2). **`nebula channel
+  start Claude Code as it says." with the command on the next line.
+  **`nebula channel
   [--json]`** prints the same entries from the terminal, one per line
   (`ch_… stopped · idle since 12:14 last heard 12:10`); with none it says
   "You have no listener, so Nebula doesn’t count you as connected to the
@@ -1928,20 +1929,20 @@ or on a Team org with Channels off, still reads "listening".
   Nebula (no listener can be yours) and says "This terminal has no agent
   token, so Nebula can’t tell which listeners are yours. Run this command,
   then start Claude Code as it says." then the command on the next line,
-  then "The nebula CLI in that session reads its token file." (GM r94).
-- **The session's own shell is the same agent** (J2, Justin 2026-11-04).
+  then "The nebula CLI in that session reads its token file."
+- **The session's own shell is the same agent** (Justin, 2026-11-04).
   The launch command `--channel` prints starts with
   `NEBULA_APP_TOKEN_FILE=<the token file's path>` (the path, never the
   token) and `NEBULA_AGENT_SESSION="cc-$(date +%s)-$$"`, so the `nebula` CLI in
   Claude's own Bash reads the same token as the listener and speaks for
-  the same session. The CLI reads tokens in the MCP server's order (D3,
-  round 5): `NEBULA_AGENT_TOKEN`, else `NEBULA_APP_TOKEN_FILE` (unless a
+  the same session. The CLI reads tokens in the MCP server's order:
+  `NEBULA_AGENT_TOKEN`, else `NEBULA_APP_TOKEN_FILE` (unless a
   personal agent's `NEBULA_AGENT_TOKEN_FILE` is set), else
   `NEBULA_APP_TOKEN`; the file wins over a `NEBULA_APP_TOKEN` set beside it.
   It reads the file with the MCP server's strict reader (a regular file of
   yours, mode 600, no symlink), keeps the token in its own memory (never
   in its environment, argv or a log), and fails closed on a bad file, even
-  with a good `NEBULA_APP_TOKEN` set (GM r97): "Nebula couldn’t read this
+  with a good `NEBULA_APP_TOKEN` set: "Nebula couldn’t read this
   agent’s token because NEBULA_APP_TOKEN_FILE <clause>. Copy a new one from
   Settings › Connect your agent, then run this command." with `nebula mcp
   connect claude-code --channel` on the next line. The clause is one of
@@ -1958,7 +1959,7 @@ or on a Team org with Channels off, still reads "listening".
   session's message, takes its label and flies its own cursor (never a
   "Claude Code · 2"), and it and `nebula pin resolve` end the listener's
   deliberate span like the tools (below).
-- **One session, one listener process** (D2, round 5). Each listener
+- **One session, one listener process.** Each listener
   process sends a random nonce with its beats; a second process beating on
   the same agent and session is refused `409 listener_session_taken` with
   a because-line, printed once by the second listener ("Nebula couldn’t
@@ -1973,7 +1974,7 @@ or on a Team org with Channels off, still reads "listening".
   routes a listener reads its messages from and reports on
   (`/api/agent/thread/inbox`, `accepted`, `held`) refuse any other caller
   the same way, with the same codes (a revoked token there gets
-  `listener_token_invalid` and r81's line too). The inbox finds a message
+  `listener_token_invalid` and the same stderr line too). The inbox finds a message
   in whichever project it was sent (each names its `projectId`), and
   `accepted`/`held` mark it there, so a project switch before the listener
   reads it never strands it. The listener reads its inbox again after
@@ -2004,7 +2005,7 @@ reload and every tab show the same rows.
   was active most recently, or the one the person picks. Refused only with
   `409 listener_stopped` (the person's line in `person`) when that listener
   is gone or stopped. The 201st message to one listener in a rolling hour is
-  accepted and **held**, never refused (GM r55): the listener holds a
+  accepted and **held**, never refused: the listener holds a
   deliberate send past its runaway cap. The row's `state` is `held` while
   Nebula knows it waits: the route marks it when that listener already had
   200 messages this hour, and the listener reports any other it holds
@@ -2023,7 +2024,7 @@ reload and every tab show the same rows.
   reply "<text>" [--node nX]`** (2,000 characters, counted as a person sees
   them). With a node, its cursor flies there and shows the reply's first
   sentence (140 characters). Only agents reply, and **only with a Settings
-  agent token** (J1, Justin 2026-11-04, the same as listening). Refused with
+  agent token** (Justin, 2026-11-04, the same as listening). Refused with
   `401` and a code:
   - `reply_no_token` (a name alone, or nothing), three lines: "Nebula
     couldn’t post this reply because this agent has no token. Copy one from
@@ -2051,10 +2052,10 @@ reload and every tab show the same rows.
   reply Nebula refuses for another reason never spends one. With no
   push to answer and no project open: `409 no_project`, "Nebula couldn’t
   post this reply because no project is open. Open one with open_project,
-  then reply again." (GM r110). Open the project the person's message came
+  then reply again." Open the project the person's message came
   from (`list_projects` gives ids): `open_project` switches the person's
   canvas, so never open an unrelated one just to post a reply.
-- **Which push a reply answers: the push ledger** (review 4). The listener
+- **Which push a reply answers: the push ledger.** The listener
   reports each push it makes (`POST /api/agent/thread/accepted` with
   `messageIds` and `questionIds`, and its process's `nonce`). Nebula
   records it for that listener's agent and session (memory only; a
@@ -2076,14 +2077,13 @@ reload and every tab show the same rows.
   the Claude Code the person messaged. To stop this, start each Claude
   Code with this command, which gives it its own session that its
   terminals share." with `nebula mcp connect claude-code --channel` on the
-  next line (GM r108). The row carries the answering listener's session,
+  next line. The row carries the answering listener's session,
   so the box clears only that message's status and the ones before it (a
   question set's id clears none), and the cursor that flies is that
-  listener's (GM r100.1). Sessions are a convenience boundary inside one
+  listener's. Sessions are a convenience boundary inside one
   token, not an auth boundary: any holder of the token can name any
   session.
-- **A reply goes to the thread of the push it answers** (GM r100.3,
-  r112.2). When that push is in another project than the open one, the
+- **A reply goes to the thread of the push it answers.** When that push is in another project than the open one, the
   reply is saved in that project's thread (unread there) and an Update is
   posted on the open project: "Claude Code replied in “Coast”." (the
   agent's name, the project's name; an unnamed project reads “Untitled”),
@@ -2095,7 +2095,7 @@ reload and every tab show the same rows.
   one. These count toward the agent's 6 Updates a minute; past that the
   Update is left as it is (the reply is saved). Its `nodeId` is checked
   only when the reply goes to the open canvas: for another project's
-  thread it is ignored, no cursor flies (GM r108 b), and the answer's
+  thread it is ignored, no cursor flies, and the answer's
   `note` says "Nebula posted this reply in “Coast” but didn’t point at n3
   because that project isn’t open, so your cursor stayed where it
   was." In the open project no Update is posted.
@@ -2272,7 +2272,7 @@ before; one whose `/api/execute` is still being admitted is judged by the
 journal's note of its starter. A run that already ended answers its status
 to anyone, since nothing is left to stop.
 
-Round 16 of PR #114: a Stop for a run ID this backend hasn't started yet
+PR #114: a Stop for a run ID this backend hasn't started yet
 (the canvas's Stop racing its own `/api/execute`, or `cancel_run` on an id
 whose start is still on its way) is kept, so that start never runs. Besides
 the durable pre-admission intent (the cross-process filter, which a Stop
@@ -2285,8 +2285,8 @@ and again at the last one before the run is registered, with nothing
 awaited in between, so a start that began before the Stop landed is refused
 with 409 "run '<id>' was cancelled before it started" and nothing is sent or
 spent. A start under an id a Stop was recorded for is always refused the
-same way (409); its `detail` says only what this process knows (review 17
-L4): "run '<id>' was already stopped, so this id can’t start again. Start a
+same way (409); its `detail` says only what this process knows:
+"run '<id>' was already stopped, so this id can’t start again. Start a
 new run with a new id." for a run that registered here and was stopped;
 "run '<id>' already ran, so this id can’t start again. …" for one that
 ended before its Stop; "… was cancelled before it started" only when the
@@ -2294,7 +2294,7 @@ Stop reached the id while this process was admitting its start; otherwise
 (a run from before a restart, a Stop for an id never seen) "run '<id>' was
 stopped, so this id can’t start again. Start a new run with a new id."
 A Stop that lands at a World Labs node's paid-start claim, the last step
-before the run registers, is refused in the same words (PR #198 review 1).
+before the run registers, is refused in the same words (PR #198).
 Agents and the CLI never pick a run id (`run_nodes`, `/api/graph/run` and
 `nebula run` make one), so they meet this only by re-sending a request a
 script built; start a new run instead. What each surface says:
@@ -2315,7 +2315,7 @@ script built; start a new run instead. What each surface says:
 The canvas settles such a run as stopped (if the person pressed Stop) or as
 not started, and it can be run again under a new ID.
 
-Round 17 of PR #114 (review 16 L1): "never started" is said only when this
+PR #114: "never started" is said only when this
 backend process saw that run's start begin (`ExecutionRunRegistry`
 notes the ID as `/api/execute`, `/api/execute-node` or
 `/api/cinema/generate-shot` takes it, before anything is awaited). An ID it
@@ -2384,7 +2384,7 @@ project Nebula can't tell holds, and run histories never release one. A start th
 id, and so does an ID in the node's settings. The text is the same whoever the
 record belongs to; tell the person, who clears it in Marble and Run history.
 
-Round 3b added the World Labs refusals to this split, with the same statuses
+The World Labs refusals have this split too, with the same statuses
 and the same checks: the status bar's "I’ve checked Marble" (`DELETE
 /api/provider-start-ambiguities/...`: "Cannot acknowledge a World Labs
 paid-start ambiguity while that provider handshake is still active", "World
@@ -2396,12 +2396,11 @@ a run start the paid-start guard refuses (`POST /api/execute`,
 journals "at capacity") and a canvas edit that races the recovery journal.
 You still get each text word for word; only the person's line is new.
 
-Round 14 of PR #114 gave one World Labs state its own detail. When the
+PR #114 gave one World Labs state its own detail. When the
 backend started, if Nebula couldn't journal a World Labs recovery ID it read
 from the canvas, restoring a graph bundle (`POST /api/outputs/restore`,
 `load_graph_file` or `nebula load` with a `.nebula.zip`) first retries that
-journal write under the paid-start fence, as a run start does, then (since
-round 15) writes the journal for real and reads it back, so the retry
+journal write under the paid-start fence, as a run start does, then writes the journal for real and reads it back, so the retry
 succeeds only when the journal takes a write now. If it does, the restore
 goes on. If the journal still can't be written, it refuses with 409:
 "Cannot restore a graph bundle: Nebula retried saving its World Labs
@@ -2420,7 +2419,7 @@ state the same way, only after a real journal write. A run start clears it
 only when the run has World Labs work to claim; an ordinary run doesn't
 touch it.
 
-Round 3c gave a node's run error the same split. `error` stays the
+A node's run error has the same split. `error` stays the
 handler's specific text, word for word, wherever agents read it: `get_run`
 and `nebula result` (`errors`), `look_at_canvas` and `nebula look` (the
 node's `error`, with `errorHint`), `view_output`, the run record, and the
@@ -2428,8 +2427,8 @@ journal. A handler may also write a line for the person (no ids, no
 parameter names: "World Labs accepted this run, ... The node's Resume
 Operation ID field keeps the job ..."); it rides beside `error` as the
 additive `person` on the execution event and `errorPerson` in the graph the
-canvas loads, and the card shows it. Since round 3c-2 every failure a
-handler words itself carries one (often the same text, when it names no id,
+canvas loads, and the card shows it. Every failure a
+handler words itself now carries one (often the same text, when it names no id,
 path, parameter key or env var), and a plain "<KEY> is required" key check
 reads "Add an OpenAI API key in Settings to run this node." on the
 card. A provider's own text keeps no line: the card says "Couldn't run the
@@ -2441,12 +2440,11 @@ cut) for the Cinema panel. Read `error`; don't parse `person` or the shot's
 error* fields.
 
 A shot's run media (`output`, `variations`, `selectedVariation` and its
-port output) is Nebula's, not part of the scene you write. Since PR #200's
-fix round 9, a write that drops a shot keeps what it had. Since fix round 10,
+port output) is Nebula's, not part of the scene you write. Since PR #200, a write that drops a shot keeps what it had, and
 a later write gets it back only when the returning shot is the same shot:
 the same id with the same prompt and settings (every field but the run
 media), as the person's Undo of a shot's × sends it. Settings are compared
-by value (fix round 11): `1.0` matches `1` exactly (no rounding, and `true`
+by value: `1.0` matches `1` exactly (no rounding, and `true`
 is not `1`), key order doesn't count, a `null`, `{}` or `[]` is the same as
 the field missing, and a missing `prompt`, `refImageUrls` or `overrides` is
 its default (`""`, `[]`, `{}`). An override inside `overrides` has no
@@ -2459,7 +2457,7 @@ cleared or another project opens. A restart forgets them: an Undo of a
 shot's × after one brings the shot back idle, with its prompt and settings
 but without its images (they are still in the outputs folder).
 
-Round 3d gives a provider's answer a line too, from one table: a 401 or 403
+A provider's answer gets a line too, from one table: a 401 or 403
 reads "{Provider} didn't accept your API key. ...", a 402 or an exhausted
 quota "Your {Provider} account is out of credits. ...", a 429 "{Provider} is
 busy. ...", a 5xx "{Provider} is having trouble right now. ...", an empty
@@ -2472,10 +2470,10 @@ the provider's own words, your `error`, behind "Details". A failure Nebula
 can't tell keeps today's line. `error` and every text you read are unchanged,
 word for word.
 
-Round 3f puts GM's rules on every card line (a final period, no dashes or
+Every card line follows Nebula's copy rules (a final period, no dashes or
 parentheses, "connected" for "wired", field labels as the node shows them,
 "Nothing was sent to {Provider}.", one spelling per name and unit). Only the
-person's lines changed: `error`, `errorHint`, `detail`, `missing` and every
+person's lines were rewritten for this: `error`, `errorHint`, `detail`, `missing` and every
 text you read stay word for word. The slow-job line now reads "{Provider} took
 too long, so Nebula stopped waiting. ...". Three fields are additive and for
 the canvas only: the execution event's `provider` (`errorProvider` in the
@@ -2508,7 +2506,7 @@ Labs API key or fal.ai API key" (two or three) or "a key for one of its 4
 providers" (four or more).
 
 The status is the one the provider's API answered, attached where Nebula
-raised the error, never a number read out of the text (round 3d, part 2): a
+raised the error, never a number read out of the text: a
 storage upload's 403 or "Prompt is too long: 500 characters over" keeps
 today's line. A job the provider took and then reported failed, cancelled or
 expired never reads the key, busy or trouble line, and its `category`
@@ -2518,7 +2516,7 @@ a job used to read `auth` and "The API key was rejected. ..." as `friendly`;
 that was wrong, and is the one change you can see. Its other categories
 (`rate_limit`, `timeout`, `quota`, ...) stay.
 
-Round 3e gave the pre-run check the same split. A run the check refuses
+The pre-run check has the same split. A run the check refuses
 (a missing key, an unconnected required input, a Batch over its cap, a connection
 that no longer fits) still answers agents exactly as before: `run_nodes`,
 `/api/graph/run` and `nebula run` list each node's `message` in `errors`,
@@ -2568,7 +2566,7 @@ something other than what is open now, so an edit made for one canvas never
 lands on the nodes of the next (node ids start again at n1 after a clear or
 a load).
 
-Which routes: since round 20 every route that changes the graph or starts
+Which routes: every route that changes the graph or starts
 work on the canvas is marked in the backend (`graph_write` in
 `backend/main.py`), and the check reads the marker of the route a request
 matches, not its path. That is every write under `/api/graph…`,
@@ -2593,7 +2591,7 @@ stays open while the canvas follows an agent's switch.
 
 The check runs twice: before the request reaches the route, and again as the
 route starts, in the same step as whatever the route writes before it
-waits on anything (a follow-up to PR #195, review 23 L-1). A project open
+waits on anything (a follow-up to PR #195). A project open
 that commits in between, which can happen in the few event-loop turns
 between the two, gets the write refused with the same 409, never applied
 to the project just opened. So a note the person wrote for one project's n1
@@ -2707,11 +2705,11 @@ Rules:
   (`NEBULA_AGENT_NAME`, `--as`, or an in-app agent token).
 - Text is plain text, control characters dropped, 1–280 characters for
   notes and replies. Nebula stores a note and a reply as typed but trimmed at both ends (PR
-  #200 fix rounds 10 and 12), and every place that shows one strips it: the API's
+  #200), and every place that shows one strips it: the API's
   pins, events and their summaries, the CLI, the channel push and the
   canvas. So what you read never carries a control byte (no C0 but `\n`, no
   C1, no ESC, no format character). What draws nothing is dropped too
-  (fix round 13 reads Unicode 18's own lists for this): a variation
+  (Nebula reads Unicode 18's own lists for this): a variation
   selector stays only when Unicode lists it for the character before it,
   and only one: U+E0100–E01EF only for a pair the Ideographic Variation
   Database registers (葛 has ten; most ideographs have none), U+180B–180F
@@ -2721,7 +2719,7 @@ Rules:
   zero-width joiner outside an emoji ZWJ sequence, and every tag character
   except the England, Scotland and Wales flags is dropped. That shown form
   is what the person's own canvas displays. What agents read goes one step
-  further (PR #200 fix round 14, GM r23): no variation selector at all
+  further (PR #200): no variation selector at all
   (U+FE00–FE0F, U+E0100–E01EF, U+180B–180F) and a zero-width joiner only
   inside an RGI emoji ZWJ sequence, so a registered variant of 葛 reads as
   葛, `❤️` as `❤`, and a family stays one family. That holds for `pins`
@@ -2729,11 +2727,11 @@ Rules:
   token, the snapshot JSON), `nebula pins` / `nebula look` / `nebula
   start`, a resolve's answer, the events feed (`text`, `reply`,
   `summary`), the channel push, and the `canvasPins` message on a raw
-  `/ws` socket (PR #200 fix round 16, review 14 LOW-1: only a socket whose
+  `/ws` socket (PR #200: only a socket whose
   `{type: "hello"}` carried the person's token gets the shown form; every
   other socket gets this form, on connect and on every push). The channel
   push applies the same rule to everything it quotes, a note or a one-line
-  field (PR #200 fix round 17, GM r26): the England, Scotland and Wales
+  field (PR #200): the England, Scotland and Wales
   flags arrive whole, a fake tag flag as a plain 🏴, and every other tag
   character, a stray joiner or a selector not at all. 280 ideographs
   whose selectors spell an instruction reach you as 280 bare ideographs. Whitespace (and a byte order mark) at
@@ -2783,8 +2781,7 @@ Rules:
   snapshot, so autosave never touches them) and switch with it. Deleting a
   pinned node leaves its pins where the node stood, marked detached; so does
   an import or Clear canvas that removes the node.
-- A note belongs to the canvas it was written on (round 23 of PR #195,
-  review 22 M-1). Node ids start again at n1 in every project and after a
+- A note belongs to the canvas it was written on (PR #195). Node ids start again at n1 in every project and after a
   Clear, so the pin routes are graph writes for the fence (`graph_write`):
   the person's canvas sends the project and canvas the note was composed on
   (`X-Nebula-Workspace-Revision`, `X-Nebula-Canvas-Revision`), and
@@ -2804,7 +2801,7 @@ Rules:
 goes in an **update**: the person reads it in the Updates corner in the top
 right, not at your cursor. The corner is on every screen (the canvas,
 Projects, Moodboard Studio, the Commons, Creator Studio and the other
-studios; Justin's Q107 a, 2026-10-21) and always shows the open project's
+studios; Justin's call, 2026-10-21) and always shows the open project's
 list, so an update reaches the person wherever they work; with no project
 open (a first start with no projects yet) there is no list and no corner.
 A card drops from the "Updates" chip for about four seconds and outlines the
@@ -2901,7 +2898,7 @@ runs from the canvas, as if the person had clicked Run. Use proposals before
 anything that costs money or reworks the person's graph.
 
 **The Update.** Every canvas proposal also posts an Update in the Updates
-corner (Justin's Q112 a, 2026-10-21), so the person hears of it on every
+corner (Justin's call, 2026-10-21), so the person hears of it on every
 screen, not only on the canvas: "Proposes 3 changes on the canvas"
 ("Proposes 1 change", or "Proposes a run on the canvas" when it only runs
 nodes). The line never starts with the agent's name: the Update's header
@@ -3044,7 +3041,7 @@ pointing at its own way to find a node that runs here: `find_nodes` for MCP,
 the canvas the ghost shows the ⚠ a real node shows, with the same title, and
 the bar lists the nodes under its summary (three, then the rest in its
 details), each in its `person` line ("“GPT Image 2” needs your OpenAI API key.
-Add it in Settings.", round 3f, the name in curly quotes; a node on the Krea
+Add it in Settings.", the name in curly quotes; a node on the Krea
 plan: "“Krea 2” needs your Krea plan. Sign in to Krea in Settings."; read
 `missing`, not that). `reason` is that line without the name, for one node
 and for several (`{one, many}`: "needs your OpenAI API key. Add it in
@@ -3064,7 +3061,7 @@ for a node without its key: the run is refused at that node before any
 provider is called, and the node shows why.
 
 **Withdraw it before proposing something else.** A proposal that can't run
-here is kept, with the warning (Justin's call, Q109: not refused, and
+here is kept, with the warning (Justin's call: not refused, and
 nothing is withdrawn for the agent). The warning ends with the call that
 takes it back, and the reply's `withdrawWith` is that call on its own:
 `withdraw_proposal(proposal_id="p_…")` for MCP, `nebula proposal withdraw
@@ -3156,7 +3153,7 @@ sandbox against hostile local code.
 
 When an agent reaches a decision only the person can make (which of two
 directions, a name or wording that is theirs, a detail it can't find on the
-canvas), it asks (Q125 item 1, 2026-10-24). A concrete change to approve is
+canvas), it asks (2026-10-24). A concrete change to approve is
 a proposal instead, and what it noticed is an Update.
 
 - **Ask:** MCP `ask_person(questions, note?, node_ids?)`, CLI
@@ -3243,19 +3240,18 @@ same user).
 
 ### The Agents panel
 
-Q125 item 2 (Justin, 2026-10-24: "Yes, all four, in that order"). The top of
-the Updates corner lists the agents working in the open project in two
-groups: **Needs you** (an agent with open questions or proposals there,
-longest wait first) and **Working** (everyone else around, most recent
-first). Clicking a Working row shows its node on the canvas; clicking a
-Needs-you row opens its oldest question set or proposal. A tab that isn't
-connected as the person gets only your asks' Updates, so it counts Needs
-you from them (each ask's `since` orders it, a question set's `count` says
-how many, and an asset Update your asks on one target share counts `asks`
-from `firstSince`): the same rows, order and badge as once it is connected,
-with the row's action locked until then. What you read here is unchanged:
-`GET /api/canvas/agents` and its MCP and CLI reads count from Nebula's own
-open sets and proposals, whatever any tab holds.
+Justin approved the panel on 2026-10-24. The top of the Updates corner lists the
+agents working in the open project in two groups: **Needs you** (an agent with
+open questions or proposals there, longest wait first) and **Working** (everyone
+else around, most recent first). Clicking a Working row shows its node on the
+canvas; clicking a Needs-you row opens its oldest question set or proposal. A
+tab that isn't connected as the person gets only your asks' Updates, so it
+counts Needs you from them (each ask's `since` orders it, a question set's
+`count` says how many, and an asset Update your asks on one target share counts
+`asks` from `firstSince`): the same rows, order and badge as once it is
+connected, with the row's action locked until then. What you read here is
+unchanged: `GET /api/canvas/agents` and its MCP and CLI reads count from
+Nebula's own open sets and proposals, whatever any tab holds.
 
 - **Set your status:** MCP `set_status(text, node_id?)`, CLI
   `nebula status "<text>" [--node nX]`, HTTP `POST /api/canvas/status` with
@@ -3310,7 +3306,7 @@ open sets and proposals, whatever any tab holds.
 
 ### Placeholders, the run mark and done cards
 
-Q125 item 3 (Justin, 2026-10-24; GM - Design's rulings, 2026-10-25).
+Justin approved these on 2026-10-24; the wording was settled on 2026-10-25.
 
 - **Placeholders (pending nodes):** MCP `edit_canvas(..., pending=True)`,
   CLI `nebula apply --add ... --pending`, HTTP `POST /api/graph/apply` with
@@ -3598,7 +3594,7 @@ Q125 item 3 (Justin, 2026-10-24; GM - Design's rulings, 2026-10-25).
 ### Proposals outside the canvas
 
 Some of the person's calls live on a project or a board, not on the graph
-(audit U16; Justin's Q60 a, 2026-10-20). An agent proposes those with
+(Justin's call, 2026-10-20). An agent proposes those with
 `propose_asset_change(kind, id, change, note)` (`POST /api/asset-proposals`
 with the same four fields), and the person decides where they work on that
 thing:
@@ -3627,7 +3623,7 @@ cover an agent set.
 
 A pin whose image is no longer in the project (its node deleted, or its
 output gone from the project's snapshot; the same test as the cover
-picker's list) no longer counts (Justin's Q90 a, 2026-10-21): the card shows
+picker's list) no longer counts (Justin's call, 2026-10-21): the card shows
 the automatic cover, the covers listing has `pinned: null`, `pinnedBy: null`
 and `lostPin: {url, by}`, the card has `coverLostPin` and no `coverBy`, and
 anyone may set the cover (`previous` is then `{"cover": null}`, what the card
@@ -3703,7 +3699,7 @@ Commons", "Asks to make 3 changes to an image in the Commons". The proposal's
 `summary` is the same words; its `target.id` says which reference. Memory only: lost on restart.
 
 **The Update.** Each asset proposal also posts an Update in the Updates
-corner (Justin's Q92 a, 2026-10-21), on the open project's list, written by
+corner (Justin's call, 2026-10-21), on the open project's list, written by
 Nebula in the strip's words and attributed to the agent (`author` is the
 agent, `source: "nebula"`, `about: "proposal"`): "Asks to change
 the cover of “Dusk”", "Asks to turn on “Moodboard notes to generators” for “Dusk board”", "Asks to change a reference in the Commons" (or
@@ -3760,7 +3756,7 @@ restarted"), and shows that in place of Review. Expiry lands on time, even
 when nobody reads proposals: Nebula checks each proposal when it is due, and
 `list_notes` never lists an expired one as waiting. Proposals are memory
 only, so after a restart an Update whose proposal was still open resolves
-as "Closed: Nebula restarted" (Justin's Q108 a, 2026-10-21) the next time
+as "Closed: Nebula restarted" (Justin's call, 2026-10-21) the next time
 its list is read (`list_notes`, the person's tab reconnecting, a project
 switch); "Expired" stays for a proposal that really waited 15 minutes. The
 agent can ask again: propose it once more if you still want it (a
@@ -3772,7 +3768,7 @@ Agents read it with `list_notes` / `nebula notes` and through the view's
 
 ### Commons curation
 
-Curating the Commons is the person's (Justin's Q63 b, 2026-10-20; audit U13):
+Curating the Commons is the person's (Justin's call, 2026-10-20):
 correcting a reference's reading, drawing, renaming, confirming or deleting a
 region, and a reference's role, why or inbox place in a collection. Those
 routes stay person-only (403 for agents). An agent asks with
@@ -3823,7 +3819,7 @@ with the reason.
 Blind labeling (`/api/commons/evaluation...`) and the agent review
 (`/api/commons/review...`) stay the person's alone, with no proposal and no
 tool, exactly as before; Justin's answer changed only when agents get the
-Commons, not who decides. The GM Commons trial is on hold: nothing here calls
+Commons, not who decides. A hosted Commons trial is on hold: nothing here calls
 a hosted Commons service.
 
 ### Spending limits
@@ -3836,7 +3832,7 @@ The person decides what agents may spend, in **Settings > Preferences**:
   umbrella over the limits below, which stay as finer ones inside it. A run
   that would pass it isn't refused: Nebula sends it as a proposal to run the
   same canvas nodes and answers `202` with `status: "waiting"`, `proposalId`,
-  `message` (GM's line: "Waiting for the person’s OK: this run (about $0.40)
+  `message` (this line: "Waiting for the person’s OK: this run (about $0.40)
   would pass their $5 daily total for everything that isn’t them ($4.80 used
   in the last 24 hours). Sent as proposal <id>. Check it with nebula
   proposals."; over MCP the last sentence is `Check it with
@@ -3882,7 +3878,7 @@ The person decides what agents may spend, in **Settings > Preferences**:
   The person's own runs never count toward it and never wait for it.
   While the total is on, a node with no list price always waits for the
   person's OK too, even with room left and no per-run limit, since Nebula
-  can't count it toward the total (Justin's Q165). The run is sent as a
+  can't count it toward the total (Justin's call). The run is sent as a
   proposal the same way, `alsoNeeds` is `unpriced`, and the lines say so:
   the message is "“Sketch” has no list price, so Nebula can’t count it
   toward the $5 daily total. Proposing it for the person’s OK. Sent as
@@ -4415,7 +4411,7 @@ With 1 or 2 set, the app file isn't read. The backend scrubs
 `NEBULA_APP_TOKEN` and `NEBULA_APP_TOKEN_FILE` from every process it starts,
 so an in-app chat never spends as an app. The `nebula` CLI uses the same
 order for `NEBULA_AGENT_TOKEN`, `NEBULA_APP_TOKEN_FILE` and
-`NEBULA_APP_TOKEN` (D3, round 5): a bad file fails the command instead of
+`NEBULA_APP_TOKEN`: a bad file fails the command instead of
 falling back to `NEBULA_APP_TOKEN`.
 
 The agent shows by its name and color on the
@@ -4918,7 +4914,7 @@ damagedRecordsUnread?, notAddedBackLimitCount?, projectLimit?, note}`:
   changes made after the copy may be missing without a row saying so, the
   note says that, and the person's notice says so instead of "No projects
   were missing."
-- `damagedRecordsUnread` (restores since PR #199 round 15; left out of older
+- `damagedRecordsUnread` (restores since PR #199; left out of older
   ones) is true when the damaged file held project records Nebula couldn't
   read: a record in the `projects` group (or in a group that can't be told)
   failed, or the file can't be shown to have closed its `projects` group
@@ -5129,7 +5125,7 @@ record a crashed backend's leftover starts as needing the person's check
 clears that state when the write works.
 
 The person reads "A run is still going. Wait for it to finish or stop it
-first." for a Clear, an open or a loaded graph (PR #198 review 4, N2: an import from
+first." for a Clear, an open or a loaded graph (PR #198: an import from
 the File menu during a run used to show the agent's text).
 
 A quick run (`nebula quick`, `POST /api/quick`) doesn't count: its nodes
@@ -5144,7 +5140,7 @@ thinks Nebula is gone), Create's Generate, proposal Accept and Reject,
 Forget ID and the unlock, chat sends and a chat permission's "Allow once",
 settings, the Commons, and project create, switch, rename and delete. The
 tab sends no write that starts work or changes anything; it saves the
-project once Nebula answers again. Since round 16 a few requests that only
+project once Nebula answers again. A few requests that only
 stop or reduce work still go, so a tab that only thinks Nebula is gone can
 still stop a run that's spending: Stop (`DELETE /api/executions/{runId}`),
 a render's cancel (`DELETE /api/render-jobs/{jobId}`), the Commons worker's
@@ -5455,7 +5451,7 @@ so that no sync read before Nebula applied the person's Undo, Redo or Delete
 undoes it: it handles the answer once that sync, or a later one, has
 arrived. Agents may ignore it; nothing an agent sends uses it.
 
-Undo puts back everything a delete removed (GM - Design, 2026-10-23). Every
+Undo puts back everything a delete removed (the design review, 2026-10-23). Every
 node delete (`DELETE /api/graph/node/{id}`, an apply's `remove`, a restore
 that removes nodes) detaches the pins on the node and closes the proposals
 that read it, under a removal record `{id: "rm_…", nodeId, pins,
@@ -5516,8 +5512,7 @@ but ignores the records (its answer's `reattached`, `pinsLeft`, `reopened`
 and `notReopened` stay empty). Your `undo_canvas_edit` puts back what your
 deletes removed from the records the backend kept for that edit.
 
-A run that started always answers as started (round 23 of PR #195, review
-22 L-4). Once Nebula admits a run it may be spending, so nothing after that
+A run that started always answers as started (PR #195). Once Nebula admits a run it may be spending, so nothing after that
 point turns the answer into an error: `/api/execute`, `/api/execute-node`,
 `/api/cinema/generate-shot` and `/api/graph/run` answer with the `runId`
 (`status: "started"`, or the run's own status for `/api/graph/run`) even
@@ -5550,7 +5545,7 @@ whoever ran it (the canvas Run button too). It is kept per project, in
 `node-errors.json` in the state dir, so it survives a page reload, a switch to
 another project and back, and a backend restart; every graph the canvas loads
 (graphSync, `GET /api/projects/{id}`) gives such a node `state: "error"` with
-the card's `error`, `errorFriendly`, `errorCategory`, `errorPerson`, `errorProviderText` and `errorProvider` (round 3f). Loading a graph over
+the card's `error`, `errorFriendly`, `errorCategory`, `errorPerson`, `errorProviderText` and `errorProvider`. Loading a graph over
 the project or clearing it forgets its errors, as does deleting the project
 for good. Deleting a node keeps its error, so undoing the delete
 (`POST /api/graph/restore`) puts the node back failed, as the canvas's undo
@@ -5709,7 +5704,7 @@ While protected:
   nothing: "Shot 2 (s2) of “Opening” (n4) is still rendering (run <id>), so
   it can’t be removed. Stop the run first (cancel_run, or `nebula cancel
   <id>`; a run the person started is theirs to stop) or wait for it to
-  finish, then try again. Nothing changed." The person reads GM's line
+  finish, then try again. Nothing changed." The person reads Nebula's own line
   instead: an undo or redo reads "Nebula couldn’t undo because it would remove “Shot 2”,
   which is still running. Stop the run first." ("Nebula couldn’t redo because …"; "…Wait
   for it to finish." while the run is still being admitted), and the canvas
@@ -5749,10 +5744,10 @@ those shots in it.
 
 #### A scene that changed since you read it (`scene_changed`)
 
-Every Cinema scene has a `sceneKey` (PR #198 fix round 8,
+Every Cinema scene has a `sceneKey` (PR #198,
 `backend/services/scene_keys.py`): a name for its authoring, everything but
 the shots' runtime (`output`, `variations`, `selectedVariation`, which runs
-write). It also has a `sceneRev` (fix round 9): a number that grows each
+write). It also has a `sceneRev`: a number that grows each
 time Nebula holds another authoring of that scene, across restarts too, so a
 client can tell an older scene from a newer one. `GET /api/graph/export`,
 `GET /api/graph` and `GET /api/canvas/snapshot` list them as `sceneKeys` and
@@ -6096,7 +6091,7 @@ How a delete or an undo reads depends on whose run it is:
   canvas until it ends (the toolbar's are disabled, each titled by its own
   verb: "You can delete it when the run finishes."). The Delete key, the
   menu's Delete and Undo/Redo are never silent: a selection of only
-  rendering scenes reads GM's scene line ("Couldn’t delete “Scene”. “Shot 2”
+  rendering scenes reads the scene line ("Couldn’t delete “Scene”. “Shot 2”
   is still running. Stop the run first."), an undo that would remove a
   rendering shot reads "Nebula couldn’t undo because it would remove “Shot 2”, which
   is still running. Stop the run first.", and anything else reads the lock's
@@ -6338,7 +6333,7 @@ twins of `rename_project`, `get_project`, `project_size`, `list_trash`,
 hints worded as `nebula` commands. A rename is journaled as `project.renamed`
 under `$NEBULA_AGENT_NAME` (unnamed without it). The CLI is an agent surface
 and never has the person token, so `keys` and `providers` print set or not
-set and each provider's health, never any part of a key (Justin, Q55 a).
+set and each provider's health, never any part of a key (Justin's call).
 
 `nebula clear` refuses when the open project has nodes and points to
 `nebula project new` instead, which keeps this project's work. `--force`
@@ -6855,4 +6850,4 @@ free, on the signed-in Krea account (marked `*`), or with a Nous sign-in.
 (words and `--category` narrow it), and `nebula nodes --all` adds the ones
 that can't run here, each with what it needs. Before 2026-10-21 `nebula
 nodes` listed every node type with no sign of which could run, and an agent
-in the Q104 rerun proposed FLUX.2 with no BFL or fal key set from it.
+in a rerun proposed FLUX.2 with no BFL or fal key set from it.
