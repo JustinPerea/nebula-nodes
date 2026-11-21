@@ -241,7 +241,7 @@ def test_a_write_refusal_lists_a_shared_name_first(cli, shared_name):
 # A Style stores its modelId and Create applies it, so it stays strict like the
 # node writes, and its refusal names the exact-name match the same way.
 
-AGENT_HEADERS = {"X-Nebula-Agent": "GM - Design"}
+AGENT_HEADERS = {"X-Nebula-Agent": "Studio Agent"}
 
 
 @pytest.mark.parametrize("name,match", [

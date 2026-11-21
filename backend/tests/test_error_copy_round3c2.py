@@ -378,7 +378,7 @@ def test_no_run_time_raise_in_nebulas_own_words_goes_without_a_person_line() -> 
              if count > UNLINED_BASELINE.get(path, 0)}
     assert not grown, (
         "These files have more raises with no person line than before (now, baseline): "
-        f"{grown}. The card hides an unlined run error behind GM's general line. A raise in "
+        f"{grown}. The card hides an unlined run error behind the approved general line. A raise in "
         "Nebula's own words needs a line for the person (execution/person_line.py): "
         "raise as_person_line(ValueError(...)) when the text already is that line, or "
         "with_person_line(exc, line) with id-free words naming the node's field by its label. "
@@ -490,7 +490,7 @@ def test_no_person_line_goes_on_a_moderation_block() -> None:
 # says so with with_provider_line, so the card keeps the instruction and puts
 # the provider's words behind Details (design: "Raw provider text stays behind
 # Details in every case.").
-def test_provider_text_keeps_gms_design() -> None:
+def test_provider_text_stays_behind_details() -> None:
     # A raise that carries the provider's own body or message keeps the
     # classifier's line or the general line (design), the raw text behind Details,
     # unless its line is a with_provider_line, which keeps Details too.

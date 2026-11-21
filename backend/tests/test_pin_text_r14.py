@@ -37,7 +37,7 @@ SCIENTIST = "\U0001F469\U0001F3FD‍\U0001F52C"
 CORPUS = json.loads((Path(__file__).parent / "fixtures/pin_text_cases.json").read_text(encoding="utf-8"))["cases"]
 
 
-def test_gm_r22_q3_both_280_character_notes_save_by_characters_not_bytes():
+def test_both_280_character_notes_save_by_characters_not_bytes():
     stray = STRAY * 280
     shown = clean_text(stray, limit=280, multiline=True)
     assert text_length(shown) == 280 and len(stray) - len(shown) == 280  # 280 hidden characters
@@ -46,8 +46,8 @@ def test_gm_r22_q3_both_280_character_notes_save_by_characters_not_bytes():
     assert clean_text(families, limit=280, multiline=True) == families
     assert text_length(families) == 280
     named = {c["name"]: c for c in CORPUS}
-    assert named["GM r22: 280 emoji, each with a stray FE0F"]["saves"]
-    assert named["GM r22: 280 families"]["saves"] and named["GM r22: 280 families"]["noteLength"] == 280
+    assert named["hidden text counts characters: 280 emoji, each with a stray FE0F"]["saves"]
+    assert named["hidden text counts characters: 280 families"]["saves"] and named["hidden text counts characters: 280 families"]["noteLength"] == 280
 
 
 def test_the_hidden_limit_counts_characters_whatever_their_bytes():
@@ -71,7 +71,7 @@ def test_a_seeded_fuzz_of_long_emoji_notes_always_saves():
     for case in CORPUS:
         typed = case["typed"]
         expected = bool(case["note"]) and case["noteLength"] <= 280 and len(typed.strip().strip("﻿")) - len(case["note"]) <= HIDDEN_TEXT_CHARACTERS
-        if case["name"].startswith(("GM r22", "fuzz r14")):
+        if case["name"].startswith(("hidden text counts characters", "fuzz family tokens")):
             assert case["saves"] == expected, case["name"]
 
 
@@ -107,7 +107,7 @@ def test_previews_never_cut_through_a_character():
     assert shown_text(families) == families
 
 
-def test_gm_r22_q1_the_person_gate_keeps_its_code(api):
+def test_the_person_gate_keeps_its_code(api):
     client, graph, _journal, _sent, _store, _ids = api
     node = graph.add_node("text-input", {})
     agent = client.post("/api/canvas/pins", headers=AGENT, json={"text": "hi", "nodeId": node})

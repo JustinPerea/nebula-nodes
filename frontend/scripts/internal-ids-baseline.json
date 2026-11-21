@@ -1,15 +1,4 @@
 {
-  "backend/tests/test_asset_reference_params.py": 1,
-  "backend/tests/test_asset_trash.py": 5,
-  "backend/tests/test_error_copy_round3c2.py": 1,
-  "backend/tests/test_error_copy_round3f.py": 1,
-  "backend/tests/test_moodboard_brief_precedence.py": 2,
-  "backend/tests/test_node_lookup_by_name.py": 1,
-  "backend/tests/test_pin_text_r14.py": 4,
-  "backend/tests/test_pin_text_r23.py": 5,
-  "backend/tests/test_projects.py": 2,
-  "backend/tests/test_style_trash_and_tools.py": 3,
-  "frontend/scripts/check-kept-guard-chunk.mjs": 1,
   "frontend/src/components/agent-notes/agentNotes.css": 21,
   "frontend/src/components/agent-notes/agentRoster.css": 2,
   "frontend/src/styles/agent-name.css": 2,
@@ -60,8 +49,5 @@
   "frontend/src/styles/slava-restraint.css": 107,
   "frontend/src/styles/workspace-header.css": 8,
   "frontend/src/styles/workspace-rail.css": 4,
-  "frontend/src/styles/world-preview.css": 2,
-  "frontend/tests/agentPresenceFollowups.r14.test.tsx": 1,
-  "frontend/tests/agentPresenceFollowups.r23.test.tsx": 1,
-  "frontend/tests/lib/errorCopy.namedLine.test.ts": 30
+  "frontend/src/styles/world-preview.css": 2
 }

@@ -30,7 +30,7 @@ from services.provider_start_guard import ProviderStartGuard
 from services.retired_nodes import migrate_params
 from tests.conftest import PERSON, stored_image_urls
 
-AGENT = {"X-Nebula-Agent": "GM - Design"}
+AGENT = {"X-Nebula-Agent": "Studio Agent"}
 MCP = {"X-Nebula-Client": "nebula-mcp"}
 
 CHARACTER = {

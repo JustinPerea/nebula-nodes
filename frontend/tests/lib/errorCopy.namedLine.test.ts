@@ -65,11 +65,11 @@ const HAND_BUILT: { file: string; text: string; why: string }[] = [
     why: 'the action from the builder, then two fixed sentences: what stays as it was, and the fix (neither is a cause)' },
   { file: 'lib/errorCopy.ts', text: '`${heading} ${reason}`', why: 'headedLine itself: the one place the rule is applied' },
   { file: 'lib/errorCopy.ts', text: '`Nebula couldn’t ${what} because this window isn’t connected as you. ${fix}`',
-    why: "GM's because form (PR #204 r6) in the desktop window: the tail is one of its two fixed sentences" },
+    why: "the approved because form (PR #204) in the desktop window: the tail is one of its two fixed sentences" },
   { file: 'lib/errorCopy.ts', text: '`${GENERATE_HEADING} ${CLUSTER_NOT_ADDED} ${personRequiredCopy(desktop, reason)}`',
-    why: "GM's Generate refusal, nodes not added (PR #204 r8, GM r10 3; heading GM r12 2): two fixed sentences, then personRequiredCopy's fixed sentences" },
+    why: "the approved Generate refusal, nodes not added (PR #204): two fixed sentences, then personRequiredCopy's fixed sentences" },
   { file: 'lib/settingsWrites.ts', text: "`Nebula couldn’t save ${it}, but your Keychain has it. ${fix ? curlApostrophes(fix) : 'Try again, or remove it.'}`",
-    why: "GM's Keychain line (PR #203 r28 item 2, r29 item 6): the tail is GM's fixed sentence or the backend's fix sentence, never a named line" },
+    why: "the approved Keychain line (PR #203): the tail is the fixed sentence or the backend's fix sentence, never a named line" },
   // The "Couldn’t …. You can …" run-lock lines are gone: PR #205 made the key-press
   // refusals the lock line alone (lib/cinemaScene runLockedLine), no heading.
   { file: 'store/graphStore.ts', text: '`${heading} ${err.raw}`', why: "the Agent log's raw form (agents read the raw text)" },
@@ -89,24 +89,24 @@ const HAND_BUILT: { file: string; text: string; why: string }[] = [
   // Design: the "other" stop line, a fixed heading over the reason the single line already had
   // (copyForAnswer's), merged for several scenes.
   { file: 'lib/sceneSaveCopy.ts', text: "`Nebula couldn’t save your changes to ${quotedNames(scenes, 'scenes')}. ${reason}`",
-    why: "GM's heading over the line's own reason (GM r32 answer 2)" },
+    why: "the approved heading over the line's own reason" },
   { file: 'lib/reopenHoldLines.ts', text: "`Nebula couldn’t save its World Labs safeguards. ${reopen} after you ${desktop ? 'quit Nebula and open it again' : 'restart Nebula'}.`",
-    why: "GM's held-reopen line for the bootstrap state (PR #199, GM r32 1): the second sentence is GM's own lock line, never a reason" },
+    why: "the approved held-reopen line for the bootstrap state (PR #199): the second sentence is the approved lock line, never a reason" },
   // PR #198: the stopped-after-8 line. Later, the state slot's merged line, with a
   // subject-and-comma fix (design).
-  { file: 'lib/sceneSaveCopy.ts', text: '`Nebula couldn’t save your changes to ${names}. ${KEPT_UNTIL_NEXT_CHANGE}`', why: "GM's own line over GM's fixed suffix (GM r28 item 2)" },
+  { file: 'lib/sceneSaveCopy.ts', text: '`Nebula couldn’t save your changes to ${names}. ${KEPT_UNTIL_NEXT_CHANGE}`', why: "the approved line over its fixed suffix (once the timed retries stop)" },
   // Design: the retrying line, the same form in the present tense.
-  { file: 'lib/sceneSaveCopy.ts', text: '`Nebula couldn’t save your changes to ${names}. ${KEPT_AND_TRYING}`', why: "GM's own line over GM's fixed suffix (GM r29 Q1)" },
+  { file: 'lib/sceneSaveCopy.ts', text: '`Nebula couldn’t save your changes to ${names}. ${KEPT_AND_TRYING}`', why: "the approved line over its fixed suffix (while the timed retries run)" },
   // PR #210: the board save lines are built around a constant opening.
   { file: 'components/moodboard-studio/boardSaveLine.ts', text: '`${NOT_SAVED_OPENING}${line.cause}. ${line.step}`',
-    why: "GM r16's board save lines: the cause and the step are GM's fixed pairs (SAVE_LINES), never a server line" },
+    why: "the board save lines: the cause and the step are fixed pairs (SAVE_LINES), never a server line" },
   // PR #210 (design): a replayed save that failed on a board the person isn't on,
   // named, under the Restore's confirmation.
   { file: 'components/moodboard-studio/boardSaveLine.ts', text: '`Nebula couldn’t save your change to ${what} because ${line.cause}. ${line.step}`',
-    why: "GM r113 2's exact line: the board's quoted name over one of GM r16's fixed cause and step pairs (SAVE_LINES), never a server line" },
+    why: "the approved line for a replayed save: the board's quoted name over one of the fixed cause and step pairs (SAVE_LINES), never a server line" },
   { file: 'components/moodboard-studio/boardSaveLine.ts',
     text: "`${LOST_ADD_OPENING}${what} because the moodboard hadn’t loaded. ${names.length > 1 ? 'Add them again.' : 'Add it again.'}`",
-    why: "GM r16 7a's lost add line: the names are quoted file names, the tail one of two fixed steps" },
+    why: "the lost add line: the names are quoted file names, the tail one of two fixed steps" },
   // Seen once constant openings were read: two older lines, each a fixed heading over a fixed tail.
     // The Agent log's raw save line: agents read the backend's own detail,
     // with the status and code (design, PR #198).
@@ -354,10 +354,10 @@ describe('ratchet: no new straight apostrophe in person copy (design)', () => {
  */
 const COLON_NAMES = new Set(['title', 'aria-label', 'ariaLabel']);
 const COLON_REVIEWED: { file: string; text: string; why: string }[] = [
-  { file: 'MoodboardBrief.tsx', text: ': pick', why: 'the color field\'s picker, "<label>: pick" (round 6, before GM r74); for GM to reword' },
-  { file: 'MoodboardBrief.tsx', text: ': hex', why: 'the color field\'s hex input, "<label>: hex" (round 6, before GM r74); for GM to reword' },
+  { file: 'MoodboardBrief.tsx', text: ': pick', why: 'the color field\'s picker, "<label>: pick" (a colon in a title; reworded later)' },
+  { file: 'MoodboardBrief.tsx', text: ': hex', why: 'the color field\'s hex input, "<label>: hex" (a colon in a title; reworded later)' },
   { file: 'MoodboardListView.tsx', text: 'Open the moodboard on this image. Nothing moves: no image changes number.',
-    why: "GM's cover button title (before GM r74); for GM to reword" },
+    why: "the cover button title (a colon in a title; reworded later)" },
 ];
 
 /** The literal text holding a colon in each title or aria-label value in `text`. */
@@ -487,7 +487,7 @@ describe('ratchet: no colon in a title or aria-label in the Moodboard Studio (de
     expect(files.length).toBeGreaterThan(10);
     const found = files.flatMap(({ name, text }) => colonsInLabels(text).map((hit) => ({ file: name, text: hit })));
     const unknown = found.filter((hit) => !COLON_REVIEWED.some((entry) => entry.file === hit.file && entry.text === hit.text));
-    expect(unknown.map((hit) => `${hit.file}: ${JSON.stringify(hit.text)}`), 'a colon in a title or aria-label: say it in words (GM r74)').toEqual([]);
+    expect(unknown.map((hit) => `${hit.file}: ${JSON.stringify(hit.text)}`), 'a colon in a title or aria-label: say it in words').toEqual([]);
     const stale = COLON_REVIEWED.filter((entry) => !found.some((hit) => hit.file === entry.file && hit.text === entry.text));
     expect(stale.map((entry) => `${entry.file}: ${entry.text}`)).toEqual([]);
   });

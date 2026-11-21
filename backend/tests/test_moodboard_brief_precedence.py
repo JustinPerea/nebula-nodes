@@ -65,7 +65,7 @@ def gm_analysis(palette=PALETTE, accents=ACCENTS) -> dict:
 
 def gm_board(**fields) -> dict:
     board = {
-        "id": "gmtestboard1", "name": "GM test board", "mode": "look", "strength": 0.7, "notes": NOTES,
+        "id": "testboard1", "name": "Test board", "mode": "look", "strength": 0.7, "notes": NOTES,
         "images": [], "direction": GM_DIRECTION, "avoid": list(GM_AVOID),
         "pinnedColors": {"include": [PIN], "exclude": []}, "briefOverride": None, "briefVersion": 1,
         "analysis": gm_analysis(),
@@ -267,11 +267,11 @@ def test_reading_an_old_board_writes_nothing(tmp_path, monkeypatch):
     monkeypatch.setenv("NEBULA_MOODBOARD_ROOT", str(tmp_path / "moodboards"))
     folder = tmp_path / "moodboards" / "_global"
     folder.mkdir(parents=True)
-    path = folder / "gmtestboard1.json"
+    path = folder / "testboard1.json"
     path.write_text(json.dumps(gm_board()), encoding="utf-8")
     before = (path.read_bytes(), path.stat().st_mtime_ns)
     store = MoodboardStore()
-    board = store.get("gmtestboard1")
+    board = store.get("testboard1")
     store.list("global")
     assert moodboard_brief.with_brief(board)["brief"]["leftOut"]
     assert (path.read_bytes(), path.stat().st_mtime_ns) == before
@@ -289,7 +289,7 @@ def test_startup_saves_the_check_on_boards_saved_before_it(tmp_path, monkeypatch
     monkeypatch.setenv("NEBULA_MOODBOARD_ROOT", str(tmp_path / "moodboards"))
     folder = tmp_path / "moodboards" / "_global"
     folder.mkdir(parents=True)
-    path = folder / "gmtestboard1.json"
+    path = folder / "testboard1.json"
     path.write_text(json.dumps(gm_board()), encoding="utf-8")
     trash = tmp_path / "moodboards" / ".trash"
     trash.mkdir()
@@ -306,7 +306,7 @@ def test_startup_saves_the_check_on_boards_saved_before_it(tmp_path, monkeypatch
     real = moodboard_colour_words.check
     monkeypatch.setattr(moodboard_colour_words, "check", lambda *a, **k: calls.append(1) or real(*a, **k))
     for _ in range(3):
-        compose(MoodboardStore().get("gmtestboard1"))
+        compose(MoodboardStore().get("testboard1"))
     assert calls == []
     before = path.stat().st_mtime_ns
     assert moodboard_brief.save_colour_checks(tmp_path / "moodboards")["saved"] == []
@@ -344,7 +344,7 @@ def _stored(board_id: str) -> dict:
 
 
 def _gm_via_api(client, **extra) -> dict:
-    body = {"name": "GM", "images": [], "direction": GM_DIRECTION, "avoid": GM_AVOID,
+    body = {"name": "Board", "images": [], "direction": GM_DIRECTION, "avoid": GM_AVOID,
             "pinnedColors": {"include": [PIN], "exclude": []}, "analysis": gm_analysis(), **extra}
     response = client.post("/api/moodboards", json=body)
     assert response.status_code == 200, response.text

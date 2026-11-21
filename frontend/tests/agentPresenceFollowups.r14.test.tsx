@@ -104,6 +104,6 @@ describe('both 280-character emoji notes fit the dialog', () => {
     const cases = (corpus as { cases: Array<{ name: string; typed: string; saves?: boolean }> }).cases;
     const blocked = cases.filter((c) => c.saves && noteLength(c.typed) > MAX_PIN_TEXT).map((c) => c.name);
     expect(blocked).toEqual([]);
-    expect(cases.filter((c) => c.name.startsWith('GM r22')).every((c) => c.saves)).toBe(true);
+    expect(cases.filter((c) => c.name.startsWith('hidden text counts characters')).every((c) => c.saves)).toBe(true);
   });
 });
