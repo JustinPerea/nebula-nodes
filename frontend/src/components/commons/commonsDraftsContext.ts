@@ -1,13 +1,12 @@
 import { createContext, useCallback, useContext, useState, type Dispatch, type SetStateAction } from 'react';
 
 /**
- * PR #204 round 11 (review 9 MEDIUM-3, GM r19 item 2): what the person has typed or opened in the
- * Commons (the search and filters, the URL draft, the open Add menu, the section, the open
- * reference, a membership note, a keyword) outlives a demote and the promote. Round 13 (review 10
- * MEDIUM-2): CommonsView no longer remounts its body, only the panes that load their own data
- * (a reference's detail, Settings, Agent review, Blind labeling), so these drafts still live above
- * those keys; the loaded data doesn't. Outside the Commons view (a test rendering one pane) it is
- * plain state.
+ * PR #204 (design): what the person has typed or opened in the Commons (the search and filters,
+ * the URL draft, the open Add menu, the section, the open reference, a membership note, a
+ * keyword) outlives a demote and the promote. CommonsView no longer remounts its body, only the
+ * panes that load their own data (a reference's detail, Settings, Agent review, Blind labeling),
+ * so these drafts still live above those keys; the loaded data doesn't. Outside the Commons view
+ * (a test rendering one pane) it is plain state.
  */
 export const CommonsDrafts = createContext<Map<string, unknown> | null>(null);
 

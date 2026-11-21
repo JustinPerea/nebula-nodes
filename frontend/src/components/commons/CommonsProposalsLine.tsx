@@ -30,7 +30,7 @@ function asks(view: AssetProposalView): string {
   return 'change a reference';
 }
 
-/** Who asks: a dot in each agent's colour (GM, PR #202 r1), then the names. */
+/** Who asks: a dot in each agent's colour (design, PR #202), then the names. */
 function Who({ agents }: { agents: Agent[] }) {
   return (
     <>
@@ -46,7 +46,7 @@ function Who({ agents }: { agents: Agent[] }) {
 /** One line per Commons reference that agents ask to change, oldest first: the
  * grid shows twenty at a time, so this is how the person finds the rest.
  *
- * GM, PR #202 r1: while this tab isn't connected as the person, the proposals
+ * Design, PR #202: while this tab isn't connected as the person, the proposals
  * themselves don't reach it (person-only), only their Updates. Each open
  * Update about a Commons reference counts in that reference's line as one
  * proposal by its agent (store/heldAssetProposals.ts `heldCommonsLines`, from
@@ -81,7 +81,7 @@ export function CommonsProposalsLine({ onOpen }: { onOpen: (assetId: string) => 
     <>
       {[...byAsset.values()].map((line) => {
         const heldOnly = line.known === 0;
-        // GM, PR #202 r2: no parentheses. One ask: "Codex asks to change a
+        // Design, PR #202: no parentheses. One ask: "Codex asks to change a
         // reference"; several: "Codex has 2 requests to change a reference",
         // "Codex and Claude Code have 2 requests to change a reference".
         const words = line.count > 1

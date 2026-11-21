@@ -1,5 +1,5 @@
 /**
- * The undo and redo toasts' words (design r160 answer 3, r161). No colon:
+ * The undo and redo toasts' words (design). No colon:
  * "Undid “Made image 3 the cover”". An undo that put nothing back says so
  * instead of "Undid" and offers no Redo, for the three cases the server keeps
  * a step for (keyed on the skipped slice's `reason`, `part` and `number`,

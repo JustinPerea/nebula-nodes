@@ -10,10 +10,10 @@ import { clearCommonsHash } from '../../lib/commonsRoute';
 import '../../styles/commons.css';
 
 /**
- * PR #204 round 18d (GM r31 layout M, GM r32 1): the Commons while the backend runs without it.
- * The header keeps only the way back, the title and Updates (no sections, Add to, Add, status,
- * Start or Stop), and the page row says "Commons is turned off for this Nebula." Its line hides
- * beside "Nebula is offline", as every load's line does (GM r23 3); the view stays.
+ * PR #204: the Commons while the backend runs without it. The header keeps only the way
+ * back, the title and Updates (no sections, Add to, Add, status, Start or Stop), and the page
+ * row says "Commons is turned off for this Nebula." Its line hides beside "Nebula is
+ * offline", as every load's line does; the view stays.
  * `CommonsOffHeader` is the Commons view's own off state; `CommonsOffView` is the screen a tab
  * opened on the Commons shows when the backend said it runs without it (App), with nothing of
  * the Commons read or sent.

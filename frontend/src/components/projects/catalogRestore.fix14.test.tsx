@@ -1,9 +1,9 @@
 /**
- * Fix round 14 of PR #199 (GM r18): a restore adds no record back past
- * the project limit. Records Nebula could read but left out because of the
- * limit get their own line, which replaces "couldn’t be added back" for them:
- * named up to three (the shared name list), counted from four. "Changes made
- * after that copy may be missing" stays only for what Nebula couldn't read.
+ * PR #199: a restore adds no record back past the project limit. Records
+ * Nebula could read but left out because of the limit get their own line,
+ * which replaces "couldn’t be added back" for them: named up to three (the
+ * shared name list), counted from four. "Changes made after that copy may be
+ * missing" stays only for what Nebula couldn't read.
  */
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
@@ -27,7 +27,7 @@ function restore(leftOut: number, extra: Partial<CatalogRestore> = {}): CatalogR
   } as CatalogRestore;
 }
 
-describe('GM r18: records left out at the limit say so', () => {
+describe('records left out at the limit say so', () => {
   it('two names, verbatim; no "may be missing", and "which was kept" is said once', () => {
     const notice = catalogRestoreNotice(restore(2));
     expect(notice.lines).toEqual([OPENING,
@@ -39,7 +39,7 @@ describe('GM r18: records left out at the limit say so', () => {
       '“Alpha”, “Beta” and “Gamma” weren’t added back because you’ve reached the limit of 500 projects. They’re still in the damaged file, which was kept.']);
   });
 
-  it('from four, a count (GM: "5 projects weren’t added back …")', () => {
+  it('from four, a count (design: "5 projects weren’t added back …")', () => {
     expect(catalogRestoreNotice(restore(4)).lines?.[1])
       .toBe('4 projects weren’t added back because you’ve reached the limit of 500 projects. They’re still in the damaged file, which was kept.');
     expect(catalogRestoreNotice(restore(5)).lines?.[1])

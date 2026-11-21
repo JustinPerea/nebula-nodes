@@ -1,4 +1,4 @@
-/* The kept canvas's project chooser (GM r24 (b) on PR #199): the project
+/* The kept canvas's project chooser (design, PR #199): the project
    limit's and the storage cap's cure, in the Discard confirm's dialog. The
    buttons are the dialog's own (.prompt-dialog__actions: their look and the
    shared disabled look); only the red on hover is said here, by kind. */

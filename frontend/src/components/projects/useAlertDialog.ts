@@ -2,12 +2,12 @@ import { useEffect, useLayoutEffect, useRef, type RefObject } from 'react';
 import { sitsBehind } from '../../lib/modalFocus';
 
 /**
- * What the kept canvas's modal dialogs share (the Discard confirm, GM r20 on
- * PR #199, and the project chooser, GM r24): everything behind the dialog is
- * inert and hidden from assistive technology while it is open (the pattern of
- * the app's other full modals, lib/modalFocus sitsBehind; its own notice is
- * ModalPortal's, GM r25 (4)); focus starts on `initialFocus`, Escape closes,
- * Tab stays inside the card, and focus goes back to `returnTo` when it closes.
+ * What the kept canvas's modal dialogs share (the Discard confirm, PR #199,
+ * and the project chooser): everything behind the dialog is inert and
+ * hidden from assistive technology while it is open (the pattern of the
+ * app's other full modals, lib/modalFocus sitsBehind; its own notice is
+ * ModalPortal's); focus starts on `initialFocus`, Escape closes, Tab stays
+ * inside the card, and focus goes back to `returnTo` when it closes.
  */
 export function useAlertDialog({ overlay, card, initialFocus, onClose, returnTo }: {
   overlay: RefObject<HTMLElement | null>; card: RefObject<HTMLElement | null>; initialFocus: RefObject<HTMLElement | null>;

@@ -1,7 +1,7 @@
 import { keyBlockedByModal } from '../../lib/canvasShortcutScope';
 
 /**
- * Moodboard Studio's own keys (plan section 5.4): Cmd+Z, Shift+Cmd+Z, Cmd+S
+ * Moodboard Studio's own keys: Cmd+Z, Shift+Cmd+Z, Cmd+S
  * and, on the Board view, Delete and Shift+1. They listen on the document so
  * they work after a click on a card, the header or the canvas, and they
  * yield to anything that owns its keys: text fields (their own undo), dialogs,
@@ -10,22 +10,22 @@ import { keyBlockedByModal } from '../../lib/canvasShortcutScope';
  */
 export function isStudioShortcutTarget(target: EventTarget | null, action?: StudioKey): boolean {
   // None acts while a modal dialog is open, wherever focus is, the page
-  // included (review 8, L-d, as the canvas's keys: lib/canvasShortcutScope.ts).
+  // included (as the canvas's keys: lib/canvasShortcutScope.ts).
   if (keyBlockedByModal()) return false;
   if (!(target instanceof Element)) return true;
   if (target === document.body || target === document.documentElement) return true;
   if (isTextEntry(target)) return false;
-  // Undo and redo yield only to a text box (Q83): on a slider, a switch, a
+  // Undo and redo yield only to a text box: on a slider, a switch, a
   // checkbox or a select, Cmd+Z is the Studio's, which has the step.
   const owns = action === 'undo' || action === 'redo' ? '[role="dialog"], [aria-modal="true"]'
     : 'input, textarea, select, [role="dialog"], [aria-modal="true"]';
   if (target.closest(owns)) return false;
   // The Updates chip and its card sit outside the Studio's tree (App mounts
-  // them on every screen, Q107 a) but take no keys but Escape: focus there
-  // leaves Cmd+Z the Studio's. Their open list is a dialog (above). The
-  // Studio's two toasts, the board toast and the asset trash toast, portal
-  // outside it too, into their slots in the app's notice region: focus on
-  // their Undo or Dismiss leaves the Studio its keys, as it did when they
+  // them on every screen) but take no keys but Escape: focus there leaves
+  // Cmd+Z the Studio's. Their open list is a dialog (above). The Studio's
+  // two toasts, the board toast and the asset trash toast, portal outside
+  // it too, into their slots in the app's notice region: focus on their
+  // Undo or Dismiss leaves the Studio its keys, as it did when they
   // rendered inside it. Only those two slots: another screen's line in the
   // region doesn't pick up the Studio's keys.
   return target.closest('.moodboard-studio-view, .agent-notes-chip, .agent-note-card, '

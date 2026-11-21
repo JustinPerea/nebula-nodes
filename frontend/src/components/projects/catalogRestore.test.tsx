@@ -1,9 +1,9 @@
 /**
  * The Projects home notice after Nebula restored a damaged project list
- * (GM - Design on PR #199, rounds 1 and 2, 2026-10-27): every form word for
- * word, shown as a status notice until the person closes it with ×, never
- * the damaged file's path; announced (its region fills after it mounts),
- * and × leaves focus on the page heading.
+ * (design, PR #199, 2026-10-27): every form word for word, shown as a
+ * status notice until the person closes it with ×, never the damaged file's
+ * path; announced (its region fills after it mounts), and × leaves focus on
+ * the page heading.
  */
 import { describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen } from '@testing-library/react';
@@ -19,8 +19,8 @@ const TWO_DAYS_AGO = '2026-10-25T11:00:00+00:00';
 
 const restore = (overrides: Partial<CatalogRestore> = {}): CatalogRestore => ({
   id: 'r'.repeat(32), at: '2026-10-27T10:15:00+00:00', kind: 'restored', source: 'catalog.json.bak',
-  // Read to its end unless a test says otherwise: the forms below are GM's
-  // for what the damaged file showed.
+  // Read to its end unless a test says otherwise: the forms below are the
+  // design's for what the damaged file showed.
   damagedFile: DAMAGED, damagedReadWhole: true, addedBack: [], addedBackCount: 0, notAddedBackCount: 0, ...overrides,
 });
 const rows = (...names: string[]) => names.map((name, index) => ({ id: String(index).repeat(32), name }));
@@ -31,7 +31,7 @@ const failedRows = (...names: (string | null)[]) => names.map((name, index) => (
 const line = (overrides: Partial<CatalogRestore>) => catalogRestoreLine(restore(overrides), NOW);
 const OPEN = "Nebula’s project list was damaged, so it restored the last good copy";
 
-describe('form 1: restored, with what was added back', () => {
+describe('restored, with what was added back', () => {
   it('names one, two or three projects added back, and counts from four', () => {
     expect(line({ addedBack: rows('Dunes'), addedBackCount: 1 }))
       .toBe(`${OPEN} and added back “Dunes”, a newer project it found.`);
@@ -48,8 +48,8 @@ describe('form 1: restored, with what was added back', () => {
   });
 
   it('never says no projects were missing when the damaged file could not be read to its end', () => {
-    // A cut or zeroed file (live check of fix round 1): what it held past the
-    // damage is unknown, so something may be lost (GM r3 string 4).
+    // A cut or zeroed file: what it held past the damage is unknown, so
+    // something may be lost.
     const notWhole = "Nebula couldn’t read the whole damaged file, so changes made after that copy may be missing.";
     expect(line({ damagedReadWhole: false })).toBe(`${OPEN}. ${notWhole} The damaged file was kept.`);
     expect(line({ damagedReadWhole: undefined })).toBe(`${OPEN}. ${notWhole} The damaged file was kept.`);
@@ -62,7 +62,7 @@ describe('form 1: restored, with what was added back', () => {
   });
 });
 
-describe('form 2 (round 1): add-backs that failed', () => {
+describe('add-backs that failed', () => {
   it('names what failed when all failed', () => {
     expect(line({ notAddedBack: failedRows('Hero study'), notAddedBackCount: 1 }))
       .toBe(`${OPEN}. “Hero study”, a newer project, couldn’t be added back. The damaged file was kept.`);
@@ -79,7 +79,7 @@ describe('form 2 (round 1): add-backs that failed', () => {
       .toBe(`${OPEN}. 1 newer project couldn’t be added back. The damaged file was kept.`);
   });
 
-  it('gives form 1, then what failed, when some were added back', () => {
+  it('gives what was added back, then what failed, when some were added back', () => {
     expect(line({ addedBack: rows('Logo'), addedBackCount: 1, notAddedBack: failedRows('Dunes'), notAddedBackCount: 1 }))
       .toBe(`${OPEN} and added back “Logo”, a newer project it found. “Dunes” couldn’t be added back. The damaged file was kept.`);
   });
@@ -90,7 +90,7 @@ describe('form 2 (round 1): add-backs that failed', () => {
   });
 });
 
-describe('form 2 (round 2): added back into Recently deleted', () => {
+describe('added back into Recently deleted', () => {
   it('says where they are and offers to open it', () => {
     const one = catalogRestoreNotice(restore({ addedBack: trashedRows('Logo'), addedBackCount: 1 }), NOW);
     expect(one.text).toBe(`${OPEN}. “Logo”, a newer project it found, is in Recently deleted. Restore it from there to keep it.`);
@@ -107,7 +107,7 @@ describe('form 2 (round 2): added back into Recently deleted', () => {
   });
 });
 
-describe('form 3: what an older copy decided', () => {
+describe('what an older copy decided', () => {
   const older = { source: 'catalog.json.bak.1', copyAt: TWO_DAYS_AGO };
 
   it('says the copy is older up front when its age is known', () => {
@@ -162,7 +162,7 @@ describe('form 3: what an older copy decided', () => {
       .toBe(`${OPEN} from 2 days ago. ${recoveredCanvasSentence('Recovered canvas')} The damaged file was kept.`);
   });
 
-  it('says the age on GM\'s scale (r3; the full scale is in catalogRestore.fix2.test.tsx)', () => {
+  it('says the age on the design\'s scale (the full scale is in catalogRestore.fix2.test.tsx)', () => {
     const at = (ms: number) => new Date(NOW - ms).toISOString();
     expect(copyAge(at(30_000), NOW)).toBe('less than an hour ago');
     expect(copyAge(at(3_600_000), NOW)).toBe('an hour ago');
@@ -173,7 +173,7 @@ describe('form 3: what an older copy decided', () => {
   });
 });
 
-describe('form 4 (round 1): rebuilt, no good copy', () => {
+describe('rebuilt, no good copy', () => {
   const rebuilt = { kind: 'rebuilt' as const, source: null };
 
   it('says when nothing was spotted missing', () => {
@@ -193,7 +193,7 @@ describe('form 4 (round 1): rebuilt, no good copy', () => {
   });
 });
 
-describe('the Agent log line (round 2)', () => {
+describe('the Agent log line', () => {
   it('is sentences with the path', () => {
     expect(catalogRestoreLogLine(restore({ addedBack: rows('Logo'), addedBackCount: 1 })))
       .toBe(`Restored the project list from catalog.json.bak. The damaged file was kept at ${DAMAGED}. Added back “Logo”.`);
@@ -216,7 +216,7 @@ describe('the Projects home notice', () => {
 
   it('is a polite live notice that stays until the person closes it with ×, without the damaged path', () => {
     const onDismissCatalogRestore = vi.fn();
-    // Dunes is in the list (the notice says only what still holds: fix round 3).
+    // Dunes is in the list (the notice says only what still holds).
     const dunes = { id: '0'.repeat(32), name: 'Dunes', createdAt: TWO_DAYS_AGO, updatedAt: TWO_DAYS_AGO, lastOpenedAt: null,
       nodeCount: 0, edgeCount: 0, thumbnail: null };
     const { rerender } = render(<ProjectHome {...props({ projects: [dunes], catalogRestore: restore({ addedBack: rows('Dunes'), addedBackCount: 1 }), onDismissCatalogRestore })} />);
@@ -241,7 +241,7 @@ describe('the Projects home notice', () => {
   });
 
   it('puts focus on "Recent projects" after × from the keyboard (the notice stack’s fallback)', () => {
-    // Review 13 of PR #199 (MEDIUM-1): the stack's rule, once the notice goes.
+    // PR #199: the stack's rule, once the notice goes.
     const onDismissCatalogRestore = vi.fn();
     const view = render(<ProjectHome {...props({ catalogRestore: restore(), onDismissCatalogRestore })} />);
     const close = screen.getByRole('button', { name: 'Dismiss' });

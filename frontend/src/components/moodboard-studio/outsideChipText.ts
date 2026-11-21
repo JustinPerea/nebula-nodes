@@ -1,10 +1,10 @@
-/** The outside-the-view chip's words, edge and place (GM - Design, #210 answers; GM r13); OutsideChip draws them. */
+/** The outside-the-view chip's words, edge and place (design, PR #210); OutsideChip draws them. */
 
 import type { NodeRect } from '../../lib/nodePlacement';
 
 export type ChipEdge = 'left' | 'right' | 'top' | 'bottom';
 
-/** The chip's words (GM, #210 answer 1). */
+/** The chip's words (design, PR #210). */
 export function outsideChipText(count: number): { text: string; label: string } {
   return count === 1
     ? { text: 'Added outside the view', label: 'Added outside the view, show it' }
@@ -40,11 +40,11 @@ const overlap = (a: NodeRect, b: NodeRect) =>
   a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
 
 /**
- * Where the chip sits (GM r13): on the view's edge nearest the first tile,
- * centred on that edge, its arrow pointing at the tile. Never on a tile it
- * points at: when the centred chip would cover part of one (a tile poking
- * into the view there), it slides along the edge to the nearest place clear
- * of them; with no such place, it steps in from the edge past them.
+ * Where the chip sits: on the view's edge nearest the first tile, centred
+ * on that edge, its arrow pointing at the tile. Never on a tile it points
+ * at: when the centred chip would cover part of one (a tile poking into the
+ * view there), it slides along the edge to the nearest place clear of them;
+ * with no such place, it steps in from the edge past them.
  *
  * All in the board's screen pixels: `pane` is the board's size, `view` the
  * view placement uses (inside the insets, above the toolbar), `floor` the

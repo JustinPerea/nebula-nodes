@@ -24,8 +24,8 @@ describe('CommonsGrid', () => {
     expect(second.querySelector('.commons-badge--proposal')?.getAttribute('aria-label')).toBe('An agent proposes changes');
   });
 
-  // GM r6 on #208, item 2: a too-transparent reference isn't a failure, so its
-  // tile says "Not analyzed" in the neutral, muted badge; other failures stay red "failed".
+  // Design, PR #208: a too-transparent reference isn't a failure, so its tile says
+  // "Not analyzed" in the neutral, muted badge; other failures stay red "failed".
   it('gives a too-transparent reference the muted "Not analyzed" badge, not "failed"', () => {
     const clear = { ...row('ast_1'), analysis_state: 'analysis_failed' as const, last_error_kind: 'transparent' };
     const broken = { ...row('ast_2'), analysis_state: 'analysis_failed' as const, last_error_kind: 'unavailable' };
@@ -42,9 +42,9 @@ describe('CommonsGrid', () => {
     expect(badge(third).className).toBe('commons-badge commons-badge--analysis_failed');
   });
 
-  // GM r10 on #208 (review 4, M2): the plain neutral badge colour, readable
-  // (--sr-ink-light, about 5.7:1), set in one rule of its own: not the faint
-  // archived tone (1.9:1), not QUEUED's tint, never the red one.
+  // Design, PR #208: the plain neutral badge colour, readable (--sr-ink-light, about 5.7:1),
+  // set in one rule of its own: not the faint archived tone (1.9:1), not QUEUED's tint, never
+  // the red one.
   it('colours "Not analyzed" in one rule of its own, the plain neutral badge colour', () => {
     const css = readFileSync(join(__dirname, '../../styles/commons.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
     const rules = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)].map(([, selectors, body]) => ({
@@ -57,8 +57,8 @@ describe('CommonsGrid', () => {
     expect(naming[0].body.trim()).toBe('color: var(--sr-ink-light);');
   });
 
-  // #208 review 4, N2: Chrome reads the badge's CSS capitals into the tile's
-  // name ("NOT ANALYZED Harbour refs"); the tile names itself with the words as written.
+  // PR #208: Chrome reads the badge's CSS capitals into the tile's name
+  // ("NOT ANALYZED Harbour refs"); the tile names itself with the words as written.
   it('names each tile by its caption, then its badges as written', () => {
     const clear = { ...row('ast_1'), summary: null, collection: 'Harbour refs', analysis_state: 'analysis_failed' as const,
       last_error_kind: 'transparent' };

@@ -117,7 +117,7 @@ describe('ProjectHome', () => {
     fireEvent.click(within(row).getAllByRole('button', { name: 'Delete forever' })[0]);
     expect(actions.onPurge).toHaveBeenCalledWith('old');
     fireEvent.click(screen.getByRole('button', { name: 'Empty' }));
-    // One project: the same words as the row's (GM r102).
+    // One project: the same words as the row's.
     const emptyConfirm = screen.getByRole('group', { name: 'Delete this project for good?' });
     expect(within(emptyConfirm).queryByRole('button', { name: 'Delete all' })).toBeNull();
     fireEvent.click(within(emptyConfirm).getByRole('button', { name: 'Delete forever' }));
@@ -177,7 +177,7 @@ describe('ProjectHome', () => {
     fireEvent.click(screen.getByRole('button', { name: /Recently deleted/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Empty' }));
     const confirm = screen.getByRole('group', { name: 'Delete this project for good? Its characters are deleted with it.' });
-    // One space after the question, in the visible text too (GM r102): one text, not two spans apart.
+    // One space after the question, in the visible text too: one text, not two spans apart.
     expect(confirm.textContent).toContain('Delete this project for good? Its characters are deleted with it.');
     expect(confirm.querySelectorAll('.project-home__confirm-prompt')).toHaveLength(1);
     expect(within(confirm).getByRole('button', { name: 'Delete forever' })).toBeTruthy();
@@ -376,13 +376,13 @@ describe('ProjectHome', () => {
     expect(actions.onRetry).toHaveBeenCalledTimes(1);
   });
 
-  it('error-copy round 2: beside "Try again" the line is in the because form and ends in "Try again."', () => {
+  it('error copy: beside "Try again" the line is in the because form and ends in "Try again."', () => {
     render(<ProjectHome {...props({ projects: [], error: 'Nebula couldn’t load your projects because the server didn’t respond. Try again.' })} />);
     expect(screen.getByRole('alert').querySelector('span')?.textContent)
       .toBe('Nebula couldn’t load your projects because the server didn’t respond. Try again.');
   });
 
-  it('error-copy round 3b: Try again shows only where it redoes the failure, and keeps the full line where it only reloads', () => {
+  it('error copy: Try again shows only where it redoes the failure, and keeps the full line where it only reloads', () => {
     const line = 'Nebula couldn’t open the project because the server didn’t respond. Try again.';
     const { rerender } = render(<ProjectHome {...props({ error: line, retry: 'redo' })} />);
     expect(screen.getByRole('alert').querySelector('span')?.textContent).toBe('Nebula couldn’t open the project because the server didn’t respond. Try again.');
@@ -453,7 +453,7 @@ describe('ProjectHome', () => {
     fireEvent.click(button);
     expect(await screen.findByText('Cover · set by Codex (agent)')).toBeTruthy();
   });
-  it('says the cover went automatic when the pinned image left the project (Q90 a)', async () => {
+  it('says the cover went automatic when the pinned image left the project', async () => {
     const choices = { images: [{ url: '/api/outputs/b.png', kind: 'output' as const }], pinned: null,
       cover: { source: 'output' as const, images: ['/api/outputs/b.png'] }, pinnedBy: null,
       lostPin: { url: '/api/outputs/a.png', by: { kind: 'person', name: 'You' } } };

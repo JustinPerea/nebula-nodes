@@ -7,11 +7,11 @@ import { isSetAside } from './steering';
 export interface BoardCardData extends Record<string, unknown> {
   imageId: string;
   url: string;
-  /** Its board number: its place in `images` + 1 (plan C7). */
+  /** Its board number: its place in `images` + 1. */
   number: number;
   setAside: boolean;
-  /** Fading in over the placeholder it just filled (GM r5): a primitive on
-   *  the card's own node, so only that card draws again (review 4, LOW-5). */
+  /** Fading in over the placeholder it just filled: a primitive on the
+   *  card's own node, so only that card draws again. */
   filling: boolean;
 }
 
@@ -34,8 +34,8 @@ export function wideFrom(widths: readonly number[], zoom: number): number {
 export const BoardWideContext = createContext<number>(Number.POSITIVE_INFINITY);
 
 /** How far the board's spring has brought each filling image in (0 to 1), by
- *  image id (GM r5). A card reads it when it mounts, so a card React Flow
- *  draws afresh mid-fade starts where the spring is, not at 0 (live, r4).
+ *  image id. A card reads it when it mounts, so a card React Flow draws
+ *  afresh mid-fade starts where the spring is, not at 0 (seen live).
  *  The value never changes, so no card draws again because of it; whether a
  *  card is filling comes on its own node (`BoardCardData.filling`). */
 export interface BoardFill {

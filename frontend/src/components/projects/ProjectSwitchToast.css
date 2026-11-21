@@ -1,7 +1,7 @@
 /* After an agent switches the open project (projectStore followProjectSwitch).
    Same spring as the Projects screen's Undo toast. In the app's notice region
    (NoticeRegion), which stacks it above the notices and the bar, so Run and a
-   notice's buttons stay reachable (GM - Design, 2026-10-23: "One region, one
+   notice's buttons stay reachable (design, 2026-10-23: "One region, one
    stack, and nothing else draws toasts"). */
 .project-switch-toast {
   --project-switch-spring: linear(0, 0.049, 0.163, 0.305, 0.452, 0.588, 0.705, 0.801, 0.876, 0.931, 0.97, 0.995, 1.011, 1.019, 1.022, 1.022, 1.02, 1.017, 1.014, 1.011, 1.008, 1.005, 1.003, 1.002, 1);
@@ -51,16 +51,16 @@
 }
 .project-switch-toast__close:hover { background: var(--sr-surface-control-hover, rgb(255 255 255 / 0.08)); color: var(--sr-ink, #ecece9); }
 .project-switch-toast__close svg { width: 14px; height: 14px; }
-/* Fix round 5 of PR #200 (GM r7): every toast in the notice region springs
-   in within its own slot, a scale and a fade, never sliding across a
-   neighbour (the open kept-notes list sits right below some). */
+/* PR #200: every toast in the notice region springs in within its own slot,
+   a scale and a fade, never sliding across a neighbour (the open kept-notes
+   list sits right below some). */
 @keyframes project-switch-toast-in {
   from { opacity: 0; transform: scale(0.96); }
   30% { opacity: 1; }
   to { opacity: 1; transform: none; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .project-switch-toast { animation: notice-fade-in 180ms ease-out both; /* opacity only (GM r9 answer 2) */ }
+  .project-switch-toast { animation: notice-fade-in 180ms ease-out both; /* opacity only */ }
 }
 /* Over the Commons (a switch held behind unsaved labels, commons-leave) it
  * stays clear of the labeling panels' form column, where Save is (at most

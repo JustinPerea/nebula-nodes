@@ -4,14 +4,15 @@ import type { ReactNode } from 'react';
 import type { Moodboard } from '../../types';
 
 /**
- * error-copy (GM - Design, 2026-10-22): "Check the other Commons save paths
+ * Error copy (design, 2026-10-22): "Check the other Commons save paths
  * and the board save too, since the same raw string probably leaks there."
  * On main a board save with no answer showed "Failed to fetch", and a 503
- * "Save failed: 503". The board's save now says GM's lines; the backend's own
- * 4xx reason is kept, after "Save failed:". A 4xx with no reason says GM's
- * line for its status; like GM's other lines it stands alone, since the
- * board's notice has no heading of its own. The real lib/api.ts and apiFetch
- * run here; only the browser's fetch is stubbed.
+ * "Save failed: 503". The board's save now says the design's lines; the
+ * backend's own 4xx reason is kept, after "Save failed:". A 4xx with no
+ * reason says the design's line for its status; like the design's other
+ * lines it stands alone, since the board's notice has no heading of its own.
+ * The real lib/api.ts and apiFetch run here; only the browser's fetch is
+ * stubbed.
  */
 
 // A failure is one sentence in the because form, and beside a Try again button it ends "Try again."
@@ -107,9 +108,9 @@ const cases: Array<[string, Failure, string]> = [
 /** The notice's line: one sentence. */
 const line = (shown: Element) => shown.querySelector('.failure-lines__reason')?.textContent;
 
-// Round 6g (brief 7a): a saved board's own save that fails keeps the edit in the draft (nothing rolls back)
-// and the toolbar's Retry sends it again, so it says what a new board's failed create says (GM r12, r14):
-// r12's neutral because-line, the "Not saved" chip. The cause names what happened; the backend's own
+// A saved board's own save that fails keeps the edit in the draft (nothing rolls back)
+// and the toolbar's Retry sends it again, so it says what a new board's failed create says (design):
+// the neutral because-line, the "Not saved" chip. The cause names what happened; the backend's own
 // reason is in the console only.
 const saved = (cause: string) => `Nebula couldn’t save the moodboard because ${cause}. Try again.`;
 const neutral = async () => {
@@ -144,7 +145,7 @@ describe('a board save that fails', () => {
     expect((await neutral()).textContent).toBe(saved(cause));
   });
 
-  // GM r16 7a: each line ends with the step that works; where that step is
+  // Each line ends with the step that works; where that step is
   // a reload there is no Retry (sending the same edit again fails the same way).
   it.each([
     ['detail-409', saved('the server didn’t accept this save'), true],
@@ -178,10 +179,10 @@ describe('a board save that fails', () => {
 
 });
 
-// Round 3 (GM): "Make Retry redo the failed action, never a different one."
+// The design rule: "Make Retry redo the failed action, never a different one."
 // The toolbar's Retry after an analyze failure analyzes again, so the notice
-// takes GM's short line (WRAP: "The button is the retry"). On 867f254e the
-// Retry saved the board instead and the line kept its "Try again".
+// takes the design's short line (WRAP: "The button is the retry"). On 867f254e
+// the Retry saved the board instead and the line kept its "Try again".
 describe('an analyze that fails', () => {
   it.each(cases)('after %s says one because line, beside Try again', async (_name, failure, clause) => {
     vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -222,7 +223,7 @@ describe('an analyze that fails', () => {
   });
 });
 
-// Round 3: a line that no button redoes shows no Retry, and keeps GM's full line.
+// A line that no button redoes shows no Retry, and keeps the design's full line.
 describe('a line no Try again redoes', () => {
   it('has no Try again beside it, and keeps its full line', async () => {
     await openStudio();
@@ -236,11 +237,11 @@ describe('a line no Try again redoes', () => {
   });
 });
 
-// Review of round 3: a failed save is still owed when an upload or brief
-// failure replaces its line. The toolbar keeps its Retry, and that Retry
-// saves (the save is the action that failed and still has to happen);
-// autosave waits while the board says Error. The notice keeps the upload's
-// own full line, since its Retry doesn't redo the upload.
+// A failed save is still owed when an upload or brief failure replaces its
+// line. The toolbar keeps its Retry, and that Retry saves (the save is the
+// action that failed and still has to happen); autosave waits while the
+// board says Error. The notice keeps the upload's own full line, since its
+// Retry doesn't redo the upload.
 describe('a save still owed under another failure', () => {
   it('keeps the toolbar Try again, and Try again saves the board again', async () => {
     state.edits = 503;
@@ -265,20 +266,20 @@ describe('a save still owed under another failure', () => {
   });
 });
 
-// Round 6f (GM r14): a new board's create goes through the real lib/api here, so its heading and line are
-// what the person reads. Nothing is lost when it fails: r12's neutral line, never "create".
+// A new board's create goes through the real lib/api here, so its heading and line are
+// what the person reads. Nothing is lost when it fails: the neutral line, never "create".
 describe('a new board\'s save (its create) that fails', () => {
   const openNewWithName = async () => {
     act(() => { useUIStore.getState().enterMoodboardEditor('new', 'global'); });
     render(<MoodboardStudioView />);
     await screen.findByDisplayValue('Untitled Moodboard');
-    // An image on the unsaved board: New saves it first (GM r8 answer 1).
+    // An image on the unsaved board: New saves it first.
     act(() => { useAssetStudioDraftStore.getState().edit(JSON.stringify(['moodboard', 'global', 'new']),
       (draft) => ({ ...(draft as object), images: board().images })); });
     fireEvent.click(screen.getByRole('button', { name: '+ New moodboard' }));
   };
 
-  // A create cut off with no answer probes first (round 6g, GM r15 4): the banner's probe finds Nebula online here.
+  // A create cut off with no answer probes first: the banner's probe finds Nebula online here.
   let stopProbe: () => void = () => {};
   beforeEach(() => {
     stopProbe = subscribeHealthProbeRequests(() => { act(() => { noteProbeAnswer(startHealthProbe(), 'online'); }); });
@@ -294,8 +295,8 @@ describe('a new board\'s save (its create) that fails', () => {
     expect(document.body.textContent).not.toMatch(/Couldn.t create/);
   });
 
-  // GM r16 7(b): neutral, the same line for the 409 and the 422; Retry creates without the refused id.
-  it('a 409 for an id another project\'s board was made with: 7(b)\'s neutral line, as the id 422 (round 6g)', async () => {
+  // Neutral, the same line for the 409 and the 422; Retry creates without the refused id.
+  it('a 409 for an id another project\'s board was made with: the neutral line, as the id 422', async () => {
     state.create = () => json({ detail: 'This request id already made a board in another project (or in Global). Use a new request id for this board.',
       code: 'request_id_scope' }, 409);
     await openNewWithName();

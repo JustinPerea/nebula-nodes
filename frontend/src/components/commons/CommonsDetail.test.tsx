@@ -107,7 +107,7 @@ describe('CommonsDetail and agents\' proposals', () => {
   });
 });
 
-// error-copy round 3 (design, item 4): one because line ("Nebula couldn’t analyze this
+// Error copy (design): one because line ("Nebula couldn’t analyze this
 // reference because ..."), with the reason mapped from last_error's kind ... Try again.
 // Put the raw last_error behind a collapsed "Details" toggle.' On 867f254e it
 // read "Analysis failed: <raw last_error>".
@@ -161,7 +161,7 @@ describe('a reference whose analysis failed', () => {
     await waitFor(() => expect(reanalyze).toHaveBeenCalledWith('ast_1'));
   });
 
-  it('says a too-transparent reference in the muted colour, as no error (GM r5 on #208)', async () => {
+  it('says a too-transparent reference in the muted colour, as no error (design, PR #208)', async () => {
     asset.mockResolvedValue(failed('transparent'));
     render(<CommonsDetail assetId="ast_1" onClose={() => {}} onChanged={() => {}} onDeleted={() => {}} />);
     const line = await screen.findByText('This image is too transparent to analyze.');
@@ -171,9 +171,9 @@ describe('a reference whose analysis failed', () => {
     expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
   });
 
-  // GM r6 on #208, items 2 and 3: nothing broke, so the badge is the neutral,
-  // muted one saying "Not analyzed" (not a red "failed"), and there is no
-  // Re-analyze (it can't change a property of the image).
+  // Design, PR #208: nothing broke, so the badge is the neutral, muted one
+  // saying "Not analyzed" (not a red "failed"), and there is no Re-analyze
+  // (it can't change a property of the image).
   it('a too-transparent reference wears the muted "Not analyzed" badge and has no Re-analyze', async () => {
     asset.mockResolvedValue(failed('transparent'));
     render(<CommonsDetail assetId="ast_1" onClose={() => {}} onChanged={() => {}} onDeleted={() => {}} />);

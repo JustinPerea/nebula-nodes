@@ -86,10 +86,10 @@ export function CommonsSettings({ status, onOpenAsset, onChanged }: Props) {
   const [linking, setLinking] = useState(false);
   const linkingRef = useRef(false);
   const [message, setMessage] = useState<string | null>(null);
-  /** The message's tooltip: a linked folder's full path (GM r33). */
+  /** The message's tooltip: a linked folder's full path. */
   const [messageTitle, setMessageTitle] = useState<string | undefined>(undefined);
-  // Round 18h (review 16 LOW-1): each notice shown is numbered, so a late read-back renames only
-  // the notice it wrote, never a newer one (a Re-analyze's count shown meanwhile).
+  // Each notice shown is numbered, so a late read-back renames only the notice it wrote,
+  // never a newer one (a Re-analyze's count shown meanwhile).
   const messageSeq = useRef(0);
   const showMessage = useCallback((text: string, title?: string) => {
     messageSeq.current += 1;
@@ -98,14 +98,14 @@ export function CommonsSettings({ status, onOpenAsset, onChanged }: Props) {
     return messageSeq.current;
   }, []);
   const [error, setError] = useState<string | null>(null);
-  // Round 15 (GM r24 b): the lists' empty states ("No folders linked.", "No new terms proposed
-  // yet.") only once they were read: before that, or when the load failed, nothing was. Round 18b
-  // (GM r29): the whole form waits for it too (see the early return below).
+  // The lists' empty states ("No folders linked.", "No new terms proposed yet.") show only once
+  // they were read: before that, or when the load failed, nothing did. The whole form waits for
+  // it too (see the early return below).
   const [loaded, setLoaded] = useState(false);
-  // PR #204 round 9: a not-connected line clears on the promote, and the settings load again.
+  // PR #204: a not-connected line clears on the promote, and the settings load again.
   const [loadEpoch, loadAgain] = useReloadEpoch();
   const line = useCommonsLine(setError, null, 'commons.settings-load', loadAgain);
-  // Round 18h (GM r38 3c): its load line reads again quietly on reconnect.
+  // Its load line reads again quietly on reconnect.
   useLoadLineQuietOnReconnect(error, () => setError(null), loadAgain);
 
   const load = useCallback(async (): Promise<FolderLink[]> => {
@@ -126,7 +126,7 @@ export function CommonsSettings({ status, onOpenAsset, onChanged }: Props) {
         setSettings(s);
         setCandidates(c);
         setLoaded(true);
-        // Round 18f (GM r35 4): read again by its "Try again": the line goes with the failure.
+        // Read again by its "Try again": the line goes with the failure.
         setError(null);
       },
       (e: unknown) => { if (!cancelled) line.show(e, "Couldn’t load Commons settings.", { reload: true }); },
@@ -135,14 +135,14 @@ export function CommonsSettings({ status, onOpenAsset, onChanged }: Props) {
   }, [loadEpoch, line]);
 
   /** `readBack` words the message again from what the write answered and the folders read back
-   * (round 18f: a linked folder's own name). */
+   * (a linked folder's own name). */
   const run = useCallback(async <T,>(work: () => Promise<T>, done?: string, doneTitle?: string,
     readBack?: (result: T, read: FolderLink[]) => void) => {
     let result: T;
     try {
       result = await work();
     } catch (e) {
-      // Refused offline before it was sent: the banner says why (round 16, L4).
+      // Refused offline before it was sent: the banner says why.
       if (!isOfflineRefusal(e)) line.show(e, "Couldn’t save the settings.");
       return false;
     }
@@ -152,10 +152,10 @@ export function CommonsSettings({ status, onOpenAsset, onChanged }: Props) {
       const read = await load();
       if (shown === messageSeq.current) readBack?.(result, read);
     } catch (e) {
-      // Round 18d (review 14 LOW-1, GM r32 3): the write landed and only reading it back failed.
-      // A load's failure, neutral, in GM's words, with no "Try again" that would send the write
-      // again; never the backend's words. Refused because this tab isn't connected as you: the
-      // settings load's own because line, which loads them again on the promote.
+      // The write landed and only reading it back failed. A load's failure, neutral, in the
+      // design's words, with no "Try again" that would send the write again; never the
+      // backend's words. Refused because this tab isn't connected as you: the settings
+      // load's own because line, which loads them again on the promote.
       const cause = isPersonRefusal(e) ? null : loadFailedCause('load the settings back', e);
       if (isPersonRefusal(e)) line.show(e, "Couldn’t load Commons settings.", { reload: true });
       else if (cause && cause !== COMMONS_OFF_COPY) line.keep(e, savedReadBackLine(cause));
@@ -174,19 +174,19 @@ export function CommonsSettings({ status, onOpenAsset, onChanged }: Props) {
     }
   };
 
-  // The panel's name, at every width (GM review of p157: folded into More,
-  // the panel had no title anywhere). Under the page's h1, "Commons".
+  // The panel's name, at every width (PR #157, design: folded into More, the panel had
+  // no title anywhere). Under the page's h1, "Commons".
   const headingId = useId();
-  // Round 16 (L4): offline the Commons is read-only like the canvas. Its
-  // writes sit in disabled fieldsets; reading and Export zip stay.
+  // Offline the Commons is read-only like the canvas. Its writes sit in disabled
+  // fieldsets; reading and Export zip stay.
   const readOnly = useBackendOffline();
-  // Round 18b (GM r29): until the settings read answers, or after it failed, only the heading and
-  // the line, as Agent review and Blind labeling do. No field or action shows over values nothing
-  // read: a Save there could overwrite the person's limits.
+  // Until the settings read answers, or after it failed, only the heading and the line, as
+  // Agent review and Blind labeling do. No field or action shows over values nothing read: a
+  // Save there could overwrite the person's limits.
   if (!loaded) return (
     <section className="commons-settings" aria-labelledby={headingId}>
       <h2 id={headingId} className="commons-heading commons-panel-title">Settings</h2>
-      {/* Round 18d (GM r32 5): the one loading look, under the heading. */}
+      {/* The one loading look, under the heading. */}
       {error ? <CommonsErrorLine line={error} onRetry={loadAgain} /> : <CommonsLoadingLine text="Loading settings…" />}
     </section>
   );
@@ -212,8 +212,8 @@ export function CommonsSettings({ status, onOpenAsset, onChanged }: Props) {
             const submittedPath = linkPath;
             linkingRef.current = true;
             setLinking(true);
-            // Round 18f (GM r35 3): the typed text until the read-back has the folder, then the
-            // folder's own name (the backend resolves "~" or ".."); a failed read-back keeps it.
+            // The typed text until the read-back has the folder, then the folder's own name
+            // (the backend resolves "~" or ".."); a failed read-back keeps it.
             void run(() => commonsApi.linkFolder(path), linkedFolderNotice(path), path, (link, read) => {
               const row = read.find((folder) => folder.id === link?.id);
               if (!row) return;

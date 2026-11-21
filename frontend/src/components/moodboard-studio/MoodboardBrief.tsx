@@ -44,7 +44,7 @@ export function BriefPanel({
   saving: boolean;
   busy: boolean;
   onEdit: (text: string) => void;
-  /** The brief's text box lost focus, or Write your own was pressed: one undo step (Q83). */
+  /** The brief's text box lost focus, or Write your own was pressed: one undo step. */
   onEditDone?: () => void;
   onKeep: () => void;
   onRegenerate: () => void;
@@ -74,7 +74,7 @@ export function BriefPanel({
               onChange={(event) => onEdit(event.target.value)} onBlur={onEditDone} />
           </label>
           {/* Right after the brief's text, before its controls, so clearing it shifts nothing
-              above (GM r5 on #208). The backend leaves it out at strength 0. */}
+              above (#208). The backend leaves it out at strength 0. */}
           {brief?.outdated && <div className="moodboard-analysis__outdated">{brief.outdated}</div>}
           {!stale && (
             <button type="button" className="moodboard-brief__action" onClick={onRegenerate} disabled={busy}>
@@ -88,7 +88,7 @@ export function BriefPanel({
             {brief?.styleBrief || (saving ? 'Saving…' : 'Analyze to build the brief.')}
           </p>
           {/* Right after the brief's text, before its controls, so clearing it shifts nothing
-              above (GM r5 on #208). The backend leaves it out at strength 0. */}
+              above (#208). The backend leaves it out at strength 0. */}
           {brief?.outdated && <div className="moodboard-analysis__outdated">{brief.outdated}</div>}
           <button
             type="button"
@@ -242,7 +242,7 @@ export function BriefFields({
   onChange: (fields: {
     direction?: string; avoid?: string[]; pinnedColors?: MoodboardPinnedColors; clashMode?: MoodboardClashMode;
   }) => void;
-  /** Direction lost focus: its edit is one undo step (Q83). */
+  /** Direction lost focus: its edit is one undo step. */
   onTextDone?: () => void;
 }) {
   const [avoidText, setAvoidText] = useState('');
