@@ -1412,6 +1412,7 @@ body.app-slava-restraint .inspector__palette-pending:focus {
 .chat-panel__thinking-caret {
   opacity: 0.6;
   font-size: 10px;
+  font-weight: 500;
 }
 
 .chat-panel__thinking-body {
@@ -1447,4 +1448,5 @@ body.app-slava-restraint .chat-panel__scope-hint {
   margin: 4px 0 0;
   color: var(--sr-ink-light);
   font-size: 10px;
+  font-weight: 500;
 }

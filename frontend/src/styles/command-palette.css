@@ -55,6 +55,7 @@
 .command-palette__group-label {
   padding: 8px 10px 4px;
   font-size: 10px;
+  font-weight: 500;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }

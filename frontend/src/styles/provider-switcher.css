@@ -241,11 +241,13 @@ body.app-slava-restraint .provider-switcher__row--auto .provider-switcher__label
 body.app-slava-restraint .provider-switcher__block {
   color: var(--sr-warning);
   font-size: var(--sr-type-meta);
+  font-weight: 500;
 }
 
 body.app-slava-restraint .provider-switcher__info {
   color: var(--sr-ink-light);
   font-size: var(--sr-type-meta);
+  font-weight: 500;
 }
 
 body.app-slava-restraint .provider-switcher__price,

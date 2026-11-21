@@ -84,6 +84,7 @@ body.app-slava-restraint .cinema-scene-node__thumb-img {
 body.app-slava-restraint .cinema-scene-node__thumb-placeholder {
   color: var(--sr-ink-light);
   font-size: 10px;
+  font-weight: 500;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
@@ -110,6 +111,7 @@ body.app-slava-restraint .cinema-scene-node__input-port-row {
 
 body.app-slava-restraint .cinema-scene-node__input-label {
   font-size: 10px;
+  font-weight: 500;
   color: var(--sr-ink-light);
 }
 
@@ -149,6 +151,7 @@ body.app-slava-restraint .cinema-scene-node__shot-port-row {
 
 body.app-slava-restraint .cinema-scene-node__shot-label {
   font-size: 10px;
+  font-weight: 500;
   color: var(--sr-ink-light);
   padding-right: 6px;
 }

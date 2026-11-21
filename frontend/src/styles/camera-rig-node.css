@@ -29,6 +29,7 @@ body.app-slava-restraint .camera-rig-node__guidance {
   margin: 0 0 8px;
   color: var(--sr-ink-light);
   font-size: 10px;
+  font-weight: 500;
   line-height: 1.4;
 }
 
@@ -134,6 +135,7 @@ body.app-slava-restraint .camera-rig-node__slider-label {
   gap: 4px;
   color: var(--sr-ink-light);
   font-size: 10px;
+  font-weight: 500;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   white-space: nowrap;

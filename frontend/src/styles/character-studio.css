@@ -291,6 +291,7 @@ body.app-slava-restraint .character-palette__name {
 body.app-slava-restraint .character-rail__sub,
 body.app-slava-restraint .character-palette__sub {
   font-size: 10px;
+  font-weight: 500;
   color: var(--sr-ink-light);
   letter-spacing: 0.03em;
 }
@@ -330,6 +331,7 @@ body.app-slava-restraint .character-def__thumb img {
 body.app-slava-restraint .character-def__thumb-empty {
   color: var(--sr-ink-light);
   font-size: 10px;
+  font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
@@ -379,6 +381,7 @@ body.app-slava-restraint .character-def__label {
 
 body.app-slava-restraint .character-def__hint {
   font-size: 10px;
+  font-weight: 500;
   color: var(--sr-ink-light);
   line-height: 1.4;
 }
@@ -448,6 +451,7 @@ body.app-slava-restraint .character-def__ref-badge {
   left: 0;
   right: 0;
   font-size: 9px;
+  font-weight: 500;
   letter-spacing: 0.06em;
   text-align: center;
   padding: 1px 0;

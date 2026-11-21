@@ -374,6 +374,7 @@ body.app-slava-restraint .structured-preview__thumb-more {
 
 body.app-slava-restraint .structured-preview .structured-preview__swatch-label {
   font-size: var(--sr-type-meta);
+  font-weight: 500;
 }
 
 body.app-slava-restraint .structured-preview .structured-preview__swatches {

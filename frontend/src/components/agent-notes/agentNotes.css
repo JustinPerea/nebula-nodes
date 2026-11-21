@@ -558,6 +558,7 @@ body.app-slava-restraint .agent-notes-root {
   width: 18px;
   height: 18px;
   font-size: 9px;
+  font-weight: 700;
 }
 
 .agent-notes-entry__name {
@@ -667,6 +668,7 @@ body.app-slava-restraint .agent-notes-root {
   width: 18px;
   height: 18px;
   font-size: 9px;
+  font-weight: 700;
 }
 
 .agent-questions-form__titles {

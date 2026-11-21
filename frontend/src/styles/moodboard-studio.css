@@ -460,6 +460,7 @@ body.app-slava-restraint .moodboard-tile__controls .moodboard-tile__note {
 body.app-slava-restraint .moodboard-tile__note-hint {
   color: var(--sr-ink-light);
   font-size: 10px;
+  font-weight: 500;
 }
 
 /* The private note is the person's alone: set apart from the note that steers. */
@@ -577,6 +578,7 @@ body.app-slava-restraint .moodboard-rail__thumb {
   background: rgba(0, 0, 0, 0.24);
   color: var(--sr-ink-faint);
   font-size: 10px;
+  font-weight: 500;
 }
 
 body.app-slava-restraint .moodboard-rail__meta {
@@ -597,6 +599,7 @@ body.app-slava-restraint .moodboard-rail__name {
 body.app-slava-restraint .moodboard-rail__sub {
   color: var(--sr-ink-light);
   font-size: 10px;
+  font-weight: 500;
 }
 
 body.app-slava-restraint .panel--moodboard-library {
@@ -875,6 +878,7 @@ body.app-slava-restraint .moodboard-image-colors__item {
   gap: 4px;
   color: var(--sr-ink-light);
   font-size: 10px;
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
 
@@ -1009,6 +1013,7 @@ body.app-slava-restraint .moodboard-color--left-out .moodboard-color__hex {
 body.app-slava-restraint .moodboard-color__flag {
   color: var(--sr-ink-light);
   font-size: 10px;
+  font-weight: 500;
 }
 
 /* Advanced: the clash setting. */
@@ -1205,6 +1210,7 @@ body.app-slava-restraint .moodboard-tile__cover {
   background: rgba(0, 0, 0, 0.76);
   color: var(--sr-ink-light);
   font-size: 10px;
+  font-weight: 500;
   transform-origin: bottom left;
   animation: moodboard-cover-in 320ms var(--moodboard-spring) both;
 }

@@ -89,6 +89,7 @@
 .proposal-ghost__category {
   color: #888;
   font-size: 9px;
+  font-weight: 500;
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
@@ -137,6 +138,7 @@
   border-radius: 999px;
   color: #ccc;
   font-size: 10px;
+  font-weight: 500;
 }
 
 .proposal-ghost__cost--paid {
@@ -148,6 +150,7 @@
   margin: 0;
   color: rgb(255 255 255 / 0.55);
   font-size: 10px;
+  font-weight: 500;
   font-style: italic;
 }
 
@@ -155,6 +158,7 @@
   margin: 0;
   color: var(--agent-color);
   font-size: 10px;
+  font-weight: 500;
 }
 
 /* A named ghost's caption also names the model; if it wraps, it breaks before "proposed by". */
@@ -205,6 +209,7 @@
   color: #fff;
   font-family: var(--sr-ui);
   font-size: 10px;
+  font-weight: 500;
   white-space: nowrap;
   /* Long values are cut here; the bar's details list shows them whole. */
   overflow: hidden;
