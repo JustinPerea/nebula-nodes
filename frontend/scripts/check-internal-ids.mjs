@@ -27,13 +27,17 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 // Agent-facing markdown is read too (docs/MCP-SETUP.md, skills/**/*.md, .agents/skills/**/*.md):
 // agents follow those files as instructions. There all prose counts (paragraphs, headings, lists,
 // tables, block quotes, link text) for the same five kinds. Fenced code blocks, inline code spans
-// and link targets are skipped for the round, question and review ids and for "lane", since they
-// hold commands, flags and literal values; the studio initials count everywhere in the file, code
-// fences included, as in every other file type.
-// Round, question and review ids are restricted to comments and titles so identifiers, SVG
-// attributes and CSS values never trip the check. "round N" is skipped when it reads as
-// arithmetic (a decimal point, "decimal places", digits) and a question id after "quarter" or
-// "fiscal" is skipped. Existing matches are frozen in internal-ids-baseline.json; a file's count
+// and link targets (the URL of [text](url), of a reference definition, of an <autolink> and a bare
+// URL) are skipped for the round, question and review ids and for "lane", since they hold commands,
+// flags and literal values; the studio initials count everywhere in the file, code fences included,
+// as in every other file type. HTML comments (<!-- -->), indented (4-space) code blocks and the
+// titles of reference definitions are not skipped: agents read the raw file, so they count as
+// prose. In markdown a "review N" counts only where it does in comments (followed by a line end,
+// punctuation, a severity id or "round"), so a mid-sentence "review 12" is not counted.
+// In code files, round, question and review ids are restricted to comments and titles so
+// identifiers, SVG attributes and CSS values never trip the check. "round N" is skipped when it
+// reads as arithmetic (a decimal point, "decimal places", digits) and a question id after
+// "quarter" or "fiscal" is skipped. Existing matches are frozen in internal-ids-baseline.json; a file's count
 // may fall, never rise, and a file missing from the baseline may have none. A moved or split file
 // keeps its allowance: `--move <old> <new>` carries it over (repeat the pair to split one gone file
 // into several in a single call; the baseline is written only when the check then passes, and
@@ -525,8 +529,15 @@ function cssContentSpans(text, commentSpans) {
 function markdownProse(text) {
   const blank = (m) => m.replace(/[^\n]/g, ' ');
   return text
-    .replace(/^([ \t]*)(`{3,}|~{3,})[^\n]*\n[\s\S]*?(?:^[ \t]*\2[`~]*[ \t]*$|(?![\s\S]))/gm, blank)
-    .replace(/(`+)(?!`)[\s\S]*?[^`]\1(?!`)/g, (m) => (m.includes('\n\n') ? m : blank(m)))
+    // One pass, so the first opener wins. A backtick fence's info string holds no backtick (a line
+    // like ```x``` is inline code); each fence character is closed only by its own character, at
+    // least as long as the opener.
+    .replace(/^[ \t]*(?:(`{3,})[^`\n]*\n[\s\S]*?(?:^[ \t]*\1`*[ \t]*$|(?![\s\S]))|(~{3,})[^\n]*\n[\s\S]*?(?:^[ \t]*\2~*[ \t]*$|(?![\s\S])))/gm, blank)
+    // A code span has no blank line inside and does not start in the middle of a backtick run.
+    .replace(/(?<!`)(`+)(?!`)(?:(?!\n[ \t]*\n)[\s\S])*?[^`]\1(?!`)/g, blank)
+    // Autolinks and bare URLs are link targets too.
+    .replace(/<https?:\/\/[^>\s]+>/g, blank)
+    .replace(/\bhttps?:\/\/[^\s)>\]]+/g, blank)
     .replace(/\]\([^)\n]*\)/g, (m) => `]${blank(m.slice(1))}`)
     .replace(/^([ \t]{0,3}\[[^\]\n]+\]:)[ \t]*\S+/gm, (m, head) => head + blank(m.slice(head.length)));
 }

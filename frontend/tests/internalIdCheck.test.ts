@@ -416,6 +416,45 @@ describe('check-internal-ids: agent-facing markdown', () => {
     expect(scanSource(md, 'a\n```\nQ901\n```\nround 901\n').map((m) => m.line)).toEqual([5]);
   });
 
+  it('keeps a stray backtick from pairing across a blank line', () => {
+    expect(kinds(md, 'a stray ` tick\n\nnext `code` prose Q901 here `e` end\n')).toEqual(['question']);
+    expect(kinds(md, 'a stray ` tick\n  \nnext `code` prose Q901 here `e` end\n')).toEqual(['question']);
+  });
+
+  it('keeps a stray backtick from pairing across a fence', () => {
+    expect(kinds(md, 'a stray ` tick\n```\nx\n```\nprose Q901 `c` end\n')).toEqual(['question']);
+  });
+
+  it('treats an unmatched backtick run as literal text', () => {
+    expect(kinds(md, 'use ``` to fence; Q901 prose `x` and more\n')).toEqual(['question']);
+  });
+
+  it('treats a line that starts with inline triple backticks as a code span, not a fence', () => {
+    expect(kinds(md, '```x``` then Q901 prose\nQ902 next\n')).toEqual(['question', 'question']);
+  });
+
+  it('closes a fence only with its own character and at least its own length', () => {
+    expect(kinds(md, '```\nQ901\n~~~\nQ902\n```\nQ903 after\n')).toEqual(['question']);
+    expect(kinds(md, '~~~\nQ901\n```\nQ902\n~~~\nQ903 after\n')).toEqual(['question']);
+    expect(kinds(md, '````\nQ901\n```\nQ902\n````\nQ903 after\n')).toEqual(['question']);
+    expect(kinds(md, '```\nQ901\n````\nQ902 after\n')).toEqual(['question']);
+    expect(kinds(md, '~~~\nQ901\n~~~```\nround 902\n~~~\nQ903 after\n')).toEqual(['question']);
+  });
+
+  it('runs an unclosed fence to the end of the file', () => {
+    expect(count(md, 'before\n```\nQ901\nround 902\n')).toBe(0);
+  });
+
+  it('blanks a code span across one newline', () => {
+    expect(count(md, 'Pass `--a\nQ901` here.\n')).toBe(0);
+  });
+
+  it('does not count ids in an autolink or a bare URL', () => {
+    expect(count(md, 'See <https://x.test/round-901/Q901/lanes> now.\n')).toBe(0);
+    expect(count(md, 'See https://x.test/Q901/lane now.\n')).toBe(0);
+    expect(kinds(md, 'See https://x.test/a, then Q901.\n')).toEqual(['question']);
+  });
+
   it('reads only the listed markdown roots', () => {
     expect(isScanned('docs/MCP-SETUP.md')).toBe(true);
     expect(isScanned('skills/nebula/SKILL.md')).toBe(true);
@@ -555,9 +594,11 @@ describe('check-internal-ids: command line on a scratch tree', () => {
     write('docs/MCP-SETUP.md', 'GM wants it.\n');
     write('skills/nebula/SKILL.md', 'fine\n');
     write('docs/OTHER.md', 'GM wants it.\n');
+    write('.agents/skills/k/SKILL.md', 'GM too.\n');
     const r = run();
     expect(r.code).toBe(1);
     expect(r.out).toContain('docs/MCP-SETUP.md:1');
+    expect(r.out).toContain('.agents/skills/k/SKILL.md:1');
     expect(r.out).not.toContain('docs/OTHER.md');
   });
 

@@ -827,9 +827,10 @@ The server exposes these tools for building and running (see
   `commons_fidelity` checks a borrowing against the output it was used in
   and saves the result. A reference whose analysis failed has
   `asset.analysis_state` `analysis_failed`, `asset.last_error` (the reader's
-  own text, unchanged) and, since the error-copy work, `asset.last_error_kind`:
-  `unavailable` (network, a timeout or the provider down), `unreadable` (the
-  model declined or couldn't read the image), `other`, or `transparent`
+  own text, unchanged) and `asset.last_error_kind` (records from before it
+  was added have none): `unavailable` (network, a timeout or the provider
+  down), `unreadable` (the model declined or couldn't read the image),
+  `other`, or `transparent`
   (below). The reader sees a
   reference with transparency composited onto #0a0a0a, the tile and stage
   surface (rgba(255, 255, 255, 0.04) over the black canvas); one too
@@ -1562,24 +1563,24 @@ Then, each time (the command it prints, with the full path):
 NEBULA_APP_TOKEN_FILE=/path/to/your/app-token-file NEBULA_AGENT_SESSION="cc-$(date +%s)-$$" claude --mcp-config ~/.nebula-listen.mcp.json --dangerously-load-development-channels server:nebula-listen --disallowedTools "mcp__nebula__*"
 ```
 
-`NEBULA_APP_TOKEN_FILE=…` gives the session's own shell the token file's
-path (never the token), so `nebula reply` and the other `nebula` commands
-Claude runs there are the same agent as its tools (see "The session's own shell is the same agent", below).
-`NEBULA_AGENT_SESSION="cc-$(date +%s)-$$"` is evaluated by your shell at
-each launch (the time and the shell's own process id, POSIX tools only),
-so each Claude Code you start this way is its own session: its listener,
-its cursor and its shell's `nebula` commands share one fresh session id
-(see "One session, one listener process", below), and two terminals running the same command are two
-sessions, each with its own cursor label. The command is for macOS, Linux
-and WSL shells; Windows shells (cmd, PowerShell) can't run the
-`NAME=value command` form.
-`--disallowedTools "mcp__nebula__*"` takes the saved server's copies of the
-same tools out of the session, so `nebula-listen` serves both the tools and the
-pushes. It has to: the listener learns which proposals and runs are Claude's,
-and when a turn is under way, from the tool calls it serves. Claude
-Code first shows **WARNING: Loading development channels**; choose **I am
-using this for local development**. In the debug log (`claude --debug-file
-<file> ...`) the server then shows `Channel notifications registered`.
+`NEBULA_APP_TOKEN_FILE=…` gives the session's own shell the token file's path
+(never the token), so `nebula reply` and the other `nebula` commands Claude runs
+there are the same agent as its tools (see "The session's own shell is the same
+agent", below). `NEBULA_AGENT_SESSION="cc-$(date +%s)-$$"` is evaluated by your
+shell at each launch (the time and the shell's own process id, POSIX tools
+only), so each Claude Code you start this way is its own session: its listener,
+its cursor and its shell's `nebula` commands share one fresh session id (see
+"One session, one listener process", below), and two terminals running the same
+command are two sessions, each with its own cursor label. The command is for
+macOS, Linux and WSL shells; Windows shells (cmd, PowerShell) can't run the
+`NAME=value command` form. `--disallowedTools "mcp__nebula__*"` takes the saved
+server's copies of the same tools out of the session, so `nebula-listen` serves
+both the tools and the pushes. It has to: the listener learns which proposals
+and runs are Claude's, and when a turn is under way, from the tool calls it
+serves. Claude Code first shows **WARNING: Loading development channels**;
+choose **I am using this for local development**. In the debug log (`claude
+--debug-file <file> ...`) the server then shows `Channel notifications
+registered`.
 
 **What the development flag does.** It lets the one server you name put text
 in front of Claude, skipping Anthropic's channel allowlist for that entry
@@ -2469,7 +2470,7 @@ the provider's own words, your `error`, behind "Details". A failure Nebula
 can't tell keeps today's line. `error` and every text you read are unchanged,
 word for word.
 
-Every card line follows the design's rules (a final period, no dashes or
+Every card line follows Nebula's copy rules (a final period, no dashes or
 parentheses, "connected" for "wired", field labels as the node shows them,
 "Nothing was sent to {Provider}.", one spelling per name and unit). Only the
 person's lines were rewritten for this: `error`, `errorHint`, `detail`, `missing` and every
@@ -3239,19 +3240,18 @@ same user).
 
 ### The Agents panel
 
-Justin approved this on 2026-10-24. The top of
-the Updates corner lists the agents working in the open project in two
-groups: **Needs you** (an agent with open questions or proposals there,
-longest wait first) and **Working** (everyone else around, most recent
-first). Clicking a Working row shows its node on the canvas; clicking a
-Needs-you row opens its oldest question set or proposal. A tab that isn't
-connected as the person gets only your asks' Updates, so it counts Needs
-you from them (each ask's `since` orders it, a question set's `count` says
-how many, and an asset Update your asks on one target share counts `asks`
-from `firstSince`): the same rows, order and badge as once it is connected,
-with the row's action locked until then. What you read here is unchanged:
-`GET /api/canvas/agents` and its MCP and CLI reads count from Nebula's own
-open sets and proposals, whatever any tab holds.
+Justin approved the panel on 2026-10-24. The top of the Updates corner lists the
+agents working in the open project in two groups: **Needs you** (an agent with
+open questions or proposals there, longest wait first) and **Working** (everyone
+else around, most recent first). Clicking a Working row shows its node on the
+canvas; clicking a Needs-you row opens its oldest question set or proposal. A
+tab that isn't connected as the person gets only your asks' Updates, so it
+counts Needs you from them (each ask's `since` orders it, a question set's
+`count` says how many, and an asset Update your asks on one target share counts
+`asks` from `firstSince`): the same rows, order and badge as once it is
+connected, with the row's action locked until then. What you read here is
+unchanged: `GET /api/canvas/agents` and its MCP and CLI reads count from
+Nebula's own open sets and proposals, whatever any tab holds.
 
 - **Set your status:** MCP `set_status(text, node_id?)`, CLI
   `nebula status "<text>" [--node nX]`, HTTP `POST /api/canvas/status` with
@@ -3306,7 +3306,7 @@ open sets and proposals, whatever any tab holds.
 
 ### Placeholders, the run mark and done cards
 
-Justin approved this on 2026-10-24, with the design review's rulings of 2026-10-25.
+Justin approved these on 2026-10-24; the wording was settled on 2026-10-25.
 
 - **Placeholders (pending nodes):** MCP `edit_canvas(..., pending=True)`,
   CLI `nebula apply --add ... --pending`, HTTP `POST /api/graph/apply` with
@@ -3819,7 +3819,7 @@ with the reason.
 Blind labeling (`/api/commons/evaluation...`) and the agent review
 (`/api/commons/review...`) stay the person's alone, with no proposal and no
 tool, exactly as before; Justin's answer changed only when agents get the
-Commons, not who decides. The studio's own Commons trial is on hold: nothing here calls
+Commons, not who decides. A hosted Commons trial is on hold: nothing here calls
 a hosted Commons service.
 
 ### Spending limits
@@ -3832,7 +3832,7 @@ The person decides what agents may spend, in **Settings > Preferences**:
   umbrella over the limits below, which stay as finer ones inside it. A run
   that would pass it isn't refused: Nebula sends it as a proposal to run the
   same canvas nodes and answers `202` with `status: "waiting"`, `proposalId`,
-  `message` (the design's line: "Waiting for the person’s OK: this run (about $0.40)
+  `message` (this line: "Waiting for the person’s OK: this run (about $0.40)
   would pass their $5 daily total for everything that isn’t them ($4.80 used
   in the last 24 hours). Sent as proposal <id>. Check it with nebula
   proposals."; over MCP the last sentence is `Check it with
@@ -5704,7 +5704,7 @@ While protected:
   nothing: "Shot 2 (s2) of “Opening” (n4) is still rendering (run <id>), so
   it can’t be removed. Stop the run first (cancel_run, or `nebula cancel
   <id>`; a run the person started is theirs to stop) or wait for it to
-  finish, then try again. Nothing changed." The person reads the design's line
+  finish, then try again. Nothing changed." The person reads Nebula's own line
   instead: an undo or redo reads "Nebula couldn’t undo because it would remove “Shot 2”,
   which is still running. Stop the run first." ("Nebula couldn’t redo because …"; "…Wait
   for it to finish." while the run is still being admitted), and the canvas
@@ -6091,7 +6091,7 @@ How a delete or an undo reads depends on whose run it is:
   canvas until it ends (the toolbar's are disabled, each titled by its own
   verb: "You can delete it when the run finishes."). The Delete key, the
   menu's Delete and Undo/Redo are never silent: a selection of only
-  rendering scenes reads the design's scene line ("Couldn’t delete “Scene”. “Shot 2”
+  rendering scenes reads the scene line ("Couldn’t delete “Scene”. “Shot 2”
   is still running. Stop the run first."), an undo that would remove a
   rendering shot reads "Nebula couldn’t undo because it would remove “Shot 2”, which
   is still running. Stop the run first.", and anything else reads the lock's
