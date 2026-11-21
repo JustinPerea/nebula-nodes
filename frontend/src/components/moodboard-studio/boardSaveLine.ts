@@ -4,20 +4,20 @@ import type { StudioNotice } from '../../store/assetStudioDraftStore';
 import { clipGraphemes } from './boardPlaceholder';
 
 /**
- * A board's save that failed with nothing lost (GM r12 1, r14, r16 7a): the
- * edit stays in the draft, so the line is neutral, the header chip reads
- * "Not saved", and it says why in the because form, ending with the step
- * that works. That covers the Studio's own save of a saved board, a new
- * board's create (New's save, its Retry, the autosave's, the save of an
- * unsaved board an add landed on) and the paste flow's background writes
- * (the queued send of a board New just saved, an add that couldn't reach a
- * board the person had left). It never says "create": after a lost answer
- * the server may have made the board.
+ * A board's save that failed with nothing lost: the edit stays in the
+ * draft, so the line is neutral, the header chip reads "Not saved", and it
+ * says why in the because form, ending with the step that works. That
+ * covers the Studio's own save of a saved board, a new board's create
+ * (New's save, its Retry, the autosave's, the save of an unsaved board an
+ * add landed on) and the paste flow's background writes (the queued send of
+ * a board New just saved, an add that couldn't reach a board the person had
+ * left). It never says "create": after a lost answer the server may have
+ * made the board.
  *
  * Each line is chosen from the answer's status and structured fields (its
  * `code`, `storage: "full"`), never from its words: no line carries the
- * server's own detail or reason (GM r16: backend wording never reaches the
- * person; boardSaveLine.test.ts holds the ratchet).
+ * server's own detail or reason (backend wording never reaches the person;
+ * boardSaveLine.test.ts holds the ratchet).
  */
 export interface BoardSaveLine {
   failure: FailureCopy;
@@ -26,13 +26,13 @@ export interface BoardSaveLine {
    *  no button: sending the same edit again fails the same way, and the
    *  line's own step is outside the board (signed out: open the link Nebula
    *  printed, as the banner says; changed somewhere else: reload, after
-   *  which the kept edit replays on the latest version, GM r17). */
+   *  which the kept edit replays on the latest version). */
   retry: 'save' | 'reload';
 }
 
 const NOT_SAVED_OPENING = 'Nebula couldn’t save the moodboard because ';
 
-/** GM r16's lines, each its cause and the step that works. */
+/** The save lines, each its cause and the step that works. */
 const SAVE_LINES = {
   noAnswer: { cause: 'the server isn’t answering', step: 'Try again.', retry: 'save' },
   busy: { cause: 'the server is busy', step: 'Try again.', retry: 'save' },
@@ -42,20 +42,20 @@ const SAVE_LINES = {
   tooLarge: { cause: 'it’s too large', step: 'Remove some images, then try again.', retry: 'save' },
   signedOut: { cause: 'you’re signed out', step: 'Open the link Nebula printed when it started.', retry: 'reload' },
   changed: { cause: 'it changed somewhere else', step: 'Reload to get the latest version.', retry: 'reload' },
-  // GM r16 7(b): any other refusal, the create id's included.
+  // Any other refusal, the create id's included.
   refused: { cause: 'the server didn’t accept this save', step: 'Try again.', retry: 'save' },
 } as const satisfies Record<string, { cause: string; step: string; retry: BoardSaveLine['retry'] }>;
 
 type SaveLineKind = keyof typeof SAVE_LINES;
 
-/** The board's own save line for one of GM r16's pairs: "Nebula couldn’t save the board because <cause>. <step>". */
+/** The board's own save line for one of the cause and step pairs: "Nebula couldn’t save the board because <cause>. <step>". */
 const notSavedReason = (line: (typeof SAVE_LINES)[SaveLineKind]) => `${NOT_SAVED_OPENING}${line.cause}. ${line.step}`;
 
 /**
- * Whether a failed save found its board deleted (round 6l, GM r21 Q3): a 404
- * whose `code` is "in_trash" is in Recently deleted ('trashed', the r18
- * neutral line with Restore); any other 404 is gone for good ('purged', the
- * red line). Never "didn’t accept this save. Try again.": Retry can't work.
+ * Whether a failed save found its board deleted: a 404 whose `code` is
+ * "in_trash" is in Recently deleted ('trashed', the neutral line with
+ * Restore); any other 404 is gone for good ('purged', the red line). Never
+ * "didn’t accept this save. Try again.": Retry can't work.
  */
 export function boardGoneKind(error: unknown): 'trashed' | 'purged' | null {
   if (!(error instanceof RequestFailedError) || error.status !== 404) return null;
@@ -63,7 +63,7 @@ export function boardGoneKind(error: unknown): 'trashed' | 'purged' | null {
   return error.code === 'in_trash' || (typeof detail === 'object' && detail?.code === 'in_trash') ? 'trashed' : 'purged';
 }
 
-/** Which of GM's lines a failed board save gets, from its status and fields (a 404 is boardGoneKind's). */
+/** Which of the save lines a failed board save gets, from its status and fields (a 404 is boardGoneKind's). */
 function saveLineKind(error: unknown): SaveLineKind {
   if (isNoAnswer(error)) return 'noAnswer';
   if (error instanceof MoodboardVersionConflict) return 'changed';
@@ -81,7 +81,7 @@ function saveLineKind(error: unknown): SaveLineKind {
 }
 
 /** The line and the header's offer for a board save that failed. A save that found its board deleted says
- *  the deleted-board line for `name` (the board's saved name), with no Retry: it can never work (GM r21 Q3). */
+ *  the deleted-board line for `name` (the board's saved name), with no Retry: it can never work. */
 export function boardSaveLine(error: unknown, name = ''): BoardSaveLine {
   const gone = boardGoneKind(error);
   if (gone) return { failure: { heading: '', reason: deletedBoardsLine([name], gone).text }, retry: 'reload' };
@@ -102,10 +102,10 @@ export function boardSaveCause(error: unknown): string {
 }
 
 /** A create refused for its `requestId`: the backend's 422 naming the field,
- *  or its 409 for an id another project's board was made with (round 6g,
- *  `code: "request_id_scope"`). Sent again, the same id fails the same way,
+ *  or its 409 for an id another project's board was made with
+ *  (`code: "request_id_scope"`). Sent again, the same id fails the same way,
  *  so the Studio drops the id and its Retry creates without one; the line
- *  is 7(b)'s, like any other refusal. */
+ *  is the `refused` line, like any other refusal. */
 export function isCreateIdRefusal(error: unknown): boolean {
   if (!(error instanceof RequestFailedError)) return false;
   if (error.status === 409) return error.code === 'request_id_scope';
@@ -114,30 +114,30 @@ export function isCreateIdRefusal(error: unknown): boolean {
 }
 
 /**
- * Whether `failure` is a board save line (GM r12 1, r16 7a): nothing is lost
- * (the edit waits in the draft, and an unsaved board in this tab's session
- * storage), so it is neutral, colour included, as PR #204's because lines
- * are, and the header chip reads "Not saved", not "Error".
+ * Whether `failure` is a board save line: nothing is lost (the edit waits
+ * in the draft, and an unsaved board in this tab's session storage), so it
+ * is neutral, colour included, as PR #204's because lines are, and the
+ * header chip reads "Not saved", not "Error".
  */
 export function isBoardNotSavedLine(failure: FailureCopy | string | null | undefined): boolean {
   return typeof failure === 'object' && failure !== null && !failure.heading && failure.reason.startsWith(NOT_SAVED_OPENING);
 }
 
-/** `parts` joined with "and" and no serial comma (GM r16): "a", "a and b", "a, b and c". */
+/** `parts` joined with "and" and no serial comma: "a", "a and b", "a, b and c". */
 export function joinWithAnd(parts: readonly string[]): string {
   return parts.length < 2 ? parts.join('') : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
 }
 
-/** The most items a line names before it counts them instead (GM r16). */
+/** The most items a line names before it counts them instead. */
 const MOST_NAMED = 3;
 
 /**
- * The red line for an add that is truly lost (GM r16 7a): it reached a
- * saved board whose draft wasn't loaded and its write failed, so nothing
- * holds it and there's no Retry. Names up to three files ("“a.png” and
- * “b.png”"), then a count. The step is "Add it again." for one file and
- * "Add them again." for more (the count form included: "Nebula couldn’t add
- * 4 images … Add them again.").
+ * The red line for an add that is truly lost: it reached a saved board
+ * whose draft wasn't loaded and its write failed, so nothing holds it and
+ * there's no Retry. Names up to three files ("“a.png” and “b.png”"), then a
+ * count. The step is "Add it again." for one file and "Add them again." for
+ * more (the count form included:
+ * "Nebula couldn’t add 4 images … Add them again.").
  */
 export function lostAddLine(names: readonly string[]): FailureCopy {
   const what = names.length === 0 ? 'the image'
@@ -148,12 +148,12 @@ export function lostAddLine(names: readonly string[]): FailureCopy {
 const LOST_ADD_OPENING = 'Nebula couldn’t add ';
 
 /** Whether `failure` is lostAddLine's red line: it stays through the board's
- *  load, which is when the person first sees it (round 6h, live). */
+ *  load, which is when the person first sees it. */
 export function isLostAddLine(failure: FailureCopy | string | null | undefined): failure is FailureCopy {
   return typeof failure === 'object' && failure !== null && !failure.heading && failure.reason.startsWith(LOST_ADD_OPENING);
 }
 
-/** How a kept board field is named in the "Kept …" line, after its one "the" (GM r16). */
+/** How a kept board field is named in the "Kept …" line, after its one "the". */
 const KEPT_FIELD_NAMES: Partial<Record<string, string>> = {
   name: 'name', notes: 'notes', mode: 'mode', strength: 'strength', direction: 'direction', avoid: 'avoid list',
   pinnedColors: 'pinned colors', briefOverride: 'brief', clashMode: 'clash setting', colorChoices: 'color choices',
@@ -162,9 +162,9 @@ const KEPT_FIELD_NAMES: Partial<Record<string, string>> = {
 
 /**
  * The line for kept edits whose boards were deleted before they could
- * replay (round 6j, GM r18), named as the Kept lines are: up to three
- * names, each clipped past KEPT_NAME_MAX, joined with "and", then a count;
- * the title holds every full name.
+ * replay, named as the Kept lines are: up to three names, each clipped
+ * past KEPT_NAME_MAX, joined with "and", then a count; the title holds
+ * every full name.
  * - In Recently deleted (neutral, with Restore): "Nebula couldn’t save your
  *   change to “Rivers” because the moodboard was deleted. Restore it to keep
  *   the change."; for several, "Nebula couldn’t save your changes to “A”
@@ -175,7 +175,7 @@ const KEPT_FIELD_NAMES: Partial<Record<string, string>> = {
  */
 export function deletedBoardsLine(names: readonly string[], gone: 'trashed' | 'purged'): { text: string; title: string } {
   const { one, what, title } = namedBoards(names);
-  // Each form spelled out whole, as GM wrote it (and so no sentence is pieced from parts).
+  // Each form spelled out whole, as the approved copy has it (and so no sentence is pieced from parts).
   const text = gone === 'trashed'
     ? (one ? `Nebula couldn’t save your change to ${what} because the moodboard was deleted. Restore it to keep the change.`
       : `Nebula couldn’t save your changes to ${what} because they were deleted. Restore them to keep the changes.`)
@@ -186,12 +186,12 @@ export function deletedBoardsLine(names: readonly string[], gone: 'trashed' | 'p
 
 /**
  * A kept edit replayed on a board the person isn't on (Restore project, or a
- * restore elsewhere) whose save failed (#210 round 6t, GM r113 2): under the
- * Restore's confirmation, the board's own save line, naming the board, from
- * the line its save failed with (boardSaveLine's). Neutral: the edit waits
- * in the board's draft. `retry` is whether trying again can work (the line's
- * Try again is then a real button that replays the save). Null for a line
- * that isn't a board save line (a board deleted again says its own line).
+ * restore elsewhere) whose save failed (design, PR #210): under the Restore's
+ * confirmation, the board's own save line, naming the board, from the line its
+ * save failed with (boardSaveLine's). Neutral: the edit waits in the board's
+ * draft. `retry` is whether trying again can work (the line's Try again is
+ * then a real button that replays the save). Null for a line that isn't a
+ * board save line (a board deleted again says its own line).
  * - "Nebula couldn’t save your change to “Rivers” because the server didn’t respond. Try again."
  */
 export function changeNotSavedLine(failure: FailureCopy | string | null | undefined, name: string):
@@ -204,12 +204,12 @@ export function changeNotSavedLine(failure: FailureCopy | string | null | undefi
 }
 
 /**
- * The confirmation once the boards a deleted-board line named are restored
- * (round 6l, GM r20 A, r21 Q6), named by the names the line and the list
- * showed, in two sentences; the second counts the boards whose kept edit was
- * sent and saved, and goes when none was (nothing left to send: the board
- * kept every change, and its "Kept …" line follows). A plain Restore from
- * Recently deleted, with no kept edit, is the first sentence alone.
+ * The confirmation once the boards a deleted-board line named are restored,
+ * named by the names the line and the list showed, in two sentences; the
+ * second counts the boards whose kept edit was sent and saved, and goes
+ * when none was (nothing left to send: the board kept every change, and its
+ * "Kept …" line follows). A plain Restore from Recently deleted, with no
+ * kept edit, is the first sentence alone.
  * - "Restored “Rivers”. Your change is saved."
  * - "Restored “Rivers” and “Harbor”. Your changes are saved."
  * - "Restored 4 moodboards. Your changes are saved."
@@ -217,7 +217,7 @@ export function changeNotSavedLine(failure: FailureCopy | string | null | undefi
  */
 export function restoredBoardsLine(names: readonly string[], saved: number, stayed = ''): { text: string; title: string } {
   const { what, title } = namedBoards(names);
-  // Each form spelled out whole; a kept remove that didn't replay adds changedAfterRemoveLine's sentence (GM r90.5).
+  // Each form spelled out whole; a kept remove that didn't replay adds changedAfterRemoveLine's sentence.
   const text = saved === 0 ? `Restored ${what}.`
     : saved === 1 ? `Restored ${what}. Your change is saved.`
       : `Restored ${what}. Your changes are saved.`;
@@ -225,11 +225,10 @@ export function restoredBoardsLine(names: readonly string[], saved: number, stay
 }
 
 /**
- * The line for kept edits whose boards' project is in Recently deleted
- * (round 6l, GM r21 Q8; round 6p, GM r90.2): one line per project, naming
- * the project and its boards by the names rule (one; up to three joined;
- * then a count), neutral, with "Restore project". The title lists every
- * board, then the project, with no colon (GM r74).
+ * The line for kept edits whose boards' project is in Recently deleted: one
+ * line per project, naming the project and its boards by the names rule
+ * (one; up to three joined; then a count), neutral, with "Restore project".
+ * The title lists every board, then the project, with no colon.
  * - "Nebula couldn’t save your change to “Rivers” because its project
  *   “Coast” was deleted. Restore the project to keep the change."
  * - "Nebula couldn’t save your changes to “Rivers” and “Tide” because their
@@ -248,10 +247,10 @@ export function projectDeletedLine(project: string, boards: readonly string[]): 
 
 /**
  * The red line for kept edits whose boards' project was deleted for good
- * somewhere else (round 6p, GM r90.1): Project home's Delete forever or
- * Empty, or the 30-day expiry, while no Restore project was out. Shown once
- * wherever the project's line showed, with its × only; the kept edits are
- * dropped once it has been seen. Titled as projectDeletedLine.
+ * somewhere else: Project home's Delete forever or Empty, or the 30-day
+ * expiry, while no Restore project was out. Shown once wherever the
+ * project's line showed, with its × only; the kept edits are dropped once
+ * it has been seen. Titled as projectDeletedLine.
  * - "Nebula couldn’t keep your change to “Rivers” because its project
  *   “Coast” was deleted for good."
  * - "Nebula couldn’t keep your changes to “Rivers” and “Tide” because their
@@ -269,14 +268,14 @@ export function projectGoneLine(project: string, boards: readonly string[]): { t
 
 /**
  * The sentence a Restore's confirmation gains when a kept remove didn't
- * replay because the image changed after it (round 6p, GM r90.5): the
- * image stays on the board, and the line says who changed it, by the
- * agent's own label (clipped as a board name is). Numbers follow the names
- * rule ("image 3", "images 3 and 5"); from four, or across several moodboards, the count
- * counts them all, and across several moodboards they're "still on their moodboards"
- * (round 6q, GM r95.2). With no single known changer, the image is the
- * subject. `by` is the agent's label as the Agent log shows it
- * (keptChangeLabel, round 6q, GM r95.3).
+ * replay because the image changed after it: the image stays on the board,
+ * and the line says who changed it, by the agent's own label (clipped as a
+ * board name is). Numbers follow the names rule ("image 3",
+ * "images 3 and 5"); from four, or across several moodboards, the count
+ * counts them all, and across several moodboards they're
+ * "still on their moodboards". With no single known changer, the image is
+ * the subject. `by` is the agent's label as the Agent log shows it
+ * (keptChangeLabel).
  * - "Claude Code changed image 3 after you removed it, so it’s still on the moodboard."
  * - "Claude Code changed images 3 and 5 after you removed them, so they’re still on the moodboard."
  * - "Claude Code changed 4 images after you removed them, so they’re still on the moodboard."
@@ -318,14 +317,14 @@ export function projectRestoredLine(project: string, saved: readonly string[], s
   const tail = stayed ? ` ${stayed}` : '';
   if (!saved.length) return { text: `Restored ${what}.${tail}`, title };
   const kept = namedBoards(saved);
-  // Each form spelled out whole; a kept remove that didn't replay adds changedAfterRemoveLine's sentence (GM r90.5):
+  // Each form spelled out whole; a kept remove that didn't replay adds changedAfterRemoveLine's sentence:
   // "Restored “Coast”. Your change to “Rivers” is saved. Claude changed image 3 after you removed it, so it’s still on the moodboard."
   const text = kept.one ? `Restored ${what}. Your change to ${kept.what} is saved.`
     : `Restored ${what}. Your changes to ${kept.what} are saved.`;
   return { text: `${text}${tail}`, title: `${kept.title} in ${title}` };
 }
 
-/** Why a Restore project failed (round 6m, GM r53 Q1): the server isn't answering, the project was deleted for good,
+/** Why a Restore project failed: the server isn't answering, the project was deleted for good,
  *  or anything else. A project another tab restored first isn't a failure. */
 export type ProjectRestoreFailure = 'noAnswer' | 'lost' | 'purged' | 'refused';
 
@@ -336,8 +335,8 @@ export function projectRestoreFailure(error: unknown): Exclude<ProjectRestoreFai
 }
 
 /**
- * The line when Restore project fails (round 6m, GM r53 Q1), in the because
- * form, naming the project:
+ * The line when Restore project fails, in the because form, naming the
+ * project:
  * - "Nebula couldn’t restore “Shore” because the server isn’t answering.
  *   Try again." (neutral, with Try again);
  * - "Nebula couldn’t restore “Shore” because it was deleted for good. Your
@@ -346,10 +345,10 @@ export function projectRestoreFailure(error: unknown): Exclude<ProjectRestoreFai
  * - "Nebula couldn’t restore “Shore” because the server didn’t accept the
  *   request. Try again." (neutral, with Try again);
  * - "Nebula couldn’t restore “Coast” because it lost the connection. Try
- *   again." (round 6p, GM r90.3: the connection dropped mid-request;
- *   neutral, with Try again, which waits for the reconnect).
- * The purged line's title lists every board, then the project, with no colon
- * (GM r74): "“Rivers” and “Harbor” in “Shore”"; the other two name the project.
+ *   again." (the connection dropped mid-request; neutral, with Try again,
+ *   which waits for the reconnect).
+ * The purged line's title lists every board, then the project, with no colon:
+ * "“Rivers” and “Harbor” in “Shore”"; the other two name the project.
  */
 export function projectRestoreFailedLine(project: string, failure: ProjectRestoreFailure, boards: readonly string[] = []):
   { text: string; title: string } {
@@ -357,7 +356,7 @@ export function projectRestoreFailedLine(project: string, failure: ProjectRestor
   // Each form spelled out whole.
   if (failure === 'noAnswer') return { text: `Nebula couldn’t restore ${what} because the server isn’t answering. Try again.`, title };
   if (failure === 'refused') return { text: `Nebula couldn’t restore ${what} because the server didn’t accept the request. Try again.`, title };
-  // Round 6p (GM r90.3): the connection dropped while the request was out (Nebula is offline once a probe answers).
+  // The connection dropped while the request was out (Nebula is offline once a probe answers).
   if (failure === 'lost') return { text: `Nebula couldn’t restore ${what} because it lost the connection. Try again.`, title };
   const lost = namedBoards(boards.length ? boards : ['']);
   const text = lost.one ? `Nebula couldn’t restore ${what} because it was deleted for good. Your change to ${lost.what} can’t be kept.`
@@ -365,12 +364,12 @@ export function projectRestoreFailedLine(project: string, failure: ProjectRestor
   return { text, title: `${lost.title} in ${title}` };
 }
 
-/** A kept Undo that was dropped because the board changed after it (round 6l, GM r21 Q1): neutral, no button. */
+/** A kept Undo that was dropped because the board changed after it: neutral, no button. */
 export const UNDO_DROPPED_LINE = 'Nebula couldn’t apply your Undo because the moodboard changed after it.';
 
 /**
  * The sentence a Delete forever or Empty confirm gains when boards in it
- * hold kept edits (round 6l, GM r21 Q2), or null when none does:
+ * hold kept edits, or null when none does:
  * "Your unsaved change to “Rivers” will be lost too."; "Your unsaved changes
  * to “Rivers” and “Harbor” will be lost too."; "Your unsaved changes to 4
  * moodboards will be lost too."
@@ -382,7 +381,7 @@ export function lostTooLine(names: readonly string[]): { text: string; title: st
 }
 
 /** Boards by name for a line: up to MOST_NAMED, each quoted and clipped past KEPT_NAME_MAX, joined with "and", then a count; the title holds every full name.
- *  The count says "moodboards" in every line (round 6q, GM r95.5; PR #228's word): "4 moodboards", never "4 boards"
+ *  The count says "moodboards" in every line (PR #228's word): "4 moodboards", never "4 boards"
  *  (tests/lib/errorCopy.namedLine.test.ts's ratchet fails a person line that counts "boards"). */
 function namedBoards(names: readonly string[]): { one: boolean; what: string; title: string } {
   const shown = names.map((name) => name.trim() || 'Untitled');
@@ -390,31 +389,31 @@ function namedBoards(names: readonly string[]): { one: boolean; what: string; ti
   return { one: shown.length === 1, what, title: joinWithAnd(shown.map((name) => `“${name}”`)) };
 }
 
-/** The most characters (grapheme clusters) of a kept name the line shows before its ellipsis (GM r17 addendum). */
+/** The most characters (grapheme clusters) of a kept name the line shows before its ellipsis. */
 export const KEPT_NAME_MAX = 40;
 
-/** An image a "Kept …" line names (round 6m, GM r53): by the label the board shows for every image, its
+/** An image a "Kept …" line names: by the label the board shows for every image, its
  *  number on the board ("Reference #3", as the side panel and each card's name say). Never its private note:
  *  that is the person's own text, and a status line can end up in a screen share or a demo. */
 export type KeptImage = { n: number };
 
 /**
- * The neutral line when the board kept its own later change over a draft
- * edit (a repeated create, round 6g; a kept edit replayed after a reload,
- * round 6i), or null when nothing was dropped. One field: only the name
- * shows the value that won, clipped past KEPT_NAME_MAX with the full name in
- * the title ("Kept the name “Rivers” from the moodboard."); every other field,
- * free text included, never shows a value ("Kept the notes from the
- * moodboard."). Several fields go without values, joined with "and" ("Kept the
- * name and notes from the moodboard."), and from four a count ("Kept 4 changes
- * from the moodboard."). GM r16, r17.
+ * The neutral line when the board kept its own later change over a draft edit
+ * (a repeated create; a kept edit replayed after a reload), or null when
+ * nothing was dropped. One field: only the name shows the value that won,
+ * clipped past KEPT_NAME_MAX with the full name in the title
+ * ("Kept the name “Rivers” from the moodboard."); every other field, free
+ * text included, never shows a value ("Kept the notes from the moodboard.").
+ * Several fields go without values, joined with "and"
+ * ("Kept the name and notes from the moodboard."), and from four a count
+ * ("Kept 4 changes from the moodboard.").
  *
- * Round 6l (GM r21 Q1): a kept image change the board changed later is named
- * per image, one item each. Round 6m (GM r53): by the label the person sees,
- * "the changes to image 3", never the private note, so no clip and no
- * title for it. With images, each item takes its own "the" ("Kept the name
- * “Tide” and the changes to image 3 from the moodboard."); the cover is a
- * board field ("the cover"). From four items, the count.
+ * A kept image change the board changed later is named per image, one item
+ * each, by the label the person sees, "the changes to image 3", never the
+ * private note, so no clip and no title for it. With images, each item
+ * takes its own "the"
+ * ("Kept the name “Tide” and the changes to image 3 from the moodboard.");
+ * the cover is a board field ("the cover"). From four items, the count.
  */
 export function keptFromBoardLine(fields: readonly string[], board: { name?: string } = {}, images: readonly KeptImage[] = []): StudioNotice | null {
   const count = fields.length + images.length;

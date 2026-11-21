@@ -1,4 +1,4 @@
-// GM, PR #202 r1: while this tab isn't connected as the person, the Commons
+// Design, PR #202: while this tab isn't connected as the person, the Commons
 // proposals line shows from the Updates the tab already has, without Review,
 // so the promote adds Review and nothing above the detail moves. The count
 // and kind come only from the Update's ref; one line per reference, one proposal per Update; the agent's
@@ -46,7 +46,7 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); session.resetPersonSessionForTests(); });
 
-describe('GM PR #202 r1: the Commons proposals line while the tab is held', () => {
+describe('PR #202: the Commons proposals line while the tab is held', () => {
   it('says what the promoted line says, from the ref, with the agent\'s dot and no Review; the promote adds only Review', () => {
     act(() => session.reportPersonRequired());
     setUpdates([update('pa_3', 'ast_1', { proposal: { changes: 3 } })]);

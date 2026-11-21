@@ -20,17 +20,17 @@ import { axisLabel, axisValue, enumFieldLabel, enumValueLabel, paletteRoleLabel,
 const pretty = (value: string) => value === 'n_a' ? 'Not applicable' : value.replaceAll('_', ' ');
 const emptyLabels = (): EvaluationLabels => ({ tags: {}, axes: {}, palette_roles: {}, keywords: [], no_keywords: false, flagged: false });
 
-/** Round 17 of PR #114 (rename-style lines for a label draft dropped on
- * reconnect; GM r18: confirmed, with "changed" for the accents too). */
+/** PR #114: rename-style lines for a label draft dropped on reconnect, with "changed" for the
+ * accents too. */
 export const LABELS_CHANGED_ELSEWHERE = "You changed this reference’s labels in another tab while Nebula was offline, so your changes here weren’t saved.";
 export const ACCENTS_CHANGED_ELSEWHERE = "You changed this reference’s accents in another tab while Nebula was offline, so your changes here weren’t saved.";
-/** GM, PR #198 r1 item 4: the image at this position, or the whole batch,
- * was replaced in another window (review 17 L3's case), not relabeled. */
+/** Design, PR #198: the image at this position, or the whole batch,
+ * was replaced in another window (the case savedStateOf guards), not relabeled. */
 export const IMAGE_REPLACED_ELSEWHERE = "You replaced this reference’s image in another tab while Nebula was offline, so your changes here weren’t saved.";
 export const BATCH_REPLACED_ELSEWHERE = "You replaced this batch in another tab while Nebula was offline, so your changes here weren’t saved.";
 
 /** What a reference has saved: a draft is based on it. The image and the
- * batch it is in come first (review 17 L3): saves go by position, so after a
+ * batch it is in come first: saves go by position, so after a
  * batch closed and a new one was prepared in another window, the same
  * position can hold another image with the same (empty) saved state. */
 const savedStateOf = (item: EvaluationItem, batch: EvaluationBatch) => JSON.stringify([batch.manifest_hash,
@@ -67,7 +67,7 @@ function followScan(pending: Scan, live: () => boolean, show: (outcome: ScanOutc
  * sections, and it reloads the batch on coming back unless a draft is open.
  */
 export function CommonsEvaluation({ onWork, active = true }: { onWork?: (work: LabelingWork | null) => void; active?: boolean }) {
-  // Round 16 (L4): offline the saves are disabled; a draft stays editable
+  // Offline the saves are disabled; a draft stays editable
   // and unsaved until Nebula answers.
   const readOnly = useBackendOffline();
   const [batch, setBatchState] = useState<EvaluationBatch | null>(null);
@@ -75,7 +75,7 @@ export function CommonsEvaluation({ onWork, active = true }: { onWork?: (work: L
    * batch is replaced, except on reconnect when the item it drafts from is
    * unchanged: the draft survives and saves at the new revision. */
   const [formEpoch, setFormEpoch] = useState(0);
-  /** A read has answered (GM r24 b, r27 1): until one has, `batch` null means
+  /** A read has answered: until one has, `batch` null means
    * nothing was read, so the setup form doesn't show. A panel that takes up a
    * running scan comes after a read that answered no batch. */
   const [answered, setAnswered] = useState(() => scan !== null);
@@ -88,8 +88,8 @@ export function CommonsEvaluation({ onWork, active = true }: { onWork?: (work: L
   const headingId = useId();
   const toggleLineId = useId();
   const statusLineId = useId();
-  /** Round 18o (GM r51 Q4): Save labels was pressed with focus on it; the form remounts from the
-   * saved batch, and the new Save labels takes focus back. Cleared if the save fails (no remount). */
+  /** Save labels was pressed with focus on it; the form remounts from the saved batch, and the
+   * new Save labels takes focus back. Cleared if the save fails (no remount). */
   const refocusSaveRef = useRef(false);
   /** A scan still running (or settled unseen) when this panel mounted. */
   const [resumed] = useState(() => scan);
@@ -99,10 +99,10 @@ export function CommonsEvaluation({ onWork, active = true }: { onWork?: (work: L
   const [saving, setSaving] = useState<Promise<SaveResult> | null>(null);
   const draft = useRef<DraftActions | null>(null);
   const [error, setError] = useState('');
-  // PR #204 round 9: a not-connected line clears on the promote, and the review loads again.
+  // PR #204: a not-connected line clears on the promote, and the review loads again.
   const [loadEpoch, loadAgain] = useReloadEpoch();
   const line = useCommonsLine(setError, '', 'commons.evaluation-load', loadAgain);
-  // Round 18h (GM r38 3c): its load line reads again quietly on reconnect.
+  // Its load line reads again quietly on reconnect.
   useLoadLineQuietOnReconnect(error, () => setError(''), loadAgain);
   const [path, setPath] = useState(resumed?.path ?? '');
   const [index, setIndex] = useState(0);
@@ -146,11 +146,10 @@ export function CommonsEvaluation({ onWork, active = true }: { onWork?: (work: L
     api.get().then((value) => { if (!cancelled && idle.current) setBatch(value); }, () => undefined);
     return () => { cancelled = true; };
   }, [active, setBatch]);
-  // Back online (round 17 of PR #114; GM: label drafts follow the rename-
-  // draft rules). The batch is read again: a draft survives, and saves at the
-  // new revision, unless its reference was changed meanwhile. Labels are the
-  // person's alone to write (the routes need the person's session), so such
-  // a change came from their other window: the draft is dropped, so it can't
+  // Back online (PR #114: label drafts follow the rename-draft rules). The batch is read
+  // again: a draft survives, and saves at the new revision, unless its reference was changed
+  // meanwhile. Labels are the person's alone to write (the routes need the person's session),
+  // so such a change came from their other window: the draft is dropped, so it can't
   // overwrite it, and the line says so.
   const latest = useRef({ batch, index, dirty, busy });
   useEffect(() => { latest.current = { batch, index, dirty, busy }; });
@@ -193,7 +192,7 @@ export function CommonsEvaluation({ onWork, active = true }: { onWork?: (work: L
     return attempt;
   }
   // The section's name is its h2, set as the eyebrow line and merged with
-  // the old eyebrow (GM review of PR #157, round 2), at every width. Under
+  // the old eyebrow (design, PR #157), at every width. Under
   // the page's h1, "Commons"; the display line is a styled p, and the steps
   // are h3 under the h2.
   const eyebrow = <SectionEyebrow id={headingId} name="Blind labeling" detail="C1 / C2 human ground truth" />;
@@ -203,10 +202,10 @@ export function CommonsEvaluation({ onWork, active = true }: { onWork?: (work: L
   </section>;
   const intro = <div>{eyebrow}<p className="evaluation-title">A fresh pair of eyes.</p>
     <p>Describe what you see. Accent observations come before palette swatches.</p></div>;
-  // GM r27 1: after a failed load, only the eyebrow, the heading and the failure line.
+  // After a failed load, only the eyebrow, the heading and the failure line.
   if (!answered) return <section className="commons-evaluation" aria-labelledby={headingId}>
     <header className="evaluation-heading">{intro}</header>
-    {/* Round 18f (GM r35 4): its "Try again" reads it again. */}
+    {/* Its "Try again" reads it again. */}
     <CommonsErrorLine line={error} onRetry={loadAgain} />
   </section>;
   const count = batch?.items.filter((item) => evaluationComplete(item, batch)).length ?? 0;
@@ -214,9 +213,9 @@ export function CommonsEvaluation({ onWork, active = true }: { onWork?: (work: L
   return <section className="commons-evaluation" aria-labelledby={headingId}>
     <header className="evaluation-heading">
       {intro}
-      {/* GM r44 1, r45 Q1: unsaved labels lock the toggle in place (aria-disabled, focusable,
-          presses ignored) with its own line right under it; natively disabled only while a save
-          runs. The toggle switches to the batch's review view, so the line says "review the batch". */}
+      {/* Unsaved labels lock the toggle in place (aria-disabled, focusable, presses ignored)
+          with its own line right under it; natively disabled only while a save runs. The toggle
+          switches to the batch's review view, so the line says "review the batch". */}
       {batch && <div className="evaluation-heading__toggle"><button className="commons-button" disabled={busy} aria-disabled={toggleLocked || undefined}
         aria-describedby={toggleLocked ? toggleLineId : undefined}
         onClick={() => { if (!toggleLocked) setReview(!review); }}>
@@ -233,7 +232,7 @@ export function CommonsEvaluation({ onWork, active = true }: { onWork?: (work: L
       followScan(started, () => mounted.current, showScan);
     }}>
       <h3 className="evaluation-step">Prepare the held-out set</h3>
-      {/* Round 3b: GM's words from the refusal ("references that look different from each other"). */}
+      {/* The approved words: "references that look different from each other". */}
       <p>Scan a local folder before you import it. Nebula picks 15 references to label and 30 to tune with, choosing references that look different from each other and spreading them across subfolders. It never uses the 15, or anything that looks like them, as examples.</p>
       <p>Files in iCloud download before they are read. This scans and snapshots media; it does not import references or run the model. The set cannot be regenerated here.</p>
       <label>Folder path<input value={path} onChange={(e) => setPath(e.target.value)} placeholder="Absolute path to the reference folder" required disabled={busy} /></label>
@@ -260,8 +259,8 @@ export function CommonsEvaluation({ onWork, active = true }: { onWork?: (work: L
             setTimeout(() => URL.revokeObjectURL(url), 1000);
           }}>Download sealed labels</button></>}
       </div> : <div className="evaluation-workspace">
-        {/* Round 18o (GM r51 Q3): unsaved labels lock the reference buttons in place, the form's
-            status line ("…to change the reference.") their reason; native only while a save runs. */}
+        {/* Unsaved labels lock the reference buttons in place, the form's status line
+            ("…to change the reference.") their reason; native only while a save runs. */}
         <nav aria-label="Held-out references">{batch.items.map((item, n) => <button key={item.position} disabled={busy}
           aria-disabled={toggleLocked || undefined} aria-describedby={toggleLocked ? statusLineId : undefined} aria-current={index === n ? 'true' : undefined}
           onClick={() => { if (!toggleLocked) setIndex(n); }}>Reference {String(n + 1).padStart(2, '0')} <span>{evaluationComplete(item, batch) ? '✓' : item.labels?.flagged ? '⚑' : ''}</span></button>)}</nav>
@@ -288,13 +287,13 @@ function ReferenceForm({ batch, item, busy, dirty, onDirty, run, draftRef, statu
   const [imageError, setImageError] = useState('');
   const [imageEpoch, imageAgain] = useReloadEpoch();
   const imageLine = useCommonsLine(setImageError, '', `commons.evaluation-image-${item.position}`, imageAgain);
-  // Offline comes first (GM r23 3): a because line hides while offline.
+  // Offline comes first: a because line hides while offline.
   const shownImageError = useOfflineFirstBecause(imageError);
   const [crosshair, setCrosshair] = useState<AccentPoint>({ x: 0.5, y: 0.5 });
   const canvas = useRef<HTMLCanvasElement>(null);
   const readonly = batch.state !== 'open' || busy;
   const offline = useBackendOffline();
-  // Round 18o (GM r51 Q4): Discard hands focus to this reference's heading (tabindex -1, no ring by
+  // Discard hands focus to this reference's heading (tabindex -1, no ring by
   // slava-restraint's code-focus rule); Save labels keeps it, through the remount after the save.
   const heading = useRef<HTMLHeadingElement>(null);
   const saveButton = useRef<HTMLButtonElement>(null);
@@ -341,7 +340,7 @@ function ReferenceForm({ batch, item, busy, dirty, onDirty, run, draftRef, statu
   return <>
     <div className="evaluation-image">
       <h3 className="evaluation-step" ref={heading} tabIndex={-1}>Reference {String(item.position + 1).padStart(2, '0')}</h3>
-      {/* Round 18 (GM r28 1): its load's line in the one Commons line style. */}
+      {/* Its load's line in the one Commons line style. */}
       {shownImageError && <CommonsErrorLine line={shownImageError} onRetry={imageAgain} />}
       {!url && !imageError && <p>Loading original image…</p>}
       <div className="evaluation-canvas" style={{ width: `min(100%, ${item.width / item.height * 64}vh)` }}>
@@ -394,7 +393,7 @@ function ReferenceForm({ batch, item, busy, dirty, onDirty, run, draftRef, statu
         <label><input type="checkbox" checked={labels.no_keywords} onChange={(e) => change({ no_keywords: e.target.checked, keywords: [] })} /> No applicable keywords</label>
         <label><input type="checkbox" checked={labels.flagged} onChange={(e) => change({ flagged: e.target.checked })} /> I need to revisit this reference</label>
       </fieldset>}
-      {/* Round 18o (GM r51 Q4): Save labels sits outside the fieldset the save disables, so it keeps
+      {/* Save labels sits outside the fieldset the save disables, so it keeps
           focus: aria-busy and aria-disabled while saving, aria-disabled with nothing to save; natively
           disabled only offline or once the batch is sealed or closed. */}
       {item.accent_locked && <div className="evaluation-save"><button ref={saveButton} className="commons-button commons-button--primary"

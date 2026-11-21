@@ -17,23 +17,22 @@ export const CLOSE_CHOOSER = 'Close';
 export const EMPTY_RECENTLY_DELETED = 'Empty Recently deleted';
 
 /**
- * GM r24 (b) on PR #199: the kept save the project limit or the storage cap
- * refused is fixed by deleting, and kept mode locks Projects, so the notice's
- * [Choose a project to delete] opens this: each project with its Delete
- * (it goes to Recently deleted with the app's Undo toast, as Projects
- * home's Delete does, and Projects can restore it), and, when
- * Recently deleted has items, [Empty Recently deleted] (the storage cap's
- * other cure; deleting for good is the person's alone, so it asks first and
- * locks as Projects does). The same modal rules as the Discard confirm
- * (useAlertDialog). Nothing here saves: the person presses [Save as a
- * project] again once there is room.
+ * The kept save the project limit or the storage cap refused is fixed by
+ * deleting (design, PR #199), and kept mode locks Projects, so the notice's
+ * [Choose a project to delete] opens this: each project with its Delete (it
+ * goes to Recently deleted with the app's Undo toast, as Projects home's
+ * Delete does, and Projects can restore it), and, when Recently deleted has
+ * items, [Empty Recently deleted] (the storage cap's other cure; deleting for
+ * good is the person's alone, so it asks first and locks as Projects does).
+ * The same modal rules as the Discard confirm (useAlertDialog). Nothing here
+ * saves: the person presses [Save as a project] again once there is room.
  */
 export function KeptDeleteChooser({ onClose, returnTo }: { onClose: () => void; returnTo?: RefObject<HTMLElement | null> }) {
   const headingId = useId();
   const projects = useProjectStore((state) => state.projects);
   const trash = useProjectStore((state) => state.trash);
   const busy = useProjectStore((state) => state.busy);
-  // The kept canvas's own project: its Delete is refused by the store (PR #199 r27), so it shows
+  // The kept canvas's own project: its Delete is refused by the store (PR #199), so it shows
   // disabled with the reason instead of a button that can only fail.
   const sourceId = useProjectStore((state) => state.keptEdits?.sourceId ?? null);
   const activeId = useProjectStore((state) => state.activeProject?.id ?? null);
@@ -41,7 +40,7 @@ export function KeptDeleteChooser({ onClose, returnTo }: { onClose: () => void; 
   // words the store gives it: projectStore.error is only drawn on Projects home, which kept mode locks.
   const failure = useProjectStore((state) => (isKeptUpdateLine(state.error) ? null : state.error));
   // Cleared on open (an older failure isn't this dialog's) and on close (no surface draws it after,
-  // so it would surface later on Projects home as a stale line; PR #199 r27 check).
+  // so it would surface later on Projects home as a stale line; PR #199).
   useEffect(() => {
     const clearOwnFailure = () => {
       const { error } = useProjectStore.getState();

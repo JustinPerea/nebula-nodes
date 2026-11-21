@@ -250,10 +250,10 @@ describe('a drag on the board', () => {
     expect(await screen.findByText('card #1 at 300,40')).toBeTruthy();
   });
 
-  // Round 3 (GM): "Make Retry redo the failed action, never a different one."
+  // The ask: "Make Retry redo the failed action, never a different one."
   // A failed undo names its own action, and the toolbar's Retry undoes the
-  // same step again (so the reason is GM's short line: the button is the
-  // retry). On 867f254e the Retry saved the board and never undid.
+  // same step again (so the reason is the design's short line: the button is
+  // the retry). On 867f254e the Retry saved the board and never undid.
   const undoNotice = async () => waitFor(() => {
     const shown = document.querySelector('.moodboard-studio__notice--error');
     expect(shown).not.toBeNull();
@@ -426,7 +426,7 @@ describe('the cover (#123) in undo', () => {
   });
 });
 
-describe('an undo kept because an image changed after the step (design r161)', () => {
+describe('an undo kept because an image changed after the step', () => {
   it('says it could not undo, not "Undid", names the image, and offers no Redo', async () => {
     await openStudio();
     fireEvent.click(screen.getByRole('button', { name: 'Use #2 as cover' }));
@@ -482,7 +482,7 @@ describe('an agent on the board', () => {
 });
 
 /**
- * /edits under the test's hand (#209 review 4 NIT-B): each call waits until
+ * /edits under the test's hand (#209): each call waits until
  * the test answers it, and the test waits for each call itself, so nothing
  * here sleeps or polls (under load the polling version ran past 5 s).
  * `called(n)` resolves once call n (from 0) has been made; `answer(n)` lets
@@ -607,9 +607,9 @@ describe("the Studio's keys", () => {
     expect(server.board.images.map((img) => img.id)).toEqual(['i1', 'i2']);
   });
 
-  // The toast portals into the app's notice region, outside the Studio's tree
-  // (round 2). It holds while focus is in it, and the Studio's keys still work
-  // from there, as they did when it rendered inside the Studio.
+  // The toast portals into the app's notice region, outside the Studio's tree.
+  // It holds while focus is in it, and the Studio's keys still work from
+  // there, as they did when it rendered inside the Studio.
   it('with focus on the toast in the notice region, Cmd+Z is still the Studio\'s', async () => {
     await openStudio({ view: 'board', withRegion: true });
     select('c-i1');
@@ -650,7 +650,7 @@ describe("the Studio's keys", () => {
   });
 });
 
-describe('the board\'s Updates in the corner (Q113 c)', () => {
+describe('the board\'s Updates in the corner', () => {
   it('the Studio says which saved board is open, with its images in board order, and forgets it on leaving', async () => {
     await openStudio();
     await waitFor(() => expect(useBoardCanvasStore.getState().studioBoard).toMatchObject({ boardId: 'g1', imageIds: ['i1', 'i2'] }));

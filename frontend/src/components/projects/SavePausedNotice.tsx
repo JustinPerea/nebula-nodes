@@ -8,7 +8,7 @@ const isShown = (id: number) => useProjectStore.getState().sizeNotice?.id === id
 const dismiss = () => useProjectStore.getState().dismissSizeNotice();
 
 /**
- * The one region notice for a project over the save limit (Q118, GM - Design):
+ * The one region notice for a project over the save limit (the design's wording):
  * "Saving paused. This project is {size} MB, over the 16 MB limit." (or, after
  * Load graph, "Opened {filename}. It's {size} MB, over the save limit.")
  * with "See what's large", which opens the panel; later "Saving again. This
@@ -19,7 +19,7 @@ const dismiss = () => useProjectStore.getState().dismissSizeNotice();
 export function SavePausedNotice() {
   const notice = useProjectStore((state) => state.sizeNotice);
   const holdHandlers = useNoticeHold(notice, isShown, dismiss, 'save-paused');
-  // It leaves as it entered (fix round 7 of PR #200, GM r11 answer 2).
+  // It leaves as it entered (PR #200).
   const leave = useLeave(notice);
   if (!leave.shown) return null;
   const shown = leave.shown;

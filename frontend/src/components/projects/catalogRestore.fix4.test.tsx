@@ -1,10 +1,9 @@
 /**
- * Fix round 4 of PR #199 (GM - Design r6, 2026-10-27; review 4's M-1 and
- * L-1): "Nothing in it is lost." in every limit and waiting form, never
- * "It stays open"; one outcome per line however many remain; 6px between
- * the lines; no ring on a focus target the page moves focus to (tabindex
- * -1), never focus moved on load. (Undo refused past the limit is gone:
- * a restore may pass the project limit, Justin 2026-10-29, fix round 12.)
+ * PR #199 (design, 2026-10-27): "Nothing in it is lost." in every limit and
+ * waiting form, never "It stays open"; one outcome per line however many
+ * remain; 6px between the lines; no ring on a focus target the page moves
+ * focus to (tabindex -1), never focus moved on load. (Undo refused past the
+ * limit is gone: a restore may pass the project limit, Justin, 2026-10-29.)
  */
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -46,7 +45,7 @@ const props = (overrides: Partial<ProjectHomeProps> = {}): ProjectHomeProps => (
   onCreate: vi.fn(), onOpen: vi.fn(), onRename: vi.fn(), onDelete: vi.fn(), onRetry: vi.fn(), ...overrides,
 });
 
-describe('GM r6: "Nothing in it is lost." in every limit and waiting form', () => {
+describe('"Nothing in it is lost." in every limit and waiting form', () => {
   it('words the three restore limit forms', () => {
     expect(canvasLimitLine('projects', { projectLimit: 500, trashHasItems: false }))
       .toBe("The canvas you had open couldn’t be saved as its own project because you’ve reached the limit of 500 projects. Nothing in it is lost. Delete a project and Nebula will save it.");
@@ -78,12 +77,12 @@ describe('GM r6: "Nothing in it is lost." in every limit and waiting form', () =
   });
 });
 
-describe('GM r6 bug 1: one outcome per line, however many remain', () => {
+describe('one outcome per line, however many remain', () => {
   const s1 = restore({
     addedBack: [{ id: HERO, name: 'Hero', trashed: true }], addedBackCount: 1, damagedReadWhole: false,
   });
 
-  it('stays stacked after a line drops (KEY-line-gone)', () => {
+  it('stays stacked after a line drops', () => {
     const before = catalogRestoreNotice(s1, NOW, now([project(LOGO, 'Logo')], [trashed(HERO, 'Hero')]));
     expect(before.lines).toHaveLength(4);
     const after = catalogRestoreNotice(s1, NOW, now([project(LOGO, 'Logo'), project(HERO, 'Hero')], []));
@@ -122,9 +121,9 @@ describe('GM r6 bug 1: one outcome per line, however many remain', () => {
     expect([...lines].map((line) => line.textContent)).toEqual([`${OPEN}.`, NOT_WHOLE, KEPT]);
   });
 
-  // GM round 5 (fix round 5 of PR #199): stacked from the first render,
-  // so a notice that was short at first is stacked too (it was one line).
-  it('stacks a notice that was short at first too (GM round 5)', () => {
+  // Stacked from the first render, so a notice that was short at first is
+  // stacked too (it was one line).
+  it('stacks a notice that was short at first too', () => {
     const single = catalogRestoreNotice(restore(), NOW, now([project(LOGO, 'Logo')], []));
     expect(single.lines).toEqual([`${OPEN}.`, 'No projects were missing.']);
   });
@@ -132,26 +131,26 @@ describe('GM r6 bug 1: one outcome per line, however many remain', () => {
 
 const css = readFileSync(join(__dirname, '..', '..', 'styles', 'project-home.css'), 'utf8');
 
-describe('GM r6 bug 2: 6px between the lines, the line height within one stays', () => {
+describe('6px between the lines, the line height within one stays', () => {
   it('spaces the stacked lines 6px apart', () => {
     expect(css).toMatch(/\.project-home__restore-lines\s*\{[^}]*gap:\s*6px/);
     expect(css).toMatch(/\.project-home__notice\s*\{[^}]*line-height:\s*1\.5/);
   });
 });
 
-// GM r6 bug 4 ("never a ring, keyboard or not") is superseded by main's
-// notice-stack rule (PR #200, GM pr200 r16 #2 and r17): a target the page
-// moves focus to rings from :focus-visible only, so a notice closed from the
-// keyboard rings what takes focus next and one closed with a click rings
-// nothing; with no notice left, "Recent projects" takes it.
-describe('a focus target the page moves focus to rings from the keyboard only (PR #200 GM r17)', () => {
+// An earlier rule ("never a ring, keyboard or not") is superseded by
+// main's notice-stack rule (PR #200): a target the page moves focus to rings
+// from :focus-visible only, so a notice closed from the keyboard rings what
+// takes focus next and one closed with a click rings nothing; with no notice
+// left, "Recent projects" takes it.
+describe('a focus target the page moves focus to rings from the keyboard only (PR #200)', () => {
   it('rings "Recent projects" and the notices from :focus-visible, never from :focus', () => {
     expect(css).toMatch(/\.project-home #recent-projects-title:focus-visible\s*\{[^}]*outline:\s*var\(--sr-focus-outline\)/);
     expect(css).not.toMatch(/\[tabindex="-1"\]:focus\s*[,{][^}]*outline:\s*var\(--sr-focus-outline\)/);
   });
 
   it('moves focus to "Recent projects" after a dismiss', () => {
-    // Review 13 of PR #199 (MEDIUM-1): the stack's rule, once the notice goes.
+    // PR #199: the stack's rule, once the notice goes.
     const view = render(<ProjectHome {...props({ catalogRestore: restore() })} />);
     const close = screen.getAllByRole('button', { name: 'Dismiss' })[0];
     close.focus();

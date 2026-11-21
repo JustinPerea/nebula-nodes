@@ -65,7 +65,7 @@ vi.mock('@xyflow/react', async (importOriginal) => {
 // The camera's spring, recorded: each move and the cancel it returned.
 const spring = vi.hoisted(() => ({ calls: [] as Array<{ to: { x: number; y: number; zoom: number }; cancel: () => void }> }));
 vi.mock('../../lib/viewportSpring', async (importOriginal) => ({
-  // springProgress is the real one: a filled placeholder's image rides it (GM r5).
+  // springProgress is the real one: a filled placeholder's image rides it.
   ...await importOriginal<typeof import('../../lib/viewportSpring')>(),
   springViewport: (_from: unknown, to: { x: number; y: number; zoom: number }) => {
     const cancel = vi.fn();
@@ -196,8 +196,8 @@ describe('a drag', () => {
     expect(moves).toEqual([[{ placement: 'c2', x: 530, y: 0 }]]);
   });
 
-  // #209 review 4 LOW-2: a drag's end resets the drag, or every arrow-key
-  // move after the first mouse drag would show and never be sent.
+  // PR #209: a drag's end resets the drag, or every arrow-key move after the
+  // first mouse drag would show and never be sent.
   for (const how of ['a card drag', 'a selection drag'] as const) {
     it(`after ${how} ends, arrow keys still send their move`, () => {
       vi.useFakeTimers();
@@ -274,7 +274,7 @@ describe('where a paste lands (Cmd+V)', () => {
 
   it('carries the view at paste time (the board inside the view insets: no bar measured, so the fallback band), and is not aimed', () => {
     const { pasteTarget } = mountWithPoint();
-    // Nothing on screen covers it: what is seen is the whole pane (round 6g, GM r15 2), not placement's view.
+    // Nothing on screen covers it: what is seen is the whole pane, not placement's view.
     expect(pasteTarget.current?.()).toEqual({ at: { x: 620, y: 440 }, view: { x: 20, y: 40, width: 1200, height: 694 },
       seen: { view: { x: 20, y: 40, width: 1200, height: 800 }, covers: [] }, aim: false });
   });
@@ -302,7 +302,7 @@ describe('where new tiles go (lib/boardPlacement targets)', () => {
     const drop = createEvent.drop(wrapper, { dataTransfer: { files: [file], types: ['Files'] } });
     Object.defineProperties(drop, { clientX: { value: 100 }, clientY: { value: 40 } });
     fireEvent(wrapper, drop);
-    // Screen (10, 20)-(610, 370), doubled by the stand-in screenToFlowPosition. What is seen (round 6g):
+    // Screen (10, 20)-(610, 370), doubled by the stand-in screenToFlowPosition. What is seen:
     // the whole pane, less the toolbar pill's own box (25, 370)-(250, 405).
     expect(targets).toEqual([{ at: { x: 200, y: 80 }, view: { x: 20, y: 40, width: 1200, height: 700 },
       seen: { view: { x: 20, y: 40, width: 1200, height: 800 }, covers: [{ x: 50, y: 740, width: 450, height: 70 }] }, aim: true, band: true }]);
@@ -316,7 +316,7 @@ describe('where new tiles go (lib/boardPlacement targets)', () => {
       seen: { view: { x: 20, y: 40, width: 1200, height: 800 }, covers: [{ x: 50, y: 740, width: 450, height: 70 }] }, aim: false }]);
   });
 
-  it('what is seen stops at the window: a pane taller than the window is seen only down to its bottom edge (round 6g)', () => {
+  it('what is seen stops at the window: a pane taller than the window is seen only down to its bottom edge', () => {
     const view = mount();
     sized(view);
     const height = window.innerHeight;
@@ -330,7 +330,7 @@ describe('where new tiles go (lib/boardPlacement targets)', () => {
     }
   });
 
-  it('what is seen leaves out the notice band across its own width and the notices up now, clipped to the pane (round 6g, GM r15 2)', () => {
+  it('what is seen leaves out the notice band across its own width and the notices up now, clipped to the pane', () => {
     const view = mount();
     sized(view);
     const band = document.createElement('div');
@@ -394,16 +394,16 @@ describe('one view for every framing and placement (#213\'s shared insets)', () 
     fireEvent.change(view.getByLabelText('Add images'), { target: { files: [new File(['x'], 'a.png', { type: 'image/png' })] } });
     expect(targets[0].view).toEqual({ x: 0, y: 0, width: 2000, height: 1300 });
     expect(chip.props!.viewOf()).toEqual(targets[0].view);
-    // The chip goes by what is seen, as placement reports by it: the pane less the pill (round 6g).
+    // The chip goes by what is seen, as placement reports by it: the pane less the pill.
     expect(targets[0].seen).toEqual({ view: { x: 0, y: 0, width: 2000, height: 1400 }, covers: [{ x: 30, y: 1300, width: 570, height: 76 }] });
     expect(chip.props!.seenOf!()).toEqual(targets[0].seen);
   });
 });
 
-// #210 round 6s (GM r105 1): the chip's press is a Show. It sets "view is
-// fitted" for the tiles it brings into view, so a line then springs the
-// camera to keep those tiles clear (round 6r had it clear the flag).
-describe('the chip\'s press and a notice line (GM r101, r105)', () => {
+// PR #210: the chip's press is a Show. It sets "view is fitted" for the tiles
+// it brings into view, so a line then springs the camera to keep those tiles
+// clear (an earlier version had it clear the flag).
+describe('the chip\'s press and a notice line', () => {
   it('fitted, a line springs the board clear of it; after the chip\'s press, a line springs the shown tiles clear of it', () => {
     const stack = document.createElement('div');
     let stackHeight = 0;
@@ -448,7 +448,7 @@ describe('the chip\'s press and a notice line (GM r101, r105)', () => {
       // It goes: back to the tiles' framing without it.
       line(0);
       expect(spring.calls.at(-1)!.to).toEqual(getViewportForBounds(tiles.rects[0], 1000, 650, 0.02, 1, 0.12));
-      // List and back (GM r105 2): the chip's flag comes back with the camera, so a line still frames the tiles.
+      // List and back: the chip's flag comes back with the camera, so a line still frames the tiles.
       view.unmount();
       const back = render(<BoardCanvas boardKey="k1" images={images} onMove={() => {}} onDropFiles={() => {}} notices={{ current: stack }} />);
       (back.container.querySelector('.moodboard-board') as HTMLDivElement).getBoundingClientRect = wrapper.getBoundingClientRect;
@@ -476,7 +476,7 @@ describe('the outside-the-view chip on the board', () => {
     expect(done).toHaveBeenCalledTimes(1);
   });
 
-  it('judges "in view" by placement\'s own view: the board less the toolbar\'s band (review 2, M2)', () => {
+  it('judges "in view" by placement\'s own view: the board less the toolbar\'s band', () => {
     const tiles = { id: 1, rects: [{ x: 3000, y: 100, width: 300, height: 200 }], thumb: null };
     const view = render(<BoardCanvas boardKey="k1" images={images} onMove={() => {}} onDropFiles={(_f, target) => { targets.push(target); }}
       outside={tiles} onOutsideDone={() => {}} />);
@@ -507,10 +507,10 @@ describe('the outside-the-view chip on the board', () => {
     expect(document.activeElement?.getAttribute('data-id')).toBe('new-c4');
   });
 
-  // Review 4, HIGH-1 and MEDIUM-2: focus on a tile being replaced moves on to
-  // what replaces it, never to the page body. React Flow draws the card over
-  // the placeholder first, and drops the placeholder's element a commit after
-  // the board's own effects (the stand-in's `hidden`).
+  // Focus on a tile being replaced moves on to what replaces it, never to the
+  // page body. React Flow draws the card over the placeholder first, and drops
+  // the placeholder's element a commit after the board's own effects (the
+  // stand-in's `hidden`).
   describe('focus on a tile as it is replaced', () => {
     const url = '/api/outputs/chat-uploads/river.png';
     const spot = { id: 'placeholder-1', x: 3000, y: 100, width: 300, height: 200, source: { kind: 'file' as const, name: 'river.png' } };
@@ -563,7 +563,7 @@ describe('the outside-the-view chip on the board', () => {
       expect(document.activeElement).toBe(node(view, 'new-c4'));
     });
 
-    it('focus on the placeholder past the 10 s follow ends on the card, however long the upload took (GM)', async () => {
+    it('focus on the placeholder past the 10 s follow ends on the card, however long the upload took', async () => {
       const tiles = { id: 1, rects: [{ x: 3000, y: 100, width: 300, height: 200 }], thumb: null };
       let view = render(<BoardCanvas boardKey="k1" images={images} onMove={() => {}} onDropFiles={() => {}}
         placeholders={[spot]} outside={tiles} onOutsideDone={() => {}} />);
@@ -627,7 +627,7 @@ describe('the outside-the-view chip on the board', () => {
       return seen;
     };
 
-    it('a placeholder whose provisional and saved cards are drawn in one commit hands focus to the saved one (review 5, M20)', async () => {
+    it('a placeholder whose provisional and saved cards are drawn in one commit hands focus to the saved one', async () => {
       let view = draw(null, images, [{ ...spot, filled: { imageId: 'i4', url } } as typeof spot]);
       act(() => { node(view, 'placeholder-1')!.focus(); });
       const seen = landed(view);
@@ -731,7 +731,7 @@ describe('the outside-the-view chip on the board', () => {
     });
   });
 
-  // Review 3: focus follows the tile only for a while, and never off a control.
+  // Focus follows the tile only for a while, and never off a control.
   const followSetup = async () => {
     const tiles = { id: 1, rects: [{ x: 3000, y: 100, width: 300, height: 200 }], thumb: null };
     const holder = { id: 'placeholder-1', x: 3000, y: 100, width: 300, height: 200, source: { kind: 'file' as const, name: 'a.png' } };
@@ -792,7 +792,7 @@ describe('the outside-the-view chip on the board', () => {
     expect(document.activeElement).toBe(view.container.querySelector('.moodboard-board'));
   });
 
-  it('a board that can\'t take focus (hidden) hands it to the view switch, never the body (review 5, NIT-6)', () => {
+  it('a board that can\'t take focus (hidden) hands it to the view switch, never the body', () => {
     const tiles = { id: 1, rects: [{ x: 3000, y: 100, width: 300, height: 200 }], thumb: null };
     const view = render(<BoardCanvas boardKey="k1" images={images} onMove={() => {}} onDropFiles={() => {}} outside={tiles} onOutsideDone={() => {}} />);
     (view.container.querySelector('.moodboard-board') as HTMLElement).focus = () => {};
@@ -807,14 +807,14 @@ describe('the outside-the-view chip on the board', () => {
   });
 });
 
-describe('placeholder tiles (GM r4 answer 1)', () => {
+describe('placeholder tiles', () => {
   it('sit at their spot and size, never dragged or selected; the empty note stays away', () => {
     const view = render(<BoardCanvas boardKey="k1" images={[]} onMove={() => {}} onDropFiles={() => {}}
       placeholders={[{ id: 'placeholder-1', x: 40, y: 60, width: 300, height: 200, source: { kind: 'file', name: 'a.png' } }]} />);
     const node = props().nodes.find((item) => item.id === 'placeholder-1')!;
     expect(node).toMatchObject({ type: 'placeholder', position: { x: 40, y: 60 }, width: 300, height: 200,
       draggable: false, selectable: false, focusable: true, ariaLabel: 'a.png, uploading' });
-    // Not selectable, movable or deletable: React Flow's description of those keys is dropped (GM r8 answer 6).
+    // Not selectable, movable or deletable: React Flow's description of those keys is dropped.
     expect(node.domAttributes).toEqual({ 'aria-describedby': undefined });
     expect(view.container.querySelector('.moodboard-board__empty')).toBeNull();
   });
@@ -831,7 +831,7 @@ describe('placeholder tiles (GM r4 answer 1)', () => {
   });
 });
 
-describe('the placeholder\'s look and its fill (GM r5)', () => {
+describe('the placeholder\'s look and its fill', () => {
   const css = readFileSync(resolve(__dirname, '../../styles/moodboard-board.css'), 'utf8');
   const rule = (selector: string) => {
     const at = css.indexOf(`${selector} {`);
@@ -943,9 +943,9 @@ describe('the placeholder\'s look and its fill (GM r5)', () => {
     } finally { raf.mockRestore(); caf.mockRestore(); }
   });
 
-  // Review 4, MEDIUM-1: the fill is keyed by the new image's id. Pasting a
-  // file the board already shows (the upload dedupes to the same url) fades
-  // in the new tile only; the old one is never marked or hidden.
+  // The fill is keyed by the new image's id. Pasting a file the board already
+  // shows (the upload dedupes to the same url) fades in the new tile only; the
+  // old one is never marked or hidden.
   it('marks only the new image\'s card filling, never an older card showing the same file', () => {
     const url = '/api/outputs/chat-uploads/same.png';
     const old = image('i-old', [card('c-old', 0, 0)], { url });
@@ -957,7 +957,7 @@ describe('the placeholder\'s look and its fill (GM r5)', () => {
     expect(data('new-c9').filling).toBe(true);
   });
 
-  it('a fill changes only the filling card\'s node: every other card keeps its node, so React Flow skips it (review 4, LOW-5)', () => {
+  it('a fill changes only the filling card\'s node: every other card keeps its node, so React Flow skips it', () => {
     const view = render(<BoardCanvas boardKey="k1" images={images} onMove={() => {}} onDropFiles={() => {}} placeholders={[holder()]} />);
     const before = new Map(props().nodes.map((item) => [item.id, item]));
     view.rerender(<BoardCanvas boardKey="k1" images={images} onMove={() => {}} onDropFiles={() => {}}
@@ -973,7 +973,7 @@ describe('the placeholder\'s look and its fill (GM r5)', () => {
     for (const id of ['c1', 'c2', 'c3']) expect(props().nodes.find((item) => item.id === id)).toBe(after.get(id));
   });
 
-  it('placeholders come first, so the cards are drawn over them (review 4, X16)', () => {
+  it('placeholders come first, so the cards are drawn over them', () => {
     render(<BoardCanvas boardKey="k1" images={images} onMove={() => {}} onDropFiles={() => {}} placeholders={[holder()]} />);
     expect(props().nodes.map((item) => item.id)).toEqual(['placeholder-1', 'c1', 'c2', 'c3']);
   });
@@ -1004,7 +1004,7 @@ describe('the placeholder\'s look and its fill (GM r5)', () => {
     return cardEl;
   };
 
-  it('another placeholder changing mid-fade never restarts the fade (review 4, X13)', async () => {
+  it('another placeholder changing mid-fade never restarts the fade', async () => {
     const q = frameQueue();
     try {
       const url = '/api/outputs/chat-uploads/a.png';
@@ -1029,7 +1029,7 @@ describe('the placeholder\'s look and its fill (GM r5)', () => {
     } finally { q.restore(); }
   });
 
-  it('a fade is stopped when the board goes, and its progress is let go with its placeholder (review 4, X14, X15)', () => {
+  it('a fade is stopped when the board goes, and its progress is let go with its placeholder', () => {
     const q = frameQueue();
     try {
       const url = '/api/outputs/chat-uploads/a.png';
@@ -1051,7 +1051,7 @@ describe('the placeholder\'s look and its fill (GM r5)', () => {
     } finally { q.restore(); }
   });
 
-  it('the fade waits for the card\'s image to decode (review 4, NIT-3), and at most FILL_DECODE_WAIT_MS', async () => {
+  it('the fade waits for the card\'s image to decode, and at most FILL_DECODE_WAIT_MS', async () => {
     const url = '/api/outputs/chat-uploads/slow.png';
     let decoded: () => void = () => {};
     const img = document.createElement('img');
@@ -1116,7 +1116,7 @@ describe('the Add images button', () => {
     expect(drops).toEqual([{ files: [file], at: { x: 620, y: 440 } }]);
   });
 
-  it('stays live while files upload, with no status of its own (GM): each upload is its placeholder', () => {
+  it('stays live while files upload, with no status of its own: each upload is its placeholder', () => {
     const view = render(<BoardCanvas boardKey="k1" images={images} onMove={() => {}} onDropFiles={() => {}}
       placeholders={[{ id: 'placeholder-1', x: 40, y: 60, width: 300, height: 200, source: { kind: 'file', name: 'a.png' } }]} />);
     const input = view.getByLabelText('Add images') as HTMLInputElement;
@@ -1127,7 +1127,7 @@ describe('the Add images button', () => {
   });
 });
 
-describe('an empty board while Nebula is offline (GM r12 2)', () => {
+describe('an empty board while Nebula is offline', () => {
   const hint = 'Drop images here. They land where you drop them.';
   const board = (offline: boolean) => <BoardCanvas boardKey="k1" images={[]} onMove={() => {}} onDropFiles={(files, target) => {
     drops.push({ files, at: target.at }); }} offline={offline} />;
@@ -1152,7 +1152,7 @@ describe('an empty board while Nebula is offline (GM r12 2)', () => {
     expect(drops).toHaveLength(1);
   });
 
-  it('Y24 (review 8): Fit on a board with no cards but a held spot frames the spot; with neither it does nothing', () => {
+  it('Fit on a board with no cards but a held spot frames the spot; with neither it does nothing', () => {
     spring.calls.length = 0;
     flow.getNodesBounds.mockClear();
     const held = render(<BoardCanvas boardKey="k1" images={[]} onMove={() => {}} onDropFiles={() => {}}
@@ -1187,7 +1187,7 @@ describe('the camera', () => {
     expect(spring.calls[1].to).toEqual(spring.calls[0].to);
   });
 
-  it('Fit frames the held spots too: a placeholder is a card on its way in (GM r8 answer 4)', () => {
+  it('Fit frames the held spots too: a placeholder is a card on its way in', () => {
     spring.calls = [];
     const view = render(<BoardCanvas boardKey="k1" images={images} onMove={() => {}} onDropFiles={() => {}}
       placeholders={[{ id: 'placeholder-1', x: 4000, y: 100, width: 300, height: 200, source: { kind: 'file', name: 'a.png' } },
@@ -1207,7 +1207,7 @@ describe('the camera', () => {
   });
 });
 
-describe('Show from an Update (Q113 c)', () => {
+describe('Show from an Update', () => {
   it('frames the cards it names on a spring, once, and only on its own board', async () => {
     spring.calls = [];
     mount();

@@ -1,5 +1,5 @@
 /**
- * Q118, GM - Design's layout and lines for "saving paused", verbatim:
+ * The design's layout and lines for "saving paused", verbatim:
  * - the header: "Saving paused · {size} MB" in the same warning colour as
  *   "Save failed", clickable, tooltip "This project is over the 16 MB save
  *   limit. Click to see what’s large.";
@@ -62,7 +62,7 @@ afterEach(() => {
 });
 
 describe('the header', () => {
-  it('reads "Saving paused · {size} MB" in the warning colour, with GM\'s tooltip, and opens the panel', () => {
+  it('reads "Saving paused · {size} MB" in the warning colour, with the design\'s tooltip, and opens the panel', () => {
     render(<ProjectWorkspaceControls />);
     const button = screen.getByRole('button', { name: 'Saving paused · 16.4 MB' });
     expect(button.tagName).toBe('BUTTON');
@@ -76,7 +76,7 @@ describe('the header', () => {
 });
 
 describe('the notice', () => {
-  it("has GM's line and its See what’s large button opens the panel", () => {
+  it("has the design's line and its See what’s large button opens the panel", () => {
     useProjectStore.setState({ sizeNotice: { id: 7, text: 'Saving paused. This project is 16.4 MB, over the 16 MB limit.', action: true } } as never);
     render(<SavePausedNotice />);
     const notice = screen.getByRole('status');
@@ -106,7 +106,7 @@ describe('the panel', () => {
     return { opener, view };
   }
 
-  it('names the connections row and counts its connections (GM: connection, never wire)', () => {
+  it('names the connections row and counts its connections (the design says connection, never wire)', () => {
     const edge = (id: string) => ({ id, source: 'n1', target: 'n2', data: { note: 'w'.repeat(Math.round(0.3 * MIB)) } });
     useGraphStore.setState({ edges: [edge('e1'), edge('e2')] } as never);
     open();
@@ -116,7 +116,7 @@ describe('the panel', () => {
     expect(panel.textContent).not.toMatch(/\bwires?\b/i);
   });
 
-  it("shows GM's heading, the live line, Download a copy and the largest rows of 0.1 MB and up, without ids", () => {
+  it("shows the design's heading, the live line, Download a copy and the largest rows of 0.1 MB and up, without ids", () => {
     const { opener } = open();
     const panel = screen.getByRole('dialog', { name: 'Saving paused' });
     expect(within(panel).getByRole('heading', { name: 'Saving paused' })).toBeTruthy();
@@ -124,7 +124,7 @@ describe('the panel', () => {
     expect(within(panel).getByRole('button', { name: 'Download a copy' })).toBeTruthy();
     expect(within(panel).getByText('Largest first')).toBeTruthy();
     const rows = within(panel).getAllByRole('button').filter((button) => button.closest('[data-size-row]'));
-    // Only the two Briefs are 0.1 MB or more; the rest fold into one line (GM, #182).
+    // Only the two Briefs are 0.1 MB or more; the rest fold into one line (design, #182).
     expect(rows).toHaveLength(2);
     for (const row of rows) expect(row.textContent).not.toContain('0.0 MB');
     // The largest, by name as the canvas shows it, its part, its size.
@@ -138,7 +138,7 @@ describe('the panel', () => {
     expect(panel.textContent).not.toMatch(/\bn1\b|\bm0\b/);
     // The rest, counted.
     // Thirteen small nodes and the project's settings.
-    // Their total rounds to 0.0, so the line has no size (GM, #182: (b)).
+    // Their total rounds to 0.0, so the line has no size (design, #182).
     expect(within(panel).getByText('14 smaller items')).toBeTruthy();
     opener.remove();
   });

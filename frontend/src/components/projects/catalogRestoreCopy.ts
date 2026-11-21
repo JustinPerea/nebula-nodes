@@ -1,16 +1,16 @@
 /**
- * GM's lines for the Projects home notice after Nebula restored a damaged
- * project list (backend services/project_store.py _restore; GM - Design on
- * PR #199, rounds 1 to 3, 2026-10-27). Shown until the person closes it
- * with ×. The damaged file's path never goes in the notice: it is in the
- * Agent log line, and agents read it from GET /api/projects `catalogRestore`.
+ * The design's lines for the Projects home notice after Nebula restored a
+ * damaged project list (backend services/project_store.py _restore;
+ * design, PR #199, 2026-10-27). Shown until the person closes it with ×. The
+ * damaged file's path never goes in the notice: it is in the Agent log line,
+ * and agents read it from GET /api/projects `catalogRestore`.
  *
- * Layout (GM r3, B): one outcome is said inline after the opening, as in A.
- * More than one: the opening on its own line, then each outcome on its own
- * line in GM's order, then "The damaged file was kept." last (`lines`).
+ * Layout: one outcome is said inline after the opening. More than one: the
+ * opening on its own line, then each outcome on its own line in the design's
+ * order, then "The damaged file was kept." last (`lines`).
  *
- * GM's general rules: names up to 3, a count from 4, never a count of 1
- * (except where the name couldn't be read).
+ * The design's general rules: names up to 3, a count from 4, never a count
+ * of 1 (except where the name couldn't be read).
  */
 import type { CatalogRestore } from '../../lib/projects';
 import { writtenDay } from '../../lib/writtenDate';
@@ -20,7 +20,7 @@ export const RESTORE_NAMED_MAX = 3;
 
 // The lines the entry chunk needs (the store's, the kept line's button)
 // live in restoreCopyCore; the rest of this module loads only when a
-// restore notice shows (restoreCopyLoader; review 13 of PR #199, LOW-1).
+// restore notice shows (restoreCopyLoader, PR #199).
 export { SAVE_AS_A_PROJECT, editsRecoveredToast, LATEST_EDITS_KEPT, RELOAD_TO_CONTINUE, agentClosedLine,
   OPEN_RECENTLY_DELETED, DEFAULT_PROJECT_LIMIT } from './restoreCopyCore';
 import { agentClosedLine, DEFAULT_PROJECT_LIMIT, quoted, sizeCapAdvice } from './restoreCopyCore';
@@ -30,11 +30,11 @@ const REBUILT = "Nebula’s project list was damaged and there was no good copy,
 const KEPT = 'The damaged file was kept.';
 
 
-/** GM r18 on PR #199, verbatim: readable records the restore left out
- * because the list was at its project limit (reconcile adds none past it).
- * Named up to RESTORE_NAMED_MAX (`names`, from namesFor), counted from 4:
- * "“Alpha” and “Beta” weren’t added back because you’ve reached the limit of
- * 500 projects. They’re still in the damaged file, which was kept." */
+/** Readable records the restore left out because the list was at its project
+ * limit (reconcile adds none past it; design, PR #199, verbatim). Named up to
+ * RESTORE_NAMED_MAX (`names`, from namesFor), counted from 4: "“Alpha” and
+ * “Beta” weren’t added back because you’ve reached the limit of 500
+ * projects. They’re still in the damaged file, which was kept." */
 export function leftOutAtLimitLine(names: string[] | null, count: number, limit: number, fileKept = true): string {
   const one = names ? names.length === 1 : count === 1;
   const who = names ? namedList(names) : `${count} ${count === 1 ? 'project' : 'projects'}`;
@@ -45,23 +45,24 @@ export function leftOutAtLimitLine(names: string[] | null, count: number, limit:
 /** The name the backend gives the live canvas when which project it was
  * isn't known (main.RECOVERED_CANVAS_NAME). */
 const RECOVERED_CANVAS = 'Recovered canvas';
-/** GM r3: "When the damaged file wasn't read whole" (it replaces "No
- * projects were missing."; "The damaged file was kept." follows it). */
+/** The design's line for "when the damaged file wasn't read whole" (it
+ * replaces "No projects were missing."; "The damaged file was kept." follows
+ * it). */
 const NOT_READ_WHOLE = "Nebula couldn’t read the whole damaged file, so changes made after that copy may be missing.";
 
-/** GM r3 (follow-up), one sentence for every case: the open project
- * couldn't be restored, it was restored but older (upgrade day), or which
- * project the canvas was couldn't be proven. `name` is the project it was
- * filed as: "Recovered Alpha", "Recovered Alpha 2" and so on (backend
+/** One sentence for every case (design): the open project couldn't be
+ * restored, it was restored but older (upgrade day), or which project the
+ * canvas was couldn't be proven. `name` is the project it was filed as:
+ * "Recovered Alpha", "Recovered Alpha 2" and so on (backend
  * project_store.recovered_name), or "Recovered canvas". */
 export function recoveredCanvasSentence(name: string | null | undefined, overSaveLimit = false): string {
   if (overSaveLimit) return canvasSavedOverLimitLine(name || RECOVERED_CANVAS);
   return `The canvas you had open was saved as its own project, ${quoted(name || RECOVERED_CANVAS)}, so nothing in it is lost.`;
 }
 
-/** GM (review 7 of PR #199): a canvas saved as a project over the save
- * limit (the person's own act holds a canvas whatever its size), in the
- * toast and the restore notice alike. It replaces the plain line. */
+/** A canvas saved as a project over the save limit (PR #199; the person's own
+ * act holds a canvas whatever its size), in the toast and the restore notice
+ * alike. It replaces the plain line. */
 export function canvasSavedOverLimitLine(name: string): string {
   return `The canvas you had open was saved as its own project, ${quoted(name)}. ${ONE_OVER}`;
 }
@@ -69,16 +70,16 @@ const ONE_OVER = "It’s over the save limit, so new changes won’t save until 
 
 /** A canvas saved as its own project, as the listing gives it: `filedAt`
  * when it was saved, `agentCopy` when it is an agent's copy of the person's
- * canvas (GM r11 on PR #199, 4), never said as "the canvas you had open". */
+ * canvas (design, PR #199), never said as "the canvas you had open". */
 export interface SavedCanvasRow {
   id?: string; name: string; overSaveLimit?: boolean; filedAt?: string | null;
   agentCopy?: { agent?: string | null } | null;
 }
 
-/** GM r10: canvases are named in the order they were saved, in the notice,
+/** Canvases are named in the order they were saved (design), in the notice,
  * the toast and the counted forms: by when Nebula saved each (`filedAt`),
- * then by its id, then as listed. Never by a number in a name (GM r29 on
- * PR #199; review 19 item 12): "Shot 7" is the person's own number. */
+ * then by its id, then as listed. Never by a number in a name (PR #199):
+ * "Shot 7" is the person's own number. */
 export function savedOrder<R extends SavedCanvasRow>(rows: R[]): R[] {
   const at = (row: R) => {
     const parsed = row.filedAt ? Date.parse(row.filedAt) : Number.NaN;
@@ -93,26 +94,25 @@ export function savedOrder<R extends SavedCanvasRow>(rows: R[]): R[] {
   }).map(({ row }) => row);
 }
 
-/** GM r11, 4: the agent named as the copy's ("Codex’s"), "An agent’s"
- * when it isn't known; curly ’ throughout. */
+/** The agent named as the copy's ("Codex’s"), "An agent’s" when it isn't
+ * known; curly ’ throughout (design). */
 function agentPossessive(agent: string | null | undefined): string {
   return agent && agent.trim() ? `${agent.trim()}’s` : 'An agent’s';
 }
 
-/** GM r11, 4, verbatim: an agent's copy saved as its own project, on its
- * own line after the person's. Over the save limit adds GM r12's tail (3). */
+/** An agent's copy saved as its own project, on its own line after the
+ * person's (design, verbatim). Over the save limit it adds COPY_OVER. */
 export function agentCopySavedLine(agent: string | null | undefined, name: string, overSaveLimit = false): string {
   return `${agentPossessive(agent)} changes were saved as their own project, ${quoted(name)}.${overSaveLimit ? ` ${COPY_OVER}` : ''}`;
 }
 
-/** GM r12 on PR #199, 3, verbatim: the copy's over-limit tail. */
+/** The copy's over-limit tail (design, PR #199, verbatim). */
 const COPY_OVER = "It’s over the save limit, so new changes to it won’t save until it’s smaller.";
 
-/** GM r11, 4, verbatim: an agent's copy that waits to be saved. At the
- * project limit its own count (GM r12, 2: the person's canvases are saved
- * first, so the copy's line counts them too: "Delete 2 projects and Nebula
- * will save it."); at the size cap GM r13, 2: "Nothing in it is lost." then
- * the singular size advice. */
+/** An agent's copy that waits to be saved (design, verbatim). At the project
+ * limit its own count (the person's canvases are saved first, so the copy's
+ * line counts them too: "Delete 2 projects and Nebula will save it."); at the
+ * size cap, "Nothing in it is lost." then the singular size advice. */
 export function agentCopyWaitingLine(agent: string | null | undefined, reason: CanvasLimit,
   context: Pick<CanvasLimitContext, 'projectLimit' | 'trashHasItems'>, deletes?: number | null): string {
   const opening = `${agentPossessive(agent)} copy of your canvas isn’t saved as a project yet because`;
@@ -123,24 +123,24 @@ export function agentCopyWaitingLine(agent: string | null | undefined, reason: C
 }
 
 /** "Delete a project and Nebula will save it.", or with the real number
- * when more than one has to go (GM r12, 2; GM r17: the person's own canvas
- * too, once the list is past the limit, as after an Undo that passed it:
+ * when more than one has to go (design: the person's own canvas too, once the
+ * list is past the limit, as after an Undo that passed it:
  * "Delete 2 projects and Nebula will save it."). */
 function deleteToSaveIt(deletes?: number | null): string {
   return typeof deletes === 'number' && deletes > 1
     ? `Delete ${deletes} projects and Nebula will save it.` : 'Delete a project and Nebula will save it.';
 }
 
-/** GM r9 (1): every canvas saved is over the save limit. */
+/** Every canvas saved is over the save limit (design). */
 const EVERY_ONE_OVER = "They’re over the save limit, so new changes to them won’t save until they’re smaller.";
 
 /** Several canvases saved as their own projects, named up to 3, a count
- * from 4 (GM's answer 1 to review 8: the restore notice names every canvas
- * filed while it shows). ``lost`` adds "so nothing in them is lost" unless
- * every one is over the save limit (its tail takes that place, as the
- * singular over-limit line drops it). ``another``: the toast for a filing
- * after the restore notice named one ("Other canvases you had open…";
- * builder's plural, for GM). */
+ * from 4 (design: the restore notice names every canvas filed while it
+ * shows). ``lost`` adds "so nothing in them is lost" unless every one is
+ * over the save limit (its tail takes that place, as the singular over-limit
+ * line drops it). ``another``: the toast for a filing after the restore
+ * notice named one ("Other canvases you had open…"; the plural wording is not
+ * yet confirmed by the design). */
 function canvasesSavedLine(given: { name: string; overSaveLimit?: boolean; filedAt?: string | null }[], lost: boolean, another = false): string {
   const rows = savedOrder(given);
   const counted = rows.length > RESTORE_NAMED_MAX;
@@ -152,11 +152,11 @@ function canvasesSavedLine(given: { name: string; overSaveLimit?: boolean; filed
 }
 
 /** Several canvases saved, some over the save limit: only those are marked
- * (fix round 7; plural form for GM to confirm). */
+ * (the plural form is not yet confirmed by the design). */
 function overLimitTail(rows: { name: string; overSaveLimit?: boolean }[], counted: boolean): string {
   const over = rows.filter((row) => row.overSaveLimit === true);
   if (over.length === 0) return '';
-  // GM r9 (1): when every saved canvas is over, they aren't named again.
+  // When every saved canvas is over, they aren't named again (design).
   if (over.length === rows.length && rows.length > 1) return ` ${EVERY_ONE_OVER}`;
   if (counted) {
     return over.length === 1
@@ -170,30 +170,30 @@ function overLimitTail(rows: { name: string; overSaveLimit?: boolean }[], counte
 
 /** The limit the live canvas waits on (backend `canvasNotFiled.reason`):
  * the project limit, or the project list's size cap ("storage", never said
- * as a size: GM r4, "Never show 128 MB to the person"). */
+ * as a size; design: "Never show 128 MB to the person"). */
 export type CanvasLimit = 'projects' | 'storage';
 
 /** What the limit lines need: the project limit's number (the backend's
  * `projectLimit`; 500), whether Recently deleted holds anything (only a
  * delete for good frees the size cap), and each canvas that waits (the
  * listing's `canvasNotFiled.canvases`: held ones and the live one, with the
- * name of the project it was when known; review 6 of PR #199, N-2). */
+ * name of the project it was when known; PR #199). */
 export interface CanvasLimitContext {
   projectLimit: number; trashHasItems: boolean;
   canvases?: { name?: string | null; agentCopy?: { agent?: string | null } | null; deletes?: number | null }[];
   /** How many projects to delete before every waiting canvas is saved (the
-   * listing's `canvasNotFiled.deletes`): GM's answer 3, the real number. */
+   * listing's `canvasNotFiled.deletes`): the real number (design). */
   deletes?: number | null;
 }
 
 /** The person's own count for their line: the listing's per-canvas one when
- * it says (GM r12, 2), else its total. */
+ * it says (design), else its total. */
 function ownCount(context: CanvasLimitContext): number | null {
   return countOf(context.canvases ?? []) ?? (typeof context.deletes === 'number' ? context.deletes : null);
 }
 
-/** GM's answer 3 to review 6: "Delete 2 projects and Nebula will save them."
- * with the real number (the canvases that wait, when the listing doesn't say). */
+/** "Delete 2 projects and Nebula will save them." with the real number (the
+ * canvases that wait, when the listing doesn't say; design). */
 function deleteToSaveMany(context: CanvasLimitContext): string {
   const own = ownCount(context);
   const deletes = typeof own === 'number' && own > 0 ? own : (context.canvases?.length ?? 2);
@@ -201,20 +201,21 @@ function deleteToSaveMany(context: CanvasLimitContext): string {
 }
 
 
-/** GM r6: what every limit and waiting line says of the canvas. Never that
- * it "stays open": the Projects home can't show a canvas that isn't a
- * project, so the person can't reach it until it is saved (review 4, M-1;
- * GM dropped "Open canvas" for good). */
+/** What every limit and waiting line says of the canvas. Never that it
+ * "stays open": the Projects home can't show a canvas that isn't a project, so
+ * the person can't reach it until it is saved (the design dropped
+ * "Open canvas" for good). */
 const NOTHING_LOST = 'Nothing in it is lost.';
 
-/** The size cap's advice for several canvases (N-2; GM to confirm). */
+/** The size cap's advice for several canvases (wording not yet confirmed by
+ * the design). */
 function sizeCapAdviceMany(trashHasItems: boolean): string {
   return trashHasItems
     ? 'Permanently delete projects in Recently deleted and Nebula will save them.'
     : 'Delete projects, then remove them from Recently deleted too, and Nebula will save them.';
 }
 
-/** Who waits, for GM's (a) counting copy (review 6 of PR #199, N-2):
+/** Who waits, for the design's counting copy (PR #199):
  * "The canvases you had open, “A” and “B”," with up to 3 names when every
  * name is known, else "2 canvases you had open". Null for one canvas: the
  * singular line, unchanged. */
@@ -230,23 +231,23 @@ function manyCanvases(context: CanvasLimitContext): string | null {
 
 const NOTHING_LOST_MANY = 'Nothing in them is lost.';
 
-/** GM r5/r6, the limit lines: in the restore notice, in the canvas line's
+/** The limit lines (design): in the restore notice, in the canvas line's
  * place, while the open canvas couldn't be saved as its own project. The
  * canvas survives restarts, so both say nothing in it is lost. Several
- * canvases waiting are counted or named (N-2). */
+ * canvases waiting are counted or named. */
 export function canvasLimitLine(reason: CanvasLimit, context: CanvasLimitContext): string {
   return withAgentCopies(reason, context, personsLimitLine);
 }
 
 /** The person's canvases' line, then each agent's copy on its own line
- * (GM r11, 4: "the canvas you had open" only ever means the person's own). */
+ * (design: "the canvas you had open" only ever means the person's own). */
 function withAgentCopies(reason: CanvasLimit, context: CanvasLimitContext,
   persons: (reason: CanvasLimit, context: CanvasLimitContext) => string): string {
   const all = context.canvases ?? [];
   const copies = all.filter((canvas) => canvas.agentCopy);
   if (copies.length === 0) return persons(reason, context);
   const own = all.filter((canvas) => !canvas.agentCopy);
-  // Each line its own count (GM r12, 2): the person's canvases are saved
+  // Each line its own count (design): the person's canvases are saved
   // first, so theirs counts only what they need (the last of theirs' count),
   // and each copy's counts every canvas saved before it too.
   const ownDeletes = countOf(own);
@@ -280,11 +281,11 @@ function personsLimitLine(reason: CanvasLimit, context: CanvasLimitContext): str
 }
 
 
-/** GM r5 (1)/r6, the waiting line: the Projects home's slim notice while
+/** The waiting line (design): the Projects home's slim notice while
  * the canvas waits, whether or not a restore notice is open; it can't be
  * dismissed and goes once the canvas is saved. Several canvases waiting
- * (held aside, and the live one) are counted or named: GM's (a), "2
- * canvases you had open aren't saved as projects yet because…" (N-2). */
+ * (held aside, and the live one) are counted or named, as in
+ * "2 canvases you had open aren't saved as projects yet because…". */
 export function canvasWaitingLine(reason: CanvasLimit, context: CanvasLimitContext): string {
   return withAgentCopies(reason, context, personsWaitingLine);
 }
@@ -319,19 +320,19 @@ export function canvasHeldUnreadableLine(count: number | null | undefined, kept 
   return `Nebula couldn’t read the file that kept the canvases you had open, so some may be lost.${end}`;
 }
 
-/** GM r9: the closing line when the restore notice also says the held
+/** The closing line when the restore notice also says the held
  * canvases that couldn't be read (two damaged files kept). */
 const KEPT_BOTH = 'The damaged files were kept.';
 
-/** GM's held model (2026-10-28), the person's Agent log line when an
+/** The design's held model (2026-10-28), the person's Agent log line when an
  * agent's write made Nebula hold the waiting canvas aside (``action``
- * "cleared", "replaced", or "changed" for any other write: review 6 of PR
- * #199, M-1; ``agent`` null: "An agent"). */
+ * "cleared", "replaced", or "changed" for any other write: PR #199;
+ * ``agent`` null: "An agent"). */
 export function canvasHeldLogLine(agent: string | null | undefined, action: 'cleared' | 'replaced' | 'changed',
   savedAs?: string | null, copy = false, kept = false): string {
   const who = agent || 'An agent';
-  // GM r15 on PR #199: the canvas already was a project, so it was
-  // kept as it was, not "saved as its own project" (r14's words).
+  // The canvas already was a project, so it was kept as it was, not "saved
+  // as its own project" (design, PR #199; agentClosedLine has the words).
   if (savedAs && kept) {
     return agentClosedLine(agent, copy || action === 'changed' ? 'change' : action === 'cleared' ? 'clear' : 'replace', savedAs);
   }
@@ -339,7 +340,7 @@ export function canvasHeldLogLine(agent: string | null | undefined, action: 'cle
   return `${who} ${action} the canvas. The one you had open is kept until Nebula can save it as a project.`;
 }
 
-/** GM's rule (a) for an agent's write while a canvas waits (2026-10-28):
+/** The design's rule for an agent's write while a canvas waits (2026-10-28):
  * Nebula saved the person's canvas untouched as its own project first; a
  * clear or load started a new canvas, any other write changed a copy. */
 function canvasSavedFirstLogLine(who: string, action: 'cleared' | 'replaced' | 'changed', savedAs: string, copy: boolean): string {
@@ -349,19 +350,19 @@ function canvasSavedFirstLogLine(who: string, action: 'cleared' | 'replaced' | '
   return `${who} ${action} the canvas. The one you had open was saved as its own project, ${quoted(savedAs)}.`;
 }
 
-/** GM round 5 and GM's answer 1 to review 6, the Agent log line when Nebula
- * refused an agent's write at the limit while the canvas waited (``action``
- * "clear", "replace", or "change" for any other write). */
+/** The Agent log line when Nebula refused an agent's write at the limit while
+ * the canvas waited (design; ``action`` "clear", "replace", or "change" for
+ * any other write). */
 export function canvasHoldRefusedLogLine(agent: string | null | undefined, action: 'clear' | 'replace' | 'change'): string {
   return `${agent || 'An agent'} tried to ${action} the canvas you had open. Nebula stopped it because that canvas isn’t saved as a project yet.`;
 }
 
-/** GM r4/r5, the toast once a waiting canvas is saved: the project's real
- * name, and no "nothing in it is lost". GM's answer 2 to review 6: it names
- * each canvas it filed (up to 3; a count from 4). */
+/** The toast once a waiting canvas is saved (design): the project's real
+ * name, and no "nothing in it is lost". It names each canvas it filed
+ * (up to 3; a count from 4). */
 export function canvasSavedToast(name: string, filed?: SavedCanvasRow[] | null,
   overSaveLimit = false, another = false, agentCopy?: { agent?: string | null } | null): string {
-  // GM r11, 4: "the toast follows the same split": the person's canvases,
+  // "The toast follows the same split" (design): the person's canvases,
   // then each agent's copy on its own line.
   const all = filed && filed.length > 0 ? savedOrder(filed)
     : [{ name, ...(overSaveLimit ? { overSaveLimit: true } : {}), ...(agentCopy ? { agentCopy } : {}) }];
@@ -380,8 +381,8 @@ function personsSavedToast(name: string, filed: SavedCanvasRow[], overSaveLimit:
   const rows = filed.length > 1 ? filed : null;
   if (!rows) {
     const over = overSaveLimit || filed?.[0]?.overSaveLimit === true;
-    // GM's answer 1 to review 8: a later filing on its own, after the
-    // restore notice named the canvas it saved.
+    // A later filing on its own (design), after the restore notice named the
+    // canvas it saved.
     if (another) {
       return `Another canvas you had open was saved as its own project, ${quoted(name)}.${over ? ` ${ONE_OVER}` : ''}`;
     }
@@ -392,7 +393,7 @@ function personsSavedToast(name: string, filed: SavedCanvasRow[], overSaveLimit:
 
 /** The projects and Recently deleted as they are now, and the canvas
  * waiting to be saved (the listing's `canvasNotFiled`): the notice says
- * only what still holds against them (GM r4's stale-lines rule). */
+ * only what still holds against them (the design's stale-lines rule). */
 export interface NoticeNow {
   projects: { id: string; name: string }[];
   /** How many projects the list may hold now (the listing's `projectLimit`). */
@@ -419,7 +420,7 @@ function namesFor(rows: Row[], count: number): string[] | null {
 /** How many of a listed kind there are: the record's count, or its rows. */
 const total = (count: number | undefined, rows: unknown[] | undefined) => Math.max(count ?? 0, rows?.length ?? 0);
 
-/** The copy's age after "from" (GM r3's scale): under an hour "less than
+/** The copy's age after "from" (the design's scale): under an hour "less than
  * an hour ago"; "an hour ago", "5 hours ago" to 23; "a day ago" to 47 hours;
  * "3 days ago" to 6 days; "a week ago" to 13 days; then the date as the
  * home cards write it ("October 12", with the year when it isn't this year's).
@@ -440,9 +441,9 @@ export function copyAge(copyAt: string | null | undefined, now: number = Date.no
 export interface CatalogRestoreNotice {
   /** The notice as one paragraph (single outcome, or for logs and tests). */
   text: string;
-  /** GM r3's B layout, when there is more than one outcome: the opening,
-   * each outcome, and "The damaged file was kept." when said, one per line.
-   * Null when the notice is said inline. */
+  /** The design's stacked layout, when there is more than one outcome: the
+   * opening, each outcome, and "The damaged file was kept." when said, one per
+   * line. Null when the notice is said inline. */
   lines: string[] | null;
   /** Show "Open Recently deleted": Recently deleted holds one of the
    * notice's items (or the size cap's line asks to empty it). */
@@ -455,15 +456,15 @@ export interface CatalogRestoreNotice {
 
 /** The notice from its parts, always stacked: the opening, one outcome per
  * line, then the closing line, from the first render on, however many
- * remain as lines drop (GM round 5, 3; GM r6, bug 1: lines ran together as
- * one paragraph). */
+ * remain as lines drop (design; before, lines ran together as one
+ * paragraph). */
 function layout(opening: string, outcomes: string[], closing: string | null, openRecentlyDeleted: boolean,
   recentlyDeletedIds: string[] = [], canvasLine: CatalogRestoreNotice['canvasLine'] = null): CatalogRestoreNotice {
   const all = [opening, ...outcomes, ...(closing ? [closing] : [])];
   return { text: all.join(' '), lines: all, openRecentlyDeleted, recentlyDeletedIds, canvasLine };
 }
 
-/** Each row as it holds now (GM r4): ``where`` says where its line puts the
+/** Each row as it holds now (design): ``where`` says where its line puts the
  * project ("projects", "trash", its own group by `trashed`, or "gone": in
  * neither). Without ``current`` every row holds (logs, older callers). */
 type Where = 'projects' | 'trash' | 'own' | 'gone';
@@ -487,16 +488,16 @@ type NoticeInput = Pick<CatalogRestore, 'kind' | 'addedBack' | 'addedBackCount' 
     | 'revertedCount' | 'cameBack' | 'cameBackCount' | 'backInTrash' | 'backInTrashCount' | 'recoveredCanvas'
     | 'canvasNotFiled' | 'damagedReadWhole' | 'damagedRecordsUnread' | 'openProjectMissing' | 'alsoFiled' | 'agentCopies'>>;
 
-/** What else the restore notice says while it shows (GM r9): held canvases
+/** What else the restore notice says while it shows (design): held canvases
  * that couldn't be read, merged in as one more outcome before the closing. */
 export interface NoticeExtras { heldUnreadable?: { count: number | null } | null }
 
-/** The open canvas's outcome (GM r3: the last outcome line before the
+/** The open canvas's outcome (design: the last outcome line before the
  * not-read-whole line), if any, as it holds now: the saved projects under
  * their names now, each dropped once it is gone; the limit line only while
  * the canvas still waits (the listing's `canvasNotFiled`, its limit now).
- * GM's answer 1 to review 8: the notice names every canvas filed while it
- * shows (`recoveredCanvas`, then `alsoFiled`), in one sentence. */
+ * The notice names every canvas filed while it shows (`recoveredCanvas`,
+ * then `alsoFiled`), in one sentence (design). */
 function canvasOutcome(restore: NoticeInput, current?: NoticeNow): { lines: string[]; kind: 'saved' | 'limit' } | null {
   const lines: string[] = [];
   const seen = new Set<string>();
@@ -512,8 +513,8 @@ function canvasOutcome(restore: NoticeInput, current?: NoticeNow): { lines: stri
       ...(saved.overSaveLimit === true ? { overSaveLimit: true } : {}),
       ...(saved.agentCopy ? { agentCopy: saved.agentCopy } : {}) });
   }
-  // GM r10: in the order they were saved; GM r11, 4: the person's canvases,
-  // then each agent's copy on its own line.
+  // In the order they were saved; the person's canvases, then each agent's
+  // copy on its own line (design).
   if (rows.length === 1) lines.push(recoveredCanvasSentence(rows[0].name, rows[0].overSaveLimit === true));
   else if (rows.length > 1) lines.push(canvasesSavedLine(rows, true));
   for (const copy of savedOrder(copies)) lines.push(agentCopySavedLine(copy.agentCopy?.agent, copy.name, copy.overSaveLimit === true));
@@ -534,7 +535,7 @@ function canvasOutcome(restore: NoticeInput, current?: NoticeNow): { lines: stri
 }
 
 /** Whether a limit line asks the person to look in Recently deleted (the
- * size cap, GM r5: "Size cap reason adds the Open Recently deleted button"). */
+ * size cap; design: "Size cap reason adds the Open Recently deleted button"). */
 function limitOpensTrash(restore: NoticeInput, canvas: { kind: string } | null, current?: NoticeNow): boolean {
   if (canvas?.kind !== 'limit') return false;
   const reason = current?.canvasNotFiled?.reason ?? restore.canvasNotFiled?.reason;
@@ -542,7 +543,8 @@ function limitOpensTrash(restore: NoticeInput, canvas: { kind: string } | null, 
 }
 
 function rebuiltNotice(restore: NoticeInput, current?: NoticeNow, extras?: NoticeExtras): CatalogRestoreNotice {
-  // GM: "Lost Recently deleted entries: not in the notice; log them."
+  // The design's rule: "Lost Recently deleted entries: not in the notice;
+  // log them."
   const all = (restore.notAddedBack ?? []).filter((row) => row.trashed !== true);
   const trashedRows = (restore.notAddedBack ?? []).length - all.length;
   const { rows, dropped } = holding(all, 'gone', current);
@@ -564,12 +566,12 @@ function rebuiltNotice(restore: NoticeInput, current?: NoticeNow, extras?: Notic
   return layout(REBUILT, outcomes, held ? KEPT_BOTH : KEPT, opensTrash, [], canvas?.kind ?? null);
 }
 
-/** The notice for `restore`: GM's sentences in GM's order. With `current`
- * (the projects and Recently deleted now), only the lines that still hold
- * (GM r4): a project restored, deleted or deleted for good since drops its
- * line, live, as the person or an agent changes the list. What the notice
- * says around them (the copy's age, "The damaged file was kept.") follows
- * what the restore did, so when every outcome has gone the opening and
+/** The notice for `restore`: the design's sentences, in the design's order.
+ * With `current` (the projects and Recently deleted now), only the lines that
+ * still hold (design): a project restored, deleted or deleted for good since
+ * drops its line, live, as the person or an agent changes the list. What the
+ * notice says around them (the copy's age, "The damaged file was kept.")
+ * follows what the restore did, so when every outcome has gone the opening and
  * that line remain until the person closes it. */
 export function catalogRestoreNotice(restore: NoticeInput, now: number = Date.now(), current?: NoticeNow,
   extras?: NoticeExtras): CatalogRestoreNotice {
@@ -582,20 +584,20 @@ export function catalogRestoreNotice(restore: NoticeInput, now: number = Date.no
   const liveAdded = Math.max(0, recordedLiveAdded - liveHeld.dropped);
   const trashedAdded = holding(recordedTrashedAdded, 'trash', current).rows;
   // The open project that couldn't be added back but whose canvas was saved
-  // as its own project: the canvas sentence is its one sentence (GM r3), so
+  // as its own project: the canvas sentence is its one sentence (design), so
   // its failed add-back isn't said beside "so nothing in it is lost". The
   // Agent log still lists it.
-  // GM r19 (b): the same holds for the open canvas that waits on the limit
-  // (its canvas line owns the project): it isn't said left out at the limit
-  // beside it too.
+  // The same holds for the open canvas that waits on the limit (design; its
+  // canvas line owns the project): it isn't said left out at the limit beside
+  // it too.
   const canvas = canvasOutcome(restore, current);
   const savedFrom = restore.recoveredCanvas || canvas ? restore.openProjectMissing ?? null : null;
   const failedListed = (restore.notAddedBack ?? []).filter((row) => savedFrom === null || row.id !== savedFrom);
   const failedOut = (restore.notAddedBack ?? []).length - failedListed.length;
   const recordedNotAdded = Math.max(0, total(restore.notAddedBackCount, restore.notAddedBack) - failedOut);
-  // GM r18: readable records left out because the list was at its
-  // project limit have their own line; the rest (records Nebula couldn't
-  // read or add) keep "couldn’t be added back".
+  // Readable records left out because the list was at its project limit
+  // have their own line (design); the rest (records Nebula couldn't read or
+  // add) keep "couldn’t be added back".
   const isLimit = (row: { reason?: string }) => row.reason === 'limit';
   const limitListed = failedListed.filter(isLimit);
   const limitOut = (restore.notAddedBack ?? []).filter(isLimit).length - limitListed.length;
@@ -626,8 +628,8 @@ export function catalogRestoreNotice(restore: NoticeInput, now: number = Date.no
   const backInTrash = Math.max(0, recordedBackInTrash - backInTrashHeld.dropped);
   const kept = Boolean(restore.damagedFile) || (restore.setAside ?? []).length > 0;
 
-  // GM: say the copy's age up front when the copy is the older one, or when
-  // it decided something; unknown: the usual opening. No comma before it (GM r3).
+  // Say the copy's age up front when the copy is the older one, or when it
+  // decided something (design); unknown: the usual opening. No comma before it.
   // As the restore decided it, so the opening stays put as lines drop.
   const older = restore.source === 'catalog.json.bak.1' || recordedReverted > 0 || recordedCameBack > 0 || recordedBackInTrash > 0;
   const age = older ? copyAge(restore.copyAt, now) : null;
@@ -644,9 +646,9 @@ export function catalogRestoreNotice(restore: NoticeInput, now: number = Date.no
     opening = `${start}.`;
   }
 
-  // GM r3's order: added back to Recently deleted, reverted, deleted but
+  // The design's order: added back to Recently deleted, reverted, deleted but
   // back, back in Recently deleted, the open canvas saved. Add-backs that
-  // failed follow form 2 (their place in A).
+  // failed come right after the first of these.
   if (trashedAdded.length > 0) {
     const count = trashedAdded.length;
     const names = namesFor(trashedAdded, count);
@@ -655,7 +657,7 @@ export function catalogRestoreNotice(restore: NoticeInput, now: number = Date.no
     else outcomes.push(`${count} newer projects it found are in Recently deleted. Restore them from there to keep them.`);
   }
 
-  // Add-backs that failed (GM round 1, form 2): named, or counted when the
+  // Add-backs that failed (design): named, or counted when the
   // name couldn't be read (even 1–3). After something was added back, the
   // named line drops ", a newer project,".
   if (failed > 0) {
@@ -695,16 +697,16 @@ export function catalogRestoreNotice(restore: NoticeInput, now: number = Date.no
     else outcomes.push(`${backInTrash} projects are in Recently deleted again because the copy had them there. Restore them again if you need them.`);
   }
 
-  // The open canvas, saved as its own project (GM r3 string 1), or the
-  // limit it waits on (GM r5).
+  // The open canvas, saved as its own project, or the limit it waits on
+  // (design).
   if (canvas) outcomes.push(...canvas.lines);
 
-  // GM r3 string 4: a damaged file that wasn't read to its end (cut,
-  // zeroed, or a key damaged): what it held past that is unknown. Only
-  // where a damaged file was kept (a missing catalog has none to read).
-  // GM r19 (a): only when the damaged file had records Nebula couldn't read
-  // (`damagedRecordsUnread`; a record from before the field: unknown, so
-  // said): a file cut only past its last record lost none.
+  // A damaged file that wasn't read to its end (cut, zeroed, or a key
+  // damaged): what it held past that is unknown (design). Only where a
+  // damaged file was kept (a missing catalog has none to read). Only when the
+  // damaged file had records Nebula couldn't read (`damagedRecordsUnread`; a
+  // record from before the field: unknown, so said): a file cut only past its
+  // last record lost none.
   const readWhole = restore.damagedReadWhole === true;
   const unreadRecords = !readWhole && restore.damagedRecordsUnread !== false;
   if (unreadRecords && kept) outcomes.push(NOT_READ_WHOLE);
@@ -715,18 +717,18 @@ export function catalogRestoreNotice(restore: NoticeInput, now: number = Date.no
     || recordedLimit > 0 || recordedReverted > 0 || recordedCameBack > 0 || recordedBackInTrash > 0
     || Boolean(restore.recoveredCanvas) || Boolean(restore.canvasNotFiled) || filedSince || (unreadRecords && kept);
   if (!saidAtFirst && !unreadRecords) outcomes.push('No projects were missing.');
-  // GM r9: held canvases that couldn't be read, merged in as one more
-  // outcome before the closing line, which then names both files.
+  // Held canvases that couldn't be read are merged in as one more outcome
+  // before the closing line, which then names both files (design).
   const held = extras?.heldUnreadable;
   if (held) outcomes.push(canvasHeldUnreadableLine(held.count, false));
   // Only when the file really is kept AND something may be lost (as the
   // restore found it: it stays when the lines that called for it go). The
-  // left-out line says "which was kept" itself (GM r18), so not twice.
+  // left-out line says "which was kept" itself (design), so not twice.
   const restoreKept = kept && leftOut === 0 && (recordedFailed > 0 || recordedReverted > 0 || Boolean(restore.recoveredCanvas)
     || Boolean(restore.canvasNotFiled) || filedSince || unreadRecords);
   const closing = held ? (kept ? KEPT_BOTH : KEPT) : restoreKept ? KEPT : null;
   // "Open Recently deleted" while Recently deleted holds one of the notice's
-  // items, and opens to them (GM r4); the size cap's line adds it too (GM r5).
+  // items, and opens to them; the size cap's line adds it too (design).
   const recentlyDeletedIds = current
     ? [...trashedAdded.map((row) => row.id), ...backInTrashRows.map((row) => row.id)]
     : [];
@@ -746,7 +748,7 @@ function logList(rows: Row[], count: number): string {
   return names ? namedList(names) : `${count} ${count === 1 ? 'project' : 'projects'}`;
 }
 
-/** The Agent log's line (source "system", GM round 2): sentences, with the
+/** The Agent log's line (source "system"; design): sentences, with the
  * damaged file's absolute path, which the notice leaves out. */
 export function catalogRestoreLogLine(restore: Pick<CatalogRestore, 'kind' | 'source' | 'damagedFile' | 'addedBack' | 'addedBackCount' | 'notAddedBackCount'>
   & Partial<Pick<CatalogRestore, 'setAside' | 'notAddedBack' | 'damagedReadWhole'>>): string {
@@ -766,7 +768,7 @@ export function catalogRestoreLogLine(restore: Pick<CatalogRestore, 'kind' | 'so
   return sentences.join(' ');
 }
 
-/** GM r3 string 5: "Rebuilt the project list from the damaged file.
+/** The design's wording: "Rebuilt the project list from the damaged file.
  * Recovered “Hero study”." then as needed "Nebula couldn’t recover “X”." /
  * "Nebula couldn’t read the whole file." / "The damaged file was kept at <path>."
  * Names to 3, counts from 4; Recently deleted's losses are logged too. */

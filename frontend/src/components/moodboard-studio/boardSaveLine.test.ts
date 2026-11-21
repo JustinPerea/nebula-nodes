@@ -10,7 +10,7 @@ const failed = (status: number, options: ConstructorParameters<typeof RequestFai
   new RequestFailedError("Couldn't save the moodboard.", status, { reason: 'x', ...options });
 const offline = () => new ConnectionLostError(new TypeError('Failed to fetch'));
 
-// GM r16 (7a, 7b), verbatim.
+// The approved save lines (design), verbatim.
 const LINES = {
   noAnswer: 'Nebula couldn’t save the moodboard because the server isn’t answering. Try again.',
   busy: 'Nebula couldn’t save the moodboard because the server is busy. Try again.',
@@ -23,7 +23,7 @@ const LINES = {
   refused: 'Nebula couldn’t save the moodboard because the server didn’t accept this save. Try again.',
 };
 
-describe('a board save that failed (GM r16 7a): the because form, ending with the step that works', () => {
+describe('a board save that failed: the because form, ending with the step that works', () => {
   it.each([
     ['no answer', offline(), LINES.noAnswer, 'save'],
     ['a gateway with no backend behind it', failed(502), LINES.noAnswer, 'save'],
@@ -50,7 +50,7 @@ describe('a board save that failed (GM r16 7a): the because form, ending with th
     expect(reason).not.toMatch(/creat/i);
   });
 
-  it('offers Retry exactly where the line says to try again; signed out points to the printed link, as the banner does (GM r17)', () => {
+  it('offers Retry exactly where the line says to try again; signed out points to the printed link, as the banner does', () => {
     const errors: Record<keyof typeof LINES, unknown> = { noAnswer: offline(), busy: failed(429), noResponse: failed(408), serverError: failed(500),
       diskFull: failed(507, { storageFull: true }), tooLarge: failed(413), signedOut: failed(403), changed: failed(409, { code: 'version_conflict' }),
       refused: failed(422) };
@@ -62,7 +62,7 @@ describe('a board save that failed (GM r16 7a): the because form, ending with th
     expect(LINES.signedOut).not.toMatch(/Reload/);
   });
 
-  // GM r16: backend wording never reaches the person.
+  // Backend wording never reaches the person.
   it('never renders the server\'s own detail or reason, for any status or code (ratchet)', () => {
     const known = new Set([...Object.values(LINES), deletedBoardsLine([''], 'trashed').text, deletedBoardsLine([''], 'purged').text]);
     const codes = [null, 'version_conflict', 'request_id_scope', 'in_trash', 'person_required', 'agent_refused', 'project_store', 'brief_override_protected', 'other'];
@@ -81,13 +81,13 @@ describe('a board save that failed (GM r16 7a): the because form, ending with th
   });
 });
 
-// Round 6l (review 10 live MEDIUM-2, GM r21 Q3): a save that finds its board deleted says the deleted-board line,
-// never "didn’t accept this save. Try again.", and no Retry (it can't work).
-describe('a save that found its board deleted (GM r21 Q3)', () => {
+// A save that finds its board deleted says the deleted-board line, never "didn’t accept this save. Try again."
+// (an earlier version said that), and no Retry (it can't work).
+describe('a save that found its board deleted', () => {
   const TRASHED = 'Nebula couldn’t save your change to “Rivers” because the moodboard was deleted. Restore it to keep the change.';
   const PURGED = 'Nebula couldn’t save your change to “Rivers” because the moodboard was deleted somewhere else.';
 
-  it('in Recently deleted: the r18 line with its Restore step; gone for good: the red line; no Retry either way', () => {
+  it('in Recently deleted: the neutral line with its Restore step; gone for good: the red line; no Retry either way', () => {
     const inTrash = failed(404, { detail: { code: 'in_trash', trashed: { deletedAt: '2026-11-03T10:00:00Z' } } });
     expect(boardGoneKind(inTrash)).toBe('trashed');
     expect(boardSaveLine(inTrash, 'Rivers')).toEqual({ failure: { heading: '', reason: TRASHED }, retry: 'reload' });
@@ -122,7 +122,7 @@ describe('a save that found its board deleted (GM r21 Q3)', () => {
   });
 });
 
-describe('which line is the neutral one (GM r12 1, r16)', () => {
+describe('which line is the neutral one', () => {
   it('is a board save line only: the lost add and any other line keep the error look', () => {
     expect(isBoardNotSavedLine(boardSaveFailure(failed(403)))).toBe(true);
     expect(isBoardNotSavedLine(lostAddLine(['a.png']))).toBe(false);
@@ -134,8 +134,8 @@ describe('which line is the neutral one (GM r12 1, r16)', () => {
   });
 });
 
-describe('a create refused for its id (round 6g, GM r16 7b)', () => {
-  it('says 7(b)\'s neutral line, the 409 for another project\'s id included', () => {
+describe('a create refused for its id', () => {
+  it('says the neutral refused line, the 409 for another project\'s id included', () => {
     const refusal = failed(422, { detail: "requestId must be 8 to 128 letters, digits, '-' or '_'" });
     expect(isCreateIdRefusal(refusal)).toBe(true);
     expect(boardSaveLine(refusal)).toEqual({ failure: { heading: '', reason: LINES.refused }, retry: 'save' });
@@ -155,7 +155,7 @@ describe('a create refused for its id (round 6g, GM r16 7b)', () => {
   });
 });
 
-describe('joining names (GM r16): "and", no serial comma', () => {
+describe('joining names: "and", no serial comma', () => {
   it('joins 0 to 4', () => {
     expect(joinWithAnd([])).toBe('');
     expect(joinWithAnd(['a'])).toBe('a');
@@ -165,7 +165,7 @@ describe('joining names (GM r16): "and", no serial comma', () => {
   });
 });
 
-describe('the red line for a truly lost add (GM r16 7a)', () => {
+describe('the red line for a truly lost add', () => {
   it('names up to three files, then counts them', () => {
     expect(lostAddLine(['river.png'])).toEqual({ heading: '',
       reason: 'Nebula couldn’t add “river.png” because the moodboard hadn’t loaded. Add it again.' });
@@ -179,7 +179,7 @@ describe('the red line for a truly lost add (GM r16 7a)', () => {
   });
 });
 
-describe('a kept edit whose board was deleted (round 6j, GM r18)', () => {
+describe('a kept edit whose board was deleted', () => {
   it('in Recently deleted: one board by name, then up to three joined with "and", then a count', () => {
     expect(deletedBoardsLine(['Rivers'], 'trashed')).toEqual({
       text: 'Nebula couldn’t save your change to “Rivers” because the moodboard was deleted. Restore it to keep the change.', title: '“Rivers”' });
@@ -214,7 +214,7 @@ describe('a kept edit whose board was deleted (round 6j, GM r18)', () => {
   });
 });
 
-describe('a Restore\'s confirmation (round 6l, GM r20 A, r21 Q6)', () => {
+describe('a Restore\'s confirmation', () => {
   it('names the boards in two sentences, the second by how many were saved', () => {
     expect(restoredBoardsLine(['Rivers'], 1)).toEqual({ text: 'Restored “Rivers”. Your change is saved.', title: '“Rivers”' });
     expect(restoredBoardsLine(['Rivers', 'Harbor'], 2).text).toBe('Restored “Rivers” and “Harbor”. Your changes are saved.');
@@ -236,7 +236,7 @@ describe('a Restore\'s confirmation (round 6l, GM r20 A, r21 Q6)', () => {
   });
 });
 
-describe('kept edits whose boards\' project was deleted (GM r21 Q8; round 6p, GM r90.2)', () => {
+describe('kept edits whose boards\' project was deleted', () => {
   it('one line per project, naming the project and its boards: one, up to three, then a count; the title lists every name', () => {
     expect(projectDeletedLine('Coast', ['Rivers'])).toEqual({ title: '“Rivers” in “Coast”',
       text: 'Nebula couldn’t save your change to “Rivers” because its project “Coast” was deleted. Restore the project to keep the change.' });
@@ -253,7 +253,7 @@ describe('kept edits whose boards\' project was deleted (GM r21 Q8; round 6p, GM
     expect(projectDeletedLine(long, ['Rivers']).text).toContain(`its project “${long.slice(0, 39)}…” was deleted`);
   });
 
-  it('deleted for good somewhere else (GM r90.1): red, "couldn’t keep", one, up to three, then a count', () => {
+  it('deleted for good somewhere else: red, "couldn’t keep", one, up to three, then a count', () => {
     expect(projectGoneLine('Coast', ['Rivers'])).toEqual({ title: '“Rivers” in “Coast”',
       text: 'Nebula couldn’t keep your change to “Rivers” because its project “Coast” was deleted for good.' });
     expect(projectGoneLine('Coast', ['Rivers', 'Tide'])).toEqual({ title: '“Rivers” and “Tide” in “Coast”',
@@ -265,8 +265,8 @@ describe('kept edits whose boards\' project was deleted (GM r21 Q8; round 6p, GM
   });
 });
 
-// Round 6q (GM r95.5): every line that counts boards says "moodboards".
-describe('a count of boards says "moodboards" in every line (GM r95.5)', () => {
+// Every line that counts boards says "moodboards".
+describe('a count of boards says "moodboards" in every line', () => {
   const four = ['a', 'b', 'c', 'd'];
   it.each([
     ['the Restore project confirmation', projectRestoredLine('Coast', four).text, 'Restored “Coast”. Your changes to 4 moodboards are saved.'],
@@ -288,7 +288,7 @@ describe('a count of boards says "moodboards" in every line (GM r95.5)', () => {
   });
 });
 
-describe('a kept remove the board changed after (GM r90.5)', () => {
+describe('a kept remove the board changed after', () => {
   it('names the numbers by the names rule, then counts them; by the agent\'s own label', () => {
     expect(changedAfterRemoveLine([], 'Claude')).toBe('');
     expect(changedAfterRemoveLine([3], 'Claude')).toBe('Claude changed image 3 after you removed it, so it’s still on the moodboard.');
@@ -297,7 +297,7 @@ describe('a kept remove the board changed after (GM r90.5)', () => {
     expect(changedAfterRemoveLine([1, 3, 5, 7], 'Claude')).toBe('Claude changed 4 images after you removed them, so they’re still on the moodboard.');
     // The agent's label, never a fixed "Claude".
     expect(changedAfterRemoveLine([3], 'Codex')).toBe('Codex changed image 3 after you removed it, so it’s still on the moodboard.');
-    // Across boards, counted (a number names an image on one board only), and on their boards (round 6q, GM r95.2).
+    // Across boards, counted (a number names an image on one board only), and on their boards.
     expect(changedAfterRemoveLine([3, 3], 'Claude', true)).toBe('Claude changed 2 images after you removed them, so they’re still on their moodboards.');
     expect(changedAfterRemoveLine([1, 2, 3, 4, 5], 'Claude Code', true))
       .toBe('Claude Code changed 5 images after you removed them, so they’re still on their moodboards.');
@@ -319,14 +319,14 @@ describe('a kept remove the board changed after (GM r90.5)', () => {
   });
 });
 
-// Round 6m (GM r53 Q1): Restore project's failure lines, verbatim, in the because form.
-describe('a Restore project that failed (GM r53 Q1)', () => {
+// Restore project's failure lines, verbatim, in the because form.
+describe('a Restore project that failed', () => {
   it('the server isn\'t answering, or didn\'t accept it: neutral, ending in Try again', () => {
     expect(projectRestoreFailedLine('Shore', 'noAnswer')).toEqual({ title: '“Shore”',
       text: 'Nebula couldn’t restore “Shore” because the server isn’t answering. Try again.' });
     expect(projectRestoreFailedLine('Shore', 'refused')).toEqual({ title: '“Shore”',
       text: 'Nebula couldn’t restore “Shore” because the server didn’t accept the request. Try again.' });
-    // Round 6p (GM r90.3): the connection dropped while it was out.
+    // The connection dropped while it was out.
     expect(projectRestoreFailedLine('Coast', 'lost')).toEqual({ title: '“Coast”',
       text: 'Nebula couldn’t restore “Coast” because it lost the connection. Try again.' });
   });
@@ -338,7 +338,7 @@ describe('a Restore project that failed (GM r53 Q1)', () => {
       text: 'Nebula couldn’t restore “Shore” because it was deleted for good. Your changes to “Rivers” and “Harbor” can’t be kept.' });
     expect(projectRestoreFailedLine('Shore', 'purged', ['Rivers', 'Harbor', 'Tide'])).toEqual({ title: '“Rivers”, “Harbor” and “Tide” in “Shore”',
       text: 'Nebula couldn’t restore “Shore” because it was deleted for good. Your changes to “Rivers”, “Harbor” and “Tide” can’t be kept.' });
-    // From 4 boards the line counts; the title still lists every name, with no serial comma (GM r74).
+    // From 4 boards the line counts; the title still lists every name, with no serial comma.
     expect(projectRestoreFailedLine('Shore', 'purged', ['Rivers', 'Tide', 'Harbor', 'Quiet'])).toEqual({
       title: '“Rivers”, “Tide”, “Harbor” and “Quiet” in “Shore”',
       text: 'Nebula couldn’t restore “Shore” because it was deleted for good. Your changes to 4 moodboards can’t be kept.' });
@@ -349,8 +349,8 @@ describe('a Restore project that failed (GM r53 Q1)', () => {
     expect(projectRestoreFailedLine(long, 'noAnswer').title).toBe(`“${long}”`);
   });
 
-  // Round 6n (GM r71): the success line names the boards as well as the project, by the same names rule.
-  // Round 6o (GM r74): its title lists every board, then the project, with no colon.
+  // The success line names the boards as well as the project, by the same names rule.
+  // Its title lists every board, then the project, with no colon.
   it('restored: names the project and the boards whose change is saved, one, up to three, then a count', () => {
     expect(projectRestoredLine('Coast', ['Rivers'])).toEqual({ title: '“Rivers” in “Coast”',
       text: 'Restored “Coast”. Your change to “Rivers” is saved.' });
@@ -358,7 +358,7 @@ describe('a Restore project that failed (GM r53 Q1)', () => {
       text: 'Restored “Coast”. Your changes to “Rivers” and “Tide” are saved.' });
     expect(projectRestoredLine('Coast', ['Rivers', 'Tide', 'Harbor'])).toEqual({ title: '“Rivers”, “Tide” and “Harbor” in “Coast”',
       text: 'Restored “Coast”. Your changes to “Rivers”, “Tide” and “Harbor” are saved.' });
-    // From 4 boards the line counts; the title still lists every name, with no serial comma (GM r74).
+    // From 4 boards the line counts; the title still lists every name, with no serial comma.
     expect(projectRestoredLine('Coast', ['Rivers', 'Tide', 'Harbor', 'Quiet'])).toEqual({ title: '“Rivers”, “Tide”, “Harbor” and “Quiet” in “Coast”',
       text: 'Restored “Coast”. Your changes to 4 moodboards are saved.' });
     expect(projectRestoredLine('Coast', ['a', 'b', 'c', 'd', 'e'])).toEqual({ title: '“a”, “b”, “c”, “d” and “e” in “Coast”',
@@ -381,7 +381,7 @@ describe('a Restore project that failed (GM r53 Q1)', () => {
   });
 });
 
-describe('a Delete forever or Empty that takes kept edits (GM r21 Q2)', () => {
+describe('a Delete forever or Empty that takes kept edits', () => {
   it('adds one sentence: one, up to three, then a count', () => {
     expect(lostTooLine([])).toBeNull();
     expect(lostTooLine(['Rivers'])).toEqual({ text: 'Your unsaved change to “Rivers” will be lost too.', title: '“Rivers”' });
@@ -391,13 +391,13 @@ describe('a Delete forever or Empty that takes kept edits (GM r21 Q2)', () => {
   });
 });
 
-describe('a dropped Undo (GM r21 Q1)', () => {
+describe('a dropped Undo', () => {
   it('has its own neutral line', () => {
     expect(UNDO_DROPPED_LINE).toBe('Nebula couldn’t apply your Undo because the moodboard changed after it.');
   });
 });
 
-describe('the "Kept …" line (round 6g, GM r16)', () => {
+describe('the "Kept …" line', () => {
   it('names up to three fields joined with "and", then counts them', () => {
     expect(keptFromBoardLine([])).toBeNull();
     expect(keptFromBoardLine(['name'], { name: 'Rivers' })).toEqual({ text: 'Kept the name “Rivers” from the moodboard.', title: 'Rivers' });
@@ -407,7 +407,7 @@ describe('the "Kept …" line (round 6g, GM r16)', () => {
     expect(keptFromBoardLine(['name', 'notes', 'mode', 'strength'])).toBe('Kept 4 changes from the moodboard.');
   });
 
-  it('shows only the name\'s value, trimmed, clipped past 40 characters with the full name in the title (GM r17 addendum)', () => {
+  it('shows only the name\'s value, trimmed, clipped past 40 characters with the full name in the title', () => {
     const long = 'An exceptionally long board name that keeps going well past forty';
     const line = keptFromBoardLine(['name'], { name: `  ${long} ` }) as { text: string; title: string };
     expect(line.title).toBe(long);
@@ -428,7 +428,7 @@ describe('the "Kept …" line (round 6g, GM r16)', () => {
     expect(keptFromBoardLine(['sendNotes', 'strength'])).toBe('Kept the “Moodboard notes to generators” setting and strength from the moodboard.');
   });
 
-  // Round 6l (GM r21 Q1): kept image changes, one item per image. Round 6m (GM r53): by the label the person sees.
+  // Kept image changes, one item per image, named by the label the person sees.
   it('names each image by its number, "image N", and joins them with the board fields', () => {
     expect(keptFromBoardLine([], {}, [{ n: 3 }])).toBe('Kept the changes to image 3 from the moodboard.');
     expect(keptFromBoardLine(['name'], { name: 'Tide' }, [{ n: 3 }])).toEqual({
@@ -446,13 +446,13 @@ describe('the "Kept …" line (round 6g, GM r16)', () => {
     expect(keptFromBoardLine(['name', 'cover'])).toBe('Kept the name and cover from the moodboard.');
     expect(keptFromBoardLine(['cover'], {}, [{ n: 1 }])).toBe('Kept the cover and the changes to image 1 from the moodboard.');
     expect(keptFromBoardLine([], {}, [{ n: 1234 }])).toBe('Kept the changes to image 1234 from the moodboard.');
-    // A long name keeps its clip and its title (GM r17), beside an image.
+    // A long name keeps its clip and its title, beside an image.
     const long = 'A board name for this reference set that keeps going well past forty';
     expect(keptFromBoardLine(['name'], { name: long }, [{ n: 2 }])).toEqual({
       text: `Kept the name “${long.slice(0, 39)}…” and the changes to image 2 from the moodboard.`, title: long });
   });
 
-  // GM r53: a private note is the person's own text, and a status line can end up in a screen share.
+  // A private note is the person's own text, and a status line can end up in a screen share.
   it('ratchet: a Kept line never carries anything of an image but its number', () => {
     const shapes = [[], ['name'], ['cover'], ['name', 'notes']] as const;
     for (const fields of shapes) {
@@ -466,10 +466,10 @@ describe('the "Kept …" line (round 6g, GM r16)', () => {
   });
 });
 
-// #210 round 6t (GM r113 2, verbatim): a replayed kept edit's save that failed on a board the person isn't on, under
+// #210 (design, verbatim): a replayed kept edit's save that failed on a board the person isn't on, under
 // the Restore's confirmation, names the board, from the save line it failed with.
-describe('a replayed save that failed elsewhere (GM r113 2)', () => {
-  it('names the board in the because form, with the same cause and step: GM\'s string', () => {
+describe('a replayed save that failed elsewhere', () => {
+  it('names the board in the because form, with the same cause and step: the approved line', () => {
     expect(changeNotSavedLine(boardSaveFailure(failed(408)), 'Rivers')).toEqual({
       text: 'Nebula couldn’t save your change to “Rivers” because the server didn’t respond. Try again.', title: '“Rivers”', retry: true });
   });

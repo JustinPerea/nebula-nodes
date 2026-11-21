@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react';
 
 /**
- * Review 13 of PR #199 (merge-integrity LOW-1): the restore notice's copy
- * (catalogRestoreCopy, about 15 KB built) is needed only once Nebula has
- * restored its project list, held a canvas or found one it couldn't read,
- * so it loads then instead of with the entry chunk. The store's Agent log
- * lines wait for it (withRestoreCopy); the home's notices render once it is
- * in (useRestoreCopy). The test setup primes it, so tests read it at once.
+ * The restore notice's copy (catalogRestoreCopy, about 15 KB built) is
+ * needed only once Nebula has restored its project list, held a canvas or
+ * found one it couldn't read, so it loads then instead of with the entry
+ * chunk (PR #199). The store's Agent log lines wait for it
+ * (withRestoreCopy); the home's notices render once it is in
+ * (useRestoreCopy). The test setup primes it, so tests read it at once.
  */
 export type RestoreCopy = typeof import('./catalogRestoreCopy');
 
@@ -15,10 +15,10 @@ let loading: Promise<RestoreCopy> | null = null;
 let importCopy: () => Promise<RestoreCopy> = () => import('./catalogRestoreCopy');
 
 /**
- * Review 14 of PR #199 (lock-order LOW-3): a chunk that failed to load (a
- * dropped connection, a restart serving a new build) is asked for again the
- * next time: a failed load is never kept, as the other deferred chunks
- * retry on focus or reconnect (useRestoreCopyState, withRestoreCopy).
+ * A chunk that failed to load (a dropped connection, a restart serving a new
+ * build) is asked for again the next time (PR #199): a failed load is never
+ * kept, as the other deferred chunks retry on focus or reconnect
+ * (useRestoreCopyState, withRestoreCopy).
  */
 export function loadRestoreCopy(): Promise<RestoreCopy> {
   if (loaded) return Promise.resolve(loaded);

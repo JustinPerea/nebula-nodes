@@ -5,8 +5,8 @@ import { dropKeptEdit, isUnsavedBoardKey, keepUnsavedDrafts, keptEditOf, keptEdi
   restoreUnsavedDrafts, takeKeptEdit, unsavedWouldBeLost, type KeptEdit } from './unsavedDrafts';
 import { takeWaitingSend } from './boardAdds';
 
-// Round 6g (GM r15 3): an unsaved board's draft lives through a reload of
-// its tab, in session storage, as the waiting sends do.
+// An unsaved board's draft lives through a reload of its tab, in session
+// storage, as the waiting sends do.
 const KEY = 'nebula:moodboard-unsaved-drafts';
 const newKey = JSON.stringify(['moodboard', 'global', 'new']);
 const river = '/api/outputs/chat-uploads/river.png';
@@ -31,7 +31,7 @@ const EDITS = 'nebula:moodboard-kept-edits';
 const kept = () => JSON.parse(window.sessionStorage.getItem(KEY) ?? '[]') as Array<Record<string, unknown> & { draft: { images: Array<{ url: string }>; pendingOps: MoodboardOp[] } }>;
 const set = (entries: Record<string, AssetStudioDraftEntry>) => useAssetStudioDraftStore.setState({ entries, aliases: {} });
 
-// What the last page load of this tab left, put back when the page installs the keeping (round 6g).
+// What the last page load of this tab left, put back when the page installs the keeping.
 const LEFT = JSON.stringify(['moodboard', 'project', 'p9', 'new']);
 let atInstall: AssetStudioDraftEntry | undefined;
 beforeAll(() => {
@@ -206,7 +206,7 @@ describe('the warning before unload', () => {
   });
 });
 
-// Round 6i (GM r17 2+3): a saved board's kept edit lives through a reload too.
+// A saved board's kept edit lives through a reload too.
 describe('a saved board\'s kept edit', () => {
   const g1Key = JSON.stringify(['moodboard', 'global', 'g1']);
   const base = { name: 'Global board', notes: '', mode: 'look', strength: 0.7 };
@@ -220,14 +220,14 @@ describe('a saved board\'s kept edit', () => {
     const add = addOp('i9', '/api/outputs/chat-uploads/sea.png');
     const edit = keptEditOf(g1Key, saved({ name: 'Dusk', pendingOps: [add, addOp('i8', 'blob:http://localhost/1')] }))!;
     expect(edit).toMatchObject({ board: 'g1', fields: { name: 'Dusk' }, base: { name: 'Global board' }, fieldEditedAt: { name: 7 }, ops: [add] });
-    // The board's saved name, trimmed, to name the board if it's gone (round 6j): not the rename that never saved;
+    // The board's saved name, trimmed, to name the board if it's gone: not the rename that never saved;
     // the draft's when the board has none; none when both are blank.
     expect(keptEditOf(g1Key, saved({ name: '  Dusk ' }))?.name).toBe('Global board');
     expect(keptEditOf(g1Key, saved({ name: '  Dusk ', base: { ...base, name: '  ' } }))?.name).toBe('Dusk');
     expect(keptEditOf(g1Key, saved({ name: '  ', notes: 'x', base: { ...base, name: ' ' } }))).not.toHaveProperty('name');
   });
 
-  it('those an earlier page load left wait, listed for the Studio to look up; this page\'s own don\'t (round 6j)', () => {
+  it('those an earlier page load left wait, listed for the Studio to look up; this page\'s own don\'t', () => {
     const left = (board: string, extra: Record<string, unknown> = {}) => ({ board, name: board.toUpperCase(), fields: { name: 'X' }, base: {}, ops: [], at: Date.now(), ...extra });
     window.sessionStorage.setItem(EDITS, JSON.stringify([left('g1'), left('g2'), left('g3', { name: 5 })]));
     expect(keptEditsWaiting().map((it) => [it.board, it.name])).toEqual([['g1', 'G1'], ['g2', 'G2']]);
@@ -310,7 +310,7 @@ describe('a saved board\'s kept edit', () => {
     const good = { board: 'g1', fields: { name: 'Dusk' }, base: {}, ops: [], at: Date.now() };
     for (const bad of [{ ...good, board: 5 }, { ...good, fields: { evil: 1 } }, { ...good, at: 'now' },
       { ...good, ops: [{ op: 'nope' }] }, { ...good, fieldEditedAt: { name: 'x' } }, { ...good, base: null },
-      // Round 6l: each op's meta, by index.
+      // Each op's meta, by index.
       { ...good, opMeta: [null] }, { ...good, opMeta: 'x' },
       { ...good, ops: [{ op: 'weight', image: 'i1', value: 0.2 }], opMeta: [{ at: 'then' }] },
       { ...good, ops: [{ op: 'restore', slices: [] }], opMeta: [{ at: 1, version: 'v3' }] }]) {
@@ -321,7 +321,7 @@ describe('a saved board\'s kept edit', () => {
     expect(takeKeptEdit('g1')).toMatchObject({ opMeta: [null] });
   });
 
-  // Round 6l (GM r21 expiry): a kept edit lives as long as its board, or its project, can be restored.
+  // A kept edit lives as long as its board, or its project, can be restored.
   it('keeps an edit of any age, and every board\'s, with no cap', () => {
     const old = { board: 'g1', fields: { name: 'Dusk' }, base: {}, ops: [], at: Date.now() - 30 * 24 * 60 * 60 * 1000 };
     window.sessionStorage.setItem(EDITS, JSON.stringify([old]));
@@ -335,7 +335,7 @@ describe('a saved board\'s kept edit', () => {
     expect(unsavedWouldBeLost()).toBe(false);
   });
 
-  // Round 6m (GM r53 Q2): a waiting send (boardAdds.ts) lives as long as its board's kept edit, not a fixed day.
+  // A waiting send (boardAdds.ts) lives as long as its board's kept edit, not a fixed day.
   it('a waiting send older than a day stays while its board holds a kept edit; with none, it ages out', () => {
     const WAITING = 'nebula:moodboard-sends-waiting';
     const old = Date.now() - 2 * 24 * 60 * 60 * 1000;
@@ -360,7 +360,7 @@ describe('a saved board\'s kept edit', () => {
     window.sessionStorage.removeItem(WAITING);
   });
 
-  // Round 6l (review 10 MEDIUM-1, GM r21 Q1): each queued image change keeps when it was made and what it changed from.
+  // Each queued image change keeps when it was made and what it changed from.
   it('records each op\'s time and the value it changed from; a later op on the same thing keeps the first from-value', () => {
     vi.useFakeTimers({ now: 1_000, toFake: ['Date'] });
     try {
@@ -393,7 +393,7 @@ describe('a saved board\'s kept edit', () => {
     }
   });
 
-  it('an op the queue replaced (a slider\'s second step) hands its from-value on: the board\'s, not the first step\'s (live 6l)', () => {
+  it('an op the queue replaced (a slider\'s second step) hands its from-value on: the board\'s, not the first step\'s', () => {
     set({ [g1Key]: saved() });
     const step = (value: number) => {
       const op = { op: 'weight', image: 'i1', value } as MoodboardOp;
@@ -419,7 +419,7 @@ describe('a saved board\'s kept edit', () => {
   });
 });
 
-describe('replaying a kept edit on the board as it is now (the 6g rule)', () => {
+describe('replaying a kept edit on the board as it is now (the replay rule)', () => {
   const edit = (fields: Record<string, unknown>, from: Record<string, unknown>, at: Record<string, number> = {}): KeptEdit =>
     ({ board: 'g1', fields, base: from, fieldEditedAt: at, ops: [], at: 0 });
 

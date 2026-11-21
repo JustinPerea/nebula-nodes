@@ -6,19 +6,18 @@ import { currentProject } from '../../lib/currentProject';
 
 /**
  * An unsaved board's draft, kept in this tab's session storage so a reload
- * doesn't lose it (round 6g, GM r15 3; review 9 lines-chip LOW-2). A new
- * board that failed to save says "Not saved" because nothing is lost; that
- * holds across a reload too: the next page load puts the draft back, images
- * and all, with its create id and attempts (a resend still makes no second
- * board) and its line, chip and Retry if it had them.
+ * doesn't lose it. A new board that failed to save says "Not saved" because
+ * nothing is lost; that holds across a reload too: the next page load puts
+ * the draft back, images and all, with its create id and attempts (a resend
+ * still makes no second board) and its line, chip and Retry if it had them.
  *
  * As the waiting sends (boardAdds): session storage is per tab and lives
  * through a reload of it, so another tab never takes it; entries older than
  * a day or not shaped as a draft are dropped when read; storage that throws
  * keeps nothing. The page warns before unload only when the last write
- * failed (GM r15 3: only then would a reload lose the board). An image only
- * this page holds (a blob: or data: url, not uploaded yet) can't be kept;
- * its add goes with it.
+ * failed (only then would a reload lose the board). An image only this page
+ * holds (a blob: or data: url, not uploaded yet) can't be kept; its add goes
+ * with it.
  */
 const UNSAVED_KEY = 'nebula:moodboard-unsaved-drafts';
 const UNSAVED_MAX_AGE = 24 * 60 * 60 * 1000;
@@ -179,16 +178,16 @@ export function resetUnsavedDrafts(): void {
 }
 
 /**
- * A saved board's kept edit (round 6i, GM r17 2+3): what its draft holds that
- * the server doesn't have yet (a save that failed, one still out, one
- * waiting for Nebula), kept in this tab's session storage beside the unsaved
- * boards, so a reload doesn't lose it. Only the edit is kept, never the
- * board: its changed board fields (with the values they were changed from,
- * `base`, and when each was edited) and its queued ops. The board's next
- * load in this tab takes it (takeKeptEdit) and replays it on the board as
- * the server has it then, by the 6g rule (replayKeptFields). Gone once the
- * draft holds nothing unsent. Keyed by the board's id, so a project switch,
- * or the board moving, still finds it.
+ * A saved board's kept edit: what its draft holds that the server doesn't
+ * have yet (a save that failed, one still out, one waiting for Nebula),
+ * kept in this tab's session storage beside the unsaved boards, so a reload
+ * doesn't lose it. Only the edit is kept, never the board: its changed
+ * board fields (with the values they were changed from, `base`, and when
+ * each was edited) and its queued ops. The board's next load in this tab
+ * takes it (takeKeptEdit) and replays it on the board as the server has it
+ * then, by the replay rule (replayKeptFields). Gone once the draft holds
+ * nothing unsent. Keyed by the board's id, so a project switch, or the
+ * board moving, still finds it.
  *
  * Per tab, as everything here: a second tab on the same board keeps (and
  * replays) only its own edit; the server's version decides between them as
@@ -197,21 +196,21 @@ export function resetUnsavedDrafts(): void {
  */
 export interface KeptEdit {
   board: string;
-  /** The board's saved name (the draft's when it has none), to name the board if it's gone when the edit would replay (round 6j):
+  /** The board's saved name (the draft's when it has none), to name the board if it's gone when the edit would replay:
    *  the name Recently deleted and the rail show, not a rename that never saved. */
   name?: string;
   fields: Record<string, unknown>;
   base: Record<string, unknown>;
   fieldEditedAt?: Record<string, number>;
   ops: MoodboardOp[];
-  /** Each op's KeptOpMeta, by index (null: not known, as for a record from before round 6l). */
+  /** Each op's KeptOpMeta, by index (null: not known, as for a record kept before op metas existed). */
   opMeta?: Array<KeptOpMeta | null>;
-  /** The board's project, by its id and name as this tab last saw it (round 6p, GM r90.1): a project deleted for good
+  /** The board's project, by its id and name as this tab last saw it: a project deleted for good
    *  is in neither project list, so its red line names it from here. Set when the edit is kept (the open project) and
    *  again by each look-up that finds the project listed (noteKeptProject). */
   project?: { id: string; name: string };
   /** Who changed an image after this tab kept the edit, by image id (an agent's own name), as the board's change
-   *  events said while the tab listened (noteKeptChange; round 6p, GM r90.5). Set on a taken edit only. */
+   *  events said while the tab listened (noteKeptChange). Set on a taken edit only. */
   changedBy?: Record<string, string>;
   at: number;
 }
@@ -220,19 +219,18 @@ const EDITS_KEY = 'nebula:moodboard-kept-edits';
 const CHANGES_KEY = 'nebula:moodboard-kept-changes';
 
 /**
- * When a queued op was made and what it changed from (round 6l, review 10
- * MEDIUM-1, GM r21 Q1), so a kept image change replays by the same rule as a
- * board field: the board still holding `from` takes it; one that changed the
- * image since keeps its own change unless the op came later (`at` against
- * the board's `updatedAt`). `from` is the image's value before the person's
- * first unsent change of it (its weight, set-aside, notes or private note,
- * a card's spot, or the board's cover); a `restore` (an Undo) records the
- * board `version` it was made against instead, and replays only on that
- * version.
+ * When a queued op was made and what it changed from, so a kept image
+ * change replays by the same rule as a board field: the board still holding
+ * `from` takes it; one that changed the image since keeps its own change
+ * unless the op came later (`at` against the board's `updatedAt`). `from`
+ * is the image's value before the person's first unsent change of it (its
+ * weight, set-aside, notes or private note, a card's spot, or the board's
+ * cover); a `restore` (an Undo) records the board `version` it was made
+ * against instead, and replays only on that version.
  */
 export interface KeptOpMeta { at: number; from?: unknown; version?: number }
 
-/** What a kept remove compares (round 6p, GM r90.5): each image's state when it was removed, so a replay can tell
+/** What a kept remove compares: each image's state when it was removed, so a replay can tell
  *  whether the board changed it since (its weight, set-aside, notes, private note, or a card's spot). */
 export function imageState(image: ImageLike): Record<string, unknown> {
   return { weight: image.weight ?? null, excluded: Boolean(image.excluded), notes: typeof image.notes === 'string' ? image.notes : '',
@@ -320,7 +318,7 @@ function stampNewOps(entries: Record<string, AssetStudioDraftEntry>): void {
         opMeta.set(op, typeof draft.version === 'number' ? { at, version: draft.version } : { at });
         return;
       }
-      // A remove records the state of each image it took (GM r90.5: one the board changed after it stays).
+      // A remove records the state of each image it took (one the board changed after it stays).
       if (op.op === 'remove') {
         const states = Object.fromEntries(op.images.flatMap((id) => {
           const image = before?.images?.find((it) => it.id === id);
@@ -384,7 +382,7 @@ function readEdits(): KeptEdit[] {
       && Array.isArray(it.ops) && it.ops.every(isOpShape)
       && (it.opMeta === undefined || (Array.isArray(it.opMeta) && it.opMeta.length === it.ops.length && it.opMeta.every(isOpMeta)))
       && (it.project === undefined || (isRecord(it.project) && typeof it.project.id === 'string' && typeof it.project.name === 'string'))
-      // No age limit (round 6l, GM r21): a kept edit lives as long as its board, or its project, can be restored.
+      // No age limit: a kept edit lives as long as its board, or its project, can be restored.
       && typeof it.at === 'number');
   } catch { return []; }
 }
@@ -397,7 +395,7 @@ let lastEditsWriteFailed = false;
 
 function writeEdits(list: KeptEdit[]): void {
   try {
-    // No cap either (round 6l): dropping the oldest would lose an edit silently. A write the storage
+    // No cap either: dropping the oldest would lose an edit silently. A write the storage
     // refuses sets the flag, and the page warns before it unloads.
     if (list.length) window.sessionStorage.setItem(EDITS_KEY, JSON.stringify(list));
     else window.sessionStorage.removeItem(EDITS_KEY);
@@ -437,20 +435,20 @@ function syncEdits(entries: Record<string, AssetStudioDraftEntry>): void {
   writeEdits([...others, ...mine]);
 }
 
-/** The kept edits earlier page loads of this tab left that this page doesn't hold: each waits for its board's load (round 6j: the Studio
+/** The kept edits earlier page loads of this tab left that this page doesn't hold: each waits for its board's load (the Studio
  *  looks up their boards when it opens, to say so when one was deleted). */
 export function keptEditsWaiting(): KeptEdit[] {
   const held = new Set([...writtenEdits.values()].map((it) => it.board));
   return readEdits().filter((it) => !held.has(it.board));
 }
 
-/** The boards with a kept edit in this tab: waiting from an earlier page load, or held in a draft here (round 6l: a Delete
- *  forever or Empty that takes one says so first, GM r21 Q2). */
+/** The boards with a kept edit in this tab: waiting from an earlier page load, or held in a draft here (a Delete
+ *  forever or Empty that takes one says so first). */
 export function keptEditBoards(): Set<string> {
   return new Set([...readEdits().map((it) => it.board), ...[...writtenEdits.values()].map((it) => it.board)]);
 }
 
-// A board's waiting send (boardAdds.ts) lives as long as its kept edit (round 6m, GM r53 Q2).
+// A board's waiting send (boardAdds.ts) lives as long as its kept edit.
 keepWaitingWhile((board) => keptEditBoards().has(board));
 
 /** Forget the kept edit for `board` an earlier page load left (its board is gone for good, and the person has been told). */
@@ -475,7 +473,7 @@ export function takeKeptEdit(board: string): KeptEdit | null {
   return changedBy ? { ...found, changedBy } : found;
 }
 
-/** Remember the project a waiting kept edit's board is in, by the name the project lists show now (round 6p, GM r90.1). */
+/** Remember the project a waiting kept edit's board is in, by the name the project lists show now. */
 export function noteKeptProject(board: string, project: { id: string; name: string }): void {
   const list = readEdits();
   let changed = false;
@@ -511,9 +509,11 @@ function forgetChanges(board: string): void {
 }
 
 /**
- * An agent changed `images` on `board`, which holds a kept edit in this tab (round 6p, GM r90.5): remembered by the
- * label its Agent log rows show (lib/agentActorLabel, round 6q, GM r95.3), so a kept remove the change keeps from replaying says who changed the image. A later change by someone
- * else (the person, another client) forgets the name: the line then names only the image.
+ * An agent changed `images` on `board`, which holds a kept edit in this
+ * tab: remembered by the label its Agent log rows show
+ * (lib/agentActorLabel), so a kept remove the change keeps from replaying
+ * says who changed the image. A later change by someone else (the person,
+ * another client) forgets the name: the line then names only the image.
  */
 export function noteKeptChange(board: string, images: readonly string[], by: string | null): void {
   const boards = keptEditBoards();
@@ -531,7 +531,7 @@ export function noteKeptChange(board: string, images: readonly string[], by: str
 }
 
 /**
- * The 6g rule for a kept edit replayed on the board as it is now (GM r17):
+ * The replay rule for a kept edit replayed on the board as it is now:
  * a field the board still holds as the edit found it takes the edit's value;
  * one the board changed since goes to the later edit, the edit's time
  * against the board's `updatedAt`. `kept` names each field where the

@@ -15,7 +15,7 @@ import './ProjectSizePanel.css';
 const GUTTER = 16;
 const WIDTH = 340;
 
-/** One row as the panel shows it: no ids (GM), the name the canvas shows. */
+/** One row as the panel shows it: no ids (the design asks for none), the name the canvas shows. */
 interface ShownRow {
   key: string;
   name: string;
@@ -56,16 +56,16 @@ function frameStyle(): CSSProperties {
 }
 
 /**
- * The "what's large" panel for a project over the save limit (Q118, GM -
- * Design's layout): a floating panel within the Inspector's top and bottom
- * lines, opened from the header's "Saving paused · {size} MB" or the notice's
+ * The "what's large" panel for a project over the save limit (the design's
+ * layout): a floating panel within the Inspector's top and bottom lines,
+ * opened from the header's "Saving paused · {size} MB" or the notice's
  * "See what's large". The heading, the live line, "Download a copy", then
- * "Largest first" and the largest rows (0.1 MB and up, at most ten): a node's name as the canvas shows
- * it (its title, else its type), a dimmer part, its size right-aligned. A
- * node row selects the node and pans to it; Run history opens its panel.
- * The rows come from this tab's own snapshot (a paused tab's edits aren't on
- * the backend), measured as the backend measures (lib/projectSize). Esc
- * closes it, and focus goes back where it came from.
+ * "Largest first" and the largest rows (0.1 MB and up, at most ten): a node's
+ * name as the canvas shows it (its title, else its type), a dimmer part, its
+ * size right-aligned. A node row selects the node and pans to it; Run history
+ * opens its panel. The rows come from this tab's own snapshot (a paused tab's
+ * edits aren't on the backend), measured as the backend measures
+ * (lib/projectSize). Esc closes it, and focus goes back where it came from.
  */
 export function ProjectSizePanel() {
   const open = useProjectStore((state) => state.sizePanelOpen && state.screen === 'workspace');

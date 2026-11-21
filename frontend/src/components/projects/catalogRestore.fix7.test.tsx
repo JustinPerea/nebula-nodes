@@ -1,10 +1,10 @@
 /**
- * Fix round 7 of PR #199 (GM r8 and GM's answers to review 7): a canvas
- * saved over the save limit has GM's own line, in the toast and the restore
- * notice alike, never beside the plain one; several named mark only those
- * over it (plural form for GM). The plural waiting line says the real number
- * of deletes (design). The saved toast wraps (design). (The Restore tooltip is
- * gone: a restore may pass the project limit, Justin 2026-10-29; design.)
+ * PR #199: a canvas saved over the save limit has its own line (design), in
+ * the toast and the restore notice alike, never beside the plain one;
+ * several named mark only those over it (plural form included). The plural
+ * waiting line says the real number of deletes (design). The saved toast
+ * wraps (design). (The Restore tooltip is gone: a restore may pass the
+ * project limit, Justin, 2026-10-29; design.)
  */
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
@@ -17,7 +17,7 @@ vi.mock('../../lib/backend', () => ({ backendAssetUrlSync: (url: string) => `htt
 
 const OVER = "The canvas you had open was saved as its own project, “Delta (recovered)”. It’s over the save limit, so new changes won’t save until it’s smaller.";
 
-describe("GM: the saved line for a canvas over the save limit", () => {
+describe("the saved line for a canvas over the save limit", () => {
   it('the toast, verbatim, in place of the plain line', () => {
     expect(canvasSavedToast('Delta (recovered)', null, true)).toBe(OVER);
     expect(canvasSavedToast('Delta (recovered)', null, false)).toBe('The canvas you had open was saved as its own project, “Delta (recovered)”.');
@@ -45,7 +45,7 @@ describe("GM: the saved line for a canvas over the save limit", () => {
   });
 });
 
-describe("GM's answer 3: the plural line's real number", () => {
+describe("the plural line's real number", () => {
   const two = { projectLimit: 3, trashHasItems: false, canvases: [{ name: 'A' }, { name: 'B' }] };
   it('"Delete 2 projects and Nebula will save them." from the listing', () => {
     expect(canvasWaitingLine('projects', { ...two, deletes: 2 })).toBe(
@@ -59,7 +59,7 @@ describe("GM's answer 3: the plural line's real number", () => {
   });
 });
 
-describe('GM r8: the saved toast wraps', () => {
+describe('the saved toast wraps', () => {
   const project = (id: string, name: string): ProjectSummary => ({
     id, name, createdAt: '2026-10-20T10:00:00Z', updatedAt: '2026-10-20T10:00:00Z', lastOpenedAt: null,
     nodeCount: 0, edgeCount: 0, thumbnail: null,

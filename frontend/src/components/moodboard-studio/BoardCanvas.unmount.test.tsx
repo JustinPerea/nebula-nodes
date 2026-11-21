@@ -3,7 +3,7 @@ import { act, cleanup, render, screen } from '@testing-library/react';
 import { StrictMode, type ReactNode } from 'react';
 import type { MoodboardImage } from '../../types';
 
-// #213 review 1 MEDIUM-1: React Flow's REAL store and d3 pan-zoom, not the
+// #213: React Flow's REAL store and d3 pan-zoom, not the
 // stand-in of BoardCanvas.fitFollow.test.tsx. When the view closes, React
 // Flow's StoreUpdater (a child of the board) resets its store to the camera
 // (0, 0, 1) in a layout cleanup, before any passive cleanup runs, and its
@@ -68,7 +68,7 @@ function scrollPan() {
   return flowCamera();
 }
 
-describe('closing the Board view keeps the camera the person left (#213 review 1 MEDIUM-1)', () => {
+describe('closing the Board view keeps the camera the person left', () => {
   it('control: left open, the scroll pan\'s move end keeps its camera', async () => {
     await open('ctl');
     const camera = scrollPan();
@@ -121,7 +121,7 @@ const mouse = (target: Element | Window, type: string, init: MouseEventInit) => 
   target.dispatchEvent(event);
 });
 
-describe('a middle press that jitters 1 px on React Flow\'s real d3 (#213 review 1 LOW-1)', () => {
+describe('a middle press that jitters 1 px on React Flow\'s real d3', () => {
   it('moves nothing and leaves the board fitted', async () => {
     await open('jitter');
     const fit = flowCamera();
@@ -150,11 +150,10 @@ describe('a middle press that jitters 1 px on React Flow\'s real d3 (#213 review
   });
 });
 
-// GM r5 (review 2 MEDIUM-1): a press follows the 1 px click rule however long
-// it's held. React Flow ends each spring frame's gesture on a 150 ms timer
-// with no source event; that end used to clear the press, so a press held
-// past it lost the rule.
-describe('a press held during a Fit spring, with 1 px of jitter (GM r5)', () => {
+// A press follows the 1 px click rule however long it's held. React Flow
+// ends each spring frame's gesture on a 150 ms timer with no source event;
+// that end used to clear the press, so a press held past it lost the rule.
+describe('a press held during a Fit spring, with 1 px of jitter', () => {
   const click = (name: string) => act(() => { (screen.getByRole('button', { name }) as HTMLButtonElement).click(); });
   async function pressDuringFitSpring(key: string, holdMs: number) {
     await open(key);
@@ -184,8 +183,8 @@ describe('a press held during a Fit spring, with 1 px of jitter (GM r5)', () => 
   }
 });
 
-// Review 2's close probes on the real store (NIT-2: R3, R4).
-describe('closing mid-gesture, more cases (review 2)', () => {
+// More close probes on the real store.
+describe('closing mid-gesture, more cases', () => {
   const click = (name: string) => act(() => { (screen.getByRole('button', { name }) as HTMLButtonElement).click(); });
   it('mid pinch (ctrl wheel): the pinch is kept', async () => {
     const view = await open('pinch');
@@ -227,7 +226,7 @@ describe('closing mid-gesture, more cases (review 2)', () => {
     expect(kept('fitspring')).toEqual({ viewport: fit, fitted: true });
   });
 
-  it('a scroll pan, Fit, closed before the spring lands, reopened: it opens on the fit (R3)', async () => {
+  it('a scroll pan, Fit, closed before the spring lands, reopened: it opens on the fit', async () => {
     const view = await open('re');
     const fit = flowCamera();
     scrollPan();
@@ -241,8 +240,8 @@ describe('closing mid-gesture, more cases (review 2)', () => {
 });
 
 // main.tsx renders under StrictMode: in development React mounts, unmounts
-// and mounts again, so the close must not leave the view closed (R4).
-describe('under StrictMode on the real store (review 2)', () => {
+// and mounts again, so the close must not leave the view closed.
+describe('under StrictMode on the real store', () => {
   async function openStrict(key: string) {
     const view = render(<StrictMode><BoardCanvas boardKey={key} images={images} onMove={() => {}} onDropFiles={() => {}} /></StrictMode>);
     await screen.findAllByLabelText(/^Reference #\d/);

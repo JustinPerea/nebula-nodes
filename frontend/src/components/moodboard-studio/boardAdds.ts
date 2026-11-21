@@ -5,17 +5,17 @@ import type { MoodboardOp } from '../../lib/moodboardEdits';
 import type { BoardPlaceholder } from './boardPlaceholder';
 
 /**
- * Adds in flight, kept per board rather than in the open Studio (GM on
- * review 4: an add whose person left the board mid-upload isn't dropped, it
- * lands on that board). Client-only: never in a draft, never saved, never sent.
+ * Adds in flight, kept per board rather than in the open Studio: an add whose
+ * person left the board mid-upload isn't dropped, it lands on that board.
+ * Client-only: never in a draft, never saved, never sent.
  *
- * A board is named by its draft instance, not its draft key (review 5,
- * MEDIUM-1): every unsaved board shares the key "new", and New or a delete
- * resets that key for a fresh draft. So each add holds a `BoardRef`: the key,
- * the draft's epoch (a reset bumps it, a copy keeps it) and, once the board
- * is saved, its id. When a draft is copied to another key (its first save,
- * a move) the ref follows it at once, so a later reset of the old key can't
- * send the add to the fresh draft.
+ * A board is named by its draft instance, not its draft key: every unsaved
+ * board shares the key "new", and New or a delete resets that key for a fresh
+ * draft. So each add holds a `BoardRef`: the key, the draft's epoch (a reset
+ * bumps it, a copy keeps it) and, once the board is saved, its id. When a
+ * draft is copied to another key (its first save, a move) the ref follows it
+ * at once, so a later reset of the old key can't send the add to
+ * the fresh draft.
  */
 export interface BoardRef {
   key: string;
@@ -100,17 +100,15 @@ export function addsInFlight(key: string): boolean {
 }
 
 /**
- * Adds on their way, by board, in this tab's session storage (GM r8 answer
- * 5, r10 answer 2): a reload mid-upload loses them, so the next open of that
- * board in this tab says so, once. Session storage is per tab and lives
- * through a reload of it, so another tab never sees or takes them (review 6,
- * MEDIUM-2). Each entry goes when its add lands or fails; one left by an
- * earlier page load is one the reload lost. An add on a board not saved yet
- * is kept here in memory and written under the board's id once its first
- * save gives it one (review 6, LOW-3; GM r10 answer 1): the line shows on
- * that board, and only there. Entries older than a day are dropped when
- * read, and the list is capped (review 6, NIT-6). With no storage, nothing
- * is kept and nothing said.
+ * Adds on their way, by board, in this tab's session storage: a reload
+ * mid-upload loses them, so the next open of that board in this tab says so,
+ * once. Session storage is per tab and lives through a reload of it, so
+ * another tab never sees or takes them. Each entry goes when its add lands or
+ * fails; one left by an earlier page load is one the reload lost. An add on a
+ * board not saved yet is kept here in memory and written under the board's id
+ * once its first save gives it one: the line shows on that board, and only
+ * there. Entries older than a day are dropped when read, and the list is
+ * capped. With no storage, nothing is kept and nothing said.
  */
 const PENDING_KEY = 'nebula:moodboard-adds-in-flight';
 const PENDING_MAX_AGE = 24 * 60 * 60 * 1000;
@@ -127,8 +125,7 @@ function readPending(): PendingAdd[] {
   } catch { return []; }
 }
 /** The list within the cap: earlier page loads' records go first, oldest
- *  first; this page's never do, since their uploads are still running
- *  (review 7, NIT-4). */
+ *  first; this page's never do, since their uploads are still running. */
 function capped<T extends { page: string }>(list: T[], cap: number): T[] {
   let drop = list.length - Math.max(cap, list.filter((it) => it.page === PAGE).length);
   return drop <= 0 ? list : list.filter((it) => it.page === PAGE || (drop -= 1) < 0);
@@ -171,7 +168,7 @@ function recordSaved(ref: BoardRef) {
 }
 // A page going away (a reload, a close) cuts its uploads short, and the
 // browser can still run their failure on the way out: those adds didn't
-// end, so their records stay for the next load to say (GM r8 answer 5).
+// end, so their records stay for the next load to say.
 let leaving = false;
 if (typeof window !== 'undefined') {
   window.addEventListener('pagehide', () => { leaving = true; });
@@ -198,7 +195,7 @@ export function takeReloadLost(board: string): string[] {
 }
 
 /**
- * A board's background send waiting for Nebula to come back (GM r11 4): the
+ * A board's background send waiting for Nebula to come back: the
  * queued send of a board New just saved, or an add that couldn't reach a
  * board the person had left, refused while offline. It waits and is sent
  * again on reconnect; meanwhile it is kept in this tab's session storage
@@ -207,7 +204,7 @@ export function takeReloadLost(board: string): string[] {
  * it. An image only this page holds (not uploaded yet) can't be kept: the
  * reload line names it, as for an upload a reload cut short.
  *
- * Round 6m (GM r53 Q2): a waiting send lives as long as its board's kept
+ * A waiting send lives as long as its board's kept
  * edit (unsavedDrafts.ts), not a fixed day: while its board, or the board's
  * project, can be restored, the send stays and lands when the board comes
  * back. Only a send whose board holds no kept edit ages out after a day.
@@ -226,8 +223,8 @@ function readWaiting(): WaitingSend[] {
     return parsed.filter((it): it is WaitingSend => typeof it?.board === 'string' && Array.isArray(it?.ops)
       && typeof it?.fields === 'object' && it.fields !== null && !Array.isArray(it.fields) && typeof it?.page === 'string'
       && typeof it?.at === 'number' && (now - it.at < PENDING_MAX_AGE || boardKeepsEdit(it.board)))
-      // Each op is checked too (review 8, NIT-4): one that isn't an op Nebula
-      // makes is dropped, never applied and sent; a record left with nothing goes.
+      // Each op is checked too: one that isn't an op Nebula makes is dropped,
+      // never applied and sent; a record left with nothing goes.
       .map((it) => ({ ...it, ops: it.ops.filter(isOpShape) }))
       .filter((it) => it.ops.length > 0 || Object.keys(it.fields).length > 0);
   } catch { return []; }
@@ -384,9 +381,9 @@ export function boardImages(key: string): MoodboardImage[] {
 }
 
 /**
- * The paste backstop (GM r4 answer 7), per board (GM r8 answer 3): a file
- * identical (by size, type and bytes hash) to one still being added to the
- * same board is ignored there; the same image on another board goes. Kept
+ * The paste backstop, per board: a file identical (by size, type and bytes
+ * hash) to one still being added to the same board is ignored there; the
+ * same image on another board goes. Kept
  * here, not in the Studio, so it holds across a board switch or the Studio
  * closing and opening again. Adds take turns: each one's files are checked
  * only after the add before it has claimed its own.

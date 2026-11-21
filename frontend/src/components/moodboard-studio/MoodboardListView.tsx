@@ -22,7 +22,7 @@ export const PRIVATE_NOTE_LIMIT = 2000;
  * cover's mark and Use as cover / Back to #1 (lib/moodboardCover).
  *
  * Files still uploading (from any add, Board or List) are rows of their own
- * at the end, each its own status (GM): the board's placeholder as its
+ * at the end, each its own status (design): the board's placeholder as its
  * thumb, with the file's name, and "Uploading". Nothing else; Add Images
  * stays live, and the toolbar has no status.
  */
@@ -42,8 +42,8 @@ export function MoodboardListView({ images, analysis, cover, uploads = [], onFil
   onSetCover: (id: string | null) => void;
   /** A note lost focus: send it now. */
   onTextDone: () => void;
-  /** Nebula is offline (GM r12 2): Add Images is disabled with the offline
-   *  reason, and the drop hint goes until it reconnects. */
+  /** Nebula is offline: Add Images is disabled with the offline reason, and
+   *  the drop hint goes until it reconnects. */
   offline?: boolean;
 }) {
   const board = useStudioBoardId();
@@ -78,7 +78,7 @@ export function MoodboardListView({ images, analysis, cover, uploads = [], onFil
       <div className="moodboard-grid">
         {images.map((img, index) => {
           const isCover = cover?.id === img.id;
-          // Only Nebula's own files are loaded (lib/storedImage.ts, Q98).
+          // Only Nebula's own files are loaded (lib/storedImage.ts).
           const view = storedImageView(img.url);
           return (
           <div key={img.id} className={`moodboard-tile ${isSetAside(img) ? 'moodboard-tile--set-aside' : ''}`}

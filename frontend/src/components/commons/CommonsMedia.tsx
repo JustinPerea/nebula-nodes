@@ -15,16 +15,15 @@ type Props = {
   controls?: boolean;
   preload?: string;
   /** The media sits inside a control (a grid tile, a keyframe tab). A button can't go inside a
-   * button, so its line has none and no "Try again." either (round 18i, GM r39 1c): it reads
-   * again by itself, on reconnect and when it scrolls back into view. The tile's click keeps its
-   * own meaning. */
+   * button, so its line has none and no "Try again." either: it reads again by itself, on
+   * reconnect and when it scrolls back into view. The tile's click keeps its own meaning. */
   inControl?: boolean;
 };
 
 /** Media elements cannot send the Commons bearer header themselves. */
 export function CommonsMedia({ path, video, alt = '', loading, inControl = false, ...props }: Props) {
   const [media, setMedia] = useState<{ path: string; url?: string }>();
-  // PR #204 round 9: a not-connected line clears on the promote, and the file loads again.
+  // PR #204: a not-connected line clears on the promote, and the file loads again.
   const [error, setError] = useState<string | null>(null);
   const [errorPath, setErrorPath] = useState<string | null>(null);
   const [loadEpoch, loadAgain] = useReloadEpoch();
@@ -40,7 +39,7 @@ export function CommonsMedia({ path, video, alt = '', loading, inControl = false
     }).catch((failure: unknown) => {
       if (controller.signal.aborted) return;
       setErrorPath(path);
-      // Round 18c (GM r30): the media says which it is ("this image", "this video").
+      // The media says which it is ("this image", "this video").
       line.show(failure, video ? "Couldn’t load this video." : "Couldn’t load this image.", { reload: true });
     });
     return () => {
@@ -48,7 +47,7 @@ export function CommonsMedia({ path, video, alt = '', loading, inControl = false
       if (url) URL.revokeObjectURL(url);
     };
   }, [path, video, loadEpoch, line]);
-  // Round 18i (GM r39 1c): the line reads again quietly on reconnect, as every Commons load line.
+  // The line reads again quietly on reconnect, as every Commons load line.
   useLoadLineQuietOnReconnect(error, () => setError(null), loadAgain);
   // And inside a tile or tab, once each time it comes back into view: an observer that waits for
   // the line to leave the view, then reads again the first time it enters, once. A read that fails
@@ -73,9 +72,9 @@ export function CommonsMedia({ path, video, alt = '', loading, inControl = false
     return () => observer.disconnect();
   }, [inControl, failed, loadEpoch, loadAgain]);
   const current = media?.path === path ? media : undefined;
-  // Offline comes first (GM r23 3): a because line hides while offline (the media stays empty).
+  // Offline comes first: a because line hides while offline (the media stays empty).
   const shownError = useOfflineFirstBecause(error);
-  // Round 18 (GM r28 1): its load's line in the one Commons line style (a span: it sits in a tile).
+  // Its load's line in the one Commons line style (a span: it sits in a tile).
   if (error && errorPath === path) return shownError ? <CommonsErrorLine as="span" line={shownError} elementRef={lineRef}
     onRetry={inControl ? undefined : loadAgain} /> : null;
   return video ? <video {...props} src={current?.url} /> :

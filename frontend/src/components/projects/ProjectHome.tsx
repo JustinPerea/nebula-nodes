@@ -43,7 +43,7 @@ export interface ProjectSummary {
   cover?: ProjectCover | null;
   /** Who pinned the cover; none on a pin from before it was recorded (the person's). */
   coverBy?: { kind: string; name: string };
-  /** A pin whose image left the project (Q90 a): it no longer counts, and the cover is automatic. */
+  /** A pin whose image left the project: it no longer counts, and the cover is automatic. */
   coverLostPin?: { url: string; by: { kind: string; name: string } | null };
   createdBy?: { kind: 'agent'; name: string };
 }
@@ -63,45 +63,46 @@ export interface ProjectHomeProps {
   busy: boolean;
   error: string | null;
   /** The text behind `error`'s collapsed Details toggle: a person-only
-   * refusal's own words, written for agents (GM, Q116 a). */
+   * refusal's own words, written for agents. */
   errorDetails?: string | null;
   onCreate: (name?: string) => void;
   onOpen: (id: string) => void;
   onRename: (id: string, name: string) => void;
   onDelete: (id: string) => void;
   onRetry: () => void;
-  /** What Try again does for `error` (error copy round 3b, store/projectStore
-   * projectRetryOffer): 'redo' redoes the failure (the reason is GM's short
-   * line), 'reload' only reloads the saved projects (the whole line stays),
-   * 'save' is [Save as a project] (GM r12 on PR #199, 1: the edits a
-   * restore stopped, kept in this tab; the whole line), and
-   * 'none' hides Try again (the whole line). 'openFollowed' (GM r29 on
-   * PR #199, 1): Nebula's own reopen this tab couldn't follow, in the
-   * neutral box (nothing was lost) with [Open “<openFollowedName>”].
-   * 'partLoad' (GM r24, c): a flow's chunk didn't load; the same box with
-   * [Try again]. 'retrying' (design): the first load is trying again by itself; [Try now]. */
+  /** What Try again does for `error` (store/projectStore projectRetryOffer):
+   * 'redo' redoes the failure (the reason is the design's short line),
+   * 'reload' only reloads the saved projects (the whole line stays), 'save'
+   * is [Save as a project] (design, PR #199: the edits a restore stopped,
+   * kept in this tab; the whole line), and 'none' hides Try again (the whole
+   * line). 'openFollowed' (design, PR #199): Nebula's own reopen this tab
+   * couldn't follow, in the neutral box (nothing was lost) with
+   * [Open “<openFollowedName>”]. 'partLoad': a flow's chunk didn't load; the
+   * same box with [Try again]. 'retrying' (design): the first load is trying
+   * again by itself; [Try now]. */
   retry?: 'redo' | 'reload' | 'save' | 'none' | 'reloadNebula' | 'openFollowed' | 'partLoad' | 'retrying';
   /** The project [Open “…”] opens, with retry 'openFollowed'. */
   openFollowedName?: string | null;
-  /** The open project's reopen that can't go yet (review 18 MEDIUM-2, GM r30
-   * item 2): its card says when it can (store/projectStore reopenHoldLine). */
+  /** The open project's reopen that can't go yet: its card says when it can
+   * (store/projectStore reopenHoldLine). */
   reopenHold?: { id: string; line: string } | null;
-  /** PR #204 round 11: Try again redoes a "Delete forever" or "Empty" (DELETE
-   * /api/projects/trash/{id}, POST /api/projects/trash/empty: require_person), so on a tab that
-   * isn't connected as the person it locks as those buttons do. */
+  /** PR #204: Try again redoes a "Delete forever" or "Empty" (DELETE
+   * /api/projects/trash/{id}, POST /api/projects/trash/empty:
+   * require_person), so on a tab that isn't connected as the person it locks
+   * as those buttons do. */
   retryPersonOnly?: boolean;
-  /** GM r12 item 5: where an update's recovered copy went, when the reload
-   * couldn't open it (store/projectStore CopyNotice): neutral, × to close,
-   * [Restore] while it is in Recently deleted. */
+  /** Where an update's recovered copy went, when the reload couldn't open it
+   * (store/projectStore CopyNotice): neutral, × to close, [Restore] while it
+   * is in Recently deleted. */
   copyNotice?: { line: string; restore: { id: string; name: string } | null; open?: { id: string; name: string } | null } | null;
   onRestoreCopy?: () => void;
   onDismissCopy?: () => void;
-  /** GM #198 r22 Q2: [Open] on the notice saying where a stale tab's edits
-   * were saved (a recovered project); opens it. */
+  /** [Open] on the notice saying where a stale tab's edits were saved (a
+   * recovered project; design, PR #198); opens it. */
   onOpenCopy?: () => void;
-  /** PR #204 round 11 (GM r18): whether this tab loaded the work. A card's node and connection
-   * counts come with it: while it couldn't (a tab that isn't connected as you), they show
-   * nothing rather than a 0 nobody counted. */
+  /** PR #204: whether this tab loaded the work. A card's node and connection
+   * counts come with it: while it couldn't (a tab that isn't connected as
+   * you), they show nothing rather than a 0 nobody counted. */
   workLoaded?: boolean;
   /** Design: the first load found no server (retrying or out of tries): New project waits, and says why. */
   serverWaiting?: boolean;
@@ -115,12 +116,12 @@ export interface ProjectHomeProps {
   onPurge?: (id: string) => void;
   onEmptyTrash?: () => void;
   onDismissUndo?: () => void;
-  /** A stale tab's unsaved edits Nebula refused for good (Q116 a): GM's
+  /** A stale tab's unsaved edits Nebula refused for good: the design's
    * "Couldn’t save your edits." with this reason, in place of the error line
    * and its Try again, until the person downloads them or continues without. */
   unsavedEdits?: { reason: string; downloadFailed?: boolean; downloadTooBig?: boolean; keptIn?: string; agentOpening?: { agent: string; projectName: string } } | null;
-  /** The file the held edits were downloaded as, for GM's line after it, and
-   * whether Load graph can open it. */
+  /** The file the held edits were downloaded as, for the design's line after
+   * it, and whether Load graph can open it. */
   editsSavedAs?: SavedEditsFile | null;
   onDownloadEdits?: () => void;
   onContinueWithoutEdits?: () => void;
@@ -130,32 +131,34 @@ export interface ProjectHomeProps {
   /** Cover picker: the project's images, and pinning one (null = automatic). */
   loadCoverChoices?: (id: string) => Promise<CoverChoices>;
   onPinCover?: (id: string, url: string | null) => void;
-  /** Nebula restored a damaged project list: GM's line (catalogRestoreCopy),
-   * shown until the person closes it with ×. */
+  /** Nebula restored a damaged project list: the design's line
+   * (catalogRestoreCopy), shown until the person closes it with ×. */
   catalogRestore?: CatalogRestore | null;
   /** How many projects the list may hold (the listing's `projectLimit`): the
-   * restore notice's left-out line names it (GM r18 on PR #199). */
+   * restore notice's left-out line names it (design, PR #199). */
   projectLimit?: number;
   onDismissCatalogRestore?: () => void;
-  /** The live canvas isn't a project and the list had no room to save it
-   * (the listing's `canvasNotFiled`): GM r5's waiting line, until it is saved. */
+  /** The live canvas isn't a project and the list had no room to save it (the
+   * listing's `canvasNotFiled`): the design's waiting line, until it is
+   * saved. */
   canvasNotFiled?: { reason: CanvasLimit; projectLimit?: number; canvases?: CanvasLimitContext['canvases']; deletes?: number | null } | null;
-  /** A waiting canvas was saved as this project (the listing's `canvasSaved`):
-   * GM's toast, once per tab, naming each canvas filed with it (`filed`). */
+  /** A waiting canvas was saved as this project (the listing's
+   * `canvasSaved`): the design's toast, once per tab, naming each canvas
+   * filed with it (`filed`). */
   canvasSaved?: { id: string; name: string; overSaveLimit?: boolean; another?: boolean; agentCopy?: { agent?: string | null };
     filed?: SavedCanvas[] } | null;
-  /** The project [Save as a project] saved this tab's edits as (GM r12 on
-   * PR #199, 1): its toast names it. */
+  /** The project [Save as a project] saved this tab's edits as
+   * (design, PR #199): its toast names it. */
   editsRecoveredAs?: { id: string; name: string; dropped?: string } | null;
   onDismissEditsRecovered?: () => void;
-  /** GM r14 on PR #199, 3: the line for a tab sent home after an agent's
-   * write closed its project ("Codex cleared the canvas. “X” is kept as its
-   * own project."), so it never goes home silently. */
+  /** The line for a tab sent home after an agent's write closed its project
+   * ("Codex cleared the canvas. “X” is kept as its own project.";
+   * design, PR #199), so it never goes home silently. */
   agentClosedNote?: { id: string; text: string } | null;
   onDismissAgentClosedNote?: () => void;
-  /** Held canvases canvas-held.json couldn't read (review 6, L-1). */
+  /** Held canvases canvas-held.json couldn't read. */
   canvasHeldUnreadable?: { count: number | null } | null;
-  /** Its × (GM r9: a one-time report, closed like the restore notice). */
+  /** Its × (a one-time report, closed like the restore notice). */
   onDismissCanvasHeldUnreadable?: () => void;
   onDismissCanvasSaved?: () => void;
 }
@@ -257,8 +260,8 @@ function recentTimestamp(project: ProjectSummary) {
 }
 
 function ProjectCard({ project, busy, offline = false, counts = true, onOpen, onRename, onDelete, loadCoverChoices, onPinCover, lockLine = null }: Pick<ProjectHomeProps, 'busy' | 'onOpen' | 'onRename' | 'onDelete' | 'loadCoverChoices' | 'onPinCover'> & { project: ProjectSummary; offline?: boolean; counts?: boolean; lockLine?: string | null }) {
-  // GM r18: the icons disabled offline carry the offline mark (the
-  // not-allowed cursor, and a press pulses the banner).
+  // The icons disabled offline carry the offline mark (the not-allowed
+  // cursor, and a press pulses the banner).
   const off = offlineMark(offline);
   const [editing, setEditing] = useState(false);
   const [choosingCover, setChoosingCover] = useState(false);
@@ -296,10 +299,10 @@ function ProjectCard({ project, busy, offline = false, counts = true, onOpen, on
             title="Move to Recently deleted" disabled={busy || editing} {...off} onClick={() => onDelete(project.id)}><Trash2 aria-hidden="true" /></button>
         </span>
       </div>
-      {/* An agent asking to change the cover the person pinned (Q60 a). */}
+      {/* An agent asking to change the cover the person pinned. */}
       <ProposalsFor kind="project" targetId={project.id} />
-      {/* Review 18 MEDIUM-2, GM r30 item 2: the open project's reopen can't go
-          yet; Open still goes back to the canvas, and this says when it can. */}
+      {/* The open project's reopen can't go yet; Open still goes back to the
+          canvas, and this says when it can. */}
       {lockLine && <p id={`project-lock-${project.id}`} className="project-home__card-lock" data-reopen-hold="">{lockLine}</p>}
       {choosingCover && loadCoverChoices && onPinCover && (
         <CoverPicker project={project} busy={busy} load={loadCoverChoices} onPin={(url) => onPinCover(project.id, url)}
@@ -351,7 +354,7 @@ function ConfirmInline({ label, confirmLabel, prompt, detail, busy, onConfirm, c
   const disarm = () => { setArmed(false); requestAnimationFrame(() => trigger.current?.focus()); };
   const text = [prompt, detail].filter(Boolean).join(' ');
   if (!armed) {
-    // It arms a Delete forever or an Empty: red on hover (GM r13), neutral at rest.
+    // It arms a Delete forever or an Empty: red on hover, neutral at rest.
     return <button type="button" ref={trigger} className={[className, 'project-home__trigger--danger'].filter(Boolean).join(' ')} disabled={busy}
       {...lock?.control()} onClick={() => { if (!lock?.locked) setArmed(true); }}>{label}</button>;
   }
@@ -359,7 +362,7 @@ function ConfirmInline({ label, confirmLabel, prompt, detail, busy, onConfirm, c
     <span className="project-home__confirm" role="group" aria-label={text} onKeyDown={(event) => {
       if (event.key === 'Escape') { event.preventDefault(); disarm(); }
     }}>
-      {/* One text, one space between the question and the line (GM r102). */}
+      {/* One text, one space between the question and the line. */}
       <span className="project-home__confirm-prompt">{text}</span>
       <button type="button" autoFocus disabled={busy} onClick={disarm}>Cancel</button>
       <button type="button" className="project-home__danger" disabled={busy} {...lock?.control()}
@@ -381,7 +384,7 @@ const TRASH_CONFIRM_CLOSE_MS = 360 + 120;
  */
 function TrashRow({ entry, now, busy, fromNotice, onRestore, onPurge, lock }: {
   entry: TrashedProject; now: number; busy: boolean;
-  /** The restore notice opened the list to this one (GM r4): marked, and the first scrolled into view. */
+  /** The restore notice opened the list to this one: marked, and the first scrolled into view. */
   fromNotice: boolean;
   onRestore: (id: string) => void; onPurge: (id: string) => void;
   /** The one lock for deleting for good (components/PersonLock): it never arms while locked. */
@@ -418,7 +421,7 @@ function TrashRow({ entry, now, busy, fromNotice, onRestore, onPurge, lock }: {
       <span className="project-home__trash-meta">{deletedDate(entry.deletedAt)}{deletedByNote(entry)} · {removalNote(entry.deletedAt, entry.purgeAt, now)}</span>
       <span className="project-home__trash-actions">
         <button type="button" disabled={busy} aria-label={`Restore ${entry.name}`} onClick={() => onRestore(entry.id)}><RotateCcw aria-hidden="true" />Restore</button>
-        {/* It arms a Delete forever: red on hover (GM r13), neutral at rest. */}
+        {/* It arms a Delete forever: red on hover, neutral at rest. */}
         {!armed && <button type="button" ref={trigger} className="project-home__trigger--danger" disabled={busy}
           {...lock.control()} onClick={() => { if (!lock.locked) { setArmed(true); setShown(true); } }}>Delete forever</button>}
       </span>
@@ -442,7 +445,7 @@ function TrashRow({ entry, now, busy, fromNotice, onRestore, onPurge, lock }: {
 
 function RecentlyDeleted({ trash, busy, onRestore, onPurge, onEmptyTrash, openRequest = 0, onOpened = noop, fromNotice = [] }: {
   trash: TrashedProject[]; busy: boolean;
-  /** The restore notice's items it opened the list to (GM r4): marked, and
+  /** The restore notice's items it opened the list to: marked, and
    * the first scrolled into view. */
   fromNotice?: string[];
   onRestore: (id: string) => void; onPurge: (id: string) => void; onEmptyTrash: () => void;
@@ -450,7 +453,7 @@ function RecentlyDeleted({ trash, busy, onRestore, onPurge, onEmptyTrash, openRe
    * "Open Recently deleted"), as the clock at that click; 0 for none. A new
    * value opens the list and moves focus to it, then `onOpened` clears it,
    * so the list coming back later (an agent deletes a project after the
-   * trash emptied) never reopens it or takes focus (review 2 of PR #199, L6). */
+   * trash emptied) never reopens it or takes focus (PR #199). */
   openRequest?: number;
   onOpened?: () => void;
 }) {
@@ -458,7 +461,7 @@ function RecentlyDeleted({ trash, busy, onRestore, onPurge, onEmptyTrash, openRe
   // Read the clock when the list opens, not on every render.
   const [openedAt, setNow] = useState(() => Date.now());
   // A project deleted while the list is open was deleted after the clock was
-  // read: the clock is at least the newest delete (GM r7, bug 2).
+  // read: the clock is at least the newest delete.
   const now = Math.max(openedAt, ...trash.map((entry) => Date.parse(entry.deletedAt)).filter(Number.isFinite));
   const toggle = useRef<HTMLButtonElement>(null);
   // A new request opens the list in this render (React's "adjust state when
@@ -473,13 +476,13 @@ function RecentlyDeleted({ trash, busy, onRestore, onPurge, onEmptyTrash, openRe
     if (!openRequest) return;
     toggle.current?.focus();
     toggle.current?.scrollIntoView?.({ block: 'nearest' });
-    // "Opens to those" (GM r4): the notice's first item in view, focus kept on the toggle.
+    // "Opens to those": the notice's first item in view, focus kept on the toggle.
     list.current?.querySelector<HTMLElement>('[data-from-notice="true"]')?.scrollIntoView?.({ block: 'nearest' });
     onOpened();
   }, [openRequest, onOpened]);
-  // PR #204 round 10 (GM r15, r17 item 1): deleting for good is the person's alone (DELETE
-  // /api/projects/trash/{id}, POST .../trash/empty: require_person). Empty and every Delete
-  // forever lock as one group with one line under the heading.
+  // PR #204: deleting for good is the person's alone (DELETE /api/projects/trash/{id}, POST
+  // .../trash/empty: require_person). Empty and every Delete forever lock as one group with one
+  // line under the heading.
   const purgeLock = usePersonLock('delete projects for good');
   return (
     <section className="project-home__trash" aria-labelledby="recently-deleted-title">
@@ -510,10 +513,10 @@ function RecentlyDeleted({ trash, busy, onRestore, onPurge, onEmptyTrash, openRe
   );
 }
 
-/** GM r12 item 5, r14 item 1: the recovered copy's notice. Not a toast: the
- * inline notice at the top of Projects home, first in the notice stack.
- * Neutral, the line, [Restore] while the copy is in Recently deleted, and ×;
- * it stays until the person closes it or restores. */
+/** The recovered copy's notice. Not a toast: the inline notice at the top of
+ * Projects home, first in the notice stack. Neutral, the line, [Restore]
+ * while the copy is in Recently deleted, and ×; it stays until the person
+ * closes it or restores. */
 function CopyNotice({ notice, busy, onRestore, onOpen, onDismiss }: {
   notice: { line: string; restore: { id: string; name: string } | null; open?: { id: string; name: string } | null };
   busy: boolean; onRestore: () => void; onOpen: () => void; onDismiss: () => void;
@@ -532,31 +535,30 @@ function CopyNotice({ notice, busy, onRestore, onOpen, onDismiss }: {
 
 const noop = () => {};
 
-// Review 21 LOW-1 (the entry chunk's budget): the notices that only show
-// when something happened load the first time one shows, and show nothing
-// while they load (no wrong line; each is a polite status that announces on
+// To stay within the entry chunk's budget, the notices that only show when
+// something happened load the first time one shows, and show nothing while
+// they load (no wrong line; each is a polite status that announces on
 // arrival).
 const CanvasWaitingNotice = lazy(() => import('./ProjectHomeNotices').then((m) => ({ default: m.CanvasWaitingNotice })));
 const CanvasHeldUnreadableNotice = lazy(() => import('./ProjectHomeNotices').then((m) => ({ default: m.CanvasHeldUnreadableNotice })));
 const CanvasSavedToast = lazy(() => import('./ProjectHomeNotices').then((m) => ({ default: m.CanvasSavedToast })));
 const SavedToast = lazy(() => import('./ProjectHomeNotices').then((m) => ({ default: m.SavedToast })));
 
-/** The notice after Nebula restored a damaged project list (GM's lines,
- * catalogRestoreCopy). Its status region is in the page from the start and
- * filled after it mounts, so screen readers announce it (a live region
- * reads changes, not what it held when it appeared: review 1 of PR #199,
- * L8). × closes it, and focus follows the notice stack's rule (design,
- * PRs #200 and #199): the notice now in its place, else
- * "Recent projects". */
+/** The notice after Nebula restored a damaged project list (the design's
+ * lines, catalogRestoreCopy). Its status region is in the page from the start
+ * and filled after it mounts, so screen readers announce it (a live region
+ * reads changes, not what it held when it appeared; PR #199). × closes it,
+ * and focus follows the notice stack's rule (design, PRs #200 and #199): the
+ * notice now in its place, else "Recent projects". */
 function CatalogRestoreNotice({ copy, copyFailed = false, restore, current, heldUnreadable = null, onDismiss, onOpenRecentlyDeleted }: {
   /** The restore copy, once loaded (restoreCopyLoader): empty until then. */
   copy: RestoreCopy | null;
   /** Its chunk failed to load (it is tried again at the next focus or
    * reconnect): the notice says RESTORE_COPY_FALLBACK meanwhile, or, while
-   * this tab keeps edits, GM r23's full sentence (restoreCopyFallback). */
+   * this tab keeps edits, the design's full sentence (restoreCopyFallback). */
   copyFailed?: boolean;
   restore: CatalogRestore | null; current: NoticeNow; onDismiss: () => void;
-  /** GM r9: held canvases that couldn't be read, merged in as one more line. */
+  /** Held canvases that couldn't be read, merged in as one more line. */
   heldUnreadable?: { count: number | null } | null;
   onOpenRecentlyDeleted: (ids: string[]) => void;
 }) {
@@ -564,10 +566,10 @@ function CatalogRestoreNotice({ copy, copyFailed = false, restore, current, held
   // is attached, and the content follows in the next render.
   const [ready, setReady] = useState(false);
   const attached = useCallback((region: HTMLDivElement | null) => { if (region) setReady(true); }, []);
-  // Only the lines that still hold against the list now (GM r4), so a
+  // Only the lines that still hold against the list now, so a
   // restore or delete by the person or an agent updates it as it lands.
   const notice = ready && restore && copy ? copy.catalogRestoreNotice(restore, undefined, current, { heldUnreadable }) : null;
-  // GM r23 (3) on PR #199: the short fallback only when nothing is kept.
+  // The short fallback only when nothing is kept (design, PR #199).
   const kept = useKeptCanvas();
   return (
     // A polite live region rather than role="status": the page keeps one
@@ -579,11 +581,11 @@ function CatalogRestoreNotice({ copy, copyFailed = false, restore, current, held
         <button type="button" className="project-home__toast-close" aria-label="Dismiss" onClick={onDismiss}><X aria-hidden="true" /></button>
       </>}
       {notice && <>
-        {/* GM r3's B layout: more than one outcome, one per line (no bullets). */}
+        {/* More than one outcome: one per line (no bullets). */}
         {notice.lines
           ? <div className="project-home__restore-text project-home__restore-lines">{notice.lines.map((line) => <p key={line}>{line}</p>)}</div>
           : <span className="project-home__restore-text">{notice.text}</span>}
-        {/* Only while Recently deleted holds one of the notice's items (GM r4; L6). */}
+        {/* Only while Recently deleted holds one of the notice's items. */}
         {notice.openRecentlyDeleted && current.trash.length > 0 && <button type="button" className="project-home__restore-action project-home__restore-action--neutral"
           onClick={() => onOpenRecentlyDeleted(notice.recentlyDeletedIds)}>{OPEN_RECENTLY_DELETED}</button>}
         <button type="button" className="project-home__toast-close" aria-label="Dismiss" onClick={onDismiss}><X aria-hidden="true" /></button>
@@ -595,21 +597,21 @@ function CatalogRestoreNotice({ copy, copyFailed = false, restore, current, held
 /** Which notice in the stack focus was in, by its key, and the keys of the
  * stack as it was. React's focus events bubble through portals, so focus in
  * a notice's own dialog (the held edits' confirm) counts as in the notice. */
-// Review 13 of PR #199 (MEDIUM-1): the restore notices above the stack
-// follow its rule too, in page order: the restore notice, the waiting line,
-// the held canvases that couldn't be read, then the stack.
+// The restore notices above the stack follow its rule too (PR #199), in
+// page order: the restore notice, the waiting line, the held canvases that
+// couldn't be read, then the stack.
 type NoticeKey = 'restore' | 'waiting' | 'unreadable' | 'copy' | 'held' | 'saved' | 'error';
 
-/** The notice stack's focus rule (GM pr200 r16 #2, which replaced GM r15's
- * "first control"): when a notice goes and takes focus with it, focus moves
- * to the notice now in its place (the next one), else the one before, onto
- * its × (Dismiss). Never onto a primary or destructive action (Restore,
+/** The notice stack's focus rule (design, PR #200; it replaced an earlier
+ * "first control" rule): when a notice goes and takes focus with it, focus
+ * moves to the notice now in its place (the next one), else the one before,
+ * onto its × (Dismiss). Never onto a primary or destructive action (Restore,
  * Download, Try again, Run, Undo, Delete): a second Enter must not act. A
  * notice with no × (the held edits, the saved line, the error) takes focus
  * itself; with the stack empty, the "Recent projects" heading. Never the
  * body. Only when focus was lost: never from something the person moved to
- * meanwhile (Q116 a review). After the commit that removed the notice: no
- * frame to wait for (a frame never comes in a background tab). */
+ * meanwhile. After the commit that removed the notice: no frame to wait for
+ * (a frame never comes in a background tab). */
 /** The × every dismissable notice carries (CopyNotice). */
 const NOTICE_DISMISS = 'button.project-home__notice-close';
 /** Any notice's × as the rule looks for it: the stack's, or the restore notices'. */
@@ -663,9 +665,9 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
   copyNotice = null, onRestoreCopy = noop, onDismissCopy = noop, onOpenCopy = noop, workLoaded = true, serverWaiting = false, retryPersonOnly = false }: ProjectHomeProps) {
   const retryLock = usePersonLock('delete projects for good', retry !== 'none' && retryPersonOnly);
   const [query, setQuery] = useState('');
-  // Offline is read-only (round 15 of PR #114): create, open, rename,
-  // delete, restore and covers are disabled as while busy; search and
-  // "Try again" (a read) still work.
+  // Offline is read-only (PR #114): create, open, rename, delete, restore and
+  // covers are disabled as while busy; search and "Try again" (a read) still
+  // work.
   const offline = useBackendOffline();
   const locked = busy || offline;
   const waitsForLoad = !workLoaded;
@@ -681,13 +683,13 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
   const landing = useMemo(() => ({
     get current(): HTMLElement | null { return (loadedNow.current ? recentHeading.current : null) ?? pageTitle.current; },
   }), []) as RefObject<HTMLElement | null>;
-  // PR #204 round 14 (GM r23 3): offline comes first for a not-connected line.
+  // PR #204: offline comes first for a not-connected line.
   const errorKept = useOfflineFirstBecause(error ?? null);
   const showError = homeLineDrawn(errorKept, unsavedEdits);
   const current = useMemo<NoticeNow>(() => ({ projects, trash, canvasNotFiled, projectLimit }), [projects, trash, canvasNotFiled, projectLimit]);
   // The waiting line, unless the restore notice already says the limit.
-  // Review 13 of PR #199 (LOW-1): the restore copy loads when one of its
-  // notices has something to say, not with the entry chunk.
+  // The restore copy loads when one of its notices has something to say,
+  // not with the entry chunk (PR #199).
   const { copy, failed: copyFailed } = useRestoreCopyState(Boolean(catalogRestore || canvasNotFiled || canvasHeldUnreadable || canvasSaved));
   const restoreSaysLimit = Boolean(catalogRestore && canvasNotFiled && copy
     && copy.catalogRestoreNotice(catalogRestore, undefined, current).canvasLine === 'limit');
@@ -768,7 +770,7 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
       <header className="project-home__header">
         <div className="project-home__brand"><CrabMark size={34} palette={monochromeMark} /><span>Nebula Nodes</span></div>
         <span className="project-home__location">Projects</span>
-        {/* Room for the Updates chip beside Settings (Q107 a; layouts.css). */}
+        {/* Room for the Updates chip beside Settings (layouts.css). */}
         <UpdatesSlot />
         {onToggleSettings && <button type="button" className="project-home__settings" aria-label="Settings"
           title="Settings and API keys" aria-haspopup="dialog" aria-expanded={settingsOpen} onClick={onToggleSettings}>
@@ -786,7 +788,7 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
         </section>
 
         {/* Every notice on the home, in page order, under one focus rule
-            (useNoticeStackFocus; review 13 of PR #199, MEDIUM-1). */}
+            (useNoticeStackFocus; PR #199). */}
         <div ref={stack} className="project-home__notice-area">
         {/* The same element with or without a restore: its live region stays in the page. */}
         <div {...(catalogRestore ? track('restore') : {})}><CatalogRestoreNotice copy={copy} copyFailed={copyFailed} restore={catalogRestore} current={current}
@@ -796,11 +798,11 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
         {showUnreadable && canvasHeldUnreadable && copy && <div {...track('unreadable')}><Suspense fallback={null}><CanvasHeldUnreadableNotice copy={copy} count={canvasHeldUnreadable.count}
           onDismiss={onDismissCanvasHeldUnreadable} /></Suspense></div>}
 
-        {/* The notice stack (GM r14 item 1): the recovered copy's notice first,
-            then the held edits or the line that says where they went, then
-            the error. Where "Try again" redoes the failure the line is in the
-            because form and ends in "Try again." (besideButton, GM r23 on
-            #208); where it only reloads, or can't help, the line stays whole. */}
+        {/* The notice stack: the recovered copy's notice first, then the held
+            edits or the line that says where they went, then the error. Where
+            "Try again" redoes the failure the line is in the because form and
+            ends in "Try again." (besideButton; design, PR #208); where it only
+            reloads, or can't help, the line stays whole. */}
         {(copyNotice || unsavedEdits || editsSavedAs || showError) && <div className="project-home__notices">
           {copyNotice && <div {...track('copy')}><CopyNotice notice={copyNotice} busy={locked}
             onRestore={onRestoreCopy} onOpen={onOpenCopy} onDismiss={onDismissCopy} /></div>}
@@ -824,7 +826,7 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
             {errorDetails ? <div className="project-home__error-text"><span>{retry === 'redo' ? <LineText text={besideButton(error!)} code /> : <LineText text={error} code />}</span>
               <ErrorDetails raw={errorDetails} className="project-home__error-details" /></div>
               : <span>{retry === 'redo' ? <LineText text={besideButton(error!)} code /> : <LineText text={error} code />}</span>}
-            {/* GM r9 decision 1: after an update, [Reload Nebula] in place of Try again. */}
+            {/* After an update, [Reload Nebula] in place of Try again. */}
             {retry !== 'none' && <button type="button" disabled={loading || busy} {...retryLock.control()} onClick={retryLock.guard(onRetry)}>
               {retry === 'reloadNebula' ? 'Reload Nebula' : retry === 'save' ? SAVE_AS_A_PROJECT : retry === 'retrying' ? 'Try now' : 'Try again'}</button>}
             <PersonLockLine lock={retryLock} place="control" /></div></div>}
@@ -846,7 +848,7 @@ export function ProjectHome({ projects, loading, busy, error, errorDetails = nul
         </section>
         {!loading && trash.length > 0 && <RecentlyDeleted trash={trash} busy={locked} onRestore={onRestore} onPurge={purge} onEmptyTrash={emptyTrash} openRequest={trashOpenRequest} onOpened={trashOpened} fromNotice={trashFromNotice} />}
       </main>
-      {/* It leaves as it entered (fix round 7 of PR #200, GM r11 answer 2). */}
+      {/* It leaves as it entered (design, PR #200). */}
       <NoticeLeave value={lastDeleted}>{(last, leave) => <UndoToast key={last.id} project={last} busy={locked}
         onUndo={() => onRestore(last.id, 'undo')} onDismiss={onDismissUndo} leave={leave} />}</NoticeLeave>
       <Suspense fallback={null}>

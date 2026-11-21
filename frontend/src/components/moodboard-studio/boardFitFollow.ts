@@ -1,10 +1,10 @@
 /**
  * Whether the Board view's camera is on the whole-board fit, and the refit
- * that keeps it there when the board's column changes size (GM, #209 (a): the
- * window narrows or widens, the offline row opens or closes, anything else
- * that moves the grid).
+ * that keeps it there when the board's column changes size (design, PR #209:
+ * the window narrows or widens, the offline row opens or closes, anything
+ * else that moves the grid).
  *
- * - Fitted is the person's intent (GM, #213 round 3 and 3b): it is set by a
+ * - Fitted is the person's intent (design, PR #213): it is set by a
  *   fit (Fit, Shift+1, the fit on open, a refit) and by the camera landing on
  *   the fit of the layout the board has now (its cards, in its column, less
  *   the view insets, within `sameCamera`'s tolerance) however it got there: a
@@ -30,7 +30,7 @@
  * - After that, a column resize refits at most once a frame, if the board is
  *   fitted when the frame runs (the camera judged against the fit of the
  *   column before the resize), springing to the new column's fit. The Board
- *   view decides that with its flag instead (`follows`, #210 round 6t).
+ *   view decides that with its flag instead (`follows`, PR #210).
  * - A refit changes the camera, never the column, so it can't call itself.
  */
 export interface FitCamera {
@@ -40,12 +40,12 @@ export interface FitCamera {
 }
 
 /**
- * GM, #213 round 3 and r5: half a screen pixel in x and y, and the zoom
- * within 0.1% of the second camera's (the fit's: 0.001 at zoom 1). Half a
- * pixel is less than anyone can see (one mouse-wheel notch pans about 50 px)
- * and absorbs floating-point rounding on the way through d3. The zoom is
- * relative so it means the same at every zoom: an absolute 0.001 at the
- * board's minimum zoom (0.02) would count a 5% pinch as the fit.
+ * The tolerance (design, PR #213): half a screen pixel in x and y, and the
+ * zoom within 0.1% of the second camera's (the fit's: 0.001 at zoom 1). Half
+ * a pixel is less than anyone can see (one mouse-wheel notch pans about
+ * 50 px) and absorbs floating-point rounding on the way through d3. The
+ * zoom is relative so it means the same at every zoom: an absolute 0.001 at
+ * the board's minimum zoom (0.02) would count a 5% pinch as the fit.
  */
 export const FIT_TOLERANCE_PX = 0.5;
 export const FIT_TOLERANCE_ZOOM = 0.001;
@@ -93,9 +93,9 @@ export interface BoardFitFollowOptions {
   /**
    * Whether a column resize refits, given whether the camera is fitted
    * (`fitted`, as this follower reads it). Left out, it refits when fitted.
-   * The Board view passes its "view is fitted" flag (#210 round 6t, GM r113
-   * 4 and 5): a framing the person made, of any kind, follows the column; a
-   * panned view doesn't, even one back on the fit.
+   * The Board view passes its "view is fitted" flag (design, PR #210): a
+   * framing the person made, of any kind, follows the column; a panned view
+   * doesn't, even one back on the fit.
    */
   follows?: (fitted: boolean) => boolean;
   requestFrame?: (callback: () => void) => number;
@@ -149,7 +149,7 @@ export function createBoardFitFollow({ fitted, camera, fitFor, refit, follows = 
     taken() {
       heading = false;
       openFit = false;
-      // One tolerance whether a move was reported or not (GM r5): a move
+      // One tolerance whether a move was reported or not: a move
       // that stays within sameCamera of the anchor keeps it.
       const now = camera();
       if (onFitAt(now, before ?? size)) anchor = now;

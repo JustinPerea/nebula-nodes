@@ -1,6 +1,6 @@
 import type { BoardRef } from './boardAdds';
 /**
- * Placeholder tiles on the Board view (GM, #210 r4 answer 1 and r5): a spot
+ * Placeholder tiles on the Board view (design, PR #210): a spot
  * held for a tile still on its way. Today that is a file uploading; a pasted
  * link being fetched (its own PR) will use the same shape, labelled with its
  * host, which is why the label is a typed source and not a string.
@@ -12,8 +12,8 @@ export type PlaceholderSource =
   | { kind: 'link'; host: string };
 
 /** The image that has just taken a held spot: its new image's id (what the
- *  fill is keyed by, so another tile showing the same file is never touched,
- *  review 4 MEDIUM-1) and its file. */
+ *  fill is keyed by, so another tile showing the same file is never touched)
+ *  and its file. */
 export interface PlaceholderFill {
   imageId: string;
   url: string;
@@ -53,7 +53,7 @@ export function clipGraphemes(text: string, max = PLACEHOLDER_LABEL_MAX): string
   return clusters.length <= max ? text : `${clusters.slice(0, max - 1).join('')}…`;
 }
 
-/** The placeholder's spoken name (GM r8 answer 6): "river.png, uploading", or a link's "example.com, uploading". */
+/** The placeholder's spoken name: "river.png, uploading", or a link's "example.com, uploading". */
 export function placeholderSpokenName(source: PlaceholderSource): string {
   return `${source.kind === 'file' ? source.name : source.host}, uploading`;
 }

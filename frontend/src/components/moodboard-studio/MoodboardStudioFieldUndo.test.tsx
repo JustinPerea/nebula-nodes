@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
 import { ReactFlowProvider } from '@xyflow/react';
 import type { Moodboard, MoodboardImage, MoodboardPlacement } from '../../types';
 
-// Board fields as undo steps (Q83, Justin: "A field becomes one step when you
+// Board fields as undo steps (Justin: "A field becomes one step when you
 // leave it, and Cmd+Z inside a text box still undoes your typing first").
 // Each change to Direction, Avoid, the pinned colours, strength and the other
 // board fields is one step in the Studio's one undo queue (#127's), committed

@@ -33,7 +33,7 @@ export function BoardSidePanel({ images, selected, analysis, onUpdate, onRemove,
   const title = picked.length === 0 ? 'Moodboard' : picked.length === 1 ? `Reference #${picked[0].number}`
     : `${picked.length} references`;
   // A tab stop while it scrolls (under the board in a narrow window), and its
-  // scroll position kept across the size where it doesn't (#213 round 3).
+  // scroll position kept across the size where it doesn't (#213).
   const panelRef = useRef<HTMLElement>(null);
   const scrolls = useScrollPanel(panelRef);
   return (
@@ -78,7 +78,7 @@ function Reference({ image, analysis, onUpdate, onRemove, onTextDone }: {
 }) {
   const hintId = useId();
   const board = useStudioBoardId();
-  // Only Nebula's own files are loaded (lib/storedImage.ts, Q98).
+  // Only Nebula's own files are loaded (lib/storedImage.ts).
   const view = storedImageView(image.url);
   const preview = view.src ? backendAssetUrlSync(overviewThumbnailUrl(view.src) ?? view.src) : null;
   return (
