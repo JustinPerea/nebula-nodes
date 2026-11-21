@@ -126,7 +126,7 @@ CLEARS = ["http-clear", "cli-clear"]
 
 @pytest.mark.parametrize("start", ["waiting-slot-freed", "restore-unsettled", "listed-first"])
 @pytest.mark.parametrize("how", [*CLEARS, *LOADS, *EDITS])
-def test_high1_an_agent_write_files_the_persons_canvas_untouched_first(app, monkeypatch, tmp_path, start, how):
+def test_an_agent_write_files_the_persons_canvas_untouched_first(app, monkeypatch, tmp_path, start, how):
     client, store, graph, state = app
     _start(start, client, store, graph, state, monkeypatch)
     before = _live_values(main_module.cli_graph)
@@ -177,7 +177,7 @@ def test_high1_an_agent_write_files_the_persons_canvas_untouched_first(app, monk
         assert _values(copies[0]) != before
 
 
-def test_high1_room_for_the_persons_canvas_only_the_copy_waits(app, monkeypatch):
+def test_room_for_the_persons_canvas_only_the_copy_waits(app, monkeypatch):
     """One place left: the person's canvas takes it; the agent's change is made
     on the copy, which then waits as any canvas does (filed as "<name> copy"
     once there is room), and the agent's next write is refused at the limit."""
@@ -201,7 +201,7 @@ def test_high1_room_for_the_persons_canvas_only_the_copy_waits(app, monkeypatch)
     assert "Recovered canvas copy" in names, names
 
 
-def test_high1_at_the_limit_an_agent_write_is_still_refused(app, monkeypatch):
+def test_at_the_limit_an_agent_write_is_still_refused(app, monkeypatch):
     client, store, graph, state = app
     _waiting(client, store, graph, state, monkeypatch)
     response = client.post("/api/graph/node", headers=CODEX, json={"definitionId": "text-input", "params": {"value": "x"}})
@@ -209,7 +209,7 @@ def test_high1_at_the_limit_an_agent_write_is_still_refused(app, monkeypatch):
     assert ONLY_W in _live_values(main_module.cli_graph)
 
 
-def test_high1_the_agents_next_write_lands_on_its_copy(app, monkeypatch):
+def test_the_agents_next_write_lands_on_its_copy(app, monkeypatch):
     """After the first edit, the copy is the agent's: its next write files it
     as "<name> copy", opened, and lands on it (never a copy of the copy)."""
     client, store, graph, state = app
@@ -227,7 +227,7 @@ def test_high1_the_agents_next_write_lands_on_its_copy(app, monkeypatch):
     assert sorted(_live_values(main_module.cli_graph)) == sorted(["delta-1", ONLY_W, "e1", "e2"])
 
 
-def test_high1_the_agent_log_row_and_the_restore_notice(app, monkeypatch):
+def test_the_agent_log_row_and_the_restore_notice(app, monkeypatch):
     client, store, graph, state = app
     _restored_unsettled(client, store, state, monkeypatch)
     sent: list[dict] = []
@@ -246,7 +246,7 @@ def test_high1_the_agent_log_row_and_the_restore_notice(app, monkeypatch):
     assert listing["catalogRestore"]["recoveredCanvas"]["name"] == "Recovered canvas"
 
 
-def test_high1_clear_and_load_never_forget_the_filed_projects_undo(app, monkeypatch):
+def test_clear_and_load_never_forget_the_filed_projects_undo(app, monkeypatch):
     """The just-filed project isn't the open one when the clear runs, so its
     undo book (and canvas revision) stays as it was."""
     client, store, graph, state = app
@@ -263,7 +263,7 @@ def test_high1_clear_and_load_never_forget_the_filed_projects_undo(app, monkeypa
     assert project_id not in forgotten
 
 
-def test_n2_a_guard_inside_a_held_transaction_says_busy_not_the_limit(app, monkeypatch):
+def test_a_guard_inside_a_held_transaction_says_busy_not_the_limit(app, monkeypatch):
     client, store, graph, state = app
     _restored_unsettled(client, store, state, monkeypatch)
     with main_module.project_store.transaction():
@@ -285,7 +285,7 @@ def _held_entry_for_fuzz(i: int, digest: bool) -> dict:
 
 
 @pytest.mark.parametrize("digest", [True, False], ids=["held-in-round-8", "held-before-round-8"])
-def test_l1_n3_damage_never_files_a_canvas_with_other_content_unsaid(tmp_path, digest):
+def test_damage_never_files_a_canvas_with_other_content_unsaid(tmp_path, digest):
     """600 damages (flip, byte, cut, zero, typed garbage) to one canvas of
     three, on its main copy, its .bak or both: each canvas reads back exactly,
     or is said lost with its files kept; never filed with other content, and
@@ -335,7 +335,7 @@ def test_l1_n3_damage_never_files_a_canvas_with_other_content_unsaid(tmp_path, d
     assert stats["exact"] > 300, stats
 
 
-def test_l1_a_held_canvas_whose_content_changed_is_kept_aside_at_filing_and_said(app, monkeypatch):
+def test_a_held_canvas_whose_content_changed_is_kept_aside_at_filing_and_said(app, monkeypatch):
     client, store, graph, state = app
     ids = _waiting(client, store, graph, state, monkeypatch)
     opened = client.post(f"/api/projects/{ids[1]}/open", headers=PERSON, json={"workspaceRevision": _rev(client)})
@@ -352,7 +352,7 @@ def test_l1_a_held_canvas_whose_content_changed_is_kept_aside_at_filing_and_said
 
 # -- A restore from Recently deleted counts the live waiting canvas --
 
-def test_l2_a_restore_never_takes_the_place_the_live_canvas_waits_on(app, monkeypatch):
+def test_a_restore_never_takes_the_place_the_live_canvas_waits_on(app, monkeypatch):
     """Justin, 2026-10-29 (a restore may pass the limit): the
     waiting canvas takes the freed place first, as the listing after a
     delete does, and the restore then passes the limit (4 of 3)."""
@@ -369,7 +369,7 @@ def test_l2_a_restore_never_takes_the_place_the_live_canvas_waits_on(app, monkey
 
 # -- The held canvases' kept files are pruned, never one the note names --
 
-def test_n1_old_kept_held_files_are_pruned_by_the_catalogs_bound(tmp_path):
+def test_old_kept_held_files_are_pruned_by_the_catalogs_bound(tmp_path):
     store = store_module.ProjectStore(tmp_path / "projects")
     store._ensure_held_dir()
     old = [f"{i:032x}.json.damaged-20260101T00000{i}Z-0000000{i}" for i in range(6)]
@@ -393,7 +393,7 @@ def test_n1_old_kept_held_files_are_pruned_by_the_catalogs_bound(tmp_path):
 
 # -- Design: the held canvases' notice is closed with × (the person's only) --
 
-def test_gm_r9_the_held_canvases_notice_is_closed_by_the_person_only(app, monkeypatch):
+def test_the_held_canvases_notice_is_closed_by_the_person_only(app, monkeypatch):
     client, store, graph, state = app
     ids = _waiting(client, store, graph, state, monkeypatch)
     opened = client.post(f"/api/projects/{ids[1]}/open", headers=PERSON, json={"workspaceRevision": _rev(client)})
@@ -421,7 +421,7 @@ def test_gm_r9_the_held_canvases_notice_is_closed_by_the_person_only(app, monkey
 
 # -- Design's answer: the restore notice names every canvas filed --
 
-def test_gm_answer1_a_canvas_filed_while_the_notice_shows_joins_it_with_no_toast(app, monkeypatch):
+def test_a_canvas_filed_while_the_notice_shows_joins_it_with_no_toast(app, monkeypatch):
     """The restore's own canvas is its recoveredCanvas; the copy an agent's
     edit made, filed while the notice shows, is the agent's (design:
     `agentCopies`, never `alsoFiled`) and gets no toast. Once the notice is
@@ -449,7 +449,7 @@ def test_gm_answer1_a_canvas_filed_while_the_notice_shows_joins_it_with_no_toast
     assert saved and saved["name"] == "Recovered canvas 2" and saved.get("another") is True
 
 
-def test_high1_a_copy_the_agent_emptied_takes_no_number(app, monkeypatch):
+def test_a_copy_the_agent_emptied_takes_no_number(app, monkeypatch):
     """An agent's apply that removes every node right after a listing filed
     and opened the person's canvas: the person's canvas stays exact in
     “Recovered canvas”, the empty copy is never filed, and the next copy is

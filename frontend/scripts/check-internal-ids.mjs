@@ -6,18 +6,31 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 // Design: the repo is public, so comments and test titles say "design" and carry no internal
 // ids. Five kinds are counted per file:
-//   - the studio initials as a standalone uppercase word, anywhere in the file;
+//   - the studio initials as a standalone uppercase word, anywhere in the file, and inside an
+//     identifier in a code file (Python, TS/JS family and shell, never a stylesheet): GM_ at the
+//     start or _GM at an underscore boundary of an uppercase name (GM_LINE, MY_GM_CARD), gm_ or
+//     gm+digits at a lowercase start or _gm / _gms / _gm+digits / _gms+digits at an underscore
+//     boundary (gm_board, reads_gms_line, ed_gm7run), and gm / Gm / Gms at a camelCase hump
+//     (gmBoard, readsGmsLine, cursorGm1). "gm" inside a word never counts: segment, pigment,
+//     enigma, gmail, gmock, GMT, GMAIL, aGM, a regex flag string;
 //   - a round id, only inside a comment or a test title (the first string argument of
-//     it/test/describe): the phrase "round N[letter]" anywhere there, or the letter r with one to
-//     three digits and an optional letter when it reads as a design round (right after the
-//     studio initials, "design", "review", "since", "per", "PR #N" or "#N", right before "item",
-//     "answer" or a question id, or as the next link of a slash chain whose earlier link counts).
-//     A bare r1 elsewhere is a domain id (a region, a radius) and is not counted, nor is an
-//     uppercase R1;
-//   - a question id (the letter Q and one to three digits), only inside the same places;
+//     it/test/describe) or a Python `def test_` name: the phrase "round N[letter]" anywhere
+//     there, the name's round_N / rN[letter] segment, or the letter r with one to three digits
+//     and an optional letter when it reads as a design round (right after the studio initials,
+//     "design", "review", "since", "per", "PR #N" or "#N", right before "item", "answer" or a
+//     question id, or as the next link of a slash chain whose earlier link counts). A bare r1
+//     elsewhere is a domain id (a region, a radius) and is not counted, nor is an uppercase R1
+//     or a provider endpoint spelled rNv (r2v);
+//   - a question id (the letter Q and one to three digits), only inside the same places; in a
+//     `def test_` name a qN / QN segment counts too;
 //   - a review id, only inside the same places: "Review N" in any case, or a severity id
 //     (LOW-N, MED-N, MEDIUM-N, HIGH-N, NIT-N; a one-letter H-N, L-N, M-N or N-N only right after
-//     a review id or another severity id, since "N-1" alone is arithmetic);
+//     a review id or another severity id, since "N-1" alone is arithmetic); in a `def test_`
+//     name a review_N or review_rule(_N) segment, a severity word with digits in any case
+//     (nit1, LOW4, medium1) or a lettered finding id that appeared in names (lr1, Le, and the
+//     uppercase C/G/H/L/M/N/U with digits: H1, L2, M1, C2, G4, U1) counts too. A bare review or
+//     rule, and any other single letter with digits, stays a word or a domain value: round_trip,
+//     the review found, n1, v3, h3, t2v, i2v, s2v, o3, e00, b64, m4a;
 //   - the word "lane", only inside text people and agents read: a JS/TS string or template
 //     literal (its literal text, never a ${} expression), JSX text, a test title, or any Python
 //     string (docstrings, triple-quoted constants and f-strings included; never an f-string
@@ -101,6 +114,38 @@ export const BASELINE_REL = 'frontend/scripts/internal-ids-baseline.json';
 export const KINDS = ['gm', 'round', 'question', 'review', 'lane'];
 
 const GM_RE = /\bGM\b/g;
+// The initials inside a code identifier (Python, TS/JS family and shell, never a stylesheet):
+// GM_ or a digit after GM/GMS/Gm/Gms/gm/gms at an identifier start (GM_LINE, GMS_2, gm_board,
+// gm7run, Gm_flag); _GM / _GM_ / _gm / _gms and their digit tails at an underscore boundary
+// (MY_GM_CARD, reads_gms_line, ed_gm7run); and gm / Gm / Gms at a camelCase hump (gmBoard,
+// GmsLine, readsGmsLine, cursorGm1, myGm). A bare uppercase GM is GM_RE's whole-word match; a
+// bare lowercase gm is not counted (a regex flag string, a gram unit). "gm" inside a word
+// never counts: segment, pigment, enigma, gmail, gmock, GMT, GMAIL, aGM.
+const GM_ID_RE = new RegExp(
+  [
+    String.raw`(?<![\w$])(?:GMS?|Gms?|gms?)(?=_|\d)`,
+    String.raw`(?<![\w$])gms?(?=[A-Z])`,
+    String.raw`(?<![\w$])Gms?(?=[A-Z]|(?![\w$]))`,
+    String.raw`(?<=_)GMS?(?=_|\d|(?![\w$]))`,
+    String.raw`(?<=_)gms?(?=_|\d|(?![\w$]))`,
+    String.raw`(?<=[a-z\d])Gms?(?=[A-Z\d]|(?![\w$]))`,
+  ].join('|'),
+  'g',
+);
+// Inside a Python `def test_` name a round, review or question id counts as its kind, the same
+// as in a test title: a bare rN[letter] or round_N (never the endpoint-shaped rNv: r2v is a
+// provider route name), a review_N or review_rule(_N), a qN / QN, a severity word with digits
+// in any case (nit1, LOW4, medium1) and a lettered finding id seen in names (lr1, Le, C/G/H/L/
+// M/N/U with one or two digits: H1, L2, M1, C2, G4, U1; H264 is a codec). A bare round, review
+// or rule stays a word (round_trip, the review found), and every other single letter with
+// digits stays a domain value: n1 and n2 are node ids, v3 / v4 / h3 / v26 model versions,
+// t2v / i2v / s2v / e2e endpoint names, o3 / t2 / e00 / b64 / m4a / qc / wan26 other domain
+// tokens.
+const DEF_TEST_RE = /\bdef\s+(test_\w+)/g;
+const DEF_ROUND_SEG = /^r\d+[a-uw-z]?$/;
+const DEF_Q_SEG = /^[qQ]\d+[a-z]?$/;
+const DEF_SEV_SEG = /^(?:nit|low|med|medium|high)\d+$/i;
+const DEF_LETTER_SEG = /^(?:lr\d+|Le|[CGHLMNU]\d{1,2}[a-z]?)$/;
 // "lane" is how the studio organises its own work, not a Nebula word; agents and people read
 // "session". Counted as a whole word in any case, only inside the text people and agents read (a
 // JS/TS string or template literal, JSX text, a test title, a Python string, a CSS content string).
@@ -442,6 +487,30 @@ function scanBody(body, offsetOf, push) {
   }
 }
 
+/** Round, review and question ids inside Python `def test_` names, reported at each segment's
+ * offset. A def name is all underscores, so the id is one or two segments; a segment counts on
+ * its own spelling (the rules on DEF_*_SEG above), and `round` or `review` counts only when the
+ * next segment is the id's digits (or `rule`), so round_trip and "the review found" stay out. */
+function defNameIds(text, push) {
+  for (const m of text.matchAll(DEF_TEST_RE)) {
+    const name = m[1];
+    const nameStart = m.index + m[0].length - name.length;
+    let at = nameStart + 'test_'.length;
+    const segs = name.slice('test_'.length).split('_');
+    for (let i = 0; i < segs.length; i++) {
+      const g = segs[i];
+      const next = segs[i + 1] ?? '';
+      let kind = null;
+      if (DEF_Q_SEG.test(g)) kind = 'question';
+      else if (DEF_ROUND_SEG.test(g) || (g === 'round' && /^\d+[a-z]?$/.test(next))) kind = 'round';
+      else if (g === 'review' && /^(?:\d+|rule)$/.test(next)) kind = 'review';
+      else if (DEF_SEV_SEG.test(g) || DEF_LETTER_SEG.test(g)) kind = 'review';
+      if (kind) push(at, kind, g);
+      at += g.length + 1;
+    }
+  }
+}
+
 /**
  * Comment texts read as runs: [{body, map}] where map[i] is the file offset of body[i]. Only runs
  * that join at least two lines are returned (a single comment is already scanned on its own). A
@@ -606,6 +675,10 @@ export function scanSource(path, text) {
     out.push({ line: idx + 1, text: lineText(idx), kind, match });
   };
   for (const m of text.matchAll(GM_RE)) push(m.index, 'gm', m[0]);
+  // The initials inside an identifier: every code file but a stylesheet (a class or grid-area
+  // never holds them anyway). A bare uppercase GM is the whole-word match above, never doubled.
+  if (ext !== 'css') for (const m of text.matchAll(GM_ID_RE)) push(m.index, 'gm', m[0]);
+  if (ext === 'py') defNameIds(text, push);
   for (const m of text.matchAll(LANE_RE)) {
     if (!readable.some((s) => m.index >= s.start && m.index < s.end)) continue;
     push(m.index, 'lane', m[0]);

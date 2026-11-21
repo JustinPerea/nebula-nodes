@@ -128,7 +128,7 @@ def _syncs() -> list[dict]:
 
 # -- A delete is said, by the window that saved the node ------------------------------
 
-def test_m1_another_windows_handoff_keeps_the_duplicate_and_the_agents_edit(app):
+def test_another_windows_handoff_keeps_the_duplicate_and_the_agents_edit(app):
     """The reviewer's probe: window B never had the duplicate; its handoff
     (n1 moved) leaves it out. n2 and the agent's edit stay, live and on
     disk, and nothing is journaled as the person's delete."""
@@ -150,7 +150,7 @@ def test_m1_another_windows_handoff_keeps_the_duplicate_and_the_agents_edit(app)
 
 
 @pytest.mark.parametrize("by", ["old", "new"])
-def test_m1_a_delete_another_window_says_is_ignored(app, by):
+def test_a_delete_another_window_says_is_ignored(app, by):
     """Window B lists the duplicate as deleted though window A saved it:
     ignored, not refused. The rest of B's save lands, the node stays."""
     client, store, *_ = app
@@ -167,7 +167,7 @@ def test_m1_a_delete_another_window_says_is_ignored(app, by):
 
 
 @pytest.mark.parametrize("by", ["old", "new"])
-def test_m1_the_window_that_saved_it_deletes_it_by_either_id(app, by):
+def test_the_window_that_saved_it_deletes_it_by_either_id(app, by):
     """Window A deletes its duplicate and says so. Gone live, from the
     stored copy right after the handoff (mutant H7: a deleted node put back
     from the stored copy, repaired by a later read), and journaled as the
@@ -188,7 +188,7 @@ def test_m1_the_window_that_saved_it_deletes_it_by_either_id(app, by):
     assert [node["id"] for node in _stored(client, delta)["nodes"]] == ["n1"]
 
 
-def test_m1_its_own_window_leaving_it_out_without_saying_so_deletes_nothing(app):
+def test_its_own_window_leaving_it_out_without_saying_so_deletes_nothing(app):
     client, store, *_ = app
     delta, window_a, _window_b = _delta(client)
     old_rev = _rev(client)
@@ -200,7 +200,7 @@ def test_m1_its_own_window_leaving_it_out_without_saying_so_deletes_nothing(app)
     assert _disk_ids(store, delta) == ["n1", new]
 
 
-def test_m1_a_delete_listed_while_the_tab_still_holds_the_node_deletes_nothing(app):
+def test_a_delete_listed_while_the_tab_still_holds_the_node_deletes_nothing(app):
     client, store, *_ = app
     delta, window_a, _window_b = _delta(client)
     old_rev = _rev(client)
@@ -210,7 +210,7 @@ def test_m1_a_delete_listed_while_the_tab_still_holds_the_node_deletes_nothing(a
     assert _disk_ids(store, delta) == ["n1", new]
 
 
-def test_m1_a_delete_by_a_save_with_no_window_deletes_nothing(app):
+def test_a_delete_by_a_save_with_no_window_deletes_nothing(app):
     """The person's token without X-Nebula-Tab (no window) can't say it."""
     client, store, *_ = app
     delta, window_a, _window_b = _delta(client)
@@ -222,7 +222,7 @@ def test_m1_a_delete_by_a_save_with_no_window_deletes_nothing(app):
     assert sorted(_export_ids(client)) == ["n1", new]
 
 
-def test_m1_which_window_saved_each_tab_local_node_is_kept_and_follows_the_renumber(app):
+def test_which_window_saved_each_tab_local_node_is_kept_and_follows_the_renumber(app):
     client, store, *_ = app
     delta, window_a, _window_b = _delta(client)
     assert _on_disk(store, delta)[main_module._TAB_LOCAL_WRITERS] == {DUP: WINDOW_A}
@@ -230,7 +230,7 @@ def test_m1_which_window_saved_each_tab_local_node_is_kept_and_follows_the_renum
     assert _on_disk(store, delta)[main_module._TAB_LOCAL_WRITERS] == {new: WINDOW_A}
 
 
-def test_m1_a_save_without_a_window_records_no_writer(app):
+def test_a_save_without_a_window_records_no_writer(app):
     client, store, *_ = app
     delta, window_a, _window_b = _delta(client)
     _save(client, delta, window_a, headers=PERSON)
@@ -238,7 +238,7 @@ def test_m1_a_save_without_a_window_records_no_writer(app):
 
 
 @pytest.mark.parametrize("listed", ["not a list", [1], [""]])
-def test_m1_a_malformed_delete_list_refuses_the_handoff(app, listed):
+def test_a_malformed_delete_list_refuses_the_handoff(app, listed):
     client, store, *_ = app
     delta, window_a, _window_b = _delta(client)
     old_rev = _rev(client)
@@ -247,7 +247,7 @@ def test_m1_a_malformed_delete_list_refuses_the_handoff(app, listed):
     assert answer.status_code == 409, answer.text
 
 
-def test_m1_after_an_agents_switch_away_another_windows_handoff_keeps_the_duplicate(app):
+def test_after_an_agents_switch_away_another_windows_handoff_keeps_the_duplicate(app):
     """The duplicate was never on Nebula's graph (the agent opened another
     project): window B's handoff leaves it out because it never had it."""
     client, store, *_ = app
@@ -260,7 +260,7 @@ def test_m1_after_an_agents_switch_away_another_windows_handoff_keeps_the_duplic
     assert _on_disk(store, delta)[main_module._TAB_LOCAL_WRITERS] == {DUP: WINDOW_A}
 
 
-def test_m1_after_an_agents_switch_away_its_own_windows_handoff_without_it_drops_it(app):
+def test_after_an_agents_switch_away_its_own_windows_handoff_without_it_drops_it(app):
     """A node only window A ever had: A's own save is still its whole copy
     of it (the ordinary rule), as before this round."""
     client, store, *_ = app
@@ -276,7 +276,7 @@ def test_m1_after_an_agents_switch_away_its_own_windows_handoff_without_it_drops
 
 # -- Mutant H13: a node World Labs paid state holds isn't deleted -----------------------
 
-def test_h13_a_deleted_duplicate_a_world_labs_checkpoint_holds_stays_live(app, tmp_path, monkeypatch):
+def test_a_deleted_duplicate_a_world_labs_checkpoint_holds_stays_live(app, tmp_path, monkeypatch):
     client, store, *_ = app
     recoveries = ProviderRecoveryStore(tmp_path / "provider-recoveries.json")
     monkeypatch.setattr(main_module, "provider_recovery_store", recoveries)
@@ -297,7 +297,7 @@ def test_h13_a_deleted_duplicate_a_world_labs_checkpoint_holds_stays_live(app, t
 
 # -- Run results move as one unit; the newer run wins -----------------------------
 
-def test_m3_the_reviewers_probe_a_result_on_the_duplicate_survives_an_agents_reopen(app):
+def test_the_reviewers_probe_a_result_on_the_duplicate_survives_an_agents_reopen(app):
     client, store, *_ = app
     delta, window_a, _window_b = _delta(client)
     old_rev = _rev(client)
@@ -311,7 +311,7 @@ def test_m3_the_reviewers_probe_a_result_on_the_duplicate_survives_an_agents_reo
     assert loaded["outputs"]["text"]["value"] == "RAN-RESULT" and loaded["runNotes"] == ["ran"]
 
 
-def test_m3_a_result_on_n1_survives_an_agents_switch_away(app):
+def test_a_result_on_n1_survives_an_agents_switch_away(app):
     """Not only renumbered nodes: n1's result from the tab's run (its run
     record says so) lands whole, its notes too."""
     client, store, *_ = app
@@ -326,7 +326,7 @@ def test_m3_a_result_on_n1_survives_an_agents_switch_away(app):
     assert stored["outputs"] == _text("N1-RAN") and stored["runNotes"] == ["n1 ran"]
 
 
-def test_m3_a_result_on_n1_goes_live_after_an_agents_reopen(app):
+def test_a_result_on_n1_goes_live_after_an_agents_reopen(app):
     client, store, *_ = app
     delta, window_a, _window_b = _delta(client)
     old_rev = _rev(client)
@@ -337,7 +337,7 @@ def test_m3_a_result_on_n1_goes_live_after_an_agents_reopen(app):
     assert _live(client)["n1"]["data"]["outputs"] == _text("N1-RAN")
 
 
-def test_m3_a_result_with_no_run_record_never_stands_over_nebulas(app):
+def test_a_result_with_no_run_record_never_stands_over_nebulas(app):
     """n1 isn't renumbered (no baseline): a differing result the tab's run
     history doesn't back keeps the stored one."""
     client, store, *_ = app
@@ -350,7 +350,7 @@ def test_m3_a_result_with_no_run_record_never_stands_over_nebulas(app):
     assert _disk_node(store, delta, "n1")["data"]["outputs"] == {}
 
 
-def test_m3_an_agents_later_run_of_n2_stands_over_the_tabs_older_result(app):
+def test_an_agents_later_run_of_n2_stands_over_the_tabs_older_result(app):
     """Nebula saw the tab's run land on the duplicate before the open, and
     the agent's run of n2 land after it: the agent's is newer."""
     client, store, *_ = app
@@ -368,7 +368,7 @@ def test_m3_an_agents_later_run_of_n2_stands_over_the_tabs_older_result(app):
     assert loaded["outputs"] == _text("AGENT")
 
 
-def test_m3_the_tabs_newer_run_wins_over_an_older_landing(app):
+def test_the_tabs_newer_run_wins_over_an_older_landing(app):
     """Nebula didn't see the tab's run (a restart): its record finished
     after the agent's result landed, so the tab's stands."""
     client, store, *_ = app
@@ -385,7 +385,7 @@ def test_m3_the_tabs_newer_run_wins_over_an_older_landing(app):
     assert _disk_node(store, delta, new)["data"]["outputs"] == _text("TAB-NEW")
 
 
-def test_m3_the_tabs_older_record_loses_to_a_later_landing(app):
+def test_the_tabs_older_record_loses_to_a_later_landing(app):
     client, store, *_ = app
     delta, window_a, _window_b = _delta(client)
     old_rev = _rev(client)
@@ -399,7 +399,7 @@ def test_m3_the_tabs_older_record_loses_to_a_later_landing(app):
     assert _live(client)[new]["data"]["outputs"] == _text("AGENT")
 
 
-def test_m3_the_tabs_result_as_the_open_loaded_it_never_stands_over_an_agents_run(app):
+def test_the_tabs_result_as_the_open_loaded_it_never_stands_over_an_agents_run(app):
     client, store, *_ = app
     delta, window_a, _window_b = _delta(client)
     old_rev = _rev(client)
@@ -410,7 +410,7 @@ def test_m3_the_tabs_result_as_the_open_loaded_it_never_stands_over_an_agents_ru
     assert _live(client)[new]["data"]["outputs"] == _text("AGENT")
 
 
-def test_m3_only_the_persons_window_hands_a_result_over(app):
+def test_only_the_persons_window_hands_a_result_over(app):
     client, store, *_ = app
     delta, window_a, _window_b = _delta(client)
     old_rev = _rev(client)
@@ -420,7 +420,7 @@ def test_m3_only_the_persons_window_hands_a_result_over(app):
     assert _disk_node(store, delta, new)["data"]["outputs"] == {}
 
 
-def test_m3_a_failure_on_the_duplicate_reaches_its_error_record(app):
+def test_a_failure_on_the_duplicate_reaches_its_error_record(app):
     client, store, *_ = app
     delta, window_a, _window_b = _delta(client)
     old_rev = _rev(client)
@@ -431,7 +431,7 @@ def test_m3_a_failure_on_the_duplicate_reaches_its_error_record(app):
     assert _live(client)[new]["data"]["state"] == "error"
 
 
-def test_m3_the_baseline_moves_on_to_the_tabs_result(app):
+def test_the_baseline_moves_on_to_the_tabs_result(app):
     """A later handoff with the same result is the one the baseline holds:
     an agent's run since then stands, whatever the clocks say (its landing
     is stamped before the tab's record finished)."""
@@ -450,7 +450,7 @@ def test_m3_the_baseline_moves_on_to_the_tabs_result(app):
     assert _live(client)[new]["data"]["outputs"] == _text("AGENT")
 
 
-def test_m3_a_result_without_a_failure_forgets_the_nodes_old_error(app):
+def test_a_result_without_a_failure_forgets_the_nodes_old_error(app):
     client, store, *_ = app
     delta, window_a, _window_b = _delta(client)
     old_rev = _rev(client)
@@ -461,7 +461,7 @@ def test_m3_a_result_without_a_failure_forgets_the_nodes_old_error(app):
     assert main_module.node_errors.get(new) is None
 
 
-def test_m3_nebula_notes_each_result_landing_in_the_runs_project(app, monkeypatch):
+def test_nebula_notes_each_result_landing_in_the_runs_project(app, monkeypatch):
     client, store, *_ = app
     delta = _create(client, "Delta")
     _add_text(client, "delta-1")
@@ -476,7 +476,7 @@ def test_m3_nebula_notes_each_result_landing_in_the_runs_project(app, monkeypatc
 
 # -- The person's reopen in place, other windows follow -----------------------------------
 
-def test_l1_the_persons_reopen_in_place_tells_other_windows_to_follow(app):
+def test_the_persons_reopen_in_place_tells_other_windows_to_follow(app):
     client, store, *_ = app
     delta, _window_a, _window_b = _delta(client)
     old_rev = _rev(client)
@@ -489,7 +489,7 @@ def test_l1_the_persons_reopen_in_place_tells_other_windows_to_follow(app):
     assert store_module.ProjectStore(store.root).read()["handoffs"] == {delta: old_rev}
 
 
-def test_l1_window_bs_typing_lands_after_window_as_reopen_in_place(app):
+def test_window_bs_typing_lands_after_window_as_reopen_in_place(app):
     client, store, *_ = app
     delta, _window_a, window_b = _delta(client)
     old_rev = _rev(client)
@@ -504,7 +504,7 @@ def test_l1_window_bs_typing_lands_after_window_as_reopen_in_place(app):
     assert _value(_on_disk(store, delta)["snapshot"], "n1") == "b typed late"
 
 
-def test_l1_the_persons_open_of_another_project_still_ends_every_handoff(app):
+def test_the_persons_open_of_another_project_still_ends_every_handoff(app):
     client, store, *_ = app
     other = _create(client, "Other")
     delta, _window_a, _window_b = _delta(client)
@@ -515,7 +515,7 @@ def test_l1_the_persons_open_of_another_project_still_ends_every_handoff(app):
 
 # -- per-node records follow a renumber --------------------------------------------------
 
-def test_l2_a_world_labs_checkpoint_and_hold_follow_the_boot_renumber(app, tmp_path, monkeypatch):
+def test_a_world_labs_checkpoint_and_hold_follow_the_boot_renumber(app, tmp_path, monkeypatch):
     """Recover after the renumber finds the checkpoint by the node's new id:
     Run history's list, the node's guard, and Forget ID."""
     client, store, _graph, state = app
@@ -540,7 +540,7 @@ def test_l2_a_world_labs_checkpoint_and_hold_follow_the_boot_renumber(app, tmp_p
     assert delta
 
 
-def test_l2_a_nodes_last_error_and_result_landings_follow_an_open_renumber(app):
+def test_a_nodes_last_error_and_result_landings_follow_an_open_renumber(app):
     client, store, *_ = app
     delta, _window_a, _window_b = _delta(client)
     main_module.node_errors.use_project(delta)

@@ -230,7 +230,102 @@ describe('check-internal-ids: what counts', () => {
   });
 
   it('does not count GMT or a word that contains the initials', () => {
-    expect(count('a.ts', '// 12:00 GMT, GMAIL, aGM, GM_FLAG')).toBe(0);
+    expect(count('a.ts', '// 12:00 GMT, GMAIL, aGM')).toBe(0);
+  });
+
+  it('counts the initials at an underscore boundary of an uppercase identifier', () => {
+    expect(count('a.ts', 'const GM_LINE = "stop";')).toBe(1);
+    expect(kinds('a.ts', 'const GM_CARD = "x"; const GM9 = "y";')).toEqual(['gm', 'gm']);
+    expect(count('a.ts', 'const MY_GM_CARD = "x";')).toBe(1);
+    expect(count('a.ts', 'const A_GM = "x"; const B_GM_2 = "y"; const C_GMS = "z";')).toBe(3);
+    expect(count('a.py', 'GM_DIRECTION = "left"\nFOO_GM = 1\n')).toBe(2);
+    expect(count('a.sh', 'GM_KINDS="a b"\n')).toBe(1);
+    // A bare uppercase GM is still the whole-word match: counted once, never doubled.
+    expect(kinds('a.ts', '// GM wants it')).toEqual(['gm']);
+    expect(count('a.ts', 'const x = GM;')).toBe(1);
+  });
+
+  it('counts the initials at an underscore boundary of a snake_case identifier', () => {
+    expect(kinds('a.py', 'def gm_board():\n    pass\n')).toEqual(['gm']);
+    expect(count('a.py', 'def test_reads_gms_line():\n    pass\n')).toBe(1);
+    expect(count('a.py', 'gm_run = "x"\nfoo_gm = 1\nfoo_gms_2 = 2\n')).toBe(3);
+    expect(count('a.ts', 'const reads_gms_line = 1;')).toBe(1);
+    // A digit tail still counts: the initials plus a case number are the initials.
+    expect(count('a.py', 'ed_gm7run00000001 = "x"\n')).toBe(1);
+    expect(count('a.ts', 'const ed_gm7val00000001 = "x";')).toBe(1);
+  });
+
+  it('counts the initials at a camelCase hump', () => {
+    expect(count('a.ts', 'const gmBoard = 1;')).toBe(1);
+    expect(count('a.ts', 'function readsGmsLine() {}')).toBe(1);
+    expect(count('a.ts', 'const cursorGm1Node = 1;')).toBe(1);
+    expect(count('a.ts', 'const myGm = 1; const myGms = 2;')).toBe(2);
+    expect(count('a.ts', 'const GmsLine = 1;')).toBe(1);
+  });
+
+  it('does not count the initials inside a word or as a bare lowercase token', () => {
+    expect(count('a.ts', 'const s = "segment, pigment, enigma, gmail, gmock";')).toBe(0);
+    expect(count('a.ts', 'const gmt = 1; const gmail2 = 2; const gmock = 3;')).toBe(0);
+    expect(count('a.ts', 'const FOO_GMT = 1; const A_GMAIL = 2; const aGM = 3;')).toBe(0);
+    expect(count('a.ts', 'const myGMT = 1; const aGmail = 2;')).toBe(0);
+    expect(count('a.py', 'log_gmtime = 1\nenigma_flag = 2\n')).toBe(0);
+    // A bare lowercase gm token and a regex flag string are not identifier shapes.
+    expect(count('a.ts', "const flags = 'gm';")).toBe(0);
+    expect(count('a.ts', 'const gm = 1; const gms = 2;')).toBe(0);
+    expect(count('a.py', 'gm = 1\ndef gm(): pass\n')).toBe(0);
+  });
+
+  it('does not count the identifier shapes in a stylesheet or a markdown file', () => {
+    expect(count('a.css', '.a { /* GM_LINE gm_board readsGmsLine */ }')).toBe(0);
+    expect(count('skills/x/SKILL.md', 'GM_LINE gm_board readsGmsLine cursorGm1\n')).toBe(0);
+  });
+
+  it('counts round, review and question ids inside a Python def test_ name', () => {
+    expect(kinds('a.py', 'def test_gm_r901_foo():\n    pass\n')).toEqual(['gm', 'round']);
+    expect(kinds('a.py', 'def test_r901_foo():\n    pass\n')).toEqual(['round']);
+    expect(kinds('a.py', 'def test_follow_r901_item():\n    pass\n')).toEqual(['round']);
+    expect(kinds('a.py', 'def test_round_901_foo():\n    pass\n')).toEqual(['round']);
+    expect(kinds('a.py', 'def test_round_901e_foo():\n    pass\n')).toEqual(['round']);
+    expect(kinds('a.py', 'def test_review_901_foo():\n    pass\n')).toEqual(['review']);
+    expect(kinds('a.py', 'def test_review_rule_901_foo():\n    pass\n')).toEqual(['review']);
+    expect(kinds('a.py', 'def test_q901_foo():\n    pass\n')).toEqual(['question']);
+    expect(kinds('a.py', 'def test_the_q901b_foo():\n    pass\n')).toEqual(['question']);
+    expect(kinds('a.py', 'def test_gms_line():\n    pass\n')).toEqual(['gm']);
+    expect(kinds('a.py', 'def test_reads_gms_line():\n    pass\n')).toEqual(['gm']);
+    expect(kinds('a.py', 'def test_nit1_foo():\n    pass\n')).toEqual(['review']);
+    expect(kinds('a.py', 'def test_the_LOW4_foo():\n    pass\n')).toEqual(['review']);
+    expect(kinds('a.py', 'def test_medium1_foo():\n    pass\n')).toEqual(['review']);
+    expect(kinds('a.py', 'def test_lr1_foo():\n    pass\n')).toEqual(['review']);
+    expect(kinds('a.py', 'def test_Le_foo():\n    pass\n')).toEqual(['review']);
+    expect(kinds('a.py', 'def test_H1_foo():\n    pass\n')).toEqual(['review']);
+    // the same shapes in comments were not already counted, so each name yields one match
+    expect(count('a.py', 'def test_review_901_foo():\n    pass\n')).toBe(1);
+  });
+
+  it('does not read a domain value or a word in a def test_ name as an id', () => {
+    // model and provider versions, node ids, endpoint names and formats stay out
+    for (const name of [
+      'test_n1_connects', 'test_n2_connects', 'test_v3_database', 'test_v4_generate',
+      'test_h3_text_to_video', 'test_v26_endpoint', 'test_t2v_request', 'test_i2v_body',
+      'test_s2v_shape', 'test_e2e_generate', 'test_o3_endpoint', 'test_t2_meshy',
+      'test_e00_matches_reference', 'test_b64_mime', 'test_m4a_audio', 'test_r2v_endpoint',
+      'test_wan26_r2v_video', 'test_f_rest_zero', 'test_qc_node', 'test_vp8l_alpha',
+      'test_H264_stream', 'test_H265_stream',
+    ]) {
+      expect(count('a.py', `def ${name}():\n    pass\n`), name).toBe(0);
+    }
+    // bare round / review / rule / answers are English, not ids
+    expect(count('a.py', 'def test_round_trip():\n    pass\n')).toBe(0);
+    expect(count('a.py', 'def test_the_review_found_this():\n    pass\n')).toBe(0);
+    expect(count('a.py', 'def test_the_rule_stands():\n    pass\n')).toBe(0);
+    expect(count('a.py', 'def test_the_review_case_62():\n    pass\n')).toBe(0);
+    expect(count('a.py', 'def test_reviews_it():\n    pass\n')).toBe(0);
+    // a bare single letter, an article and a label letter stay out
+    expect(count('a.py', 'def test_a_thing():\n    pass\n')).toBe(0);
+    expect(count('a.py', 'def test_c_person_form():\n    pass\n')).toBe(0);
+    expect(count('a.py', 'def test_for_A_and_B():\n    pass\n')).toBe(0);
+    // an uppercase R901 is not a round id, in a def name either
+    expect(count('a.py', 'def test_probe_R901():\n    pass\n')).toBe(0);
   });
 
   it('does not count a code identifier named like a round id', () => {

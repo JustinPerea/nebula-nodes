@@ -127,7 +127,7 @@ def _create(client, name: str) -> str:
     return response.json()["project"]["id"]
 
 
-def test_h1_the_review_probe_never_saves_betas_canvas_into_alpha(app):
+def test_the_review_probe_never_saves_betas_canvas_into_alpha(app):
     """Probe: Alpha (two nodes), then Beta opened with one node.
     The older copy has Alpha open. catalog.json is zero-filled and .bak
     overwritten with zeros: the restore comes from .bak.1."""
@@ -167,7 +167,7 @@ def test_h1_the_review_probe_never_saves_betas_canvas_into_alpha(app):
     assert sum(1 for project in again["projects"] if project["name"] == "Recovered canvas") == 1
 
 
-def test_h1_a_restore_opens_the_canvas_own_project_when_it_came_back(app):
+def test_a_restore_opens_the_canvas_own_project_when_it_came_back(app):
     client, store, graph, state = app
     alpha = _create(client, "Alpha")
     _add_text(client, "alpha-1")
@@ -190,7 +190,7 @@ def test_h1_a_restore_opens_the_canvas_own_project_when_it_came_back(app):
     assert not [project for project in after["projects"].values() if project["name"] == "Recovered canvas"]
 
 
-def test_h1_a_project_read_never_saves_a_canvas_that_isnt_the_projects(app):
+def test_a_project_read_never_saves_a_canvas_that_isnt_the_projects(app):
     client, store, graph, _state = app
     alpha = _create(client, "Alpha")
     _add_text(client, "alpha-1")
@@ -203,7 +203,7 @@ def test_h1_a_project_read_never_saves_a_canvas_that_isnt_the_projects(app):
     assert json.loads(store.path.read_text())["projects"][alpha]["snapshot"] == before
 
 
-def test_h1_a_crash_between_the_canvas_and_the_catalog_in_a_switch_opens_the_canvas_project(app, monkeypatch):
+def test_a_crash_between_the_canvas_and_the_catalog_in_a_switch_opens_the_canvas_project(app, monkeypatch):
     """A switch writes state.json, then the catalog. A crash between them
     leaves Beta's canvas with Alpha open in the catalog: the next listing opens
     Beta, and Alpha keeps its own nodes."""
@@ -235,7 +235,7 @@ def test_h1_a_crash_between_the_canvas_and_the_catalog_in_a_switch_opens_the_can
     assert _values(after["projects"][beta]) == ["beta-1"]
 
 
-def test_h1_a_crash_while_creating_a_project_never_empties_the_open_one(app, monkeypatch):
+def test_a_crash_while_creating_a_project_never_empties_the_open_one(app, monkeypatch):
     client, store, graph, state = app
     alpha = _create(client, "Alpha")
     _add_text(client, "alpha-1")
@@ -254,7 +254,7 @@ def test_h1_a_crash_while_creating_a_project_never_empties_the_open_one(app, mon
     assert after["activeProjectId"] is None
 
 
-def test_h1_the_canvas_records_its_project_in_state_json(app):
+def test_the_canvas_records_its_project_in_state_json(app):
     client, store, graph, state = app
     alpha = _create(client, "Alpha")
     assert json.loads(state.read_text())["projectId"] == alpha
@@ -264,7 +264,7 @@ def test_h1_the_canvas_records_its_project_in_state_json(app):
     assert json.loads(state.read_text())["projectId"] is None
 
 
-def test_h1_a_canvas_saved_before_it_recorded_its_project_is_resolved_at_boot(tmp_path):
+def test_a_canvas_saved_before_it_recorded_its_project_is_resolved_at_boot(tmp_path):
     store = _store(tmp_path)
     [alpha] = _add(store, "Alpha", open_last=True)
     graph = CLIGraph()
@@ -284,7 +284,7 @@ def test_h1_a_canvas_saved_before_it_recorded_its_project_is_resolved_at_boot(tm
     assert graph.owner is None
 
 
-def test_h1_state_json_round_trips_the_owner(tmp_path):
+def test_state_json_round_trips_the_owner(tmp_path):
     path = tmp_path / "state.json"
     graph = CLIGraph(persist_path=path)
     graph.owner = "a" * 32
@@ -303,7 +303,7 @@ def test_h1_state_json_round_trips_the_owner(tmp_path):
 # -- M1: what an older copy decided ------------------------------------------------
 
 
-def test_m1_an_edit_the_damage_cut_off_is_reported_as_reverted(tmp_path):
+def test_an_edit_the_damage_cut_off_is_reported_as_reverted(tmp_path):
     """Probe P1: Beta renamed with a node added; its record in catalog.json is
     cut. .bak is one commit behind, so Beta goes back to its version there."""
     store = _store(tmp_path)
@@ -330,7 +330,7 @@ def test_m1_an_edit_the_damage_cut_off_is_reported_as_reverted(tmp_path):
     assert record["copyAt"]
 
 
-def test_m1_an_unchanged_record_cut_by_the_damage_is_not_reported(tmp_path):
+def test_an_unchanged_record_cut_by_the_damage_is_not_reported(tmp_path):
     store = _store(tmp_path)
     alpha, beta = _add(store, "Alpha", "Beta")
     _add(store, "Gamma")  # a later commit that leaves Beta as it was
@@ -343,7 +343,7 @@ def test_m1_an_unchanged_record_cut_by_the_damage_is_not_reported(tmp_path):
     assert record["reverted"] == []
 
 
-def test_m1_a_project_deleted_for_good_is_remembered_and_stays_deleted(tmp_path):
+def test_a_project_deleted_for_good_is_remembered_and_stays_deleted(tmp_path):
     """Probe P5: "Gone" deleted for good, .bak damaged, .bak.1 (which still
     has Gone) is the base. The purge is in the damaged file's head."""
     store = _store(tmp_path)
@@ -362,7 +362,7 @@ def test_m1_a_project_deleted_for_good_is_remembered_and_stays_deleted(tmp_path)
     assert record["cameBack"] == []
 
 
-def test_m1_a_delete_the_damaged_file_cant_prove_comes_back_and_is_reported(tmp_path):
+def test_a_delete_the_damaged_file_cant_prove_comes_back_and_is_reported(tmp_path):
     """A parseable damaged file that lacks the project and has no tombstone
     (saved before tombstones): the copy's project comes back, and says so."""
     store = _store(tmp_path)
@@ -380,7 +380,7 @@ def test_m1_a_delete_the_damaged_file_cant_prove_comes_back_and_is_reported(tmp_
     assert record["cameBack"] == [{"id": gone, "name": "Gone", "how": "deleted", "trashed": False}]
 
 
-def test_m1_a_move_to_recently_deleted_the_damage_cut_off_is_reported_back(tmp_path):
+def test_a_move_to_recently_deleted_the_damage_cut_off_is_reported_back(tmp_path):
     store = _store(tmp_path)
     keep, gone = _add(store, "Keep", "Gone")
     _edit(store, lambda catalog: move_to_trash(catalog, gone))
@@ -394,7 +394,7 @@ def test_m1_a_move_to_recently_deleted_the_damage_cut_off_is_reported_back(tmp_p
     assert record["cameBack"] == [{"id": gone, "name": "Gone", "how": "trashed", "trashed": False}]
 
 
-def test_m1_a_restore_from_recently_deleted_is_kept_when_the_record_reads(tmp_path):
+def test_a_restore_from_recently_deleted_is_kept_when_the_record_reads(tmp_path):
     """Probe P6: Alpha restored from Recently deleted after the copy. Its
     record reads whole, and the restore is newer than the delete."""
     store = _store(tmp_path)
@@ -410,7 +410,7 @@ def test_m1_a_restore_from_recently_deleted_is_kept_when_the_record_reads(tmp_pa
     assert record["backInTrash"] == []
 
 
-def test_m1_a_restore_from_recently_deleted_saved_before_restoredAt_is_reported(tmp_path):
+def test_a_restore_from_recently_deleted_saved_before_restoredAt_is_reported(tmp_path):
     store = _store(tmp_path)
     [alpha] = _add(store, "Alpha")
     _edit(store, lambda catalog: move_to_trash(catalog, alpha))
@@ -429,7 +429,7 @@ def test_m1_a_restore_from_recently_deleted_saved_before_restoredAt_is_reported(
     assert record["backInTrash"] == [{"id": alpha, "name": "Alpha"}]
 
 
-def test_m1_a_restore_from_recently_deleted_the_damage_cut_off_is_reported(tmp_path):
+def test_a_restore_from_recently_deleted_the_damage_cut_off_is_reported(tmp_path):
     store = _store(tmp_path)
     keep, alpha = _add(store, "Keep", "Alpha")
     _edit(store, lambda catalog: move_to_trash(catalog, alpha))
@@ -449,7 +449,7 @@ def _zero_inside(raw: bytes, entry_id: str) -> bytes:
     return raw[:at] + b"\0" * 32 + raw[at + 32:]
 
 
-def test_m1_several_records_cut_in_one_file_each_get_their_group(tmp_path):
+def test_several_records_cut_in_one_file_each_get_their_group(tmp_path):
     """Live check: three torn pages in one file. The record cut
     after a whole record that followed an earlier cut lost its group, so a
     restore from Recently deleted the copy didn't have went unreported."""
@@ -482,7 +482,7 @@ def test_m1_several_records_cut_in_one_file_each_get_their_group(tmp_path):
     assert revived in catalog["trash"] and draft in catalog["projects"]
 
 
-def test_m1_the_agents_note_says_what_the_older_copy_decided():
+def test_the_agents_note_says_what_the_older_copy_decided():
     note = main_module._catalog_restore_note({
         "kind": "restored", "reason": "corrupt", "source": "catalog.json.bak.1", "addedBackCount": 0,
         "notAddedBackCount": 0, "setAside": ["/s/catalog.json.damaged-x"],
@@ -497,7 +497,7 @@ def test_m1_the_agents_note_says_what_the_older_copy_decided():
     assert "2 projects were brought up to date from the damaged file" in note
 
 
-def test_m1_start_here_and_the_cli_carry_the_older_copys_outcomes():
+def test_start_here_and_the_cli_carry_the_older_copys_outcomes():
     from cli.formatter import format_start
     from services import agent_start
 
@@ -513,7 +513,7 @@ def test_m1_start_here_and_the_cli_carry_the_older_copys_outcomes():
     assert "Went back to the copy's version: Logo" in text
 
 
-def test_m1_a_damaged_file_not_read_to_its_end_never_claims_nothing_was_lost(tmp_path):
+def test_a_damaged_file_not_read_to_its_end_never_claims_nothing_was_lost(tmp_path):
     """Live check: catalog.json and .bak zero-filled, .bak.1 the
     base. What the damaged file held is unknown, and the record, the agents'
     note and the CLI say so (the notice then never says no projects were
@@ -551,7 +551,7 @@ def test_m1_a_damaged_file_not_read_to_its_end_never_claims_nothing_was_lost(tmp
 # -- L1-L7 ---------------------------------------------------------------------------
 
 
-def test_l1_a_rebuild_past_the_size_limit_refuses_and_changes_nothing(tmp_path, monkeypatch):
+def test_a_rebuild_past_the_size_limit_refuses_and_changes_nothing(tmp_path, monkeypatch):
     """Probe P2: prepare refuses the rebuilt catalog once."""
     store = _store(tmp_path)
     _add(store, "One", "Two", "Three")
@@ -576,7 +576,7 @@ def test_l1_a_rebuild_past_the_size_limit_refuses_and_changes_nothing(tmp_path, 
     assert not list(store.root.glob("*.damaged-*"))
 
 
-def test_l1_room_counts_each_records_key_and_comma():
+def test_room_counts_each_records_key_and_comma():
     base = {"version": 1, "projects": {}, "trash": {}, "activeProjectId": None, "workspaceRevision": "r"}
     entries = {}
     for index in range(3):
@@ -592,7 +592,7 @@ def test_l1_room_counts_each_records_key_and_comma():
 
 
 @pytest.mark.parametrize("bad", ["NaN", "Infinity", "-Infinity", "1e999"])
-def test_l2_a_value_the_store_cant_write_never_makes_every_request_a_500(tmp_path, bad):
+def test_a_value_the_store_cant_write_never_makes_every_request_a_500(tmp_path, bad):
     """Probe P3, and the same value in an otherwise whole catalog."""
     store = _store(tmp_path)
     [alpha] = _add(store, "Alpha")
@@ -607,7 +607,7 @@ def test_l2_a_value_the_store_cant_write_never_makes_every_request_a_500(tmp_pat
         store.commit(catalog)  # and it can be written again
 
 
-def test_l2_a_damaged_record_with_nan_is_left_out_and_reported(tmp_path):
+def test_a_damaged_record_with_nan_is_left_out_and_reported(tmp_path):
     store = _store(tmp_path)
     [alpha] = _add(store, "Alpha")
     store.backup_path.unlink()
@@ -620,7 +620,7 @@ def test_l2_a_damaged_record_with_nan_is_left_out_and_reported(tmp_path):
         store.read()
 
 
-def test_l2_a_lone_surrogate_never_makes_every_request_a_500(tmp_path):
+def test_a_lone_surrogate_never_makes_every_request_a_500(tmp_path):
     store = _store(tmp_path)
     [alpha] = _add(store, "Alpha")
     _add(store, "Beta")
@@ -632,7 +632,7 @@ def test_l2_a_lone_surrogate_never_makes_every_request_a_500(tmp_path):
         store.commit(catalog)
 
 
-def test_l3_a_nested_transaction_fails_loudly(tmp_path):
+def test_a_nested_transaction_fails_loudly(tmp_path):
     """Probe P8: the inner commit used to be lost silently."""
     store = _store(tmp_path)
     [alpha] = _add(store, "A")
@@ -648,7 +648,7 @@ def test_l3_a_nested_transaction_fails_loudly(tmp_path):
         store.commit(catalog)
 
 
-def test_l4_a_catalog_from_a_newer_nebula_is_not_ours(tmp_path):
+def test_a_catalog_from_a_newer_nebula_is_not_ours(tmp_path):
     """Probe P4: version 2 in the file and both copies."""
     store = _store(tmp_path)
     _add(store, "Alpha", "Beta")
@@ -664,7 +664,7 @@ def test_l4_a_catalog_from_a_newer_nebula_is_not_ours(tmp_path):
     assert not list(store.root.glob("*.damaged-*"))
 
 
-def test_l4_a_damaged_file_whose_head_says_a_newer_version_is_not_ours(tmp_path):
+def test_a_damaged_file_whose_head_says_a_newer_version_is_not_ours(tmp_path):
     store = _store(tmp_path)
     _add(store, "Alpha")
     raw = store.path.read_bytes().replace(b'{"version":1', b'{"version":3', 1)
@@ -674,7 +674,7 @@ def test_l4_a_damaged_file_whose_head_says_a_newer_version_is_not_ours(tmp_path)
     assert _records(store) == []
 
 
-def test_l5_salvage_of_a_deep_cut_chain_is_linear(monkeypatch):
+def test_salvage_of_a_deep_cut_chain_is_linear(monkeypatch):
     """A 300-deep chain of hex-keyed objects with padding, cut at the
     innermost point: each enclosing decode used to rescan to the end."""
     depth, pad = 300, 2000
@@ -699,7 +699,7 @@ def test_l5_salvage_of_a_deep_cut_chain_is_linear(monkeypatch):
     assert rescanned["bytes"] <= 4 * len(text)
 
 
-def test_l5_a_record_swallowed_by_a_lost_brace_is_still_found():
+def test_a_record_swallowed_by_a_lost_brace_is_still_found():
     """Records after a record whose closing brace was lost decode as nested:
     salvage still finds them, without rescanning."""
     first, second = make_project("First"), make_project("Second")
@@ -712,7 +712,7 @@ def test_l5_a_record_swallowed_by_a_lost_brace_is_still_found():
     assert second["id"] in found.entries
 
 
-def test_l5_the_listing_restores_off_the_event_loop(app, monkeypatch):
+def test_the_listing_restores_off_the_event_loop(app, monkeypatch):
     client, store, _graph, _state = app
     _create(client, "Alpha")
     seen = {}
@@ -732,7 +732,7 @@ def test_l5_the_listing_restores_off_the_event_loop(app, monkeypatch):
     assert seen == {"loop": False}
 
 
-def test_l6_bak_is_a_hard_link_of_the_validated_catalog_and_bak1_a_real_copy(tmp_path):
+def test_bak_is_a_hard_link_of_the_validated_catalog_and_bak1_a_real_copy(tmp_path):
     store = _store(tmp_path)
     _add(store, "Alpha")
     before = store.path.stat().st_ino
@@ -744,7 +744,7 @@ def test_l6_bak_is_a_hard_link_of_the_validated_catalog_and_bak1_a_real_copy(tmp
     assert not list(store.root.glob(".catalog*.tmp"))
 
 
-def test_l6_no_temporary_name_is_left_when_bak_is_already_the_same_file(tmp_path):
+def test_no_temporary_name_is_left_when_bak_is_already_the_same_file(tmp_path):
     store = _store(tmp_path)
     _add(store, "Alpha")
     os.unlink(store.backup_path)
@@ -753,7 +753,7 @@ def test_l6_no_temporary_name_is_left_when_bak_is_already_the_same_file(tmp_path
     assert not list(store.root.glob(".catalog*.tmp"))
 
 
-def test_l6_bak_never_takes_a_catalog_that_wasnt_validated(tmp_path):
+def test_bak_never_takes_a_catalog_that_wasnt_validated(tmp_path):
     store = _store(tmp_path)
     _add(store, "Alpha")
     good = store.backup_path.read_bytes()
@@ -763,7 +763,7 @@ def test_l6_bak_never_takes_a_catalog_that_wasnt_validated(tmp_path):
     assert store.backup_path.read_bytes() == good
 
 
-def test_l7_damaged_files_are_pruned_to_a_bound_and_the_new_one_kept(tmp_path):
+def test_damaged_files_are_pruned_to_a_bound_and_the_new_one_kept(tmp_path):
     store = _store(tmp_path)
     _add(store, "Alpha")
     old = (datetime.now() - timedelta(days=60)).timestamp()
@@ -779,7 +779,7 @@ def test_l7_damaged_files_are_pruned_to_a_bound_and_the_new_one_kept(tmp_path):
     assert len(kept) <= store_module.DAMAGED_KEPT_MIN + 1
 
 
-def test_l7_orphaned_temporary_files_are_swept(tmp_path):
+def test_orphaned_temporary_files_are_swept(tmp_path):
     store = _store(tmp_path)
     _add(store, "Alpha")
     day_old = time.time() - 2 * 86400
@@ -795,7 +795,7 @@ def test_l7_orphaned_temporary_files_are_swept(tmp_path):
     assert fresh.exists()
 
 
-def test_l9_a_purge_tombstone_is_bounded(tmp_path):
+def test_a_purge_tombstone_is_bounded(tmp_path):
     store = _store(tmp_path)
     ids = _add(store, *[f"P{index}" for index in range(3)])
 

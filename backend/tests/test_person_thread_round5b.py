@@ -608,7 +608,7 @@ NO_PROJECT = ("Nebula couldn’t post this reply because no project is open. Ope
 FORBIDDEN = ("ask the person to open one", "Ask the person to open one", "Ask the person to open it with Load graph")
 
 
-def test_the_no_project_refusal_is_gm_r110s(thread):
+def test_the_no_project_refusal_line(thread):
     assert person_thread.REPLY_NO_PROJECT_LINE == NO_PROJECT
     _listen(thread, SESSION_A)
     _open(thread, None)
@@ -647,7 +647,7 @@ def test_mcp_setup_lists_every_token_file_clause():
         assert f"“{clause}”" in doc or f'"{clause}"' in doc, clause
 
 
-def test_the_gm_r108_strings_3_and_4_put_the_command_on_its_own_line():
+def test_the_strings_3_and_4_put_the_command_on_its_own_line():
     three = person_thread.reply_unmatched_line("Claude Code", 2).split("\n")
     four = channel_listeners.SESSION_TAKEN_LINE.split("\n")
     assert three[1] == four[1] == "nebula mcp connect claude-code --channel" and len(three) == len(four) == 2

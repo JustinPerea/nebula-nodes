@@ -55,17 +55,17 @@ function listener(over: Partial<ChannelListener> = {}): ChannelListener {
   };
 }
 
-describe('the r50 strings, verbatim', () => {
+describe('the send strings, verbatim', () => {
   it('pins every line', () => {
     expect(NOT_CONNECTED_LINE).toBe('Connect Claude Code with the Nebula channel to message it here.');
     expect(STOPPED_LISTENING_LINE).toBe('Claude stopped listening. Reconnect nebula-listen with /mcp in its terminal to message it here.');
     expect(SERVER_FAILED_LINE).toBe('Nebula couldn’t send your message because the server isn’t answering. Try again.');
     expect(LISTENER_DROPPED_LINE).toBe('Nebula couldn’t send your message because Claude stopped listening. Reconnect it in the terminal, then send it again.');
-    // r55 replaced r50's cap failure with a neutral hold.
+    // A later pass replaced the cap failure with a neutral hold.
     expect(HELD_LINE).toBe('Sends in a few minutes because you’ve sent 200 this hour.');
   });
 
-  it('pins r50’s times: Sending… after 300 ms held 400, working settles at 20 s, "Sent" at 60 s', () => {
+  it('pins the send times: Sending… after 300 ms held 400, working settles at 20 s, "Sent" at 60 s', () => {
     expect([SENDING_AFTER_MS, SENDING_HOLD_MS, WORKING_SETTLE_MS, QUIET_SENT_MS]).toEqual([300, 400, 20_000, 60_000]);
   });
 
@@ -120,7 +120,7 @@ describe('a message’s state comes only from what Nebula saw', () => {
     expect(messageStatus(row, 2_000, { replied: false, activity: { at: 1_500, line: null } })?.text).toBe('Claude is working');
   });
 
-  it('holds with r55’s neutral line, whatever else happened', () => {
+  it('holds with the neutral line, whatever else happened', () => {
     const row = message({ state: 'held' });
     expect(messageStatus(row, 1_000 + 10 * QUIET_SENT_MS, { replied: false, activity: { at: 2_000, line: 'x' } }))
       .toEqual({ kind: 'held', text: HELD_LINE });

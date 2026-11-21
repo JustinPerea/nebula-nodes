@@ -172,7 +172,7 @@ def _drain_to_pins(ws, limit: int = 12) -> dict:
     raise AssertionError("no canvasPins message")
 
 
-def test_low1_only_the_persons_sockets_get_the_persons_form(api, monkeypatch):
+def test_only_the_persons_sockets_get_the_persons_form(api, monkeypatch):
     import asyncio
 
     import main as main_module

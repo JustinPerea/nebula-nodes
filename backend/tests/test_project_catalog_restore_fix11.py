@@ -65,7 +65,7 @@ WRITES = {
 
 @pytest.mark.parametrize("cut", ["f10", "f50", "f90", "zeroed"])
 @pytest.mark.parametrize("write", list(WRITES))
-def test_medium1_a_damage_right_after_the_agents_write_still_restores_the_persons_canvas(
+def test_a_damage_right_after_the_agents_write_still_restores_the_persons_canvas(
         app, monkeypatch, write, cut):
     """Restored-unsettled: the first restore left the
     person's canvas live and unfiled; Codex's write files it and changes the
@@ -90,7 +90,7 @@ def test_medium1_a_damage_right_after_the_agents_write_still_restores_the_person
     assert _listed_with(store, before) == ["Recovered canvas"]
 
 
-def test_medium1_the_filing_and_the_agents_write_are_two_commits(app, monkeypatch):
+def test_the_filing_and_the_agents_write_are_two_commits(app, monkeypatch):
     """The filing commits on its own first: right after it (before the
     agent's change commits) the catalog holds it open and protected."""
     client, store, _graph, state = app
@@ -119,7 +119,7 @@ def test_medium1_the_filing_and_the_agents_write_are_two_commits(app, monkeypatc
 
 # -- A restore while Nebula runs reaches the tabs ---------------------------------
 
-def test_high1_a_runtime_restore_sends_a_graphsync_with_its_id(app, monkeypatch):
+def test_a_runtime_restore_sends_a_graphsync_with_its_id(app, monkeypatch):
     client, store, _graph, _state = app
     for name in ("Alpha", "Beta", "Gamma"):
         _create(client, name)
@@ -163,7 +163,7 @@ def test_high1_a_runtime_restore_sends_a_graphsync_with_its_id(app, monkeypatch)
     assert any(event["kind"] == "project.catalogRestored" and event["data"]["id"] == restore_id for event in events)
 
 
-def test_high1_tell_catalog_restore_broadcasts_on_a_running_loop(monkeypatch):
+def test_tell_catalog_restore_broadcasts_on_a_running_loop(monkeypatch):
     sent: list[dict] = []
 
     async def capture(message, **_kwargs):
@@ -224,7 +224,7 @@ print(json.dumps({"before": before, "after": after, "fresh": fresh, "digest": ma
 '''
 
 
-def test_low1_a_restore_at_boot_is_journaled_at_startup_with_a_real_digest(tmp_path):
+def test_a_restore_at_boot_is_journaled_at_startup_with_a_real_digest(tmp_path):
     script = tmp_path / "boot.py"
     script.write_text(BOOT_SCRIPT)
     env = {**os.environ, "HOME": str(tmp_path / "home"), "NEBULA_STATE_DIR": str(tmp_path / "state"),
@@ -291,7 +291,7 @@ KEPT = {
 
 
 @pytest.mark.parametrize("how", list(KEPT))
-def test_q10_an_existing_project_protected_again_is_said_as_kept(app, monkeypatch, tmp_path, how):
+def test_an_existing_project_protected_again_is_said_as_kept(app, monkeypatch, tmp_path, how):
     client, store, _graph, _state = app
     film = _protected_again(client, store)
     monkeypatch.setenv("NEBULA_AGENT_NAME", "Codex")
@@ -337,7 +337,7 @@ def test_q10_an_existing_project_protected_again_is_said_as_kept(app, monkeypatc
     assert isinstance(note["id"], str) and len(note["id"]) == 32
 
 
-def test_q10_the_persons_waiting_canvas_filed_by_a_listing_is_still_said_as_saved(app, monkeypatch):
+def test_the_persons_waiting_canvas_filed_by_a_listing_is_still_said_as_saved(app, monkeypatch):
     """The other side of "kept": a canvas that wasn't a project before this
     protection (filed from the person's waiting canvas) says "saved"."""
     client, store, _graph, state = app
@@ -371,7 +371,7 @@ def _named(*names: str, trash: tuple[str, ...] = ()) -> dict:
     ("Alpha", ("Recovered Alpha 2",), "Recovered Alpha"),
     ("Alpha", ("Recovered Alpha", "Recovered Alpha copy 2"), "Recovered Alpha copy"),
 ])
-def test_r14_4_recovered_names_never_stack(source, names, want):
+def test_recovered_names_never_stack(source, names, want):
     assert store_module.recovered_name(source, _named(*names)) == want
 
 
@@ -382,11 +382,11 @@ def test_r14_4_recovered_names_never_stack(source, names, want):
     ("Alpha copy 2", ("Alpha copy", "Alpha copy 2"), "Alpha copy 3"),
     ("Recovered canvas", ("Recovered canvas copy",), "Recovered canvas copy 2"),
 ])
-def test_r14_4_copy_names_follow_the_same_rule(source, names, want):
+def test_copy_names_follow_the_same_rule(source, names, want):
     assert store_module.duplicate_name(source, _named(*names)) == want
 
 
-def test_r14_4_recovered_canvas_takes_the_next_free_number_and_counts_the_trash():
+def test_recovered_canvas_takes_the_next_free_number_and_counts_the_trash():
     assert store_module.recovered_canvas_name(_named()) == "Recovered canvas"
     assert store_module.recovered_canvas_name(_named("Recovered canvas")) == "Recovered canvas 2"
     assert store_module.recovered_canvas_name(_named(trash=("Recovered canvas",))) == "Recovered canvas 2"
@@ -403,11 +403,11 @@ def test_r14_4_recovered_canvas_takes_the_next_free_number_and_counts_the_trash(
     # Design: a recovered copy of a copy names its source.
     ("Alpha copy", ("Alpha copy",), "Recovered Alpha copy"),
 ])
-def test_r14_4_a_lost_rows_own_name_is_reused_when_free(lost, names, want):
+def test_a_lost_rows_own_name_is_reused_when_free(lost, names, want):
     assert store_module.lost_row_name(lost, _named(*names)) == want
 
 
-def test_r14_4_the_recover_endpoint_names_a_copy_of_an_unlisted_project_by_its_name(app):
+def test_the_recover_endpoint_names_a_copy_of_an_unlisted_project_by_its_name(app):
     """[Save as a project] after a restore took the tab's project away: the
     tab sends the name it knew, so the copy isn't "Deleted project"."""
     client, store, _graph, _state = app
@@ -431,7 +431,7 @@ def test_r14_4_the_recover_endpoint_names_a_copy_of_an_unlisted_project_by_its_n
 
 # -- nit 3: a protection for an unlisted project goes -------------------------------------
 
-def test_nit3_a_carried_protection_for_an_unlisted_project_goes(tmp_path):
+def test_a_carried_protection_for_an_unlisted_project_goes(tmp_path):
     store = store_module.ProjectStore(tmp_path / "projects")
     listed, gone = "a" * 32, "b" * 32
     catalog = {"projects": {listed: {"name": "A"}}, "trash": {}, "activeProjectId": listed}

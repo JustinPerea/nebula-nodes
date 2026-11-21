@@ -418,7 +418,7 @@ describe('an undo takes off only what its step added; no silent Cmd+Z', () => {
       sameAsBackend();
     });
 
-    it("control (as in heldUndo.round14's refused-delete case): a refused delete's own line stays where it was; the press held on it says nothing beside it", async () => {
+    it("control (the earlier refused-delete case): a refused delete's own line stays where it was; the press held on it says nothing beside it", async () => {
       setGraph([textNode('n1'), textNode('n2')]);
       type('n1', 'E1');
       act(() => { store().deleteNode('n2'); }); await settle();

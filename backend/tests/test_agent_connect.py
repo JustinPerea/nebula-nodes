@@ -1017,7 +1017,7 @@ def test_check_token_says_where_to_point_it_in_two_sentences(monkeypatch, capsys
     assert ";" not in err.split("token. ", 1)[1]
 
 
-def test_gm_r51_the_three_rewordings(tmp_path, monkeypatch, capsys):
+def test_the_three_rewordings(tmp_path, monkeypatch, capsys):
     """Design: no semicolon and no aside in parens, each its own sentence; the parser's words on their own line."""
     import httpx
 
@@ -1047,7 +1047,7 @@ def test_gm_r51_the_three_rewordings(tmp_path, monkeypatch, capsys):
     assert second.startswith("The parser said Expecting property name") and second.endswith(".")
 
 
-def test_gm_r59_r60_the_cli_lines(tmp_path, cli_env, monkeypatch, capsys):
+def test_the_cli_lines(tmp_path, cli_env, monkeypatch, capsys):
     """Design's exact strings. Nothing introduces a command or a path with a colon:
     a sentence ends with a period and the command goes on the next line."""
     # The OpenClaw and plain cases, the command on its own line.
@@ -1080,7 +1080,7 @@ def test_gm_r59_r60_the_cli_lines(tmp_path, cli_env, monkeypatch, capsys):
     (None, 5, "Pick Cursor and set a daily limit of $5."),
     ("Desk", 0.5, "Pick Cursor, name it Desk and set a daily limit of $0.5."),
 ])
-def test_gm_r60_11_no_token_names_the_picks_without_a_colon(tmp_path, monkeypatch, capsys, name, daily, pick):
+def test_no_token_names_the_picks_without_a_colon(tmp_path, monkeypatch, capsys, name, daily, pick):
     monkeypatch.delenv("NEBULA_AGENT_TOKEN", raising=False)
     monkeypatch.delenv("NEBULA_APP_TOKEN", raising=False)
     monkeypatch.delenv("NEBULA_APP_TOKEN_FILE", raising=False)
@@ -1089,7 +1089,7 @@ def test_gm_r60_11_no_token_names_the_picks_without_a_colon(tmp_path, monkeypatc
         f"error: no token. Make one in Settings > Connect your agent. {pick} Then run the command it shows, ")
 
 
-def test_gm_r59_the_paste_prompt_and_the_commands_the_cli_runs(tmp_path, legacy_env, monkeypatch, capsys):
+def test_the_paste_prompt_and_the_commands_the_cli_runs(tmp_path, legacy_env, monkeypatch, capsys):
     monkeypatch.delenv("NEBULA_APP_TOKEN")
     monkeypatch.setattr(mcp_connect.sys.stdin, "isatty", lambda: True, raising=False)
     prompts = []

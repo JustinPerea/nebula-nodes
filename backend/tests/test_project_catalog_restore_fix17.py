@@ -101,7 +101,7 @@ def _agent_read_and_listing(client, project_id: str) -> None:
 
 # -- The reviewer's repro, duplicate and paste --------------------------------------
 
-def test_high1_a_duplicates_typing_survives_a_reopen_and_an_agents_read(app):
+def test_a_duplicates_typing_survives_a_reopen_and_an_agents_read(app):
     client, store, *_ = app
     delta = _create(client, "Delta")
     _add_text(client, "delta-1")
@@ -127,7 +127,7 @@ def test_high1_a_duplicates_typing_survives_a_reopen_and_an_agents_read(app):
     assert client.get("/api/graph", headers=PERSON).json()["nodes"]
 
 
-def test_high1_pasted_nodes_and_their_connection_survive_a_reopen_and_an_agents_read(app):
+def test_pasted_nodes_and_their_connection_survive_a_reopen_and_an_agents_read(app):
     client, store, *_ = app
     delta = _create(client, "Delta")
     _add_text(client, "delta-1")
@@ -150,7 +150,7 @@ def test_high1_pasted_nodes_and_their_connection_survive_a_reopen_and_an_agents_
     assert [(edge["source"], edge["target"]) for edge in on_disk["edges"]] == [(renumbered[P1], renumbered[P2])]
 
 
-def test_high1_an_agents_open_carries_renumbered_to_the_tab_and_the_journal(app):
+def test_an_agents_open_carries_renumbered_to_the_tab_and_the_journal(app):
     client, store, *_ = app
     delta = _create(client, "Delta")
     _add_text(client, "delta-1")
@@ -170,7 +170,7 @@ def test_high1_an_agents_open_carries_renumbered_to_the_tab_and_the_journal(app)
     assert replaced[-1]["data"]["renumbered"] == {DUP: new} and "gave 1 node new ids" in replaced[-1]["summary"]
 
 
-def test_high1_an_open_with_nothing_to_renumber_answers_an_empty_mapping_and_changes_nothing(app):
+def test_an_open_with_nothing_to_renumber_answers_an_empty_mapping_and_changes_nothing(app):
     client, store, *_ = app
     delta = _create(client, "Delta")
     _add_text(client, "delta-1")
@@ -185,7 +185,7 @@ def test_high1_an_open_with_nothing_to_renumber_answers_an_empty_mapping_and_cha
     assert syncs and all("renumbered" not in sync for sync in syncs)
 
 
-def test_high1_a_project_on_disk_with_uuid_ids_opens_with_its_edges_history_and_selection(app):
+def test_a_project_on_disk_with_uuid_ids_opens_with_its_edges_history_and_selection(app):
     client, store, *_ = app
     delta = _create(client, "Delta")
     _create(client, "Alpha")
@@ -216,7 +216,7 @@ def test_high1_a_project_on_disk_with_uuid_ids_opens_with_its_edges_history_and_
     assert set(_export_ids(client)) == set(mapping.values())
 
 
-def test_high1_every_export_id_is_nebulas_after_an_open_a_restore_and_an_import(app):
+def test_every_export_id_is_nebulas_after_an_open_a_restore_and_an_import(app):
     client, store, *_ = app
     delta = _create(client, "Delta")
     _add_text(client, "delta-1")
@@ -250,7 +250,7 @@ def test_high1_every_export_id_is_nebulas_after_an_open_a_restore_and_an_import(
     assert all(NN.match(node_id) for node_id in _export_ids(client))
 
 
-def test_high1_the_commit_refuses_a_node_id_that_isnt_nebulas(app, monkeypatch):
+def test_the_commit_refuses_a_node_id_that_isnt_nebulas(app, monkeypatch):
     """The ratchet: an open whose renumbering went missing fails loudly, nothing written."""
     client, store, *_ = app
     delta = _create(client, "Delta")
@@ -266,7 +266,7 @@ def test_high1_the_commit_refuses_a_node_id_that_isnt_nebulas(app, monkeypatch):
 
 
 @pytest.mark.parametrize("node_id", ["n٣", "n１", "n1a", "N2", "uuid-ish"])
-def test_nit1_only_ascii_digits_make_a_nebula_id(app, node_id):
+def test_only_ascii_digits_make_a_nebula_id(app, node_id):
     """n٣ (Arabic-Indic three) and n１ (fullwidth one) aren't Nebula ids: the tab's CLI_ID_RE is ASCII."""
     client, store, *_ = app
     delta = _create(client, "Delta")
@@ -283,7 +283,7 @@ def test_nit1_only_ascii_digits_make_a_nebula_id(app, node_id):
         main_module._require_backend_node_ids({"nodes": [{"id": node_id}]})
 
 
-def test_nit2_a_remotion_manifest_and_a_skip_gate_follow_the_renumbering(app):
+def test_a_remotion_manifest_and_a_skip_gate_follow_the_renumbering(app):
     client, store, *_ = app
     delta = _create(client, "Delta")
     _create(client, "Alpha")
@@ -309,7 +309,7 @@ def test_nit2_a_remotion_manifest_and_a_skip_gate_follow_the_renumbering(app):
     assert sorted(mapping.values()) == ["n2", "n3"]
 
 
-def test_nit2_an_imported_manifest_names_the_imported_nodes_new_ids(app):
+def test_an_imported_manifest_names_the_imported_nodes_new_ids(app):
     client, *_ = app
     _create(client, "Delta")
     manifest = {"timeline": [{"id": "t1", "sourceNodeId": "file-a", "componentType": "Text"}]}
@@ -323,7 +323,7 @@ def test_nit2_an_imported_manifest_names_the_imported_nodes_new_ids(app):
     assert timeline[0]["sourceNodeId"] == ids["file-a"]
 
 
-def test_high1_a_state_json_with_a_uuid_node_loads_renumbered_and_its_project_follows(app, tmp_path):
+def test_a_state_json_with_a_uuid_node_loads_renumbered_and_its_project_follows(app, tmp_path):
     client, store, graph, state = app
     delta = _create(client, "Delta")
     _add_text(client, "delta-1")
@@ -354,7 +354,7 @@ def test_high1_a_state_json_with_a_uuid_node_loads_renumbered_and_its_project_fo
     main_module._boot_renumbered.clear()
 
 
-def test_high1_a_stale_node_id_answers_read_the_canvas_again(app):
+def test_a_stale_node_id_answers_read_the_canvas_again(app):
     client, *_ = app
     _create(client, "Delta")
     gone = client.put("/api/graph/node/n7", headers=CODEX, json={"params": {"value": "x"}})
@@ -362,7 +362,7 @@ def test_high1_a_stale_node_id_answers_read_the_canvas_again(app):
     assert "read the canvas again" in gone.json()["detail"] and gone.json()["detail"].startswith("Node n7 not found")
 
 
-def test_high1_undo_sync_refuses_a_non_nebula_id_clearly(app):
+def test_undo_sync_refuses_a_non_nebula_id_clearly(app):
     """The tab sends only CLI_ID_RE ids to /api/graph/restore; anything else is refused, not renumbered."""
     client, *_ = app
     _create(client, "Delta")
@@ -374,7 +374,7 @@ def test_high1_undo_sync_refuses_a_non_nebula_id_clearly(app):
 
 # -- The counter covers every id the copy has used ------------------------------------
 
-def test_low1_with_the_source_gone_a_kept_node_never_takes_a_deleted_nodes_id(app):
+def test_with_the_source_gone_a_kept_node_never_takes_a_deleted_nodes_id(app):
     client, store, *_ = app
     _create(client, "Delta")
     _add_text(client, "delta-1")
@@ -396,7 +396,7 @@ def test_low1_with_the_source_gone_a_kept_node_never_takes_a_deleted_nodes_id(ap
 
 # -- Recover checks every connection as the live route does ---------------------------
 
-def test_nit4_a_connection_to_a_node_whose_definition_was_removed_is_checked_and_reported(app, monkeypatch):
+def test_a_connection_to_a_node_whose_definition_was_removed_is_checked_and_reported(app, monkeypatch):
     client, store, *_ = app
     _create(client, "Delta")
     _add_text(client, "delta-1")
@@ -416,7 +416,7 @@ def test_nit4_a_connection_to_a_node_whose_definition_was_removed_is_checked_and
     assert "unknown definition retired-thing" in dropped[0]["detail"]
 
 
-def test_nit4_a_stray_shot_connection_is_reported_not_dropped_silently(app):
+def test_a_stray_shot_connection_is_reported_not_dropped_silently(app):
     client, *_ = app
     _create(client, "Delta")
     source = _active(client)
@@ -549,7 +549,7 @@ def test_the_generator_writes_what_is_checked_in(tmp_path):
 
 # -- an expired grace isn't counted while another tab stays kept ---
 
-def test_grace_low1_an_expired_grace_isnt_counted_while_another_tab_stays_kept(app, clock, monkeypatch, tmp_path):
+def test_an_expired_grace_isnt_counted_while_another_tab_stays_kept(app, clock, monkeypatch, tmp_path):
     client, *_ = app
     marker = tmp_path / main_module.KEPT_MARKER_NAME
     manager = _manager(monkeypatch, marker)
@@ -576,7 +576,7 @@ def test_grace_low1_an_expired_grace_isnt_counted_while_another_tab_stays_kept(a
     again.__exit__(None, None, None)
 
 
-def test_grace_low2_the_marker_clears_itself_with_no_request(monkeypatch, tmp_path):
+def test_the_marker_clears_itself_with_no_request(monkeypatch, tmp_path):
     """K9: in a real event loop, with a short grace and nothing asking."""
     marker = tmp_path / main_module.KEPT_MARKER_NAME
     marker.write_text(json.dumps({"keptTabs": 1}), encoding="utf-8")
@@ -597,7 +597,7 @@ def test_grace_low2_the_marker_clears_itself_with_no_request(monkeypatch, tmp_pa
     assert manager.kept_graces == {}
 
 
-def test_grace_nit1_a_directory_where_the_marker_goes_is_no_marker_and_leaks_nothing(monkeypatch, tmp_path, capsys):
+def test_a_directory_where_the_marker_goes_is_no_marker_and_leaks_nothing(monkeypatch, tmp_path, capsys):
     marker = tmp_path / main_module.KEPT_MARKER_NAME
     marker.mkdir()
     manager = main_module.ConnectionManager(marker)
@@ -611,7 +611,7 @@ def test_grace_nit1_a_directory_where_the_marker_goes_is_no_marker_and_leaks_not
     assert said.count("couldn't write the kept marker") == 1 and said.count("isn't a file") == 1
 
 
-def test_grace_nit1_a_marker_that_cant_be_removed_pauses_one_grace_only(monkeypatch, tmp_path, capsys):
+def test_a_marker_that_cant_be_removed_pauses_one_grace_only(monkeypatch, tmp_path, capsys):
     marker = tmp_path / main_module.KEPT_MARKER_NAME
     marker.write_text(json.dumps({"keptTabs": 1}), encoding="utf-8")
     real_unlink = Path.unlink
@@ -640,7 +640,7 @@ def test_grace_nit1_a_marker_that_cant_be_removed_pauses_one_grace_only(monkeypa
 
 # -- No selection and no view while kept ---------------------------------
 
-def test_kept_ui_low1_agents_read_no_selection_or_view_while_a_tab_keeps_edits(app, clock, monkeypatch, tmp_path):
+def test_kept_ui_agents_read_no_selection_or_view_while_a_tab_keeps_edits(app, clock, monkeypatch, tmp_path):
     client, *_ = app
     manager = _manager(monkeypatch, tmp_path / main_module.KEPT_MARKER_NAME)
     _create(client, "Delta")
@@ -671,7 +671,7 @@ def test_kept_ui_low1_agents_read_no_selection_or_view_while_a_tab_keeps_edits(a
     socket.__exit__(None, None, None)
 
 
-def test_kept_ui_low1_a_project_switch_clears_the_published_selection(app):
+def test_kept_ui_a_project_switch_clears_the_published_selection(app):
     client, *_ = app
     _create(client, "Delta")
     _add_text(client, "delta-1")
@@ -683,7 +683,7 @@ def test_kept_ui_low1_a_project_switch_clears_the_published_selection(app):
     assert alpha
 
 
-def test_kept_ui_low1_a_catalog_restore_clears_the_published_selection(app):
+def test_kept_ui_a_catalog_restore_clears_the_published_selection(app):
     client, store, *_ = app
     _create(client, "Delta")
     _add_text(client, "delta-1")
@@ -696,7 +696,7 @@ def test_kept_ui_low1_a_catalog_restore_clears_the_published_selection(app):
 
 # -- Design: "1 node", and the canvas said once --------------------------------------------
 
-def test_r23e_counts_are_singular_for_one():
+def test_counts_are_singular_for_one():
     assert counted(1, "node") == "1 node" and counted(2, "node") == "2 nodes" and counted(0, "project") == "0 projects"
     assert counted(1, "canvas") == "1 canvas" and counted(3, "canvas") == "3 canvases"
     start = {"canvas": {"nodeCount": 1, "view": {"stale": True}}, "pins": {}, "proposals": {}, "boards": {},
@@ -708,7 +708,7 @@ _WAITING_RESTORE = {"kind": "restored", "reason": "corrupt", "source": "catalog.
                     "canvasNotFiled": {"reason": "projects", "current": True}}
 
 
-def test_r23e_the_restore_note_leaves_the_waiting_canvas_to_its_block():
+def test_the_restore_note_leaves_the_waiting_canvas_to_its_block():
     alone = main_module._catalog_restore_note(_WAITING_RESTORE)
     beside = main_module._catalog_restore_note(_WAITING_RESTORE, canvas_block=True)
     assert "couldn't be filed as its own" in alone and "couldn't be filed as its own" not in beside
@@ -725,7 +725,7 @@ def test_r23e_the_restore_note_leaves_the_waiting_canvas_to_its_block():
 
 # -- Design: "Recovered Delta" ---------------------------------------------------------------
 
-def test_r23a_recovered_copies_are_named_recovered_delta_then_numbered(app):
+def test_recovered_copies_are_named_recovered_delta_then_numbered(app):
     client, store, *_ = app
     _create(client, "Delta")
     _add_text(client, "delta-1")
@@ -754,12 +754,12 @@ def test_r23a_recovered_copies_are_named_recovered_delta_then_numbered(app):
     ("Delta (recovered)", (), "Recovered Delta"),
     ("Alpha copy", ("Alpha copy",), "Recovered Alpha copy"),
 ])
-def test_r23a_the_family_rules_hold_in_the_new_shape(source, taken, expected):
+def test_the_family_rules_hold_in_the_new_shape(source, taken, expected):
     catalog = {"projects": {f"{index:032x}": {"name": name} for index, name in enumerate(taken)}, "trash": {}}
     assert store_module.recovered_name(source, catalog) == expected
 
 
-def test_r23a_a_duplicate_of_a_recovered_copy_names_its_source():
+def test_duplicate_of_a_recovered_copy_names_its_source():
     catalog = {"projects": {"a" * 32: {"name": "Recovered Delta"}, "b" * 32: {"name": "Recovered Delta copy"}},
                "trash": {}}
     assert store_module.duplicate_name("Recovered Delta", catalog) == "Recovered Delta copy 2"
@@ -768,7 +768,7 @@ def test_r23a_a_duplicate_of_a_recovered_copy_names_its_source():
         "Recovered Beta"
 
 
-def test_agent_docs_describe_round_17():
+def test_agent_docs_describe_the_fix():
     setup = (ROOT / "docs/MCP-SETUP.md").read_text()
     skill = (ROOT / "skills/nebula/SKILL.md").read_text()
     for text in (setup, skill):
@@ -823,17 +823,17 @@ def _recover_with_source_records(client, store, *, history: bool, pins: bool) ->
     return recovered.json()["renumbered"][DUP]
 
 
-def test_low1_the_counter_covers_the_sources_run_history(app):
+def test_the_counter_covers_the_sources_run_history(app):
     client, store, *_ = app
     assert _recover_with_source_records(client, store, history=True, pins=False) == "n6"
 
 
-def test_low1_the_counter_covers_the_sources_pins(app):
+def test_the_counter_covers_the_sources_pins(app):
     client, store, *_ = app
     assert _recover_with_source_records(client, store, history=False, pins=True) == "n10"
 
 
-def test_low1_a_long_n_string_in_the_history_never_pushes_ids_past_a_short_id(app):
+def test_a_long_n_string_in_the_history_never_pushes_ids_past_a_short_id(app):
     """Only a short id's length counts (CLIGraph SHORT_ID_RE: 9 digits)."""
     client, store, *_ = app
     _create(client, "Delta")

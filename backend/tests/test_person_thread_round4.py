@@ -53,7 +53,7 @@ def test_an_in_app_agents_turn_token_is_told_to_answer_in_its_chat(thread, monke
     assert refused.headers["X-Nebula-Code"] == "reply_in_app_token"
 
 
-def test_a_revoked_token_gets_the_replys_own_line_and_the_listener_routes_r81s(thread):
+def test_a_revoked_token_gets_the_replys_own_line_and_the_listener_still_routes(thread):
     bogus = {"Authorization": "Agent gone", "X-Nebula-Agent-Session": "sess-a"}
     refused = _reply(thread, "hi", headers=bogus)
     assert refused.status_code == 401 and refused.json()["detail"] == person_thread.REPLY_BAD_TOKEN_LINE
@@ -75,7 +75,7 @@ def test_the_reply_lines_follow_the_copy_rules():
     assert "Settings › Connect your agent" in person_thread.REPLY_NO_TOKEN_LINE
 
 
-def test_the_agent_lines_are_gm_r94s_verbatim():
+def test_the_agent_lines_are_verbatim():
     """Design: the words, and the command on its own line."""
     command = "nebula mcp connect claude-code --channel"
     assert person_thread.REPLY_NO_TOKEN_LINE.split("\n") == [

@@ -457,7 +457,7 @@ def run_started(seq: int, run_id: str, node: str = "n3") -> dict:
     ("edge.added", {"source": "n1", "target": "n2"}), ("edge.removed", {"source": "n1", "target": "n2"}),
     ("pin.removed", {"pinId": "pin_1"}),
 ])
-def test_each_q50_change_wakes_it_after_the_quiet_time(kind, data):
+def test_each_change_wakes_it_after_the_quiet_time(kind, data):
     state = ChannelState(now=0.0)
     state.observe(resp(ev(1, kind, node="n2", data=data, summary=f"{kind} on Hero (n2)")), now=100.0)
     assert take(state, 107.9) is None

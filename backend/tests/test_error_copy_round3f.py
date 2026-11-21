@@ -727,7 +727,7 @@ def test_node_errors_keep_the_provider_for_the_card_only(tmp_path) -> None:
     assert "provider" not in (errors.get("n1") or {})
 
 
-def test_a_validation_entry_saved_before_round_3e_reads_the_general_line(tmp_path) -> None:
+def test_a_validation_entry_saved_before_the_person_line_change_reads_the_general_line(tmp_path) -> None:
     from services.node_errors import NodeErrors
 
     path = tmp_path / "errors.json"

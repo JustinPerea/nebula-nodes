@@ -335,7 +335,7 @@ def test_no_file_in_a_read_only_folder_names_the_folder(home_file):
     assert _left(home_file.parent) == []
 
 
-def test_the_folder_lines_follow_gm_r31_for_each_reader():
+def test_the_folder_lines_are_the_approved_ones_for_each_reader():
     assert main.SETTINGS_FOLDER_UNWRITABLE == {
         "person": "Nothing was saved because Nebula isn’t allowed to change {folder}. "
                   "Check the folder’s permissions, then try again.",
@@ -464,7 +464,7 @@ VERTEX_PASTE_LINE = ("The Vertex AI service account key saved in Settings isn’
 
 
 @pytest.mark.parametrize("raw", ["{not json", '{"type": "authorized_user"}', "[]"], ids=["not-json", "another-kind", "not-an-object"])
-def test_a_pasted_vertex_key_that_isnt_a_key_file_says_gm_r31s_line(raw):
+def test_a_pasted_vertex_key_that_isnt_a_key_file_says_the_approved_line(raw):
     from execution.person_line import person_line
     from services.google_vertex import VertexCredentialsError, parse_service_account
 

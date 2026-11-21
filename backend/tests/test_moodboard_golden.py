@@ -86,7 +86,7 @@ before it was replaced (the review lists every path that moved):
   0.1892, 0.1892, 0.1513, 0.1135, 0.0568). The diff is 29 paths, every one a
   ``kreaStyleReferences[i].strength`` on the 7 boards; the URLs, their order
   and every other key are as before, which
-  ``test_q21b_changed_only_the_krea_style_references`` pins by a hash of the
+  ``test_changed_only_the_krea_style_references`` pins by a hash of the
   file before the change less that key.
 - 2026-10-20, clash reason wording (demo dry run). ``LEXICON_VERSION`` 2 to 3,
   so every saved check runs again and no board keeps the old "allows Warm
@@ -103,7 +103,7 @@ before it was replaced (the review lists every path that moved):
   by ``with_steering_count``) drops by one on the 3 analyzed ones (3 paths).
   Nothing else moved: no generator prompt, Krea style reference, brief,
   ``compose`` output, run note, hash or saved analysis key besides that
-  summary. ``test_q21b_changed_only_the_krea_style_references`` pins the
+  summary. ``test_changed_only_the_krea_style_references`` pins the
   file before the change with those paths normalized
   (``_without_weight_zero``), and ``tests/test_moodboard_weight_zero.py``
   pins that no generator request changes.
@@ -118,7 +118,7 @@ before it was replaced (the review lists every path that moved):
   ``outside: true`` and adds one ``outsideNote`` (9 paths on the bundle and
   notes, 6 on the CLI). Nothing else moved: no generator prompt, Krea style
   reference, brief, ``compose`` output, hash or saved analysis key.
-  ``test_q21b_changed_only_the_krea_style_references`` normalizes those
+  ``test_changed_only_the_krea_style_references`` normalizes those
   paths too (``_without_outside_links``); the file at 26572670, the file
   just before this change and this one give the same hash.
   A review of the outside-link change (same day) moved 9 more paths on those 3 boards: the bundle's
@@ -134,7 +134,7 @@ before it was replaced (the review lists every path that moved):
   brief, summary, Krea reference or saved analysis moved, and every saved
   analysis stays current. One path moved: ``sourceHash.version`` for the
   never-analyzed ``prebrief_unanalyzed`` is today's analyzer's, 5 to 6; its
-  hash is the same. ``test_q21b_changed_only_the_krea_style_references``
+  hash is the same. ``test_changed_only_the_krea_style_references``
   reads that path as 5 (``_ANALYZER_AT_26572670``), so the hash is unchanged.
   The same PR (design on #208): the summary's count gets a real plural,
   "1 reference image" / "N reference images", in place of "reference
@@ -452,7 +452,7 @@ def _without_krea_refs(expected: dict[str, Any]) -> str:
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
-def test_q21b_changed_only_the_krea_style_references() -> None:
+def test_changed_only_the_krea_style_references() -> None:
     expected = json.loads(EXPECTED.read_text(encoding="utf-8"))
     assert _without_krea_refs(expected) == BEFORE_Q21B_WITHOUT_KREA_REFS
     # Each board's references add up to its strength, at 4 decimals.
@@ -466,7 +466,7 @@ def test_q21b_changed_only_the_krea_style_references() -> None:
         assert total == Decimal(str(board.get("strength", 0.7))), label
 
 
-def test_the_golden_docstring_records_the_q21b_change() -> None:
+def test_the_golden_docstring_records_the_review_change() -> None:
     doc = __doc__ or ""
     assert "2026-10-20" in doc
     assert ("Krea 2 board refs scaled to add up to the board's strength; unchanged: refs, order, "

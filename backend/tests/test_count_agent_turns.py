@@ -252,20 +252,20 @@ def test_the_final_reply_is_a_needed_turn(counter):
 
 # -- Design's run ---------------------------------------------------------------------
 
-def gm_run() -> Transcript:
+def recorded_run() -> Transcript:
     """Design's 15 calls and final reply, as docs/agent-runs/2026-10-20-cli-headless.md records them."""
     unrecognized = "Exit code 2\nusage: nebula [--url URL] <command> [options]\nnebula: error: unrecognized arguments: {}"
     return (Transcript()
             .call("nebula projects", text="I'll find your project first.")
-            .call("nebula moodboard list --project p_gm")
-            .call("nebula moodboard show mb_gm", "x" * 8319)
+            .call("nebula moodboard list --project p_demo")
+            .call("nebula moodboard show mb_demo", "x" * 8319)
             .call("nebula apply --help")
             .call("nebula info moodboard", "Exit code 1\nNode 'moodboard' not found. Did you mean: krea-moodboard, "
                                            "nebula-moodboard, krea-moodboard-search, krea-moodboard-create", error=True)
             .call("nebula info nebula-moodboard")
             .call("nebula nodes preview", unrecognized.format("preview"), error=True)
             .call("nebula nodes", "y" * 20489)
-            .call("nebula apply --add +mb=nebula-moodboard --param +mb.moodboard=mb_gm --add +pv=preview "
+            .call("nebula apply --add +mb=nebula-moodboard --param +mb.moodboard=mb_demo --add +pv=preview "
                   "--wire +mb:moodboard +pv:input --at +mb=0,0 --at +pv=450,0")
             .call("nebula run n2")
             .call("nebula point n1 --say \"Here's what your board gives\"")
@@ -280,23 +280,23 @@ def gm_run() -> Transcript:
             .result(num_turns=16, duration_ms=38226, total_cost_usd=0.226))
 
 
-GM_KINDS = ["needed", "needed", "needed", "help", "usage-error", "lookup", "usage-error", "lookup",
+EXPECTED_KINDS = ["needed", "needed", "needed", "help", "usage-error", "lookup", "usage-error", "lookup",
             "needed", "needed", "needed", "lookup", "usage-error", "help", "needed"]
 
 
-def test_gm_run_gives_8_of_16(counter):
-    report = counter.count(gm_run().lines())
+def test_the_recorded_run_gives_8_of_16(counter):
+    report = counter.count(recorded_run().lines())
     assert (report["orientation"], report["turns"]) == (8, 16)
     assert report["toolCalls"] == 15 and report["numTurns"] == 16 and "warning" not in report
-    assert _kinds(report) == GM_KINDS
+    assert _kinds(report) == EXPECTED_KINDS
     # Design's breakdown: two help reads, three node lookups... and the usage errors among them.
     assert report["helpReads"] == 2 and report["usageErrors"] == 3
     assert report["callsByKind"]["lookup"] == 3
 
 
 def test_the_script_prints_a_table_and_json(counter, tmp_path):
-    path = tmp_path / "gm.jsonl"
-    path.write_text("\n".join(gm_run().lines()) + "\n", encoding="utf-8")
+    path = tmp_path / "run.jsonl"
+    path.write_text("\n".join(recorded_run().lines()) + "\n", encoding="utf-8")
     out = io.StringIO()
     with redirect_stdout(out):
         assert counter.main([str(path)]) == 0

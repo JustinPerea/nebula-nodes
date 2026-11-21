@@ -20,8 +20,8 @@ from tests.test_pending_nodes import (  # noqa: F401 - fixture
     _apply, _execute_body, _owner, _paid_chain, pend,
 )
 
-GM_CHANGED_RUN = "Nothing ran. This run changed since you last reviewed it. Click “Run” again to review it."
-GM_CHANGED_SHOT = "Nothing ran. This run changed since you last reviewed it. Generate again to review it."
+CHANGED_RUN_LINE = "Nothing ran. This run changed since you last reviewed it. Click “Run” again to review it."
+CHANGED_SHOT_LINE = "Nothing ran. This run changed since you last reviewed it. Generate again to review it."
 
 
 def _run(pend, target: str, **extra):
@@ -79,7 +79,7 @@ def test_a_confirmed_total_below_nebulas_estimate_is_refused_with_no_placeholder
     assert detail["code"] == "placeholder_confirm_required"
     assert detail["placeholders"] == []
     assert detail["estimate"]["high"] > 0.000001
-    assert detail["message"] == GM_CHANGED_RUN
+    assert detail["message"] == CHANGED_RUN_LINE
     assert pend.ran == []
 
 
@@ -113,7 +113,7 @@ def test_a_shot_is_held_to_its_confirmed_total_with_no_placeholder_left(pend):
     refused = _shot(pend, cine, confirmedPlaceholders=[], confirmedCost=0.000001, variations=2)
     assert refused.status_code == 409, refused.text
     detail = refused.json()["detail"]
-    assert detail["message"] == GM_CHANGED_SHOT
+    assert detail["message"] == CHANGED_SHOT_LINE
     assert detail["placeholders"] == []
     ok = _shot(pend, cine, confirmedPlaceholders=[], confirmedCost=detail["estimate"]["high"], variations=2)
     assert ok.status_code == 200, ok.text

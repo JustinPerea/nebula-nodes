@@ -83,7 +83,7 @@ def _kept_canvas(client) -> None:
     _add_text(client, "delta-1")
 
 
-def test_nit2_a_blip_holds_kept_mode_for_the_grace(app, clock):
+def test_a_blip_holds_kept_mode_for_the_grace(app, clock):
     client, *_ = app
     _kept_canvas(client)
     socket, tab = _person_tab(client)
@@ -95,7 +95,7 @@ def test_nit2_a_blip_holds_kept_mode_for_the_grace(app, clock):
     assert refused.json()["detail"] == main_module.CANVAS_KEPT_IN_TAB_DETAIL
 
 
-def test_nit2_past_the_grace_the_agents_write_goes(app, clock):
+def test_past_the_grace_the_agents_write_goes(app, clock):
     client, *_ = app
     _kept_canvas(client)
     socket, tab = _person_tab(client)
@@ -106,7 +106,7 @@ def test_nit2_past_the_grace_the_agents_write_goes(app, clock):
     assert _agent_add(client).status_code == 200
 
 
-def test_nit2_the_grace_is_the_module_constant(app, clock, monkeypatch):
+def test_the_grace_is_the_module_constant(app, clock, monkeypatch):
     client, *_ = app
     monkeypatch.setattr(main_module, "KEPT_GRACE_SECONDS", 30.0)
     _kept_canvas(client)
@@ -119,7 +119,7 @@ def test_nit2_the_grace_is_the_module_constant(app, clock, monkeypatch):
     assert _agent_add(client).status_code == 200
 
 
-def test_nit2_kept_false_before_closing_ends_it_at_once(app, clock):
+def test_kept_false_before_closing_ends_it_at_once(app, clock):
     client, *_ = app
     _kept_canvas(client)
     socket, tab = _person_tab(client)
@@ -130,7 +130,7 @@ def test_nit2_kept_false_before_closing_ends_it_at_once(app, clock):
     assert _agent_add(client).status_code == 200
 
 
-def test_nit2_a_tab_back_within_the_grace_carries_it_on(app, clock):
+def test_a_tab_back_within_the_grace_carries_it_on(app, clock):
     client, *_ = app
     _kept_canvas(client)
     socket, tab = _person_tab(client)
@@ -153,7 +153,7 @@ def test_nit2_a_tab_back_within_the_grace_carries_it_on(app, clock):
         _closed(again)
 
 
-def test_nit2_a_tab_back_within_the_grace_that_says_kept_false_ends_it(app, clock):
+def test_a_tab_back_within_the_grace_that_says_kept_false_ends_it(app, clock):
     client, *_ = app
     _kept_canvas(client)
     socket, tab = _person_tab(client)
@@ -170,7 +170,7 @@ def test_nit2_a_tab_back_within_the_grace_that_says_kept_false_ends_it(app, cloc
         _closed(again)
 
 
-def test_nit2_an_agents_socket_can_neither_end_nor_extend_the_grace(app, clock):
+def test_an_agents_socket_can_neither_end_nor_extend_the_grace(app, clock):
     client, *_ = app
     _kept_canvas(client)
     socket, tab = _person_tab(client)
@@ -195,7 +195,7 @@ def test_nit2_an_agents_socket_can_neither_end_nor_extend_the_grace(app, clock):
 
 # -- `nebula project new` past the limit ---------------------------------------------
 
-def test_low3_the_cli_says_the_project_limit_whole(app, monkeypatch, capsys):
+def test_the_cli_says_the_project_limit_whole(app, monkeypatch, capsys):
     client, *_ = app
     for name in ("A", "B", "C"):
         _create(client, name)
@@ -212,7 +212,7 @@ def test_low3_the_cli_says_the_project_limit_whole(app, monkeypatch, capsys):
 
 # -- An open's dropped ports, said ---------------------------------
 
-def test_b2_an_agents_open_notes_its_dropped_ports_and_says_the_line(workspace, person):  # noqa: F811
+def test_an_agents_open_notes_its_dropped_ports_and_says_the_line(workspace, person):  # noqa: F811
     client, _graph, store, _ = workspace
     a = client.post("/api/projects", headers=PERSON, json={"name": "A"}).json()
     b = client.post("/api/projects", headers=PERSON,

@@ -283,7 +283,7 @@ def _gate_states(client) -> tuple[int, int, int]:
             client.get("/api/agent/spend", headers=MCP).status_code)
 
 
-def test_a_folder_on_the_way_that_is_a_file_reads_as_no_file_as_before_round_14(tmp_path, monkeypatch, sockets):  # noqa: F811
+def test_a_folder_on_the_way_that_is_a_file_reads_as_no_file_as_before(tmp_path, monkeypatch, sockets):  # noqa: F811
     """ENOTDIR is "the file isn't there", as exists() said before the read-failure codes:
     defaults, and the gate's reach is what it was."""
     parent = tmp_path / "f"

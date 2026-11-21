@@ -443,7 +443,7 @@ def _authored(scene_value, keep):
     return out
 
 
-def test_r9_undo_of_a_shot_x_brings_its_images_back(authoring_client):
+def test_undo_of_a_shot_x_brings_its_images_back(authoring_client):
     client, graph, path, _ = authoring_client
     before = _with_media(graph)
     removed = client.put("/api/graph/node/n1", json={"params": {"scene": _authored(before, {"a"})}})
@@ -465,7 +465,7 @@ def test_r9_undo_of_a_shot_x_brings_its_images_back(authoring_client):
     assert reloaded.get_state()["nodes"][0]["params"]["scene"]["shots"][1]["variations"] == RUN_MEDIA["variations"]
 
 
-def test_r9_redo_takes_it_out_again_and_a_second_undo_brings_it_back_again(authoring_client):
+def test_redo_takes_it_out_again_and_a_second_undo_brings_it_back_again(authoring_client):
     client, graph, _, _ = authoring_client
     before = _with_media(graph)
     for _ in range(2):
@@ -474,7 +474,7 @@ def test_r9_redo_takes_it_out_again_and_a_second_undo_brings_it_back_again(autho
         assert graph.nodes["n1"]["params"]["scene"]["shots"][1]["variations"] == RUN_MEDIA["variations"]
 
 
-def test_r9_a_new_shot_starts_idle_and_a_client_cannot_supply_media(authoring_client):
+def test_new_shot_starts_idle_and_a_client_cannot_supply_media(authoring_client):
     client, graph, _, _ = authoring_client
     before = _with_media(graph)
     fresh = _authored(before, {"a", "b"})
@@ -486,7 +486,7 @@ def test_r9_a_new_shot_starts_idle_and_a_client_cannot_supply_media(authoring_cl
     assert "variations" not in shot_c and "selectedVariation" not in shot_c
 
 
-def test_r9_kept_media_belongs_to_its_canvas(authoring_client, tmp_path):
+def test_kept_media_belongs_to_its_canvas(authoring_client, tmp_path):
     client, graph, path, _ = authoring_client
     before = _with_media(graph)
     assert client.put("/api/graph/node/n1", json={"params": {"scene": _authored(before, {"a"})}}).status_code == 200
@@ -499,7 +499,7 @@ def test_r9_kept_media_belongs_to_its_canvas(authoring_client, tmp_path):
     assert graph.removed_shot_media == {}
 
 
-def test_r9_kept_media_is_capped_oldest_first():
+def test_kept_media_is_capped_oldest_first():
     graph = CLIGraph()
     for index in range(main._REMOVED_SHOT_MEDIA_CAP + 5):
         main._keep_removed_shot_media(graph, "n1", f"s{index}", {"output": {"status": "done"}})
@@ -512,7 +512,7 @@ def test_r9_kept_media_is_capped_oldest_first():
 # gets its media back only when its prompt and settings match what was taken
 # out; otherwise it starts idle, and only the kept link goes (no file).
 
-def test_r10_a_different_shot_reusing_a_removed_id_starts_idle_and_the_kept_link_goes(authoring_client):
+def test_different_shot_reusing_a_removed_id_starts_idle_and_the_kept_link_goes(authoring_client):
     client, graph, _, _ = authoring_client
     before = _with_media(graph)
     assert client.put("/api/graph/node/n1", json={"params": {"scene": _authored(before, {"a"})}}).status_code == 200
@@ -531,7 +531,7 @@ def test_r10_a_different_shot_reusing_a_removed_id_starts_idle_and_the_kept_link
     assert graph.nodes["n1"]["params"]["scene"]["shots"][1]["output"] == {"status": "idle"}
 
 
-def test_r10_the_same_prompt_with_a_changed_setting_is_a_different_shot(authoring_client):
+def test_the_same_prompt_with_a_changed_setting_is_a_different_shot(authoring_client):
     client, graph, _, _ = authoring_client
     before = _with_media(graph)
     assert client.put("/api/graph/node/n1", json={"params": {"scene": _authored(before, {"a"})}}).status_code == 200
@@ -541,7 +541,7 @@ def test_r10_the_same_prompt_with_a_changed_setting_is_a_different_shot(authorin
     assert graph.nodes["n1"]["params"]["scene"]["shots"][1]["output"] == {"status": "idle"}
 
 
-def test_r10_the_matching_shot_comes_back_whole_and_key_order_does_not_matter(authoring_client):
+def test_the_matching_shot_comes_back_whole_and_key_order_does_not_matter(authoring_client):
     client, graph, _, _ = authoring_client
     before = _with_media(graph)
     before["shots"][1]["aspectRatio"] = "16:9"
@@ -555,7 +555,7 @@ def test_r10_the_matching_shot_comes_back_whole_and_key_order_does_not_matter(au
     assert graph.nodes["n1"]["outputs"]["shot_b"] == {"type": "Image", "value": "https://fixture.example/b1.png"}
 
 
-def test_r10_dropping_kept_media_never_deletes_a_file(authoring_client):
+def test_dropping_kept_media_never_deletes_a_file(authoring_client):
     """Design: "Dropped" is only the link from the shot; generated
     files stay in the outputs folder, as Projects promises."""
     client, graph, _, _ = authoring_client
@@ -598,7 +598,7 @@ def _remove_then_return(client, graph, stored_b: dict, returning_b: dict) -> dic
     return graph.nodes["n1"]["params"]["scene"]["shots"][1]
 
 
-def test_r11_an_agents_float_setting_matches_the_browsers_int(authoring_client):
+def test_an_agents_float_setting_matches_the_browsers_int(authoring_client):
     """The reviewer's live case: an agent wrote contrast 1.0; the browser's
     JSON round trip sends it back as 1. Same shot, so its media comes back."""
     client, graph, _, _ = authoring_client
@@ -610,7 +610,7 @@ def test_r11_an_agents_float_setting_matches_the_browsers_int(authoring_client):
     assert {key: shot_b[key] for key in RUN_MEDIA} == RUN_MEDIA
 
 
-def test_r11_a_missing_field_matches_its_default_on_either_side(authoring_client):
+def test_missing_field_matches_its_default_on_either_side(authoring_client):
     client, graph, _, _ = authoring_client
     _with_media(graph)
     # Stored with the defaults written out; it comes back without them.
@@ -622,7 +622,7 @@ def test_r11_a_missing_field_matches_its_default_on_either_side(authoring_client
     assert main._shot_authoring({"id": "b", "prompt": "x"}) == main._shot_authoring({"prompt": "x", "id": "b", "overrides": {"look": {"contrast": None}}})
 
 
-def test_r11_value_equality_is_exact():
+def test_value_equality_is_exact():
     """No epsilon, a bool is not a number, and a set override never matches a
     missing one (missing means "the scene's", not any number)."""
     fp = main._shot_authoring
@@ -635,7 +635,7 @@ def test_r11_value_equality_is_exact():
     assert fp({"id": "b", "prompt": " p"}) != fp({"id": "b", "prompt": "p"})
 
 
-def test_r11_a_changed_float_is_still_a_different_shot(authoring_client):
+def test_changed_float_is_still_a_different_shot(authoring_client):
     client, graph, _, _ = authoring_client
     _with_media(graph)
     shot_b = _remove_then_return(client, graph, {"prompt": "Agent shot", "overrides": {"look": {"contrast": 1.0}}},

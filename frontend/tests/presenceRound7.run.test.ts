@@ -151,7 +151,7 @@ describe('a refused shot goes back to the output it last settled with', () => {
 });
 
 describe('Generate\'s nodes added, their start refused for this tab (PR #204)', () => {
-  const GM_R13 = 'Nebula added the nodes to the canvas but couldn’t start the generation because this tab isn’t connected as you. Open the link Nebula printed when it started, then run them from the canvas.';
+  const ADDED_NOT_STARTED_LINE = 'Nebula added the nodes to the canvas but couldn’t start the generation because this tab isn’t connected as you. Open the link Nebula printed when it started, then run them from the canvas.';
   const origin = { genId: 'g1', prompt: 'a lighthouse', ts: 1, sessionId: 's', modelNodeIds: ['n2'], allNodeIds: ['n1', 'n2'] };
   beforeEach(() => {
     resetPersonSessionForTests();
@@ -169,7 +169,7 @@ describe('Generate\'s nodes added, their start refused for this tab (PR #204)', 
     await useGraphStore.getState().executeClusterConcurrent(['n1', 'n2'], origin as never);
     const cards = useGraphStore.getState().nodes.map((n) => n.data);
     expect(cards.map((d) => d.state)).toEqual(['error', 'error']);
-    expect(cards.map((d) => d.error)).toEqual([GM_R13, GM_R13]);
+    expect(cards.map((d) => d.error)).toEqual([ADDED_NOT_STARTED_LINE, ADDED_NOT_STARTED_LINE]);
     expect(cards.map((d) => d.errorPerson)).toEqual([undefined, undefined]);
     notePersonPromoted();
     expect(useGraphStore.getState().nodes.map((n) => n.data.state)).toEqual(['idle', 'idle']);
@@ -179,7 +179,7 @@ describe('Generate\'s nodes added, their start refused for this tab (PR #204)', 
     fresh([text('n1'), text('n2')]);
     vi.spyOn(api, 'executeGraph').mockRejectedValueOnce(gateStart("Couldn't start the run."));
     await useGraphStore.getState().executeClusterConcurrent(['n1', 'n2']);
-    expect(useGraphStore.getState().nodes[0].data.error).not.toBe(GM_R13);
+    expect(useGraphStore.getState().nodes[0].data.error).not.toBe(ADDED_NOT_STARTED_LINE);
     expect(useGraphStore.getState().nodes[0].data.state).toBe('error');
   });
 });

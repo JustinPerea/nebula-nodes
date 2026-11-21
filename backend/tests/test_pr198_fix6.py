@@ -28,12 +28,12 @@ from tests.test_pr198_fix5 import BASE, PAID, WIRE, _import, _rf_scene, _saved_p
 AGENT = {"X-Nebula-Agent": "Codex"}
 
 
-def test_one_connection_reads_gms_line():
+def test_one_connection_reads_the_approved_line():
     assert main_module.stray_shot_line("Scene", "n4", ["shot_s2"], 1) == (
         "Removed the connection to shot port s2 on “Scene”, node n4. That shot no longer exists.")
 
 
-def test_several_connections_from_several_ports_read_gms_plural():
+def test_several_connections_from_several_ports_read_the_approved_plural():
     assert main_module.stray_shot_line("Scene", "n4", ["shot_s2", "shot_s3"], 3) == (
         "Removed 3 connections to shot ports on “Scene”, node n4. Those shots no longer exist.")
 
@@ -92,7 +92,7 @@ def test_the_agent_log_says_up_to_five_lines_then_the_overflow():
 
 
 @pytest.mark.parametrize("who", ["person", "agent"])
-def test_an_import_says_gms_line_with_the_new_node_id(api, person, who):  # noqa: F811
+def test_an_import_says_the_approved_line_with_the_new_node_id(api, person, who):  # noqa: F811
     client, _graph, sent = api
     sent.clear()
     reply = _import(client, {"person": PERSON, "agent": AGENT}[who], {"shots": [{"id": "S2", "prompt": "a"}]},

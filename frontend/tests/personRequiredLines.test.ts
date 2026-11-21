@@ -40,8 +40,8 @@ import { connectKrea } from '../src/lib/kreaConnection';
 import { acceptProposal } from '../src/lib/canvasProposals';
 import { enhancePrompt } from '../src/lib/enhancePrompt';
 
-const GM_LINE = "This change needs your OK, and this tab isn’t connected as you. Open the link Nebula printed when it started, then try again.";
-// Each as the one because line a heading's action makes of it (the reason itself stays GM_LINE/APP_LINE).
+const TAB_LINE = "This change needs your OK, and this tab isn’t connected as you. Open the link Nebula printed when it started, then try again.";
+// Each as the one because line a heading's action makes of it (the reason itself stays TAB_LINE/APP_LINE).
 const because = (what: string, tab: boolean) => `Nebula couldn’t ${what} because ${tab ? 'this tab isn’t connected as you. Open the link Nebula printed when it started.' : 'this window isn’t connected as you. Quit Nebula and open it again.'}`;
 const APP_LINE = "This change needs your OK, and this window isn’t connected as you. Quit Nebula and open it again, then try again.";
 // Design (2026-10-23), verbatim: the banners stay up, so each fits one line.
@@ -63,9 +63,9 @@ beforeEach(() => {
 describe("the line for a person-only refusal (design)", () => {
   it('is the reason of any request refused with code person_required; the agents\' text stays on the error', async () => {
     const error = await requestError("Couldn't recover the project.", personRequired());
-    expect(error.reason).toBe(GM_LINE);
+    expect(error.reason).toBe(TAB_LINE);
     expect(error.message).toBe(because('recover the project', true));
-    expect(failureCopy(error)).toEqual({ heading: '', reason: because('recover the project', true), button: because('recover the project', true), cause: GM_LINE, what: 'recover the project', status: 403 });
+    expect(failureCopy(error)).toEqual({ heading: '', reason: because('recover the project', true), button: because('recover the project', true), cause: TAB_LINE, what: 'recover the project', status: 403 });
     expect(error.detail).toBe(BILLING);
     expect(error.code).toBe('person_required');
     expect(details(error)).toBe(BILLING);
@@ -74,7 +74,7 @@ describe("the line for a person-only refusal (design)", () => {
   it('wins over a reason the caller wrote: the code decides, never the words', () => {
     const error = new RequestFailedError("Couldn't start the run.", 403,
       { detail: BILLING, reason: BILLING, code: 'person_required' });
-    expect(error.reason).toBe(GM_LINE);
+    expect(error.reason).toBe(TAB_LINE);
   });
 
   it('leaves every other refusal as it was, with nothing behind Details', async () => {
@@ -85,7 +85,7 @@ describe("the line for a person-only refusal (design)", () => {
     expect(bare.reason).toBe(ACCESS_LOST_COPY);
     // A person_required answer with no words of its own has nothing to hide.
     const wordless = await requestError("Couldn't recover the project.", json({ code: 'person_required' }, 403));
-    expect(wordless.reason).toBe(GM_LINE);
+    expect(wordless.reason).toBe(TAB_LINE);
     expect(details(wordless)).toBeNull();
   });
 
@@ -93,7 +93,7 @@ describe("the line for a person-only refusal (design)", () => {
     apiFetch.mockResolvedValue(personRequired());
     const refused = await executeNode([], [], 'n1').catch((error: unknown) => error);
     expect(refused).toBeInstanceOf(ExecutionStartRejectedError);
-    expect((refused as ExecutionStartRejectedError).reason).toBe(GM_LINE);
+    expect((refused as ExecutionStartRejectedError).reason).toBe(TAB_LINE);
     expect((refused as ExecutionStartRejectedError).code).toBe('person_required');
     expect(details(refused)).toBe(BILLING);
   });
@@ -103,7 +103,7 @@ describe("the line for a person-only refusal (design)", () => {
       code: 'person_required' }, 403));
     const refused = await acceptProposal('p_a', 'key', {}).catch((error: unknown) => error);
     expect((refused as RequestFailedError).code).toBe('person_required');
-    expect((refused as RequestFailedError).reason).toBe(GM_LINE);
+    expect((refused as RequestFailedError).reason).toBe(TAB_LINE);
   });
 
   it('Krea connection: the person gate\'s refusal says it, other refusals keep their line', async () => {
@@ -123,7 +123,7 @@ describe("the line for a person-only refusal (design)", () => {
       copyForAnswer?: (status: number, detail: unknown, code: string | null) => string;
     }).copyForAnswer;
     expect(typeof copyForAnswer).toBe('function');
-    expect(copyForAnswer!(403, BILLING, 'person_required')).toBe(GM_LINE);
+    expect(copyForAnswer!(403, BILLING, 'person_required')).toBe(TAB_LINE);
     expect(copyForAnswer!(403, BILLING, null)).toBe(BILLING);
     expect(copyForAnswer!(503, BILLING, 'person_required')).toBe("Nebula didn’t respond. Try again.");
   });
@@ -181,7 +181,7 @@ describe("the app lines (design), chosen by the desktop flag", () => {
   });
 
   it('a browser tab keeps the browser line 3', () => {
-    expect(errorCopy.copyForAnswer(403, BILLING, 'person_required')).toBe(GM_LINE);
+    expect(errorCopy.copyForAnswer(403, BILLING, 'person_required')).toBe(TAB_LINE);
   });
 
   it("the app's banner, when the backend refuses the token the shell handed over", async () => {

@@ -31,7 +31,7 @@ def _refused(response) -> bool:
     return response.status_code == 409 and response.json().get("code") == "scene_changed"
 
 
-def test_b1_an_mcp_read_guards_a_cli_write_that_never_read(api):  # noqa: F811
+def test_an_mcp_read_guards_a_cli_write_that_never_read(api):  # noqa: F811
     node = _cinema(api)
     api.client.get("/api/canvas/snapshot", headers=MCP)
     _person_types(api, node)
@@ -39,7 +39,7 @@ def test_b1_an_mcp_read_guards_a_cli_write_that_never_read(api):  # noqa: F811
     assert _prompts(api, node) == TYPED
 
 
-def test_c1_a_fresh_mcp_read_never_refreshes_the_clis_older_look(api):  # noqa: F811
+def test_a_fresh_mcp_read_never_refreshes_the_clis_older_look(api):  # noqa: F811
     node = _cinema(api)
     api.client.get("/api/graph", headers=CODEX)  # nebula look, no session: before the typing
     _person_types(api, node)
@@ -51,7 +51,7 @@ def test_c1_a_fresh_mcp_read_never_refreshes_the_clis_older_look(api):  # noqa: 
     assert _put(api, node, CODEX, _scene("the person typed this", "redone")).status_code == 200
 
 
-def test_c1b_two_session_less_lanes_still_share_one_read(api):  # noqa: F811
+def test_two_session_less_lanes_still_share_one_read(api):  # noqa: F811
     # Documented: without NEBULA_AGENT_SESSION two agents of one name are one reader.
     node = _cinema(api)
     api.client.get("/api/graph", headers=CODEX)
@@ -60,7 +60,7 @@ def test_c1b_two_session_less_lanes_still_share_one_read(api):  # noqa: F811
     assert _put(api, node, CODEX, _scene("a quiet street", "agent A stale")).status_code == 200
 
 
-def test_c2_lanes_with_their_own_sessions_stay_apart(api):  # noqa: F811
+def test_lanes_with_their_own_sessions_stay_apart(api):  # noqa: F811
     node = _cinema(api)
     one = {**CODEX, "X-Nebula-Agent-Session": "agent-1"}
     two = {**CODEX, "X-Nebula-Agent-Session": "agent-2"}
@@ -71,7 +71,7 @@ def test_c2_lanes_with_their_own_sessions_stay_apart(api):  # noqa: F811
     assert _put(api, node, two, _scene("the person typed this", "agent 2 on top")).status_code == 200
 
 
-def test_c3_a_session_that_never_read(api):  # noqa: F811
+def test_a_session_that_never_read(api):  # noqa: F811
     node = _cinema(api)
     api.client.get("/api/graph/export", headers=CODEX)  # the name's session-less read, before the typing
     _person_types(api, node)
@@ -86,7 +86,7 @@ def test_c3_a_session_that_never_read(api):  # noqa: F811
     assert late.status_code == 200
 
 
-def test_c4_a_verified_token_is_never_the_names_reader(api, monkeypatch):  # noqa: F811
+def test_a_verified_token_is_never_the_names_reader(api, monkeypatch):  # noqa: F811
     from commons.actors import agent_registry
     monkeypatch.setattr(agent_registry, "lookup", lambda token: {"runner": "codex", "session": "chat-a"} if token == "tok-a" else None)
     node = _cinema(api)
@@ -99,7 +99,7 @@ def test_c4_a_verified_token_is_never_the_names_reader(api, monkeypatch):  # noq
     assert not any(key[1] in ("newest:Codex", "name:Codex:mcp-proc-1") for key in scene_keys._reads)
 
 
-def test_c5_reads_stay_bounded(api):  # noqa: F811
+def test_reads_stay_bounded(api):  # noqa: F811
     node = _cinema(api)
     api.client.get("/api/canvas/snapshot", headers=MCP)
     for i in range(2100):
@@ -111,7 +111,7 @@ def test_c5_reads_stay_bounded(api):  # noqa: F811
 # -- Design: ’ in the lines this PR's backend added, the
 # person's and the agents' alike. Agents match on `code`, never the detail.
 
-def test_l3_input_taken_detail_is_curly(api):  # noqa: F811
+def test_input_taken_detail_is_curly(api):  # noqa: F811
     node = _cinema(api)
     target = api.graph.add_node("gpt-image-2-5-edit", {}, position={"x": 400, "y": 0})
     api.graph.connect(node, "shot_s1", target, "mask")
@@ -122,7 +122,7 @@ def test_l3_input_taken_detail_is_curly(api):  # noqa: F811
     assert "'" not in taken.json()["detail"].replace(f"'{node}'", "")
 
 
-def test_l3_the_prs_backend_lines_carry_no_straight_apostrophe():
+def test_the_prs_backend_lines_carry_no_straight_apostrophe():
     import main as main_module
     for line in (main_module.RUN_ID_STOPPED, main_module.RUN_ID_RAN, main_module.RUN_ID_STOP_RECORDED):
         assert "can’t" in line and "can't" not in line

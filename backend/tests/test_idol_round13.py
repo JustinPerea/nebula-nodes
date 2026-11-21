@@ -255,7 +255,7 @@ SHOWN = f"~{os.sep}.nebula{os.sep}settings.json"
 SAVE_LINE = f"Nothing was saved because Nebula can’t read {SHOWN}. Fix the file, then try again."
 
 
-def test_a_cut_short_file_refuses_every_write_with_gms_line_and_keeps_the_file(cut_short):
+def test_a_cut_short_file_refuses_every_write_with_the_approved_line_and_keeps_the_file(cut_short):
     client = _person()
     for response in (client.put("/api/settings", json={"apiKeys": {"OPENAI_API_KEY": "sk-new-1111"}}),
                      client.put("/api/settings", json={"favorites": []}),

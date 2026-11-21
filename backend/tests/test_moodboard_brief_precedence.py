@@ -33,13 +33,13 @@ from services.moodboard_brief import CLASH_MODES, colour_check, compose
 from services.moodboard_store import MoodboardStore
 from services.output import OUTPUT_ROOT
 
-GM_DIRECTION = (
+DIRECTION = (
     "Real 19th-century landscape oil (Hudson River School, Luminism, Tonalism) in a silver tonalist palette: "
     "cool pearl-grey sky, pale blue-grey water, sage and grey-green land, soft mist. Fine detail confined to "
     "about a third of the canvas; the rest is quiet sky, mist or water. Flowers in cool jewel tones: cornflower "
     "blue, violet, lilac and white."
 )
-GM_AVOID = ["busy all-over detail", "warm yellow varnish cast", "red, orange or pink flowers",
+AVOID = ["busy all-over detail", "warm yellow varnish cast", "red, orange or pink flowers",
             "digital or illustration look", "people, buildings, text"]
 PALETTE = [("#f7f8f7", 0.2037), ("#111010", 0.136), ("#2a2b28", 0.0478), ("#dce0e2", 0.0344),
            ("#16121f", 0.0245), ("#1c70f2", 0.0232), ("#98acac", 0.0208), ("#e7e2d4", 0.0197)]
@@ -50,7 +50,7 @@ MEASURED_KEYWORDS = ["palette-led", "style consistency", "visual language"]
 NOTE_KEYWORDS = ["liquid", "glass", "panels", "over", "soft", "nature"]
 
 
-def gm_analysis(palette=PALETTE, accents=ACCENTS) -> dict:
+def analysis_fixture(palette=PALETTE, accents=ACCENTS) -> dict:
     return {
         "version": 4, "sourceHash": "fixture", "mode": "look", "strength": 0.7,
         "summary": "33 reference image(s) analyzed as look. Palette: x. Notes emphasize: liquid glass",
@@ -63,12 +63,12 @@ def gm_analysis(palette=PALETTE, accents=ACCENTS) -> dict:
     }
 
 
-def gm_board(**fields) -> dict:
+def board_fixture(**fields) -> dict:
     board = {
         "id": "testboard1", "name": "Test board", "mode": "look", "strength": 0.7, "notes": NOTES,
-        "images": [], "direction": GM_DIRECTION, "avoid": list(GM_AVOID),
+        "images": [], "direction": DIRECTION, "avoid": list(AVOID),
         "pinnedColors": {"include": [PIN], "exclude": []}, "briefOverride": None, "briefVersion": 1,
-        "analysis": gm_analysis(),
+        "analysis": analysis_fixture(),
     }
     board.update(fields)
     return board
@@ -81,7 +81,7 @@ def hexes(items: list[dict]) -> list[str]:
 # -- the default ---------------------------------------------------------------
 
 def test_the_good_machines_board_leaves_out_its_clashing_accents():
-    brief = compose(gm_board())
+    brief = compose(board_fixture())
     assert brief["clashMode"] == "leave-out"
     assert sorted(hexes(brief["leftOut"])) == sorted([BRICK, SALMON, RUST, OCHRE])
     by_hex = {item["hex"]: item for item in brief["leftOut"]}
@@ -107,7 +107,7 @@ def test_the_good_machines_board_leaves_out_its_clashing_accents():
 
 
 def test_keep_anyway_puts_a_colour_back_without_pinning_it():
-    brief = compose(gm_board(colorChoices={"keep": [BRICK], "leaveOut": []}))
+    brief = compose(board_fixture(colorChoices={"keep": [BRICK], "leaveOut": []}))
     assert brief["accents"] == [BRICK]
     assert hexes(brief["kept"]) == [BRICK] and BRICK not in hexes(brief["leftOut"])
     assert "Accent colors, used sparingly: #a6392d." in brief["styleBrief"]
@@ -116,22 +116,22 @@ def test_keep_anyway_puts_a_colour_back_without_pinning_it():
 
 def test_a_choice_survives_a_reanalysis_that_shifts_the_hex():
     shifted = [("#a83a2f" if hex_value == BRICK else hex_value, share) for hex_value, share in ACCENTS]
-    brief = compose(gm_board(analysis=gm_analysis(accents=shifted), colorChoices={"keep": [BRICK], "leaveOut": []}))
+    brief = compose(board_fixture(analysis=analysis_fixture(accents=shifted), colorChoices={"keep": [BRICK], "leaveOut": []}))
     assert brief["accents"] == ["#a83a2f"] and hexes(brief["kept"]) == ["#a83a2f"]
     # A choice with no colour near it stays stored and does nothing.
-    stray = compose(gm_board(colorChoices={"keep": ["#00ff00"], "leaveOut": ["#123456"]}))
+    stray = compose(board_fixture(colorChoices={"keep": ["#00ff00"], "leaveOut": ["#123456"]}))
     assert sorted(hexes(stray["leftOut"])) == sorted([BRICK, SALMON, RUST, OCHRE])
 
 
 def test_leave_out_takes_a_warning_out():
-    brief = compose(gm_board(colorChoices={"keep": [], "leaveOut": [BLUE]}))
+    brief = compose(board_fixture(colorChoices={"keep": [], "leaveOut": [BLUE]}))
     assert BLUE not in brief["palette"] and BLUE not in brief["styleBrief"]
     assert {item["hex"]: item["why"] for item in brief["leftOut"]}[BLUE] == "choice"
     assert brief["mayClash"] == []
 
 
 def test_a_warm_direction_leaves_avoided_reds_out():
-    brief = compose(gm_board(direction="Warm evening light.", avoid=["red, orange or pink flowers"],
+    brief = compose(board_fixture(direction="Warm evening light.", avoid=["red, orange or pink flowers"],
                              pinnedColors={"include": [], "exclude": []}))
     assert sorted(hexes(brief["leftOut"])) == sorted([BRICK, SALMON, RUST])
     for hex_value in (BRICK, SALMON, RUST):
@@ -139,7 +139,7 @@ def test_a_warm_direction_leaves_avoided_reds_out():
 
 
 def test_no_people_keeps_the_red_flowers_and_blue_sky_the_direction_asks_for():
-    brief = compose(gm_board(direction="No people, red flowers and a blue sky.", avoid=[],
+    brief = compose(board_fixture(direction="No people, red flowers and a blue sky.", avoid=[],
                              pinnedColors={"include": [], "exclude": []}))
     assert brief["leftOut"] == [] and brief["mayClash"] == []
     assert BRICK in brief["styleBrief"] and SALMON in brief["styleBrief"] and BLUE in brief["styleBrief"]
@@ -152,18 +152,18 @@ def test_every_clash_mode_is_known():
 
 
 def test_flag_leaves_nothing_out_until_the_person_does():
-    brief = compose(gm_board(clashMode="flag"))
+    brief = compose(board_fixture(clashMode="flag"))
     assert brief["leftOut"] == []
     assert sorted(hexes(brief["mayClash"])) == sorted([BRICK, SALMON, RUST, OCHRE, BLUE])
     assert {item["hex"]: item["level"] for item in brief["mayClash"]}[BRICK] == "conflict"
     assert brief["accents"] == [BRICK, SALMON, RUST, OCHRE]
-    chosen = compose(gm_board(clashMode="flag", colorChoices={"keep": [], "leaveOut": [BRICK]}))
+    chosen = compose(board_fixture(clashMode="flag", colorChoices={"keep": [], "leaveOut": [BRICK]}))
     assert hexes(chosen["leftOut"]) == [BRICK] and chosen["leftOut"][0]["why"] == "choice"
     assert BRICK not in chosen["styleBrief"]
 
 
 def test_no_measured_sends_no_measured_colour_once_there_is_a_direction():
-    brief = compose(gm_board(clashMode="no-measured"))
+    brief = compose(board_fixture(clashMode="no-measured"))
     assert brief["palette"] == [] and brief["accents"] == []
     assert len(brief["leftOut"]) == len(PALETTE) + len(ACCENTS)
     assert all(item["reason"] == "Measured colors are off for this board" and item["why"] == "mode"
@@ -176,17 +176,17 @@ def test_no_measured_sends_no_measured_colour_once_there_is_a_direction():
     assert brick["level"] == "conflict"
     assert brick["reasons"][0] == "Measured colors are off for this board"
     assert "Avoid: red, orange or pink flowers" in brick["reasons"][1:]
-    kept = compose(gm_board(clashMode="no-measured", colorChoices={"keep": ["#f7f8f7"], "leaveOut": []}))
+    kept = compose(board_fixture(clashMode="no-measured", colorChoices={"keep": ["#f7f8f7"], "leaveOut": []}))
     assert kept["palette"] == ["#f7f8f7"] and hexes(kept["kept"]) == ["#f7f8f7"]
     # Without a Direction it behaves as the default.
-    plain = compose(gm_board(clashMode="no-measured", direction=""))
+    plain = compose(board_fixture(clashMode="no-measured", direction=""))
     assert plain["palette"] == [hex_value for hex_value, _ in PALETTE]
     assert sorted(hexes(plain["leftOut"])) == sorted([BRICK, SALMON, RUST])
     assert OCHRE in hexes(plain["mayClash"])  # only the cast warning, without the palette rule
 
 
 def test_keep_all_sends_everything_but_still_runs_the_check():
-    board = gm_board(clashMode="keep-all", colorChoices={"keep": [], "leaveOut": [BLUE]})
+    board = board_fixture(clashMode="keep-all", colorChoices={"keep": [], "leaveOut": [BLUE]})
     brief = compose(board)
     assert brief["leftOut"] == brief["mayClash"] == brief["pinnedClashes"] == brief["kept"] == []
     assert brief["palette"] == [hex_value for hex_value, _ in PALETTE]
@@ -196,21 +196,21 @@ def test_keep_all_sends_everything_but_still_runs_the_check():
 
 # -- notes --------------------------------------------------------------------------
 
-@pytest.mark.parametrize("direction", [GM_DIRECTION, ""])
+@pytest.mark.parametrize("direction", [DIRECTION, ""])
 def test_notes_never_reach_generators_by_default(direction):
-    brief = compose(gm_board(direction=direction))
+    brief = compose(board_fixture(direction=direction))
     assert brief["notesSent"] is False
     assert "Notes:" not in brief["styleBrief"] and "liquid glass" not in brief["styleBrief"].lower()
     assert "Visual cues: palette-led, style consistency, visual language." in brief["styleBrief"]
 
 
 def test_notes_go_when_the_board_or_the_node_opts_in():
-    on = gm_board(sendNotes=True)
+    on = board_fixture(sendNotes=True)
     assert compose(on)["notesSent"] is True
     assert f"Notes: {NOTES}" in compose(on)["styleBrief"]
     assert "liquid" in compose(on)["styleBrief"]                       # the cues lifted from the notes too
-    assert compose(gm_board(), send_notes=True)["notesSent"] is True   # node yes over board off
-    assert "Notes:" in compose(gm_board(), send_notes=True)["styleBrief"]
+    assert compose(board_fixture(), send_notes=True)["notesSent"] is True   # node yes over board off
+    assert "Notes:" in compose(board_fixture(), send_notes=True)["styleBrief"]
     assert compose(on, send_notes=False)["notesSent"] is False         # node no over board on
     assert "Notes:" not in compose(on, send_notes=False)["styleBrief"]
 
@@ -228,7 +228,7 @@ def _basis_on_main(board: dict) -> str:
 
 
 def test_an_override_written_on_main_is_not_marked_stale_by_the_upgrade():
-    board = gm_board()
+    board = board_fixture()
     board["briefOverride"] = {"text": "Mine.", "basis": _basis_on_main(board), "updatedAt": "x", "by": "person"}
     brief = compose(board)
     assert brief["override"] == {"active": True, "stale": False}
@@ -239,7 +239,7 @@ def test_an_override_written_on_main_is_not_marked_stale_by_the_upgrade():
     {"clashMode": "flag"}, {"colorChoices": {"keep": [BRICK], "leaveOut": []}}, {"sendNotes": True},
 ])
 def test_changing_a_new_field_marks_an_override_stale(change):
-    board = gm_board()
+    board = board_fixture()
     board["briefOverride"] = {"text": "Mine.", "basis": _basis_on_main(board), "updatedAt": "x", "by": "person"}
     assert compose({**board, **change})["override"]["stale"] is True
 
@@ -247,7 +247,7 @@ def test_changing_a_new_field_marks_an_override_stale(change):
 # -- the saved check and room for a second one ----------------------------------------
 
 def test_a_saved_check_from_another_checker_counts_at_its_basis_only():
-    board = gm_board()
+    board = board_fixture()
     saved = colour_check(board)
     assert saved["version"] == 1 and saved["checks"]["words"]["version"] >= 1
     reader = {"hex": "#98acac", "role": "palette", "share": 0.0208, "level": "conflict", "source": "direction",
@@ -258,7 +258,7 @@ def test_a_saved_check_from_another_checker_counts_at_its_basis_only():
     item = {i["hex"]: i for i in brief["leftOut"]}["#98acac"]
     assert item["foundBy"] == ["reader"] and item["reason"] == "Direction: soft mist"
     # The board moved: the words check runs again in memory, the reader's finding waits.
-    moved = compose({**board, "avoid": [*GM_AVOID, "neon"]})
+    moved = compose({**board, "avoid": [*AVOID, "neon"]})
     assert "#98acac" not in hexes(moved["leftOut"])
     assert sorted(hexes(moved["leftOut"])) == sorted([BRICK, SALMON, RUST, OCHRE])
 
@@ -268,7 +268,7 @@ def test_reading_an_old_board_writes_nothing(tmp_path, monkeypatch):
     folder = tmp_path / "moodboards" / "_global"
     folder.mkdir(parents=True)
     path = folder / "testboard1.json"
-    path.write_text(json.dumps(gm_board()), encoding="utf-8")
+    path.write_text(json.dumps(board_fixture()), encoding="utf-8")
     before = (path.read_bytes(), path.stat().st_mtime_ns)
     store = MoodboardStore()
     board = store.get("testboard1")
@@ -290,17 +290,17 @@ def test_startup_saves_the_check_on_boards_saved_before_it(tmp_path, monkeypatch
     folder = tmp_path / "moodboards" / "_global"
     folder.mkdir(parents=True)
     path = folder / "testboard1.json"
-    path.write_text(json.dumps(gm_board()), encoding="utf-8")
+    path.write_text(json.dumps(board_fixture()), encoding="utf-8")
     trash = tmp_path / "moodboards" / ".trash"
     trash.mkdir()
-    (trash / "testboard2.json").write_text(json.dumps(gm_board(id="testboard2")), encoding="utf-8")
+    (trash / "testboard2.json").write_text(json.dumps(board_fixture(id="testboard2")), encoding="utf-8")
 
     asyncio.run(main_module._moodboard_brief_fields_startup())
     saved = json.loads(path.read_text())
     assert saved["colorCheck"]["basis"] == moodboard_brief.colour_check_basis(saved)
     assert {f["hex"] for f in saved["colorCheck"]["findings"]} >= {BRICK, SALMON, RUST}
     assert "colorCheck" in json.loads((trash / "testboard2.json").read_text())
-    assert {k: v for k, v in saved.items() if k != "colorCheck"} == gm_board()
+    assert {k: v for k, v in saved.items() if k != "colorCheck"} == board_fixture()
 
     calls = []
     real = moodboard_colour_words.check
@@ -343,9 +343,9 @@ def _stored(board_id: str) -> dict:
     return MoodboardStore().get(board_id)
 
 
-def _gm_via_api(client, **extra) -> dict:
-    body = {"name": "Board", "images": [], "direction": GM_DIRECTION, "avoid": GM_AVOID,
-            "pinnedColors": {"include": [PIN], "exclude": []}, "analysis": gm_analysis(), **extra}
+def _board_via_api(client, **extra) -> dict:
+    body = {"name": "Board", "images": [], "direction": DIRECTION, "avoid": AVOID,
+            "pinnedColors": {"include": [PIN], "exclude": []}, "analysis": analysis_fixture(), **extra}
     response = client.post("/api/moodboards", json=body)
     assert response.status_code == 200, response.text
     return response.json()
@@ -361,13 +361,13 @@ def _gm_via_api(client, **extra) -> dict:
     {"sendNotes": "yes"},
 ])
 def test_bad_new_fields_are_refused(client, body):
-    board = _gm_via_api(client)
+    board = _board_via_api(client)
     response = client.put(f"/api/moodboards/{board['id']}", json=body)
     assert response.status_code == 422, response.text
 
 
 def test_new_fields_default_and_round_trip(client):
-    board = _gm_via_api(client)
+    board = _board_via_api(client)
     assert board["clashMode"] == "leave-out" and board["sendNotes"] is False
     assert board["colorChoices"] == {"keep": [], "leaveOut": []}
     updated = client.put(f"/api/moodboards/{board['id']}", json={
@@ -377,7 +377,7 @@ def test_new_fields_default_and_round_trip(client):
 
 
 def test_the_check_is_saved_on_every_change_that_moves_it_and_a_sent_one_is_ignored(client):
-    board = _gm_via_api(client)
+    board = _board_via_api(client)
     saved = _stored(board["id"])["colorCheck"]
     assert saved["basis"] and {f["hex"] for f in saved["findings"]} >= {BRICK, SALMON, RUST, OCHRE, BLUE, PIN}
     assert board["colorCheck"] == saved
@@ -401,13 +401,13 @@ def test_analyze_refreshes_the_saved_check(client):
 
 
 def test_only_the_person_may_send_notes_and_anyone_may_stop_them(client, person):
-    board = _gm_via_api(client)
+    board = _board_via_api(client)
     for headers, code in ((AGENT, "agent_refused"), ({}, "person_required")):
         refused = client.put(f"/api/moodboards/{board['id']}", json={"sendNotes": True, "direction": "x"},
                              headers=headers)
         assert refused.status_code == 403, refused.text
         assert refused.json()["code"] == code and "notes" in refused.json()["detail"].lower()
-    assert _stored(board["id"])["sendNotes"] is False and _stored(board["id"])["direction"] == GM_DIRECTION
+    assert _stored(board["id"])["sendNotes"] is False and _stored(board["id"])["direction"] == DIRECTION
     assert client.put(f"/api/moodboards/{board['id']}", json={"sendNotes": True},
                       headers=person.headers).status_code == 200
     # Sent again as it is (Studio saves the whole board), it isn't turning anything on.

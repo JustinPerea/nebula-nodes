@@ -39,7 +39,7 @@ def _reopen(api) -> tuple[str, dict]:
     return old_revision, api.client.get(f"/api/projects/{api.first}").json()["snapshot"]
 
 
-def test_M1_an_agents_reopen_keeps_the_handoffs_typing_live_and_stored(api):
+def test_an_agents_reopen_keeps_the_handoffs_typing_live_and_stored(api):
     node = api.graph.add_node("text-input", {"value": "a"}, position={"x": 0, "y": 0})
     old_revision, saved = _reopen(api)
     answer = _handoff(api, old_revision, _with(saved, node, params={"value": "typed"}),
@@ -52,7 +52,7 @@ def test_M1_an_agents_reopen_keeps_the_handoffs_typing_live_and_stored(api):
     assert api.client.get("/api/graph/export").json()["nodes"][0]["data"]["params"]["value"] == "typed"
 
 
-def test_M1_a_reopen_keeps_an_unsent_name_live(api):
+def test_a_reopen_keeps_an_unsent_name_live(api):
     node = api.graph.add_node("text-input", {"value": "a"}, position={"x": 0, "y": 0})
     old_revision, saved = _reopen(api)
     answer = _handoff(api, old_revision, _with(saved, node, label="Hero prompt"), pendingLabels={node: "Hero prompt"})
@@ -61,7 +61,7 @@ def test_M1_a_reopen_keeps_an_unsent_name_live(api):
     assert _stored(api, node)["data"]["label"] == "Hero prompt"
 
 
-def test_M1_the_reopens_live_change_is_broadcast(api):
+def test_the_reopens_live_change_is_broadcast(api):
     node = api.graph.add_node("text-input", {"value": "a"}, position={"x": 0, "y": 0})
     old_revision, saved = _reopen(api)
     api.sent.clear()
@@ -71,7 +71,7 @@ def test_M1_the_reopens_live_change_is_broadcast(api):
     assert syncs and syncs[-1]["nodes"][0]["data"]["params"]["value"] == "typed"
 
 
-def test_M1_control_a_switch_away_leaves_the_live_graph_alone(api):
+def test_control_a_switch_away_leaves_the_live_graph_alone(api):
     node = api.graph.add_node("text-input", {"value": "a"}, position={"x": 0, "y": 0})
     old_revision, saved = _switch_away(api)
     assert _handoff(api, old_revision, _with(saved, node, params={"value": "typed"}),
@@ -85,7 +85,7 @@ def test_M1_control_a_switch_away_leaves_the_live_graph_alone(api):
 # Only a person's tab sends the unsent changes
 
 
-def test_L6_an_agents_handoff_with_pending_params_is_refused(api):
+def test_an_agents_handoff_with_pending_params_is_refused(api):
     node = api.graph.add_node("text-input", {"value": "a"}, position={"x": 0, "y": 0})
     old_revision, saved = _switch_away(api)
     answer = api.client.put(f"/api/projects/{api.first}", headers={**AGENT, **CANVAS_PARAMS_VERSION, "X-Nebula-Workspace-Revision": old_revision},
@@ -96,7 +96,7 @@ def test_L6_an_agents_handoff_with_pending_params_is_refused(api):
     assert _stored(api, node)["data"]["params"]["value"] == "a"
 
 
-def test_L6_a_person_without_a_tab_is_refused_too(api):
+def test_a_person_without_a_tab_is_refused_too(api):
     node = api.graph.add_node("text-input", {"value": "a"}, position={"x": 0, "y": 0})
     old_revision, saved = _switch_away(api)
     answer = api.client.put(f"/api/projects/{api.first}", headers={**PERSON, "X-Nebula-Workspace-Revision": old_revision},
@@ -106,7 +106,7 @@ def test_L6_a_person_without_a_tab_is_refused_too(api):
     assert answer.json()["detail"] == _refusal("the change came from an agent")
 
 
-def test_L6_control_an_agents_handoff_without_pending_keys_is_kept_as_before(api):
+def test_control_an_agents_handoff_without_pending_keys_is_kept_as_before(api):
     api.graph.add_node("text-input", {"value": "a"}, position={"x": 0, "y": 0})
     old_revision, saved = _switch_away(api)
     answer = api.client.put(f"/api/projects/{api.first}", headers={**AGENT, **CANVAS_PARAMS_VERSION, "X-Nebula-Workspace-Revision": old_revision},
@@ -114,7 +114,7 @@ def test_L6_control_an_agents_handoff_without_pending_keys_is_kept_as_before(api
     assert answer.status_code == 200, answer.text
 
 
-def test_G4_a_node_the_save_lacks_reads_the_node_was_removed(api):
+def test_a_node_the_save_lacks_reads_the_node_was_removed(api):
     node = api.graph.add_node("text-input", {"value": "a"}, position={"x": 0, "y": 0})
     old_revision, saved = _switch_away(api)
     answer = _handoff(api, old_revision, {**saved, "nodes": []}, pendingParams={node: {"value": "typed"}})
@@ -122,7 +122,7 @@ def test_G4_a_node_the_save_lacks_reads_the_node_was_removed(api):
     assert answer.json()["detail"] == _refusal("the node was removed")
 
 
-def test_G4_another_kind_of_node_reads_a_nodes_type_changed(api):
+def test_another_kind_of_node_reads_a_nodes_type_changed(api):
     node = api.graph.add_node("text-input", {"value": "a"}, position={"x": 0, "y": 0})
     old_revision, saved = _switch_away(api)
     snapshot = _with(saved, node, definition="combine-text")
@@ -136,7 +136,7 @@ def test_G4_another_kind_of_node_reads_a_nodes_type_changed(api):
 # Accept refuses on a canvas that moved since the proposal was made
 
 
-def test_L3_a_proposal_keeps_the_canvas_it_was_made_on_and_accept_refuses_when_it_moved(api, monkeypatch):
+def test_a_proposal_keeps_the_canvas_it_was_made_on_and_accept_refuses_when_it_moved(api, monkeypatch):
     main = api.main
     from services.canvas_proposals import Proposal
 
@@ -158,7 +158,7 @@ def test_L3_a_proposal_keeps_the_canvas_it_was_made_on_and_accept_refuses_when_i
 # The revisions file is saved as a merge
 
 
-def test_L5_two_books_on_one_file_never_move_a_revision_backwards(tmp_path):
+def test_two_books_on_one_file_never_move_a_revision_backwards(tmp_path):
     path = tmp_path / "canvas-revisions.json"
     first = CanvasUndoBook(persist_path=path)
     second = CanvasUndoBook(persist_path=path)
@@ -171,7 +171,7 @@ def test_L5_two_books_on_one_file_never_move_a_revision_backwards(tmp_path):
     assert CanvasUndoBook(persist_path=path).epoch("p") == 3
 
 
-def test_L5_a_corrupt_file_is_not_rewritten_with_only_the_projects_in_memory(tmp_path):
+def test_a_corrupt_file_is_not_rewritten_with_only_the_projects_in_memory(tmp_path):
     path = tmp_path / "canvas-revisions.json"
     other = CanvasUndoBook(persist_path=path)
     other.forget_project("kept", "cleared")
@@ -190,7 +190,7 @@ def _recover(api, recovery_id: str):
                            json={"sourceProjectId": api.first, "snapshot": snapshot, "recoveryId": recovery_id})
 
 
-def test_G5_recovered_copies_are_numbered(api):
+def test_recovered_copies_are_numbered(api):
     names = []
     for index in range(3):
         answer = _recover(api, f"{index:032x}")
@@ -200,7 +200,7 @@ def test_G5_recovered_copies_are_numbered(api):
     assert names == ["Recovered Active", "Recovered Active copy", "Recovered Active copy 2"]
 
 
-def test_G5_a_retry_of_the_same_copy_is_the_same_copy(api):
+def test_a_retry_of_the_same_copy_is_the_same_copy(api):
     first = _recover(api, "a" * 32).json()["project"]
     again = _recover(api, "a" * 32).json()["project"]
     assert again["id"] == first["id"] and again["name"] == "Recovered Active"

@@ -62,7 +62,7 @@ def _storage_fails_once_registered(main, monkeypatch):
 
 
 @pytest.mark.parametrize("route", ["cli", "execute", "execute-node"])
-def test_Le_admission_reads_no_storage_once_the_run_is_registered(pend, monkeypatch, route):
+def test_admission_reads_no_storage_once_the_run_is_registered(pend, monkeypatch, route):
     ids = _chain(pend)
     kept = []
     real_start = pend.main.agent_runs.start
@@ -83,7 +83,7 @@ def test_Le_admission_reads_no_storage_once_the_run_is_registered(pend, monkeypa
 
 
 @pytest.mark.parametrize("route", ["cli", "execute", "execute-node"])
-def test_Le_a_failing_read_in_admission_changes_nothing(pend, monkeypatch, route):
+def test_a_failing_read_in_admission_changes_nothing(pend, monkeypatch, route):
     """The identity or plan read failing: refused, and the placeholders are
     still placeholders (never saved as normal first)."""
     ids = _chain(pend)
@@ -100,7 +100,7 @@ def test_Le_a_failing_read_in_admission_changes_nothing(pend, monkeypatch, route
 
 
 @pytest.mark.parametrize("route", ["cli", "execute", "execute-node"])
-def test_Le_a_failing_placeholder_save_keeps_no_agent_run(pend, monkeypatch, route):
+def test_a_failing_placeholder_save_keeps_no_agent_run(pend, monkeypatch, route):
     """The one write (the placeholders made normal, saved) failing: nothing
     was kept for the run either."""
     ids = _chain(pend)

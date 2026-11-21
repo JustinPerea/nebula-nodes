@@ -23,7 +23,7 @@ from services.node_registry import NodeRegistry
 
 # -- 1: the stop ------------------------------------------------------------------------------
 
-def test_the_stops_words_are_gms():
+def test_the_stops_words_are_the_approved_ones():
     assert speridlabs_idol.AGENT_STOP_PERSON == (
         "An agent’s run stopped here because this node could bill your Hugging Face account, and only you can "
         "start that. Run the node yourself to go ahead.")
@@ -37,13 +37,13 @@ def test_the_stops_words_are_gms():
 
 # -- 2 and 3: settings ------------------------------------------------------------------------
 
-def test_a_folder_in_the_way_says_gms_line():
+def test_a_folder_in_the_way_says_the_approved_line():
     assert main.SETTINGS_IN_THE_WAY["person"].format(folder="~/.nebula/settings.json") == (
         "Nothing was saved because ~/.nebula/settings.json is a folder, and Nebula needs to put a file there. "
         "Move or rename that folder, then try again.")
 
 
-def test_not_restored_says_gms_line_by_cause(tmp_path):
+def test_not_restored_says_the_approved_line_by_cause(tmp_path):
     from services import settings
 
     where = tmp_path / "settings.json"
