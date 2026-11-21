@@ -9,7 +9,6 @@
   "backend/handlers/replicate_universal.py": 1,
   "backend/handlers/speridlabs_idol.py": 15,
   "backend/handlers/worldlabs.py": 10,
-  "backend/main.py": 1388,
   "backend/services/agent_spend.py": 35,
   "backend/services/asset_trash.py": 1,
   "backend/services/project_store.py": 135,
