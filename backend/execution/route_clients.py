@@ -77,7 +77,7 @@ def refuse(where: str, text: str, person: str | None = None) -> ValueError:
 
 def refuse_needs(where: str, what: str, *, longer: bool = False) -> ValueError:
     """A run stopped before any request because a required input isn't
-    connected (GM r118): agents read ``{where} needs {what}``; the card says
+    connected (design): agents read ``{where} needs {what}``; the card says
     "Nebula couldn\u2019t run \u201cX\u201d because it needs {what}. Connect
     one, then run it again." with the node's own name, never the provider's."""
     node = _person(where).rpartition(" on ")[0] or _person(where)

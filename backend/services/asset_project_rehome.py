@@ -108,7 +108,7 @@ def default_roots() -> list[AssetRoot]:
     return [
         AssetRoot("moodboard", moodboard_store.store_root(), True, _explicit("moodboard")),
         AssetRoot("character", character_store.store_root(), True, _explicit("character")),
-        # Styles have had Recently deleted since 2026-10-20 (Q53 a).
+        # Styles have had Recently deleted since 2026-10-20.
         AssetRoot("preset", preset_store.store_root(), True, _explicit("style")),
     ]
 
@@ -120,9 +120,9 @@ def decide_home(kind: str, users: list[tuple[str, str]]) -> tuple[str | None, st
     ``(None, reason)`` for Global. ``users`` are the live canvas projects
     (id, name) whose saved or open graph points at it.
 
-    R1, "by use, else Global" (Justin picked R1 on 2026-10-19): used by
+    "By use, else Global" (Justin picked on 2026-10-19): used by
     exactly one live project -> that project; by none or by several -> Global.
-    Styles aren't referenced by graphs, so they go to Global (his P3). A
+    Styles aren't referenced by graphs, so they go to Global (his choice). A
     different rule is a change to this function only."""
     if kind == "preset":
         return None, "styles go to Global"
@@ -335,7 +335,7 @@ def _rehome_root(spec: AssetRoot, run: _Run, canvas_ids: set[str],
             if (root / (target or GLOBAL_DIR)).is_symlink() or (root / (target or GLOBAL_DIR) / path.name).is_symlink():
                 # A linked destination (``_global`` or the project's folder) may be
                 # another store's: the move would write into it. Never followed,
-                # as the purge never follows a link (#230 round 2 check).
+                # as the purge never follows a link (PR #230 check).
                 run.skipped.append(run.entry(asset_id, asset, folder.name, target,
                                              "not moved: its destination is a link", file=str(path)))
                 continue

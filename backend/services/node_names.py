@@ -1,5 +1,5 @@
 """A node's name as Nebula shows it to a person or an agent, in curly quotes
-as the Agents panel shows it (GM - Design, 2026-10-25: Connecting “A” to “B”).
+as the Agents panel shows it (design, 2026-10-25: Connecting “A” to “B”).
 The cursor bubbles (main._quoted), `nebula delete` and the spending check's
 refusals use it."""
 from __future__ import annotations
@@ -31,7 +31,7 @@ def node_name_list(names: list[str]) -> str:
     """Nodes by name in a line, the shared name-list helper's rule (frontend
     lib/errorCopy.ts nodeNameList, the same cases): up to 3 by name,
     "“A”", "“A” and “B”", "“A”, “B” and “C”", a repeated name counted ("2
-    “Writer” nodes"; design r211: "Added 2 “Combine Text” nodes"); from 4, a
+    “Writer” nodes"; design: "Added 2 “Combine Text” nodes"); from 4, a
     count ("4 nodes"). A name a person typed in quotes keeps one pair."""
     if len(names) >= 4:
         return f"{len(names)} nodes"

@@ -99,13 +99,13 @@ def run_load(client: NebulaClient, filepath: str) -> None:
     """Open a .nebula, .json or .nebula.zip as the canvas's Load canvas does
     (MCP load_graph_file; graph_file_client.py): a bundle's files are
     restored, and a file over the save limit opens as a new project named
-    after it (Q123 a). Under the limit it replaces the open project's canvas."""
+    after it. Under the limit it replaces the open project's canvas."""
     import graph_file_client
 
     try:
         # This client's identity headers: the agent's name and the CLI's
         # X-Nebula-Surface, so the backend's refusals and the load notes
-        # name `nebula` commands (review 11 of PR #203, NIT-3). Nothing is
+        # name `nebula` commands (PR #203). Nothing is
         # sent before the file and its path are checked.
         result = graph_file_client.load(client.api, filepath, headers=client._identity_headers())
     except graph_file_client.GraphFileError as exc:
@@ -130,9 +130,9 @@ def run_clear(client: NebulaClient, force: bool = False) -> None:
     result = client.clear_graph(force=force)
     message = saved_canvas_message(result)
     if message:
-        # GM's rule (a): the person's canvas was saved untouched as its own
+        # The design's rule (a): the person's canvas was saved untouched as its own
         # project and the clear ran on a new canvas, so there is nothing of
-        # theirs to undo (review 9, M-2): GM's line in the Undo sentence's place.
+        # theirs to undo: the design's line in the Undo sentence's place.
         print(f"Canvas cleared ({count} node{'s' if count != 1 else ''} removed).\n{message}" if count
               else f"Canvas cleared (it was already empty).\n{message}")
     elif count:

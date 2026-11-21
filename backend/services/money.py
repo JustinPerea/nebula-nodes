@@ -1,4 +1,4 @@
-"""Money as Nebula writes it, in one place (PR #198 review 2, L4).
+"""Money as Nebula writes it, in one place (PR #198).
 
 Two forms, the same in the frontend (frontend/src/lib/pricing.ts
 ``formatSpentUsd`` and ``formatUsd``); both read the table in
@@ -6,7 +6,7 @@ contracts/fixtures/money/cases.json, so neither side can drift:
 
 - ``usd_spent``: what was spent, to the cent, as Settings and ``nebula spend``
   show it ("$3.40", "$1,234.50"). "$0.00" only ever means nothing: a
-  non-zero amount that rounds to no cents is "<$0.01" (GM, PR #198 r1).
+  non-zero amount that rounds to no cents is "<$0.01" (design, PR #198).
 - ``usd_amount``: a price, a limit or a cost in a line (spend refusals, and
   every chip's figures): two significant figures under $0.10 ("$0.0047"),
   cents under $10 ("$0.43", "$4.20"), whole dollars from $10 ("$12"). It is
@@ -19,11 +19,11 @@ the only way to get below zero is float noise from a subtraction (a limit
 minus what was used), where "nothing left" is the true reading. A refund
 would need its own words, not a minus sign ("$-0.00").
 
-An amount under a millionth of a dollar is "<$0.000001" (review 3, L5): two
+An amount under a millionth of a dollar is "<$0.000001": two
 significant figures of a float denormal would be 324 decimals, past what a
 float can scale to, and no price Nebula shows is that small. An amount above
 $10 trillion (``CEILING_USD``) is ">$10,000,000,000,000" (">$10,000,000,000,000.00"
-spent; review 5, N4): past it the figures are float noise (cents stop being
+spent): past it the figures are float noise (cents stop being
 exact near 9e13), and at 1.8e308 ``value * 100`` is infinite. No amount up to
 the largest float raises. frontend/src/lib/pricing.ts has the same rule.
 
@@ -39,7 +39,7 @@ UNDER_A_CENT = "<$0.01"
 # The smallest amount usd_amount writes in figures.
 TINY_USD = 0.000001
 UNDER_TINY = "<$0.000001"
-# The largest amount written in figures (review 5, N4); above it, the ceiling.
+# The largest amount written in figures; above it, the ceiling.
 CEILING_USD = 1e13
 OVER_CEILING = ">$10,000,000,000,000"
 OVER_CEILING_SPENT = ">$10,000,000,000,000.00"
@@ -76,7 +76,7 @@ def _two_figures(value: float) -> tuple[float, int]:
     """``value`` (0 < value < 0.1) to two significant figures, and how many
     decimals that takes.
 
-    The same on every platform (review 5, M2): ``scale`` is an exact int,
+    The same on every platform: ``scale`` is an exact int,
     ``*`` and ``/`` are correctly rounded, and the carry check is integer
     arithmetic (it was ``rounded >= 10 ** (exponent + 1)``, a libm ``pow``).
     ``math.log10`` is the one libm call. A last-ulp error in it can only move

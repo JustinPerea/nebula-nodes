@@ -423,8 +423,8 @@ def _http_status(exc: Exception) -> tuple[int, str] | None:
 
 
 class LookupFailure(str):
-    """Why look_up has no data for a model, and which kind of why (review 13,
-    L-5): ``kind`` is "missing-key" (the provider's key isn't set),
+    """Why look_up has no data for a model, and which kind of why: ``kind`` is
+    "missing-key" (the provider's key isn't set),
     "invalid" (the model id can't be one) or "model-settings" (reading the
     provider's settings for the model failed: no answer, an error, no such
     model). The canvas says "Couldn't load the model settings for “X”." only
@@ -507,7 +507,7 @@ def _cached_row(definition_id: str, model: str) -> Mapping[str, Any] | None:
 
 
 def model_name(definition_id: str, model: str, data: Any = None) -> str:
-    """The chosen model as the person reads it (GM - Design, PR #216 r4:
+    """The chosen model as the person reads it (design, PR #216:
     "Claude Sonnet 4.5 on your OpenRouter key"): the provider's catalog name
     without its maker's prefix ("Anthropic: Claude Sonnet 4.5"), from
     ``data`` (look_up's row) or the pickers' cache; else the model id."""

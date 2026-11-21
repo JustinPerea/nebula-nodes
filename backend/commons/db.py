@@ -252,7 +252,7 @@ CREATE VIRTUAL TABLE IF NOT EXISTS search_fts USING fts5(
 ADDED_COLUMNS = (
     ("evaluation_batch", "closed", "TEXT"),       # v4
     ("evaluation_batch", "close_hash", "TEXT"),   # v4
-    # Why an analysis failed (commons/analysis_errors.py; error-copy round 3).
+    # Why an analysis failed (commons/analysis_errors.py).
     # Nullable and additive, so the schema stays version 4: a build that
     # predates it still opens the file and ignores the column, where a bump
     # would lock that build out. Rows from before read their kind from

@@ -29,20 +29,20 @@ asks this module:
   - a project deleted for good (``purged``, in a file's head, and in
     catalog-purged.json beside it, written before every commit's rename
     with its commit number and the layer before, so a damaged head doesn't
-    lose the last delete and a crash between leaves it true of a commit:
-    review 4, L-3; review 5, L-1/L-3; each layer is placed in the files'
+    lose the last delete and a crash between leaves it true of a commit; each layer is
+    placed in the files'
     order by its commit number, ``side_layers``) stays deleted when
     that file is the newest that says anything of it: a record in a newer
     file (the same id made again) wins over an older file's tombstone. File
     order decides, never a record's createdAt (a clock that ran ahead
     writes one later than the delete), except that a file whose newest date
     is older than the tombstone can't bring it back (an older damaged
-    catalog.json: review 4, L-2);
+    catalog.json);
   - a date ahead of the restore's own clock (``until``) is judged by file
-    order (review 5, M-2): in the newer file it counts as now
+    order: in the newer file it counts as now
     (FUTURE_IS_NOW: a clock that ran ahead and was corrected wrote the
     newest files), in the older it never counts (FUTURE_DROPS: a copy
-    saved ahead is never "newer": review 4, M-3); a whole record that loses
+    saved ahead is never "newer"); a whole record that loses
     to an older copy by dates is reported (``reverted``, by "dates");
   - everything else the copy holds stays, and what that decided is
     reported: a record the damage cut off goes back to the copy's version
@@ -52,22 +52,22 @@ asks this module:
 
 Every pattern matches JSON's own whitespace (space, tab, newline, return:
 ``_WS``), never ``\\s``, which also takes the bytes 0x1c-0x1f and 0x85 that
-one flipped bit makes of a structural byte (review 5, M-1).
+one flipped bit makes of a structural byte.
 
 A record's id is what the record says (its ``id``), checked against its key
-and the copy (review 2 of PR #199, M2): a bit flip in a key, an id or a
+and the copy (PR #199): a bit flip in a key, an id or a
 section name leaves the file valid JSON, and trusting the structure filed a
 record under the wrong id and called the real one deleted. In a file that
 doesn't parse, a record whose key the damage broke is found by its own
-leading ``{"id":"<hex>"`` (review 3, M-A), or, when the flip took its
-opening brace, by ``"<hex>":X"id":"<the same hex>"`` (review 4, M-2), and
-nothing nested deeper than a record is ever counted as one (review 3, L-2):
+leading ``{"id":"<hex>"``, or, when the flip took its
+opening brace, by ``"<hex>":X"id":"<the same hex>"``, and
+nothing nested deeper than a record is ever counted as one:
 its depth is counted both forward from it and from the last point known to
-sit between records, and where damage makes neither readable it isn't taken
-(review 4, L-5). A record whose key and id both changed and land one
-character off a copy record keeps the copy's version (L-5's two-flip set),
+sit between records, and where damage makes neither readable it isn't taken. A record
+whose key and id both changed and land one
+character off a copy record keeps the copy's version (a two-flip set),
 and a record in Recently deleted's group without deletedAt (a changed key)
-is never "in Recently deleted again" (review 4, L-4).
+is never "in Recently deleted again".
 
 Nothing here writes; nothing here decides wording.
 """
@@ -96,10 +96,10 @@ _JSON_SPACE = " \t\n\r"
 # A record's key in a catalog file: a project id, then the record's object.
 _ENTRY_KEY = re.compile(rf'"([a-f0-9]{{32}})"{_WS}*:{_WS}*(?=\{{)')
 # A record's own first member (make_project writes "id" first): how salvage
-# finds a record whose key the damage broke (review 3 of PR #199, M-A).
+# finds a record whose key the damage broke (PR #199).
 _RECORD_OPEN = re.compile(rf'\{{{_WS}*"id"{_WS}*:{_WS}*"([a-f0-9]{{32}})"')
-# A record whose own opening brace the damage changed (review 4 of PR #199,
-# M-2: one bit turns "{" into "z", "y", "s", "k", "[", ";", 0x7f or a byte
+# A record whose own opening brace the damage changed (PR #199:
+# one bit turns "{" into "z", "y", "s", "k", "[", ";", 0x7f or a byte
 # that isn't UTF-8, and both anchors above hang on that byte): its key, one
 # byte that isn't a brace, then its own id, the same as the key. The second
 # group is where the brace was.
@@ -141,7 +141,7 @@ def _finite(text: str) -> float:
 
 
 # json accepts NaN, Infinity and 1e999; the store writes with allow_nan=False
-# and can't write them back (review 1, L2). Read strictly, so a file holding
+# and can't write them back. Read strictly, so a file holding
 # them is damage, not a catalog every write then fails on.
 _DECODER = json.JSONDecoder(parse_constant=_reject_constant, parse_float=_finite)
 
@@ -186,7 +186,7 @@ class Salvage:
     purged: dict[str, str] = field(default_factory=dict)  # deleted for good: id -> when
     # The file parsed and both groups read whole, so a project it lacks is
     # one it doesn't hold (deleted after the copy, or by the damage itself).
-    # Never when a key, an id or a section name was damaged (review 2, M2):
+    # Never when a key, an id or a section name was damaged:
     # what it lacks is then not proven gone.
     complete: bool = False
     holds: set[str] = field(default_factory=set)  # every id it holds, when complete
@@ -197,12 +197,12 @@ class Salvage:
     misfiled: list[tuple[str | None, str, dict[str, Any], str | None]] = field(default_factory=list)
     # The group each entry sat in, where the file says ("projects", "trash"),
     # so a record is said to be back in Recently deleted only when this file
-    # had it in the list (review 4, L-4).
+    # had it in the list.
     entry_groups: dict[str, str] = field(default_factory=dict)
     # The file's commit number (its head's ``commitSeq``), when it reads.
     seq: int | None = None
     # Its ``canvasPending`` (what protects the person's canvas: written in
-    # the head since review 10 of PR #199, HIGH-1), as read, or None.
+    # the head since PR #199), as read, or None.
     pending: Any = None
 
     def take(self, entry_id: str, entry: dict[str, Any], group: str | None = None) -> bool:
@@ -252,8 +252,8 @@ def entry_ok(entry_id: Any, entry: Any) -> bool:
 def fits_group(entry: dict[str, Any], group: str | None) -> bool:
     """A record in Recently deleted's group carries when it was deleted
     (ProjectStore._check): one that lacks it there is damaged (a flipped
-    bit in the key "deletedAt"), never a record restored since (review 4 of
-    PR #199, L-4: it read as "is in Recently deleted again")."""
+    bit in the key "deletedAt"), never a record restored since (PR #199:
+    it read as "is in Recently deleted again")."""
     return group != "trash" or "deletedAt" in entry
 
 
@@ -325,7 +325,7 @@ CLEAN, FILLER, BROKEN = 0, 1, 2
 def _complete_keyed_objects(text: str, start: int, stop: int) -> list[tuple[str, int]]:
     """The outermost objects in ``text[start:stop]`` that sit after a
     project-id key and close before ``stop``: (id, where the object opens).
-    One pass, for the span a record's decode failed in (review 1, L5: each
+    One pass, for the span a record's decode failed in (each
     nested key used to be decoded again to the end of the file)."""
     keys = {match.end(): match.group(1) for match in _ENTRY_KEY.finditer(text, start, stop)}
     if not keys:
@@ -467,8 +467,7 @@ def _record_shaped(members: dict[str, Any]) -> bool:
     """Whether what was read of an object opens as a project record does:
     ``id``, ``name`` (a string) and ``createdAt`` (a dated time), first and
     in that order. A nested object that only shares a record's id and name
-    ({"id", "name", "kind"}: a reference, an output map) doesn't (review 3,
-    L-2)."""
+    ({"id", "name", "kind"}: a reference, an output map) doesn't."""
     head = list(members)[:len(_RECORD_HEAD)]
     return head == list(_RECORD_HEAD) and isinstance(members.get("name"), str) \
         and _moment(members.get("createdAt")) is not None
@@ -483,9 +482,9 @@ def _scan(text: str, start: int, stop: int | None = None, depth: int = 0) -> tup
     Stops early, with the depth so far, at -3 or where it is BROKEN, and at
     a torn page (two zeros in a row, which no single flip makes): past one
     the bytes are another page's, so nothing after it can be counted, and
-    what was read up to it is FILLER (fix round 4's run: a torn record after
-    a whole one read its leftover text as broken, so the whole record looked
-    nested and was lost)."""
+    what was read up to it is FILLER (before this, a test run showed a torn
+    record after a whole one read its leftover text as broken, so the whole
+    record looked nested and was lost)."""
     index = start
     limit = len(text) if stop is None else stop
     torn = text.find("\x00\x00", start, limit)
@@ -527,9 +526,9 @@ def _depth_after(text: str, start: int) -> bool | None:
     ends. A cut file closes fewer, so it never makes a record look nested.
     None when it can't be told: text JSON doesn't allow between tokens comes
     first (a broken quote after the object reads every brace that closes it
-    as text, and the text around it as structure: review 4 of PR #199, L-5).
+    as text, and the text around it as structure; PR #199).
     A torn page's zeros are read past, as before. ``text[start]`` may be the
-    byte that took a record's opening brace (M-2): the scan then starts
+    byte that took a record's opening brace: the scan then starts
     inside it."""
     opened = text.startswith(("{", "["), start)
     depth, state, _open_string = _scan(text, start, depth=0) if opened else _scan(text, start + 1, depth=1)
@@ -560,7 +559,7 @@ def _at_record_place(text: str, start: int, anchors: list[int]) -> bool:
     point before it known to be between records (_depth_before). Damage on
     one side of it can throw one count, never both (a single flip); when
     one can't be read, the other decides; when neither can, it isn't taken
-    (review 4 of PR #199, L-5: a broken quote after a whole record-shaped
+    (PR #199: a broken quote after a whole record-shaped
     object nested in a record made the forward count call it a record)."""
     after = _depth_after(text, start)
     if after is False:
@@ -588,11 +587,11 @@ _JSON_OUTSIDE = frozenset(' \t\r\n{}[]:,-+.0123456789eEtrufalsn')
 def _projects_closed_before_damage(text: str) -> bool:
     """Whether ``text`` (a damaged catalog file) shows its "projects" group
     opened and closed inside the top-level object before its damage, so the
-    damage cut no project record off (GM r19 on PR #199, 6a). A bracket and
+    damage cut no project record off (design, PR #199). A bracket and
     string tracker reads up to the first byte JSON doesn't allow there (or
     the end). What comes after the group closed doesn't count: a cut trash
-    group isn't in the notice (GM: lost Recently deleted entries are logged,
-    not in the notice). False for anything else (no top-level object, a cut
+    group isn't in the notice (design: lost Recently deleted entries are logged, not in
+    the notice). False for anything else (no top-level object, a cut
     inside the group or one of its records, the group key never seen or
     damaged): unsure is False."""
     index = len(text) - len(text.lstrip())
@@ -643,14 +642,14 @@ def _projects_closed_before_damage(text: str) -> bool:
 
 def records_unread(raw: bytes | None, found: Salvage | None, read_whole: bool) -> bool:
     """Whether the damaged catalog.json held project records Nebula couldn't
-    read (GM r19 on PR #199, 6a): the restore notice's "changes made after
+    read (design, PR #199): the restore notice's "changes made after
     that copy may be missing" is true only then. The rule: read whole,
     False. Otherwise True when a record that failed sat in the projects
     group or in a group that can't be told, or when the "projects" member
     wasn't seen opened and closed at depth 1 before the damage
     (_projects_closed_before_damage); else False. A cut trash group, or any
     damage after the projects group closed, is False: lost Recently deleted
-    entries are logged, not in the notice (GM)."""
+    entries are logged, not in the notice (design)."""
     if read_whole:
         return False
     if raw is None or found is None:
@@ -663,7 +662,7 @@ def records_unread(raw: bytes | None, found: Salvage | None, read_whole: bool) -
 def salvage(raw: bytes, parsed: Any = _UNKNOWN) -> Salvage:
     """What ``raw`` (a damaged catalog file) still holds. ``parsed``: what
     the store already decoded it to, or None when it already failed to
-    decode, so it isn't decoded twice (review 1, L5)."""
+    decode, so it isn't decoded twice."""
     found = Salvage()
     text = raw.decode("utf-8", errors="replace")
     whole = parsed
@@ -681,7 +680,7 @@ def salvage(raw: bytes, parsed: Any = _UNKNOWN) -> Salvage:
     opening = _SPACE.match(text).end()
     # Points known to sit between two records in a group (a group's opening,
     # a record's key where one belongs, the end of a record taken whole):
-    # where _at_record_place counts a candidate's depth from (review 4, L-5).
+    # where _at_record_place counts a candidate's depth from.
     anchors: list[int] = []
     anchor_groups: dict[int, str | None] = {}  # the group each anchor sits in, where known
     if text.startswith("{", opening):
@@ -727,8 +726,8 @@ def salvage(raw: bytes, parsed: Any = _UNKNOWN) -> Salvage:
         spans.append((match.end(), end if end is not None else max(stopped, match.end() + 1)))
         nested = not expected and end is not None and not _at_record_place(text, match.end(), anchors)
         if nested:
-            # Whole, but deeper than a record sits: an object a record holds
-            # (review 3, L-2), whatever its members say.
+            # Whole, but deeper than a record sits: an object a record holds,
+            # whatever its members say.
             position = end
             continue
         if not expected and members.get("id") == entry_id and _record_shaped(members):
@@ -736,10 +735,10 @@ def salvage(raw: bytes, parsed: Any = _UNKNOWN) -> Salvage:
             # the damage cut), but its own members do: its id is its key and
             # it opens as a record does (id, name, createdAt). An object
             # nested in a record that shares only an id and a name (an output
-            # map, a reference) is not counted (review 3, L-2; fix round 2's
-            # live check: a torn open project after another torn record was
-            # lost, and its canvas filed nameless). Its group is told only by
-            # its own deletedAt; reconcile reads None as "can't be told".
+            # map, a reference) is not counted (a live check found a torn open
+            # project after another torn record was lost, and its canvas filed
+            # nameless). Its group is told only by its own deletedAt; reconcile
+            # reads None as "can't be told".
             expected, group = True, ("trash" if isinstance(members.get("deletedAt"), str) else None)
         # A record that lost its closing brace holds the records after it as
         # its own members (a project id for a key): they are records.
@@ -749,7 +748,7 @@ def salvage(raw: bytes, parsed: Any = _UNKNOWN) -> Salvage:
                     or (isinstance(inner, dict) and _misfiled(found, inner_id, inner, None)):
                 del members[inner_id]
         entry = members if end is not None else None
-        # Where the structure puts it, for Recently deleted's rule (L-4).
+        # Where the structure puts it, for Recently deleted's rule.
         placed = group if group is not None else _group_at(text, match.start(), anchors, anchor_groups)
         if entry is not None and ((entry_ok(entry_id, entry) and fits_group(entry, placed)
                                    and found.take(entry_id, entry, group))
@@ -802,7 +801,7 @@ def _salvage_by_own_id(found: Salvage, text: str, read_from: set[int], spans: li
     quote, colon or brace, or a hex digit turned into a control byte, a
     quote or a byte that isn't UTF-8, makes the file fail to parse and hides
     the key, while the record behind it is whole and holds its own id
-    (review 3 of PR #199, M-A: about a quarter of the flips in a changed
+    (PR #199: about a quarter of the flips in a changed
     record's key reverted it, and no row said so). Each ``{"id":"<hex>"``
     the key scan didn't read from or inside, whose id no record has yet:
     - whole and a record (entry_ok) no deeper than a record sits: taken by
@@ -810,7 +809,7 @@ def _salvage_by_own_id(found: Salvage, text: str, read_from: set[int], spans: li
     - cut, but opening as a record does (id, name, createdAt): reported as
       a record the damage cut, its group told only by its deletedAt.
     And each ``"<hex>":X"id":"<the same hex>"``, a record whose opening
-    brace the damage changed into X (review 4, M-2): read as if the brace
+    brace the damage changed into X: read as if the brace
     were there, under its key (key and id agree), by the same rules.
     Either is a record only where both depth counts allow (_at_record_place).
     Anything else (an object a record holds) is not a record."""
@@ -837,7 +836,7 @@ def _salvage_by_own_id(found: Salvage, text: str, read_from: set[int], spans: li
             placed = _group_at(text, start, anchors, anchor_groups)
             if not fits_group(members, placed):
                 # In Recently deleted's group without deletedAt: a key the
-                # damage changed ("d%letedAt"), never a restore (review 4, L-4).
+                # damage changed ("d%letedAt"), never a restore.
                 found.failed[own] = "invalid"
                 found.groups[own] = placed
                 found.partial[own] = _scalars(members)
@@ -873,15 +872,15 @@ def _moment(value: Any) -> datetime | None:
 
 
 # What a date ahead of the restore's clock (``until``) counts as, by file
-# order (review 5 of PR #199, M-2). A clock that ran ahead and was then
+# order (PR #199). A clock that ran ahead and was then
 # corrected leaves future dates in whichever files were written meanwhile,
 # and those are the newest files, not only an older copy.
 # - FUTURE_DROPS, in the older file of a comparison (.bak.1 against .bak, a
 #   copy's record against the damaged file's): left out, so a date from the
-#   future never makes the older file win (review 4, M-3);
+#   future never makes the older file win;
 # - FUTURE_IS_NOW, in the newer file (catalog.json, then .bak): it counts as
 #   ``until``, so the newer file's change made while the clock was ahead is
-#   never older than the older file's (review 5's c1 and c2).
+#   never older than the older file's.
 FUTURE_DROPS, FUTURE_IS_NOW = "drop", "now"
 
 
@@ -906,9 +905,8 @@ def catalog_freshness(catalog: dict[str, Any], until: datetime | None = None,
                       future: str = FUTURE_DROPS) -> datetime | None:
     """When a catalog last changed, by what it holds: the latest date on any
     record, or on a delete for good (ProjectStore._restore picks the newest
-    copy by it, not by its name or mtime: review 2, L3), a date after
-    ``until`` counted as ``future`` says (a clock that ran ahead: review 4,
-    M-3; review 5, M-2)."""
+    copy by it, not by its name or mtime), a date after
+    ``until`` counted as ``future`` says (a clock that ran ahead)."""
     moments = [freshness(entry, until, future) for section in ("projects", "trash")
                for entry in (catalog.get(section) or {}).values() if isinstance(entry, dict)]
     moments.extend(_until(_moment(at), until, future) for at in purged_map(catalog.get("purged")).values())
@@ -929,7 +927,7 @@ def salvage_freshness(found: Salvage, until: datetime | None = None, future: str
 def newer(older_files: dict[str, Any], newer_files: dict[str, Any], until: datetime | None = None) -> bool:
     """Whether the record from the older file (a copy) is strictly newer by
     its dates than the newer file's (the damaged file): the older file's
-    future dates are left out, the newer file's count as now (M-2)."""
+    future dates are left out, the newer file's count as now."""
     found = freshness(older_files, until, FUTURE_DROPS)
     kept = freshness(newer_files, until, FUTURE_IS_NOW)
     return found is not None and kept is not None and found > kept
@@ -939,7 +937,7 @@ def newer_copy(newer_copy_catalog: dict[str, Any], older_copy_catalog: dict[str,
                until: datetime | None = None) -> bool:
     """Whether .bak.1 (``older_copy_catalog``, older by construction) holds
     a later catalog than .bak by the dates: its own future dates left out,
-    .bak's counted as now (review 5, M-2: .bak written while the clock ran
+    .bak's counted as now (.bak written while the clock ran
     ahead lost to .bak.1, and the next commit erased a project only .bak
     held). Commit order decides beside it (ProjectStore._restore)."""
     older = catalog_freshness(older_copy_catalog, until, FUTURE_DROPS)
@@ -953,7 +951,7 @@ def _unchanged(partial: dict[str, Any], current: dict[str, Any]) -> bool:
     record has matches. Every change Nebula makes to a project moves one of
     them (refresh_metadata, an open, a move to or from Recently deleted),
     so a key the copy's record lacks is a key name the damage changed
-    ("deletedQt": review 4, L-4), not a change."""
+    ("deletedQt"), not a change."""
     if "updatedAt" not in partial or "lastOpenedAt" not in partial:
         return False
     return all(current.get(key) == value for key, value in partial.items() if key in current)
@@ -976,7 +974,7 @@ class Reconciled:
     # the key the copy agrees with when their id was damaged: {id, key}.
     rekeyed: list[dict[str, Any]] = field(default_factory=list)
     # catalog-purged.json was older than a file that decided ids it names
-    # (its write failed, or a crash: review 5, L-1).
+    # (its write failed, or a crash).
     purged_file_behind: bool = False
 
 
@@ -1008,7 +1006,7 @@ def _resolve_misfiled(found: Salvage, copy_ids: set[str]) -> list[dict[str, Any]
             if damaged is not None:
                 # Neither id is the copy's, but one is a single character
                 # off a copy record the damage left unread: the damage hit
-                # both its key and its id (review 4, L-5's @2896/@2846 filed
+                # both its key and its id (the case that filed
                 # "Old" under a new id as a project added back). Which bytes
                 # are its own can't be told, so it keeps the copy's version.
                 found.failed.setdefault(damaged, "invalid")
@@ -1067,7 +1065,7 @@ def _record_name(entry_id: str, salvages: list[Salvage], *places: dict[str, Any]
 def _made_after(entry_id: str, at: str, salvages: list[Salvage], *places: dict[str, Any]) -> bool:
     """Whether some record of ``entry_id`` says it was made after its
     tombstone's time ``at``. Never decides anything (a clock that ran ahead
-    writes such a createdAt: review 3, L-3); it only marks the row of a
+    writes such a createdAt); it only marks the row of a
     tombstone that drops such a record (``createdAfterDelete``), so the
     skew is on record."""
     purged_at = _moment(at)
@@ -1091,13 +1089,13 @@ def _commit_of(value: Any) -> int | None:
 
 def commit_check(seq: int) -> int:
     """The check written beside a commit number (``commitCheck``): a CRC-32
-    of it, so a flipped digit reads as damage (review 6 of PR #199, L-5)."""
+    of it, so a flipped digit reads as damage (PR #199)."""
     return zlib.crc32(f"nebula-commit:{seq}".encode("ascii"))
 
 
 def proven_commit(holder: Any, key: str = "commitSeq") -> int | None:
     """``holder[key]`` as a commit number only when its ``commitCheck`` is
-    that number's (review 6 of PR #199, L-5). A number with no check, or a
+    that number's (PR #199). A number with no check, or a
     check that doesn't match (a flipped digit in either), is unproven: None,
     as for a file from before commits were numbered, so it never moves the
     side file's tombstones after that file, and never picks a copy as the
@@ -1125,11 +1123,11 @@ def reconcile(base: dict[str, Any], salvages: Iterable[Salvage], *, max_projects
     record past either is left out and reported (it stays in the damaged
     file). ``open_project``: the project the live canvas is (main, from
     state.json), None for no project's, UNKNOWN when it isn't recorded.
-    ``until``: the restore's clock; a date after it decides nothing (review
-    4, M-3). ``side_purged``: catalog-purged.json's tombstones, the latest
-    commit's (review 4, L-3), or ``side_layers``, its layers as
-    (the commit each is true of, its tombstones), newest first (review 5,
-    L-1 and L-3). A layer whose commit is unknown (a side file from before
+    ``until``: the restore's clock; a date after it decides nothing. ``side_purged``:
+    catalog-purged.json's tombstones, the latest
+    commit's, or ``side_layers``, its layers as
+    (the commit each is true of, its tombstones), newest first. A layer whose commit is
+    unknown (a side file from before
     commits were numbered) goes right after the damaged catalog.json
     (``side_index`` 1; 0 when catalog.json is missing, so ``salvages`` are
     all damaged copies) and before every copy; a numbered one goes there
@@ -1157,15 +1155,15 @@ def reconcile(base: dict[str, Any], salvages: Iterable[Salvage], *, max_projects
     # has the project. Decided by file order alone, newest first (the
     # damaged ones, then the copy): the newest file that says anything of
     # an id decides it. A record in a newer file is the same id made again
-    # (a recover retry after the delete, review 2's L1): every commit that
+    # (a recover retry after the delete): every commit that
     # makes a project follows the delete it comes after, so its file is
     # newer than the tombstone's. Never by comparing a record's createdAt
     # with the tombstone's time: a clock that ran ahead when the project was
     # made writes a createdAt after a later delete, and brought a project
-    # deleted for good back with no row (review 3, L-3). Within one file a
+    # deleted for good back with no row. Within one file a
     # record wins (a commit never holds both).
     #
-    # One exception keeps file order honest (review 4, L-2): a file whose own
+    # One exception keeps file order honest: a file whose own
     # newest date is older than a later file's tombstone for an id predates
     # that delete (a catalog.json a sync tool or a one-file restore rolled
     # back), so its record of the id doesn't decide; the tombstone does.
@@ -1173,8 +1171,7 @@ def reconcile(base: dict[str, Any], salvages: Iterable[Salvage], *, max_projects
     # delete (a recover retry) is newer than it, so it still wins.
     #
     # A file's own newest date counts a future date as now (it is the newer
-    # file of that comparison), a later file's tombstone time leaves one out
-    # (review 5, M-2).
+    # file of that comparison), a later file's tombstone time leaves one out.
     layers = list(side_layers) if side_layers is not None else [(None, side_purged or {})]
     layers = [(commit, purged_map(tombstones)) for commit, tombstones in layers]
     layers = [(commit, tombstones) for commit, tombstones in layers if tombstones]
@@ -1296,7 +1293,7 @@ def reconcile(base: dict[str, Any], salvages: Iterable[Salvage], *, max_projects
                 came_back.append({"id": entry_id, "name": current["name"], "how": "deleted",
                                   "trashed": trashed(current)})
     # Which project is open. Never one the live canvas isn't: the next
-    # listing saves the canvas into whichever is open (H1 of review 1).
+    # listing saves the canvas into whichever is open.
     # - The canvas says which project it is: that one, if it came back live.
     # - It isn't recorded: the damaged file's, when its head says one and it
     #   came back live (the canvas is the latest commit's open project).
@@ -1326,7 +1323,7 @@ def restore_said_more(record: Any) -> bool:
     project is missing": the frontend's ``saidAtFirst``
     (components/projects/catalogRestoreCopy.ts), as the restore found it, so
     agents' notes (main._catalog_restore_note, cli.formatter) say "no project
-    is missing" only under the person's rule (GM r22 on PR #199, 1): projects
+    is missing" only under the person's rule (design, PR #199, 1): projects
     added back, left out (at the limit or not), reverted (not the live
     canvas's or a deleted one's), back after a delete or in Recently deleted
     again, or a canvas filed or waiting on the limit."""

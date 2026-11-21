@@ -134,7 +134,7 @@ class NodeErrors:
 
     def renumber(self, project_id: str | None, mapping: Mapping[str, str]) -> None:
         """The project's nodes got new ids ({old: new}; a renumber of tab-local
-        ids, PR #199 review 18 handoff-reopen LOW-2): their errors move with
+        ids, PR #199): their errors move with
         them. An error already kept under a new id stays."""
         key = _project_key(project_id)
         errors = self._projects.get(key)
@@ -166,7 +166,7 @@ class NodeErrors:
             return
         entry = {"error": _clip(message)}
         # The pre-call check refused the run (record_validation): the card's
-        # heading is "Nebula couldn’t start the run." (GM, PR #203 r32), as
+        # heading is "Nebula couldn’t start the run." (design, PR #203), as
         # the Agent log's. Card-only, like the person line.
         if not_started:
             entry["notStarted"] = "1"
@@ -175,12 +175,12 @@ class NodeErrors:
         # Card-only, kept so a reload and a project switch draw it the same.
         if missing_key:
             entry["missingKey"] = "1"
-        # The person's line (error copy round 3c): the card shows it, agents
+        # The person's line: the card shows it, agents
         # never get it from here (get() is the specific text, word for word).
         if person:
             entry["person"] = _clip(person)
             # Its line was written for a provider's answer: the card keeps the
-            # text behind Details beside it (error copy round 3d).
+            # text behind Details beside it.
             if provider_text:
                 entry["providerText"] = "1"
         hint = _clip(friendly) if friendly else ""
@@ -189,7 +189,7 @@ class NodeErrors:
             entry["hint"] = hint
         if category:
             entry["category"] = _clip(category)
-        # Who the run called (round 3f): the card's general line names them.
+        # Who the run called: the card's general line names them.
         # Card-only, like the person line: get() never returns it.
         if provider:
             entry["provider"] = _clip(provider)
@@ -203,10 +203,10 @@ class NodeErrors:
     def record_validation(self, errors: Iterable[Any]) -> None:
         """A pre-call check's errors (ValidationErrorDetail), several per node joined in order.
 
-        The card's line (error copy round 3e) is their `person` lines joined
+        The card's line is their `person` lines joined
         (execution.person_line.joined_lines); a check with none (only agents
         or a damaged saved graph reach it) is kept as category "unknown", so
-        after a reload the card shows GM's general line with the text behind
+        after a reload the card shows the design's general line with the text behind
         Details, as it did live. get() is the specific text, as before."""
         from execution.person_line import joined_lines
 
@@ -265,9 +265,9 @@ class NodeErrors:
         entry = self._errors.get(node_id)
         if not entry:
             return None
-        # An entry saved before round 3e's validation lines (no category, no
+        # An entry saved before the validation lines (no category, no
         # person line) is a check Nebula wrote for agents, so the card reads
-        # GM's general line with the text behind Details (round 3f), not the
+        # the design's general line with the text behind Details, not the
         # raw text as if it were a line for the person.
         category = entry.get("category") or (None if entry.get("person") else "unknown")
         return {"state": "error", "error": entry["error"],

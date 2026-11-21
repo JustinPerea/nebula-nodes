@@ -523,7 +523,7 @@ class _Batch:
         resized = layout.resized(p, weight, aspect)
         changed = any([self.set(p, key, resized[key]) for key in ("weight", "w", "h")])
         # A steering image weighs what its largest card shows (plan section
-        # 4.3); weight 0 stays until the image is used again (Q8).
+        # 4.3); weight 0 stays until the image is used again.
         if img.get("weight", 0) > 0:
             changed |= self.set(img, "weight", max(q["weight"] for q in layout.cards_of(img)))
         return {"changed": changed}
@@ -703,7 +703,7 @@ class _Batch:
                 seen.add(id(img))
                 p["frameId"] = frame_id
         else:
-            # Drawing a frame takes in the loose cards wholly inside it (Q6).
+            # Drawing a frame takes in the loose cards wholly inside it.
             for img in self.images:
                 for p in layout.cards_of(img):
                     card = layout.card_rect(p)
@@ -1433,7 +1433,7 @@ def journal_entry(changes: dict[str, Any], before: dict[str, Any], after: dict[s
         return image_words([n for n in (number(i) for i in ids) if n])
 
     if kind in ("added", "removed"):
-        # The names rule (GM, slice 3b): up to 3 are listed, "added images 4, 5 and
+        # The names rule (design): up to 3 are listed, "added images 4, 5 and
         # 6 to “Dusk”"; from 4 a count, "added 4 images to “Dusk”".
         what = (image_words(shown) if 1 <= len(shown) <= MAX_NAMED_IMAGES
                 else image_count_words(len(shown) or len(refs)))
@@ -1526,7 +1526,7 @@ def fields_entry(changes: Mapping[str, Any], before: Mapping[str, Any],
     """The ``board.fields`` journal event for a change (``diff``'s): the
     board fields that changed, by name, or None when none did. Never a
     value, so no Direction, Avoid or notes text, no colour, no strength and
-    no switch's on or off (Justin's Q91: "the field names but none of your
+    no switch's on or off (Justin: "the field names but none of your
     text"): "changed Direction and the Avoid list on board Dusk"."""
     fields = [key for key in JOURNAL_FIELDS if key in (changes.get("fields") or ())]
     if not fields:

@@ -1,4 +1,4 @@
-"""Where a moodboard's cards sit (the moodboard canvas, item 6).
+"""Where a moodboard's cards sit (the moodboard canvas).
 
 Each image carries ``placements``: one card per placement, at absolute flow
 pixels (docs/moodboard-canvas-plan.md section 4.2). A card's area is its
@@ -30,9 +30,9 @@ import re
 from typing import Any, Iterable
 from uuid import uuid4
 
-# Full weight is a 480x270 card (Q1). Weight is area / FULL_AREA, capped at 1.
+# Full weight is a 480x270 card. Weight is area / FULL_AREA, capped at 1.
 FULL_AREA = 129_600
-# The smallest card: weight 0.05, today's slider step (Q3). Below that is Set aside.
+# The smallest card: weight 0.05, today's slider step. Below that is Set aside.
 MIN_WEIGHT = 0.05
 # Cards with no header to read: 4:3.
 DEFAULT_ASPECT = 4 / 3
@@ -101,7 +101,7 @@ def _finite(value: Any) -> float | None:
 def card_weight(image_weight: Any) -> float:
     """The card weight an image is laid out at when nothing says otherwise:
     its own weight, at least MIN_WEIGHT. Weight 0 (set aside) shows at full
-    size (Q8), so it doesn't shrink to nothing."""
+    size, so it doesn't shrink to nothing."""
     weight = _finite(image_weight)
     if weight is None or weight <= 0:
         return 1.0

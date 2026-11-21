@@ -21,7 +21,7 @@ from typing import Any, Callable
 from nebula_api import NebulaAPIError, never_reached, offline_read_only
 
 _STEP_KEYS = frozenset({"note", "steps"})
-# `nodeIds` (with `pending: false`) makes the agent's placeholders ready (Q125 item 3).
+# `nodeIds` (with `pending: false`) makes the agent's placeholders ready.
 _EDIT_KEYS = ("nodes", "edges", "params", "rename", "move", "remove", "unwire", "nodeIds")
 
 
@@ -131,7 +131,7 @@ def resolve_step(step: dict[str, Any], id_map: dict[str, str]) -> dict[str, Any]
 def stop_reason(exc: NebulaAPIError, base_url: str, *, reread: str | None = None) -> str:
     """Why a step didn't land, in words the caller can act on. `reread`: the
     caller's way to read the canvas again; with it, a Nebula never reached
-    also says the person's canvas is read-only meanwhile (round 14 of PR #114)."""
+    also says the person's canvas is read-only meanwhile (PR #114)."""
     if exc.kind == "connect":
         reason = f"cannot connect to Nebula backend at {base_url}"
         return f"{reason}. {offline_read_only(reread)}" if reread and never_reached(exc) else reason

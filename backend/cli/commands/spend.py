@@ -10,8 +10,8 @@ from ..formatter import daily_total_line
 
 def _usd(value: Any) -> str:
     """To the cent, as Settings shows it (services/money.py usd_spent, the
-    one formatter; review 2, L4). A non-zero amount that would round to
-    "$0.00" is "<$0.01": "$0" only ever means nothing (GM, PR #198 r1)."""
+    one formatter). A non-zero amount that would round to
+    "$0.00" is "<$0.01": "$0" only ever means nothing (design, PR #198)."""
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return "no limit"
     return money.usd_spent(value)

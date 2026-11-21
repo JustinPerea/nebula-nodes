@@ -13,10 +13,10 @@ MAX_COLLECTION_ITEMS = 20
 MAX_NODE_ID_LENGTH = 128
 # A Nebula node id (services/cli_graph.BACKEND_NODE_ID): "n" and ASCII digits.
 _BACKEND_NODE_ID = re.compile(r"n[0-9]+")
-# Said where a selection holds nodes only the person's tab has (PR #199
-# round 18, GM r26): a duplicated or pasted node keeps a tab-local id until
+# Said where a selection holds nodes only the person's tab has (PR #199,
+# design): a duplicated or pasted node keeps a tab-local id until
 # the project is opened again, so agents get no id to act on. "also" only
-# beside nodes agents can see (round 19, review 17 drops-locks-ui MEDIUM-1).
+# beside nodes agents can see.
 TAB_ONLY_NOTE = ("The person {also}selected {count} only their tab has (a duplicate or a paste): "
                  "it has no id agents can use until the project is opened again.")
 _SECRET_KEY_RE = re.compile(
@@ -92,7 +92,7 @@ class SelectionContextStore:
     def __init__(self) -> None:
         self._node_ids: list[str] = []
         # How many of the published ids were tab-local (not ``nN``): left out
-        # of every read, counted only (GM r26).
+        # of every read, counted only (design).
         self._tab_only = 0
         self._updated_at = _utc_now()
         # While this says so, every read answers no selection
@@ -135,7 +135,7 @@ class SelectionContextStore:
                 continue
             seen.add(node_id)
             if not _BACKEND_NODE_ID.fullmatch(node_id):
-                # A node only the person's tab has (GM r26): agents are never
+                # A node only the person's tab has (design): agents are never
                 # offered its id, as a selected node or as a stale one.
                 tab_only += 1
                 continue
@@ -251,8 +251,7 @@ def selection_tab_only_note(read: dict[str, Any]) -> str:
 def tab_only_fields(snapshot: dict[str, Any]) -> dict[str, Any]:
     """A selection read's ``tabOnlyCount`` and ``tabOnlyNote``, when it has
     them, for every other surface that shows the selection to agents
-    (start_here, look_at_canvas, the selection event; review 17 agents-docs
-    LOW-1 and LOW-2)."""
+    (start_here, look_at_canvas, the selection event)."""
     return {key: snapshot[key] for key in ("tabOnlyCount", "tabOnlyNote") if snapshot.get(key)}
 
 

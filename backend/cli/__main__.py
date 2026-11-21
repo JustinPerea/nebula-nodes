@@ -24,7 +24,7 @@ def _positive_int(text: str) -> int:
 
 
 # `nebula --help`'s closing section: how an orchestrator gives each lane its
-# own cursor (GM - Design, PR #211 r1). The same text is in skills/nebula and
+# own cursor (design, PR #211). The same text is in skills/nebula and
 # docs/MCP-SETUP.md, "Agent cursors".
 CURSOR_ENV_HELP = """\
 your cursor on the person's canvas:
@@ -43,7 +43,7 @@ your cursor on the person's canvas:
 
 def _cursor_action(value: str) -> str:
     """`nebula point --action`: one of the ten, else the same line the
-    backend and MCP give (GM - Design, PR #211 r2)."""
+    backend and MCP give (design, PR #211)."""
     if value not in CURSOR_ACTIONS:
         raise argparse.ArgumentTypeError(cursor_action_refusal(value))
     return value
@@ -458,7 +458,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("proposals", help="List proposals waiting for the person")
 
-    # Questions for the person (Q125 item 1): agents ask, only the person answers, in Nebula.
+    # Questions for the person: agents ask, only the person answers, in Nebula.
     from .commands.questions import add_ask_arguments
 
     ask_p = sub.add_parser(
@@ -661,7 +661,7 @@ def build_parser() -> argparse.ArgumentParser:
     b.add_argument("--region")
     b.add_argument("--brand")
     csub.add_parser("status", help="Worker, meter and queue status")
-    # Twins of the commons_* reads and of curation proposals (Q63 b, U13).
+    # Twins of the commons_* reads and of curation proposals.
     cl = csub.add_parser("collections", help="The collections in your scope (add takes a collection id)")
     cl.add_argument("--brand")
     bw = csub.add_parser("borrowings", help="Recorded borrowings in your scope")

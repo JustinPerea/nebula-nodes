@@ -93,7 +93,7 @@ class RunReports:
             node["error"] = event.friendly or event.error or "failed"
             if event.proposal_needed:
                 # A stop only the person may lift (Idol's Hugging Face call):
-                # the agent's words whole, and marked (review 19, NIT-4).
+                # the agent's words whole, and marked.
                 node["error"], node["stopped"] = event.error or "stopped", True
 
     def _run(self, run_id: str) -> dict[str, Any]:

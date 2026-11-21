@@ -1,6 +1,6 @@
-"""GM's line for a provider's answer, from one shared table (error copy round 3d).
+"""The design's line for a provider's answer, from one shared table.
 
-GM - Design's copy for a provider's HTTP failure, one table for every handler:
+The design's copy for a provider's HTTP failure, one table for every handler:
 
 - 401/403: "{Provider} didn't accept your API key. Check it in Settings, then
   run the node again."
@@ -11,7 +11,7 @@ GM - Design's copy for a provider's HTTP failure, one table for every handler:
 - empty or malformed answers: "{Provider} didn't return a result. Run the
   node again."
 
-GM: "Raw provider text stays behind Details in every case." So the card shows
+Design: "Raw provider text stays behind Details in every case." So the card shows
 the line and keeps the exception text behind Details (the event's
 ``provider_text``); agents, MCP, the run record and the journal read the
 exception text word for word, as before.
@@ -23,7 +23,7 @@ params and the keys, so it can name the provider the run actually called:
 
 1. A handler's own person line always wins (execution/person_line.py).
 2. Moderation keeps its own card: no line for a blocked run.
-3. The status, from the call, never from the text (round 3d, part 2): the
+3. The status, from the call, never from the text: the
    status a handler attached where the provider's own API answered
    (person_line.with_api_status), else a typed provider error's own
    ``status_code`` or ``status`` (BFLError, BytePlusError, QuiverError,
@@ -53,7 +53,7 @@ params and the keys, so it can name the provider the run actually called:
    today's line.
 
 A failure whose status or provider Nebula can't tell keeps today's line: the
-classifier's, or GM's general one.
+classifier's, or the design's general one.
 """
 from __future__ import annotations
 
@@ -72,10 +72,10 @@ class CardLine(NamedTuple):
     provider's own words."""
     person: str | None
     provider_text: bool
-    # Who the run called, from the route it took (round 3f): GM's general
+    # Who the run called, from the route it took: the design's general
     # line names them ("Details shows what {Provider} said."). Never read
     # from the error's text. None for a node that calls no provider, or a
-    # failure that provider never answered (card_line, review of round 3f).
+    # failure that provider never answered (card_line).
     provider: str | None = None
 
 
@@ -132,7 +132,7 @@ def _auth_error_type(exc: BaseException) -> bool:
 
 
 def failure_kind(exc: BaseException) -> str | None:
-    """Which of GM's lines the failure takes (person_line.STATUS_LINES), or None."""
+    """Which of the design's lines the failure takes (person_line.STATUS_LINES), or None."""
     import httpx
 
     if isinstance(exc, httpx.HTTPStatusError):
@@ -184,7 +184,7 @@ def _route(definition_id: str, params: Mapping[str, Any], api_keys: Mapping[str,
 
 def provider_line(exc: BaseException, definition_id: str, params: Mapping[str, Any],
                   api_keys: Mapping[str, Any]) -> str | None:
-    """GM's line for a provider's answer, naming the provider the run called;
+    """The design's line for a provider's answer, naming the provider the run called;
     None when Nebula can't tell the failure or the provider."""
     kind = failure_kind(exc)
     if kind is None:
@@ -241,7 +241,7 @@ def provider_answered(exc: BaseException) -> bool:
     """`exc` is about an answer the provider gave this run, by the facts the
     raise attached, never its text: an API status (with_api_status, or a
     typed provider error's own), a terminal job failure (as_job_failure), the
-    provider's own words (with_provider_line), or one of GM's status-table
+    provider's own words (with_provider_line), or one of the design's status-table
     kinds. A plain exception Nebula raised before sending (a saved model the
     node doesn't list, a local file, a handler bug) carries none of these,
     and neither does a download's own HTTPStatusError (module docstring, 3)."""
@@ -253,7 +253,7 @@ def card_line(exc: BaseException, definition_id: str, params: Mapping[str, Any] 
               api_keys: Mapping[str, Any] | None) -> CardLine:
     """The card's line for a run error: the handler's own, else the table's
     for a provider's answer (with its text behind Details), else none; and
-    who the run called, for GM's general line. GM: "Details shows what
+    who the run called, for the design's general line. Design: "Details shows what
     {Provider} said" is for a failure that names a provider, so the route's
     provider goes on the card only when that provider answered
     (provider_answered); a failure before sending reads "open Details"."""

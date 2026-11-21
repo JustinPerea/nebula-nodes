@@ -1,12 +1,12 @@
 """Why a Commons analysis failed, as a kind the person's UI can say in words.
 
-GM - Design, error-copy round 3: heading "Couldn't analyze this reference."
+Design: heading "Couldn't analyze this reference."
 over a reason mapped from last_error's kind:
   - network, timeout or provider 5xx -> "The analysis service didn't respond."  (UNAVAILABLE)
   - the model refused or couldn't read the image -> "The analyzer couldn't read this image."  (UNREADABLE)
   - anything else -> "Something went wrong during analysis."  (OTHER)
   - no pixel of it is seen, so it was never sent -> "This image is too
-    transparent to analyze."  (TRANSPARENT; neutral, not an error: GM r5 on #208)
+    transparent to analyze."  (TRANSPARENT; neutral, not an error: design, PR #208)
 
 The kind is decided where the analysis fails (worker.py, reader.py,
 intake.py's video probe) and stored next to last_error in

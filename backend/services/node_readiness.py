@@ -229,7 +229,7 @@ def instance_access(
     return KEY
 
 
-# The row by name, as MCP's sign-in hint does (GM, PR #203 r25 item 2).
+# The row by name, as MCP's sign-in hint does (design, PR #203).
 KREA_SIGN_IN = "needs the Krea account signed in (Settings > Providers > Krea)"
 
 
@@ -277,8 +277,8 @@ def instance_missing_line(
     krea_signed_in: bool = False, definitions: Mapping[str, Mapping[str, Any]] | None = None,
     wired: Any = (), name: str | None = None,
 ) -> str | None:
-    """instance_missing in words for the person (error copy round 3f): the
-    node by its name in curly quotes (GM, PR #203 r20 item 3), a key by its
+    """instance_missing in words for the person: the
+    node by its name in curly quotes (design, PR #203), a key by its
     provider, never an env-var name or a ref ("“GPT Image 2” needs your
     OpenAI API key. Add it in Settings."). The proposal bar and layer show
     it; agents keep instance_missing's text. None when the node can run."""
@@ -303,8 +303,7 @@ def instance_missing_reason(
 ) -> Any:
     """Why the node can't run here, as person_line.NOT_READY_PREDICATES says
     it for one node and for several (a NotReadyReason), or None when it can
-    run. The bar's lines and the Agent Log merge nodes by it (GM, PR #203
-    r28; review 14, copy LOW-1)."""
+    run. The bar's lines and the Agent Log merge nodes by it (design, PR #203)."""
     from execution.person_line import NotReadyReason, key_phrase
     from services import node_route
 
@@ -315,7 +314,7 @@ def instance_missing_reason(
     if node_route.has_routes(definition):
         routed = node_route.with_wired_blockers(definition, params, wired)
         if node_route.uses_krea_plan(definition, routed):
-            # GM, PR #203 r21: Krea's one verb is the Settings button's, "Sign in".
+            # Design, PR #203: Krea's one verb is the Settings button's, "Sign in".
             return NotReadyReason.of("krea_plan")
         reason = node_route.route_unavailable_reason(definition, routed, {key: "set" for key in configured})
         if reason is not None:

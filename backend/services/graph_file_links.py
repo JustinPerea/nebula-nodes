@@ -1,7 +1,7 @@
 """How a graph file's links to Nebula's output folder are read and rewritten:
 the backend's port of Load graph's link handling (frontend/src/lib/graphFile.ts).
 
-Q123 a (Justin, 2026-10-24): "Yes: `nebula load` and an MCP tool open a
+Justin, 2026-10-24: "Yes: `nebula load` and an MCP tool open a
 bundle, restoring its files, as Load graph does. A big one opens as a new
 project." The canvas restores a `.nebula.zip` through POST /api/outputs/restore,
 then rewrites every local `/api/outputs/<path>` link in the graph's params and

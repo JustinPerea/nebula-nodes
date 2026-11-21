@@ -116,7 +116,7 @@ def _updated(style: Mapping[str, Any] | None, fields: list[str], style_id: str,
 def describe(change: str, style: Mapping[str, Any] | None, *, fields: list[str] | None = None,
              style_id: str = "", before: Mapping[str, Any] | None = None) -> str:
     """One line for a Style write, lower case first, as journal summaries are
-    (GM - Design's wording, 2026-11-14):
+    (the design's wording, 2026-11-14):
 
     - "made the style “Dusk”", "restored the style “Dusk”", "deleted the
       style “Dusk” for good";

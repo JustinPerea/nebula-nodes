@@ -183,8 +183,7 @@ def protected_agent_dirs() -> list[Path]:
     the MCP server a token file was made for reads it, never a graph or media
     path or an in-app agent. ``settings-copy`` holds the copy of settings.json
     an in-place save keeps, the file a restore replaced, and their temp files,
-    keys in plain text (services/settings.settings_copy_folder; review 17 of
-    PR #203, settings MEDIUM-1).
+    keys in plain text (services/settings.settings_copy_folder; PR #203).
     """
     from commons.paths import commons_root
     from services import agent_token_file, app_token_file
@@ -202,9 +201,9 @@ def secret_dirs() -> list[Path]:
     grant of the folder holding settings.json works as before): the judging
     folders, where a save without the lock moves another save's temp file
     for a moment to check it before removing it, keys included
-    (services/settings.judging_folders; round 20 of PR #203), and the private
+    (services/settings.judging_folders; PR #203), and the private
     temp folder every save writes its temp file in (services/settings.
-    temp_folders; round 23b): the folder is on every deny list, so a temp made
+    temp_folders): the folder is on every deny list, so a temp made
     after an agent's profile is built is inside a denied folder."""
     from services.settings import judging_folders, temp_folders
 
@@ -266,8 +265,8 @@ def agent_workspace_env(workdir: Path) -> dict[str, str]:
 
 def default_secret_paths() -> list[Path]:
     """Files holding credentials that no agent may read: settings.json, the
-    temp file a save writes beside it (services/settings.secret_temp_paths;
-    review 17 of PR #203, settings MEDIUM-1) and the .env files."""
+    temp file a save writes beside it (services/settings.secret_temp_paths; PR #203) and
+    the .env files."""
     from services.settings import secret_temp_paths, settings_path
 
     project_root = Path(__file__).resolve().parent.parent.parent
@@ -285,7 +284,7 @@ def secret_deny_rules(secret_paths: list[Path]) -> list[str]:
     """Read-deny rules for secret files, as absolute (`//`) paths. A save's
     shared temp name also gets its pattern (`<name>-*`): every save writes a
     temp file of its own under that name plus a process id and a token
-    (services/settings.new_temp_path_for; round 23 of PR #203)."""
+    (services/settings.new_temp_path_for; PR #203)."""
     # A single leading slash anchors at the settings source, not the
     # filesystem root; `//` is the absolute form.
     from services.settings import TEMP_FOLDER, TEMP_SUFFIX_FIXED

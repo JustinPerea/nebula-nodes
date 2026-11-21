@@ -31,7 +31,7 @@ def run_list(client: NebulaClient, *, as_json: bool = False) -> None:
     if isinstance(restore, dict) and restore.get("note"):
         # Nebula restored a damaged project list (until the person closes its notice).
         print(f"Note: {restore['note']}")
-        # The CANVAS NOT SAVED note below says the waiting canvas (GM r23 e).
+        # The CANVAS NOT SAVED note below says the waiting canvas (design).
         for line in catalog_restore_lines(restore, canvas_block=isinstance(listing.get("canvasNotFiled"), dict)):
             print(line)
         print()
@@ -78,13 +78,13 @@ def run_open(client: NebulaClient, project_id: str) -> None:
     result = client.open_project(project_id, listing.get("workspaceRevision", ""))
     print(f"Opened {result.get('project', {}).get('name', project_id)}. The canvas now shows it.")
     # What opening changed (a folded node's connections, a scene's shot
-    # output no shot owns and its connections; PR #198 review 5, L3), as
+    # output no shot owns and its connections; PR #198), as
     # `nebula load` prints its own.
     for warning in result.get("warnings") or []:
         print(f"note: {warning}", file=sys.stderr)
     renumbered = result.get("renumbered") or {}
     if renumbered:
-        # Nodes the person's Duplicate or Paste made got Nebula's ids (PR #199 round 17).
+        # Nodes the person's Duplicate or Paste made got Nebula's ids (PR #199).
         moved = ", ".join(f"{old} -> {new}" for old, new in list(renumbered.items())[:10])
         print(f"note: Nebula gave {counted(len(renumbered), 'node')} its own ids at this open ({moved}). "
               "Read the canvas again (`nebula graph`) and use the ids you see.", file=sys.stderr)
@@ -138,7 +138,7 @@ def run_show(client: NebulaClient, project_id: str, *, as_json: bool = False) ->
 
 def run_size(client: NebulaClient, project_id: str = "current", *, as_json: bool = False) -> None:
     """A project's size against the save limit and what takes the space: MCP
-    project_size (Q118)."""
+    project_size."""
     result = client.shared(project_client.project_size, project_id)
     if as_json:
         _print_json(result)

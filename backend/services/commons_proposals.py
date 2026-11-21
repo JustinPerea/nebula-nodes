@@ -1,4 +1,4 @@
-"""Commons curation as asset proposals (Justin's Q63 b, 2026-10-20; audit U13).
+"""Commons curation as asset proposals (Justin's call, 2026-10-20).
 
 Curating the Commons is the person's: correcting a reference's reading,
 drawing, renaming, confirming or deleting a region, and a reference's role,
@@ -244,7 +244,7 @@ def parse_change(raw: dict[str, Any]) -> dict[str, Any]:
 
 # -- one line for the journal, the Agent log and the CLI -------------------------
 
-# GM, PR #202 r4: how a Commons ask reads in the Agent log ("Asks to X") and
+# Design, PR #202: how a Commons ask reads in the Agent log ("Asks to X") and
 # its withdrawal ("Withdrew its request to X"), and in the journal. Agents read
 # the log, so X names no reference by its id, filename, page title or
 # collection, and carries no Commons text (a label, value, why or keyword):
@@ -276,7 +276,7 @@ def _edit_words(edit: dict[str, Any]) -> str:
 
 
 def summary(asset_id: str, change: dict[str, Any]) -> str:
-    """X in "Asks to X" and "Withdrew its request to X" (GM, PR #202 r4).
+    """X in "Asks to X" and "Withdrew its request to X" (design, PR #202).
     ``asset_id`` is never part of it."""
     edits = change.get("edits") or []
     if len(edits) == 1:

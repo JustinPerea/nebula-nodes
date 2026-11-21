@@ -72,7 +72,7 @@ def _reserve(store, position):
         if meter['remaining'] <= 0:
             # The real count, and a step that works: with the cap at 0 no call
             # was made and tomorrow won't help; a cap lowered below today's
-            # calls names the calls made (round 3 review).
+            # calls names the calls made.
             raise ev.EvaluationError('Daily model call cap reached.', (
                 'Agent review needs at least 1 analysis call a day, and Settings has it at 0. '
                 'Raise \u201cAnalysis calls per day\u201d, then try again.' if meter['cap'] == 0 else
