@@ -43,7 +43,11 @@ _TOKEN_RUN = re.compile(r"[A-Za-z0-9_-]{20,}")
 
 def one_line_detail(raw: str) -> str:
     """What a CLI printed on stderr, kept only when its first non-empty line is short and plainly safe (see
-    ``_SAFE_DETAIL``); otherwise empty, so the line shows no detail. At most ``_DETAIL_MAX`` characters."""
+    ``_SAFE_DETAIL``); otherwise empty, so the line shows no detail. At most ``_DETAIL_MAX`` characters.
+
+    The allowlist lets through plain words, so a bare name, or a token broken by dots or colons into runs of
+    under 20 characters, still passes. That is accepted: the source is Codex's own refusal line, and the full
+    text goes to the log only."""
     first = next((line for line in raw.splitlines() if line.strip()), "")
     text = " ".join(first.split())
     if not text or not _SAFE_DETAIL.fullmatch(text) or _TOKEN_RUN.search(text):

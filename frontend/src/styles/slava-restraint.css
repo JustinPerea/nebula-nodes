@@ -4972,14 +4972,33 @@ body.app-slava-restraint .edit-node__open {
   cursor: pointer;
 }
 
-/* Punctuation touching a code span ("(" before it, ")" "," "." after it) shares a no-break group with it
-   (lib/codeSpans glueToSpans), so a line never breaks between a bracket and the span. nowrap would also stop
-   the span wrapping inside itself, so the span takes normal white space back: a span wider than the line still
-   wraps (overflow-wrap: anywhere above). The group is inline, not inline-block, so it adds no box. */
+/* Punctuation touching a code span ("(" before it, ")" "," "." after it) shares a group with it
+   (lib/codeSpans glueToSpans). The rule: the group is never wider than its line, the punctuation stays on the
+   span's line ("(" on the span's first line, the closer on its last), and a span that fits moves to the next
+   line whole with its punctuation. An inline-flex box is atomic, so a line breaks only before or after it, and
+   max-width: 100% caps it at the line. The span is a flex item that may shrink (min-width: 0; an
+   overflow-wrap: anywhere item has a tiny min-content), so beside its punctuation it takes the width that is
+   left and wraps inside itself; the punctuation items do not shrink. The opener lines up with the span's first
+   line and the closer with its last. The punctuation is its own element because text directly inside a flex box
+   becomes anonymous items, and a bare text node there would not take align-self. */
 body.app-slava-restraint .code-glue {
-  white-space: nowrap;
+  display: inline-flex;
+  max-width: 100%;
+  vertical-align: baseline;
+  align-items: first baseline;
 }
 
 body.app-slava-restraint .code-glue .code-span {
-  white-space: normal;
+  min-width: 0;
+  flex: 0 1 auto;
+}
+
+body.app-slava-restraint .code-glue__open,
+body.app-slava-restraint .code-glue__close {
+  flex: 0 0 auto;
+  white-space: pre;
+}
+
+body.app-slava-restraint .code-glue__close {
+  align-self: last baseline;
 }

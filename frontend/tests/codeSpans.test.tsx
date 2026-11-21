@@ -284,14 +284,42 @@ describe('punctuation that touches a span stays on the span’s line', () => {
     expect(groups(two).map((g) => g.textContent)).toEqual(['(a,', 'b).']);
     expect(two.textContent).toBe('Features (a, b).');
   });
-  it('the group does not wrap and the span inside it takes normal white space back, so a long span still wraps', () => {
+  it('the group is an inline-flex box capped at its line, and the span shrinks beside its punctuation (layout is measured in a real browser, not jsdom)', () => {
     document.body.className = 'app-slava-restraint';
-    const el = html('(`x`)');
+    const el = html('(`x`),');
     const group = groups(el)[0];
-    expect(cascaded(group).get('|white-space')?.value).toBe('nowrap');
+    const value = (node: Element, prop: string) => cascaded(node as HTMLElement).get(`|${prop}`)?.value;
+    expect(value(group, 'display')).toBe('inline-flex');
+    expect(value(group, 'max-width')).toBe('100%');
+    expect(value(group, 'align-items')).toBe('first baseline');
     const code = group.querySelector('code')!;
-    expect(cascaded(code).get('|white-space')?.value).toBe('normal');
-    expect(cascaded(code).get('|overflow-wrap')?.value).toBe('anywhere');
+    expect(value(code, 'min-width')).toBe('0');
+    expect(value(code, 'flex')).toBe('0 1 auto');
+    expect(value(code, 'overflow-wrap')).toBe('anywhere');
+    const open = group.querySelector('.code-glue__open')!;
+    const close = group.querySelector('.code-glue__close')!;
+    expect(value(open, 'flex')).toBe('0 0 auto');
+    expect(value(close, 'flex')).toBe('0 0 auto');
+    expect(value(close, 'align-self')).toBe('last baseline');
+    expect([...group.children].map((c) => c.className)).toEqual(['code-glue__open', 'code-span', 'code-glue__close']);
+    expect(open.textContent).toBe('(');
+    expect(close.textContent).toBe('),');
+    expect(el.textContent).toBe('(x),');
+  });
+  it('every piece of punctuation is its own element, so the group has no bare text node (a flex box would make it an anonymous item)', () => {
+    const el = html('See "`a`, `b`" and `c`.');
+    for (const group of groups(el)) {
+      expect([...group.childNodes].every((n) => n.nodeType === Node.ELEMENT_NODE)).toBe(true);
+    }
+  });
+  it('an apostrophe after a span glues only when whitespace, punctuation or the end follows it', () => {
+    const possessive = html('Read `x`\'s value and `y`’s too.');
+    expect(groups(possessive)).toHaveLength(0);
+    expect(possessive.textContent).toBe('Read x\'s value and y’s too.');
+    expect(groups(html("Read `x`' now")).map((g) => g.textContent)).toEqual(["x'"]);
+    expect(groups(html('Read `x`’.')).map((g) => g.textContent)).toEqual(['x’.']);
+    expect(groups(html("It said 'run `x`'")).map((g) => g.textContent)).toEqual(["x'"]);
+    expect(groups(html("Read `x`'s, `y`'.")).map((g) => g.textContent)).toEqual(["y'."]);
   });
   it('text with no touching punctuation is unchanged: the span stands alone, with no group', () => {
     const el = html('Run `nebula apply` now, then `check` it.');
