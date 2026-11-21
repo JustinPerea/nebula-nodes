@@ -1,10 +1,11 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve, sep } from 'node:path';
+import { createRequire } from 'node:module';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 // Design: the repo is public, so comments and test titles say "design" and carry no internal
-// ids. Four kinds of id are counted per file:
+// ids. Five kinds are counted per file:
 //   - the studio initials as a standalone uppercase word, anywhere in the file;
 //   - a round id, only inside a comment or a test title (the first string argument of
 //     it/test/describe): the phrase "round N[letter]" anywhere there, or the letter r with one to
@@ -16,7 +17,13 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 //   - a question id (the letter Q and one to three digits), only inside the same places;
 //   - a review id, only inside the same places: "Review N" in any case, or a severity id
 //     (LOW-N, MED-N, MEDIUM-N, HIGH-N, NIT-N; a one-letter H-N, L-N, M-N or N-N only right after
-//     a review id or another severity id, since "N-1" alone is arithmetic).
+//     a review id or another severity id, since "N-1" alone is arithmetic);
+//   - the word "lane", only inside text people and agents read: a JS/TS string or template
+//     literal (its literal text, never a ${} expression), JSX text, a test title, or any Python
+//     string (docstrings, triple-quoted constants and f-strings included; never an f-string
+//     replacement field). The TypeScript parser finds those in .ts, .tsx, .js, .jsx, .mjs and .cjs.
+//     An identifier, a comment, a CSS class or a grid-area named lane is code and does not count,
+//     and stylesheets are not read for it at all.
 // Round, question and review ids are restricted to comments and titles so identifiers, SVG
 // attributes and CSS values never trip the check. "round N" is skipped when it reads as
 // arithmetic (a decimal point, "decimal places", digits) and a question id after "quarter" or
@@ -52,7 +59,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 // .skip/.only/.todo variants and .each(...)( forms) in TS, TSX, JS, MJS. A member call such as
 // RE.test('...') is not a title.
 //
-// This file and its test hold the patterns and fixtures, so both are skipped by name (SELF_SKIP).
+// This file and its tests hold the patterns and fixtures, so they are skipped by name (SELF_SKIP).
 // A text scanner, not a parser. Known limits: a regex literal that holds an unbalanced quote can
 // confuse it, and so can JSX text that holds // or /* or an apostrophe (it reads them as a
 // comment or a string until the line or file ends). A `.each` title is followed only in the
@@ -60,7 +67,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 // table, is not followed.
 
 export const SCAN_DIRS = ['frontend/src', 'frontend/scripts', 'frontend/tests', 'backend', 'scripts'];
-export const SCAN_EXT = new Set(['ts', 'tsx', 'js', 'mjs', 'cjs', 'css', 'py', 'sh']);
+export const SCAN_EXT = new Set(['ts', 'tsx', 'js', 'jsx', 'mjs', 'cjs', 'css', 'py', 'sh']);
 // Directories skipped anywhere in the path: dependencies and build output.
 const SKIP_DIR_NAMES = new Set(['node_modules', 'dist', 'build', 'coverage', '.next', '.venv', 'venv', '__pycache__', '.git']);
 // Path prefixes (repo-relative) that hold data rather than prose.
@@ -75,11 +82,18 @@ const SKIP_FILE = /(^|\/)(package-lock\.json|[^/]*\.lock|[^/]*\.min\.(js|css)|[^
 export const SELF_SKIP = new Set([
   'frontend/scripts/check-internal-ids.mjs',
   'frontend/tests/internalIdCheck.test.ts',
+  'backend/tests/test_agent_text_wording.py',
 ]);
 export const BASELINE_REL = 'frontend/scripts/internal-ids-baseline.json';
-export const KINDS = ['gm', 'round', 'question', 'review'];
+export const KINDS = ['gm', 'round', 'question', 'review', 'lane'];
 
 const GM_RE = /\bGM\b/g;
+// "lane" is how the studio organises its own work, not a Nebula word; agents and people read
+// "session". Counted as a whole word in any case, only inside the text people and agents read (a
+// JS/TS string or template literal, JSX text, a test title, a Python string, a CSS content string).
+// Never in a comment, where "the scrollbar lane" is ordinary English, and never in code, where an
+// identifier, a CSS class or a grid-area may be named lane.
+const LANE_RE = /\blanes?\b/gi;
 const ROUND_RE = /\br\d{1,3}[a-z]?\b|\bround\s+\d{1,3}[a-z]?\b/gi;
 const ROUND_BEFORE = /(?:\b(?:design|review|since|per)|PR\s*#\d+|#\d+)[,\s]*$/i;
 const ROUND_BEFORE_GM = /\bGM[,\s]*$/;
@@ -103,11 +117,61 @@ const REGEX_PRECEDERS = '(,=:[!&|?{};+-*%~^';
 const CALLEE_TAIL = /(?:^|[^.\w$])(?:it|test|describe)(?:\.(?:skip|only|todo|concurrent|fails|sequential))?$/;
 const EACH_TAIL = /(?:^|[^.\w$])(?:it|test|describe)(?:\.(?:skip|only|concurrent|fails|sequential))?\.each\s*$/;
 
-/** Find comment and title spans in source. Returns [{start, end, kind}] with kind comment|title. */
+/**
+ * Find comment and title spans in source. Returns [{start, end, kind}] with kind comment|title.
+ * In Python files the literal text of every string is also returned, as kind string.
+ */
 export function findSpans(path, text) {
   const ext = path.slice(path.lastIndexOf('.') + 1);
   if (ext === 'py' || ext === 'sh') return hashSpans(text, ext === 'py');
   return jsSpans(text, ext !== 'css');
+}
+
+const require = createRequire(import.meta.url);
+let tsApi;
+/** The TypeScript compiler API, loaded on first use from frontend's node_modules. */
+function loadTs() {
+  if (!tsApi) tsApi = require('typescript');
+  return tsApi;
+}
+
+const SCRIPT_KINDS = { ts: 'TS', mts: 'TS', cts: 'TS', tsx: 'TSX', js: 'JSX', jsx: 'JSX', mjs: 'JSX', cjs: 'JSX' };
+
+/**
+ * Spans of the text people and agents read in a JS/TS-family file, found with the TypeScript parser:
+ * the literal text of every string, no-substitution template, template head, middle and tail (never
+ * the ${} expressions), and JSX text. Import and export module paths are code, not prose, and are
+ * skipped. Comments, identifiers and types never count. A file whose text has no "lane" cannot hold
+ * a match, so it is not parsed.
+ */
+function readableSpansJs(path, text) {
+  const ext = path.slice(path.lastIndexOf('.') + 1);
+  const kind = SCRIPT_KINDS[ext];
+  if (!kind || !/lane/i.test(text)) return [];
+  const ts = loadTs();
+  const sf = ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true, ts.ScriptKind[kind]);
+  const K = ts.SyntaxKind;
+  const out = [];
+  const visit = (node) => {
+    switch (node.kind) {
+      case K.StringLiteral:
+        if (!((node.parent.kind === K.ImportDeclaration || node.parent.kind === K.ExportDeclaration) && node.parent.moduleSpecifier === node)) {
+          out.push({ start: node.getStart(sf), end: node.getEnd(), kind: 'string' });
+        }
+        break;
+      case K.NoSubstitutionTemplateLiteral:
+      case K.TemplateHead:
+      case K.TemplateMiddle:
+      case K.TemplateTail:
+      case K.JsxText:
+        out.push({ start: node.getStart(sf), end: node.getEnd(), kind: 'string' });
+        break;
+      default:
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sf);
+  return out;
 }
 
 // Is the string that starts at `start` the first argument of it( / test( / describe( or an
@@ -240,6 +304,40 @@ function isDocstringStart(lines, idx, col) {
   return false;
 }
 
+// Does the string literal whose opening quote is at `q` carry an f (or rf, fr) prefix?
+function isFString(text, q) {
+  let k = q - 1;
+  let prefix = '';
+  while (k >= 0 && /[A-Za-z]/.test(text[k]) && prefix.length < 3) prefix = text[k--] + prefix;
+  return (k < 0 || !/[\w$]/.test(text[k])) && /^(?:[rR][fF]|[fF][rR]?|[fF])$/.test(prefix);
+}
+
+// Push the readable parts of a Python string whose body is [from, to): the whole body, or for an
+// f-string the text outside its {replacement fields} ({{ and }} are literal braces).
+function pushPyString(spans, text, start, from, to, fstring) {
+  if (!fstring) {
+    spans.push({ start: from, end: to, kind: 'string' });
+    return;
+  }
+  let segStart = from;
+  let depth = 0;
+  for (let k = from; k < to; k++) {
+    const ch = text[k];
+    if (depth === 0) {
+      if (ch === '{' && text[k + 1] === '{') k++;
+      else if (ch === '{') {
+        if (k > segStart) spans.push({ start: segStart, end: k, kind: 'string' });
+        depth = 1;
+      }
+    } else if (ch === '{') depth++;
+    else if (ch === '}') {
+      depth--;
+      if (depth === 0) segStart = k + 1;
+    }
+  }
+  if (depth === 0 && to > segStart) spans.push({ start: segStart, end: to, kind: 'string' });
+}
+
 function hashSpans(text, isPython) {
   const spans = [];
   const n = text.length;
@@ -279,9 +377,11 @@ function hashSpans(text, isPython) {
         if (isDocstringStart(lines, idx, i - lineStarts[idx])) {
           spans.push({ start: i, end: Math.min(j + 3, n), kind: 'comment' });
         }
+        pushPyString(spans, text, i, i + 3, Math.min(j, n), isFString(text, i));
         i = j + 3;
         continue;
       }
+      const start = i;
       i++;
       // Python strings end at the line; shell strings may span lines.
       while (i < n && text[i] !== c && (!isPython || text[i] !== '\n')) {
@@ -289,6 +389,7 @@ function hashSpans(text, isPython) {
         i++;
       }
       i++;
+      if (isPython) pushPyString(spans, text, start, start + 1, Math.max(start + 1, Math.min(i - 1, n)), isFString(text, start));
       continue;
     }
     i++;
@@ -393,9 +494,30 @@ function joinPieces(pieces) {
   return { body, map };
 }
 
-/** Every match in one file: [{line, text, kind: 'gm'|'round'|'question'|'review', match}]. */
+/** The quoted strings of a stylesheet's `content:` declarations, outside comments: the only CSS text
+ * a person reads. Class names, grid areas, url() and font names are not text. */
+function cssContentSpans(text, commentSpans) {
+  const out = [];
+  for (const m of text.matchAll(/\bcontent\s*:([^;}]*)/g)) {
+    if (commentSpans.some((c) => m.index >= c.start && m.index < c.end)) continue;
+    const valueStart = m.index + m[0].length - m[1].length;
+    for (const q of m[1].matchAll(/(["'])(?:\\.|(?!\1)[^\\])*\1/g)) {
+      out.push({ start: valueStart + q.index, end: valueStart + q.index + q[0].length, kind: 'string' });
+    }
+  }
+  return out;
+}
+
+/** Every match in one file: [{line, text, kind: 'gm'|'round'|'question'|'review'|'lane', match}]. */
 export function scanSource(path, text) {
-  const spans = findSpans(path, text);
+  const allSpans = findSpans(path, text);
+  const spans = allSpans.filter((s) => s.kind !== 'string');
+  // Text people and agents read: every Python string, the strings and JSX text the TypeScript
+  // parser finds, and a stylesheet's `content:` strings (drawn on screen). Shell scripts hold none.
+  const ext = path.slice(path.lastIndexOf('.') + 1);
+  const readable = ext === 'py' ? allSpans.filter((s) => s.kind === 'string')
+    : ext === 'css' ? cssContentSpans(text, spans)
+      : readableSpansJs(path, text);
   const lineStarts = [0];
   for (let k = 0; k < text.length; k++) if (text[k] === '\n') lineStarts.push(k + 1);
   const lineOf = (offset) => {
@@ -415,6 +537,10 @@ export function scanSource(path, text) {
     out.push({ line: idx + 1, text: lineText(idx), kind, match });
   };
   for (const m of text.matchAll(GM_RE)) push(m.index, 'gm', m[0]);
+  for (const m of text.matchAll(LANE_RE)) {
+    if (!readable.some((s) => m.index >= s.start && m.index < s.end)) continue;
+    push(m.index, 'lane', m[0]);
+  }
   const seen = new Set();
   const add = (offset, kind, match) => {
     const key = `${kind}:${offset}`;
@@ -697,7 +823,7 @@ export function main(argv) {
   let code = 0;
   if (failures.length > 0) {
     code = 1;
-    console.error('internal-ids: internal ids in a public repo. Write "design" instead and drop the id (studio initials, round ids, question ids, review ids; in code, use a neutral name).');
+    console.error('internal-ids: internal ids in a public repo. Write "design" instead and drop the id (studio initials, round ids, question ids, review ids, the word lane inside a string, JSX text, a test title or a Python string; an identifier, a CSS class or a grid-area named lane is fine).');
     for (const f of failures) {
       console.error(`\n  ${f.file}: ${f.count} match(es), baseline allows ${f.allowed}`);
       for (const l of f.lines) console.error(l);
@@ -729,7 +855,7 @@ export function main(argv) {
   if (notes.length > 0) {
     console.log(`internal-ids: ${notes.length} file(s) fell below their baseline (run \`npm run check:internal-ids -- --write-baseline\` from frontend/ to lock it in).`);
   }
-  console.log(`internal-ids: ok (${Object.keys(counts).length} files, ${totals.gm} studio, ${totals.round} round, ${totals.question} question, ${totals.review} review matches, all within baseline).`);
+  console.log(`internal-ids: ok (${Object.keys(counts).length} files, ${totals.gm} studio, ${totals.round} round, ${totals.question} question, ${totals.review} review, ${totals.lane} lane matches, all within baseline).`);
   return 0;
 }
 

@@ -52,23 +52,23 @@ def test_c1_a_fresh_mcp_read_never_refreshes_the_clis_older_look(api):  # noqa: 
 
 
 def test_c1b_two_session_less_lanes_still_share_one_read(api):  # noqa: F811
-    # Documented: without NEBULA_AGENT_SESSION two lanes of one name are one reader.
+    # Documented: without NEBULA_AGENT_SESSION two agents of one name are one reader.
     node = _cinema(api)
     api.client.get("/api/graph", headers=CODEX)
     _person_types(api, node)
     api.client.get("/api/graph", headers=CODEX)
-    assert _put(api, node, CODEX, _scene("a quiet street", "lane A stale")).status_code == 200
+    assert _put(api, node, CODEX, _scene("a quiet street", "agent A stale")).status_code == 200
 
 
 def test_c2_lanes_with_their_own_sessions_stay_apart(api):  # noqa: F811
     node = _cinema(api)
-    one = {**CODEX, "X-Nebula-Agent-Session": "lane-1"}
-    two = {**CODEX, "X-Nebula-Agent-Session": "lane-2"}
+    one = {**CODEX, "X-Nebula-Agent-Session": "agent-1"}
+    two = {**CODEX, "X-Nebula-Agent-Session": "agent-2"}
     api.client.get("/api/graph/export", headers=one)
     _person_types(api, node)
     api.client.get("/api/graph/export", headers=two)
-    assert _refused(_put(api, node, one, _scene("a quiet street", "lane 1 stale")))
-    assert _put(api, node, two, _scene("the person typed this", "lane 2 on top")).status_code == 200
+    assert _refused(_put(api, node, one, _scene("a quiet street", "agent 1 stale")))
+    assert _put(api, node, two, _scene("the person typed this", "agent 2 on top")).status_code == 200
 
 
 def test_c3_a_session_that_never_read(api):  # noqa: F811
@@ -76,13 +76,13 @@ def test_c3_a_session_that_never_read(api):  # noqa: F811
     api.client.get("/api/graph/export", headers=CODEX)  # the name's session-less read, before the typing
     _person_types(api, node)
     # No session read yet: held to the name's session-less read.
-    assert _refused(_put(api, node, {**CODEX, "X-Nebula-Agent-Session": "lane-3"}, _scene("a quiet street", "lane 3")))
+    assert _refused(_put(api, node, {**CODEX, "X-Nebula-Agent-Session": "agent-3"}, _scene("a quiet street", "agent 3")))
     assert _prompts(api, node) == TYPED
-    # After lane 2's fresh read, a session that never read is held to that
+    # After agent 2's fresh read, a session that never read is held to that
     # newest session read: current, so it writes as it sends (the last
     # writer, as a reader that never read always has).
-    api.client.get("/api/graph/export", headers={**CODEX, "X-Nebula-Agent-Session": "lane-2"})
-    late = _put(api, node, {**CODEX, "X-Nebula-Agent-Session": "lane-4"}, _scene("a quiet street", "lane 4"))
+    api.client.get("/api/graph/export", headers={**CODEX, "X-Nebula-Agent-Session": "agent-2"})
+    late = _put(api, node, {**CODEX, "X-Nebula-Agent-Session": "agent-4"}, _scene("a quiet street", "agent 4"))
     assert late.status_code == 200
 
 

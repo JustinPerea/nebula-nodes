@@ -11,7 +11,7 @@ import pytest
 import mcp_server
 from services.agent_presence import PresenceError
 from tests.test_cursor_anywhere_protocol import BOARDS, _parse
-from tests.test_cursor_anywhere_writes import AGENT, LANE_A, LANE_B, _create, _cursor, _edit, api  # noqa: F401 - fixture
+from tests.test_cursor_anywhere_writes import AGENT, AGENT_A, AGENT_B, _create, _cursor, _edit, api  # noqa: F401 - fixture
 
 DIGITS = ["\u00b2", "#\u00b2", "\u2460", "\u0663", "#\u0663", "\uff11"]  # superscript two, circled one, Arabic-Indic three, fullwidth one
 
@@ -84,11 +84,11 @@ def test_deleting_a_board_tells_the_tabs_which_cursors_left(tabs):
     (client, sent, presence, _), heard = tabs
     board = _create(client)
     other = _create(client, name="Dusk", count=1)
-    a = _point(client, sent, board["id"], LANE_A)
-    b = _point(client, sent, board["id"], LANE_B, image=1)
-    c = _point(client, sent, other["id"], {**AGENT, "X-Nebula-Agent-Session": "lane-c"})
+    a = _point(client, sent, board["id"], AGENT_A)
+    b = _point(client, sent, board["id"], AGENT_B, image=1)
+    c = _point(client, sent, other["id"], {**AGENT, "X-Nebula-Agent-Session": "agent-c"})
     heard.clear()
-    assert client.delete(f"/api/moodboards/{board['id']}", headers=LANE_A).status_code == 200
+    assert client.delete(f"/api/moodboards/{board['id']}", headers=AGENT_A).status_code == 200
     (leave,) = [event for event in heard if event.get("type") == "agentPresenceLeave"]
     left = {(cursor["agentId"], cursor["key"]) for cursor in leave["cursors"] if cursor["key"] is not None}
     assert left == {a, b} and c not in left
@@ -98,17 +98,17 @@ def test_a_delete_that_drops_no_cursor_tells_no_tab(tabs):
     (client, _, _, _), heard = tabs
     board = _create(client)
     heard.clear()
-    assert client.delete(f"/api/moodboards/{board['id']}", headers=LANE_A).status_code == 200
+    assert client.delete(f"/api/moodboards/{board['id']}", headers=AGENT_A).status_code == 200
     assert [event for event in heard if event.get("type") == "agentPresenceLeave"] == []
 
 
 def test_an_image_removed_elsewhere_moves_the_tabs_cursors_to_the_board(tabs):
     (client, sent, _, _), heard = tabs
     board = _create(client)
-    a = _point(client, sent, board["id"], LANE_A, image=3)
-    b = _point(client, sent, board["id"], LANE_B, image=1)
+    a = _point(client, sent, board["id"], AGENT_A, image=3)
+    b = _point(client, sent, board["id"], AGENT_B, image=1)
     heard.clear()
-    _edit(client, board["id"], [{"op": "remove", "image": 3}], LANE_B)  # another session removes it
+    _edit(client, board["id"], [{"op": "remove", "image": 3}], AGENT_B)  # another session removes it
     (retarget,) = [event for event in heard if event.get("type") == "agentPresenceRetarget"]
     (moved,) = [c for c in retarget["cursors"] if (c["agentId"], c["key"]) == a]
     assert moved["target"] == {"surface": "moodboard", "itemId": board["id"]}
@@ -163,12 +163,12 @@ def test_a_pin_that_changes_only_the_keep_out_list_goes_to_that_row(api):
     client, sent, _, _ = api
     board = _create(client)
     both = {"include": ["#C8A27A"], "exclude": ["#2F4F4F"]}
-    assert client.put(f"/api/moodboards/{board['id']}", headers=LANE_A, json={"pinnedColors": both}).status_code == 200
+    assert client.put(f"/api/moodboards/{board['id']}", headers=AGENT_A, json={"pinnedColors": both}).status_code == 200
     # Both lists changed at once: no one row, so the board's colors.
     assert _cursor(sent)["target"]["part"] == "colors"
     more = {"include": ["#C8A27A"], "exclude": ["#2F4F4F", "#111111"]}
-    assert client.put(f"/api/moodboards/{board['id']}", headers=LANE_A, json={"pinnedColors": more}).status_code == 200
+    assert client.put(f"/api/moodboards/{board['id']}", headers=AGENT_A, json={"pinnedColors": more}).status_code == 200
     assert _cursor(sent)["target"]["part"] == "colors-out"
     again = {"include": ["#C8A27A", "#222222"], "exclude": ["#2F4F4F", "#111111"]}
-    assert client.put(f"/api/moodboards/{board['id']}", headers=LANE_A, json={"pinnedColors": again}).status_code == 200
+    assert client.put(f"/api/moodboards/{board['id']}", headers=AGENT_A, json={"pinnedColors": again}).status_code == 200
     assert _cursor(sent)["target"]["part"] == "colors"

@@ -33,8 +33,8 @@ from tests.test_agent_cursor_sessions import (  # noqa: F401 - fixtures
     sockets,
 )
 
-LANE_A = {"X-Nebula-Agent-Session": "lane-a"}
-LANE_B = {"X-Nebula-Agent-Session": "lane-b"}
+AGENT_A = {"X-Nebula-Agent-Session": "agent-a"}
+AGENT_B = {"X-Nebula-Agent-Session": "agent-b"}
 
 
 def _frames(socket) -> list[dict]:
@@ -54,11 +54,11 @@ def _look(api, node, headers):  # noqa: F811
 
 # -- MEDIUM-1: the pin reply ---------------------------------------------------
 
-@pytest.mark.parametrize("headers", [{}, LANE_B], ids=["plain", "session"])
+@pytest.mark.parametrize("headers", [{}, AGENT_B], ids=["plain", "session"])
 def test_a_pin_reply_lands_on_the_resolving_sessions_own_cursor_and_is_replayed(sockets, person, headers):
     api = sockets
     node = api.graph.add_node("text-input", {"value": "hi"})
-    _look(api, node, LANE_A)
+    _look(api, node, AGENT_A)
     _look(api, node, headers)
     (*_, mine) = _frames(api.person_socket)
     pin = api.client.post("/api/canvas/pins", headers=PERSON, json={"text": "warmer", "nodeId": node}).json()["pin"]
@@ -107,11 +107,11 @@ def _accept(api, proposal_id: str) -> None:  # noqa: F811
     assert accepted.status_code == 200, accepted.text
 
 
-@pytest.mark.parametrize("headers", [{}, LANE_B], ids=["plain", "session"])
+@pytest.mark.parametrize("headers", [{}, AGENT_B], ids=["plain", "session"])
 def test_accepted_lands_on_the_proposing_sessions_cursor_while_it_is_live(sockets, person, headers):
     api = sockets
     node = api.graph.add_node("text-input", {"value": "hi"})
-    _look(api, node, LANE_A)
+    _look(api, node, AGENT_A)
     proposal_id = _propose(api, node, headers)
     (*_, proposing) = _frames(api.person_socket)
     assert proposing["action"] == "propose"
@@ -121,7 +121,7 @@ def test_accepted_lands_on_the_proposing_sessions_cursor_while_it_is_live(socket
     assert [c.get("proposalId") for c in api.main.agent_presence.replay() if c["action"] == "propose"] == [proposal_id]
     # Another session of the same agent acts in between: "Accepted" still
     # goes to the cursor that proposed, not the agent's latest.
-    _look(api, node, LANE_A)
+    _look(api, node, AGENT_A)
     api.person_socket.sent.clear()
     api.listener.sent.clear()
 
@@ -137,15 +137,15 @@ def test_accepted_lands_on_the_proposing_sessions_cursor_while_it_is_live(socket
     assert len(_replay(api, person)) == 2
 
 
-@pytest.mark.parametrize("headers", [{}, LANE_B], ids=["plain", "session"])
+@pytest.mark.parametrize("headers", [{}, AGENT_B], ids=["plain", "session"])
 def test_no_accepted_click_on_the_persons_tabs_when_the_proposing_session_has_left(sockets, person, headers):
     api = sockets
     node = api.graph.add_node("text-input", {"value": "hi"})
     proposal_id = _propose(api, node, headers)
-    # The proposing session goes quiet past the TTL while lane a stays live.
+    # The proposing session goes quiet past the TTL while agent a stays live.
     for _ in range(5):
         api.presence_clock.now += 30
-        _look(api, node, LANE_A)
+        _look(api, node, AGENT_A)
     before = {c["session"]["key"] for c in _replay(api, person)}
     api.person_socket.sent.clear()
     api.listener.sent.clear()
@@ -163,7 +163,7 @@ def test_no_accepted_click_on_the_persons_tabs_when_the_proposing_session_has_le
 def test_the_proposing_session_never_reaches_an_agent(sockets, person):
     api = sockets
     node = api.graph.add_node("text-input", {"value": "hi"})
-    raw = "lane-secret-7f3a"
+    raw = "agent-secret-7f3a"
     proposal_id = _propose(api, node, {"X-Nebula-Agent-Session": raw})
     assert api.main.canvas_proposals.get(proposal_id).presence_session == raw
     assert raw not in repr(api.main.canvas_proposals.get(proposal_id))
@@ -696,7 +696,7 @@ def test_a_failed_accepted_person_form_sends_the_person_nothing(sockets, monkeyp
     never the bare agent form (a tab would draw it as the plain cursor)."""
     api = sockets
     node = api.graph.add_node("text-input", {"value": "hi"})
-    proposal_id = _propose(api, node, LANE_B)
+    proposal_id = _propose(api, node, AGENT_B)
     api.person_socket.sent.clear()
     api.listener.sent.clear()
     real = api.main.agent_presence.person_form

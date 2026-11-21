@@ -150,8 +150,8 @@ describe('a demoted tab (PR #211)', () => {
     expect(store.getState().agents).toEqual({});
     // The agents' form: no session. Each agent shows once, unnumbered, as a
     // live event (it flies in: not a replayed snap).
-    emit(presence({ say: 'lane a again' }));
-    emit(presence({ say: 'lane b again' }));
+    emit(presence({ say: 'agent a again' }));
+    emit(presence({ say: 'agent b again' }));
     const agents = Object.values(store.getState().agents);
     expect(agents.map((cursor) => [cursor.key, cursor.session, cursor.replayed])).toEqual([['claude', null, false]]);
   });

@@ -143,6 +143,92 @@ describe('check-internal-ids: what counts', () => {
     expect(count('a.css', '.a { /* GM r901 1 */ color: red; }')).toBe(2);
   });
 
+  it('counts the whole word lane in a string, a title and a docstring, not in a comment', () => {
+    expect(kinds('a.ts', 'const help = "give each lane its own cursor";')).toEqual(['lane']);
+    expect(kinds('a.ts', "it('keeps one lane per agent', () => {});")).toEqual(['lane']);
+    expect(kinds('a.py', 'HELP = "set a value per Lane"\n')).toEqual(['lane']);
+    expect(kinds('a.py', 'def f():\n    """Give each lane its own cursor."""\n')).toEqual(['lane']);
+    expect(count('a.ts', 'const x = ["lane", "lanes"];')).toBe(2);
+    expect(count('a.css', '/* the scrollbar lane */ .a { color: red; }')).toBe(0);
+    expect(count('a.ts', '// the scrollbar lane stays empty\n/* a lane here */')).toBe(0);
+    expect(count('a.py', '# the scrollbar lane\n')).toBe(0);
+    expect(count('a.ts', 'const s = "plane, laneway, lanewise, Elaney";')).toBe(0);
+  });
+
+  it('counts lane only in text people read, never in code', () => {
+    expect(count('a.ts', 'const lane = 1;')).toBe(0);
+    expect(count('a.css', '.swim-lane { grid-area: lane; }')).toBe(0);
+    expect(count('a.tsx', 'const lane = 1;\nconst x = <div>{lane}</div>;')).toBe(0);
+    expect(count('a.ts', "const t = 'each lane';")).toBe(1);
+    expect(count('a.ts', 'const t = `each lane ${x}`;')).toBe(1);
+    expect(count('a.tsx', 'const x = <p>each lane</p>;')).toBe(1);
+    expect(count('a.tsx', 'const x = (\n  <p className="a">\n    each lane\n  </p>\n);')).toBe(1);
+    expect(count('a.py', 'def f():\n    """Give each lane a cursor."""\n    lane = 1\n')).toBe(1);
+    expect(count('a.py', 'lane = 1\ndef lane(): pass\n')).toBe(0);
+  });
+
+  it('finds lane in strings, templates, JSX text and Python strings with a parser, never in code or comments', () => {
+    // a JS string -> 1
+    expect(count("a.ts", "const t = 'each lane';")).toBe(1);
+    // a template with an expression around literal lane text -> 1
+    expect(count("a.ts", "const t = `a ${x} lane ${y}`;")).toBe(1);
+    // JSX text after an expression -> 1
+    expect(count("a.tsx", "const x = <Trans>each {n} lane</Trans>;")).toBe(1);
+    // JSX text with a semicolon -> 1
+    expect(count("a.tsx", "const x = <p>a;lane</p>;")).toBe(1);
+    // multi-line JSX text -> 1
+    expect(count("a.tsx", "const x = (\n  <p>\n    each\n    lane\n  </p>\n);")).toBe(1);
+    // a JSX attribute string -> 1
+    expect(count("a.tsx", "const x = <input aria-label=\"each lane\" />;")).toBe(1);
+    // JSX text in a .jsx file -> 1
+    expect(count("a.jsx", "const x = <p>each lane</p>;")).toBe(1);
+    // JSX text in a .js file -> 1
+    expect(count("a.js", "const x = <p>each lane</p>;")).toBe(1);
+    // a test title -> 1
+    expect(count("a.test.ts", "it('keeps one lane per agent', () => {});")).toBe(1);
+    // a Python docstring -> 1
+    expect(count("a.py", "def f():\n    \"\"\"Give each lane a cursor.\"\"\"\n")).toBe(1);
+    // a Python module constant in triple quotes -> 1
+    expect(count("a.py", "X = \"\"\"each lane\"\"\"\n")).toBe(1);
+    // a Python f-string -> 1
+    expect(count("a.py", "x = f\"each lane {n}\"\n")).toBe(1);
+    // a Python return of a triple-quoted string -> 1
+    expect(count("a.py", "def f():\n    return \"\"\"lane\"\"\"\n")).toBe(1);
+    // a lane identifier -> 0
+    expect(count("a.ts", "const lane = 1;")).toBe(0);
+    // a lane expression in a template -> 0
+    expect(count("a.ts", "const s = `${lane} x`;")).toBe(0);
+    // a lane identifier after a generic type -> 0
+    expect(count("a.tsx", "const m: Array<string> = [];\nconst lane = 1;")).toBe(0);
+    // a lane argument after a generic call -> 0
+    expect(count("a.tsx", "const [v] = useState<string>(lane);")).toBe(0);
+    // a lane parameter of a generic function -> 0
+    expect(count("a.tsx", "function f<T>(lane: T) { return lane }")).toBe(0);
+    // a comparison chain that looks like a tag -> 0
+    expect(count("a.tsx", "const z = a<b && c>lane;")).toBe(0);
+    // a CSS class and grid area -> 0
+    expect(count("a.css", ".swim-lane { grid-area: lane; }")).toBe(0);
+    // A stylesheet's content: string is drawn on screen, so it counts; url(), class names and comments don't.
+    expect(count("a.css", '.x::after { content: "each lane"; }')).toBe(1);
+    expect(count("a.css", ".x::before { content: 'a lane' }")).toBe(1);
+    expect(count("a.css", '.a { background: url("lane.png"); }')).toBe(0);
+    expect(count("a.css", '/* content: "lane" */ .a {}')).toBe(0);
+    // a line comment -> 0
+    expect(count("a.ts", "// the lane stays empty")).toBe(0);
+    // a block comment -> 0
+    expect(count("a.ts", "/* a lane here */")).toBe(0);
+    // a JSX comment -> 0
+    expect(count("a.tsx", "const x = <div>{/* lane */}</div>;")).toBe(0);
+    // a Python comment -> 0
+    expect(count("a.py", "# lane\n")).toBe(0);
+    // a Python function named lane -> 0
+    expect(count("a.py", "def lane():\n    pass\n")).toBe(0);
+    // a lane name in an f-string replacement field -> 0
+    expect(count("a.py", "x = f\"{lane} x\"\n")).toBe(0);
+    // a lane in a shell script -> 0
+    expect(count("a.sh", "echo \"each lane\"\n")).toBe(0);
+  });
+
   it('does not count GMT or a word that contains the initials', () => {
     expect(count('a.ts', '// 12:00 GMT, GMAIL, aGM, GM_FLAG')).toBe(0);
   });
@@ -409,7 +495,7 @@ describe('check-internal-ids: command line on a scratch tree', () => {
     expect(r.code).toBe(1);
     expect(r.out).toContain('frontend/src/a.ts:3');
     expect(r.out).toContain('"design"');
-    expect(r.out).toContain('neutral name');
+    expect(r.out).toContain('grid-area');
   });
 
   it('fails a new file with a match', () => {

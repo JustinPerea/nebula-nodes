@@ -2,7 +2,7 @@
 
 The routing itself is execution/maker_routes.py ``dual_route`` (and
 ``krea_router`` for the generated Krea copies); this module holds the OpenAI
-lane's translators and direct handlers. The requests go out through the
+route's translators and direct handlers. The requests go out through the
 existing direct handlers in handlers/openai_image_v2.py (streamed
 ``/v1/images/generations`` and multipart ``/v1/images/edits``), with a body
 builder per model.

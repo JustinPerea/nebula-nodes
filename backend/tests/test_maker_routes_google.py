@@ -1,4 +1,4 @@
-"""Google lane of the direct maker routes (execution/maker_routes_google.py).
+"""Google route of the direct maker routes (execution/maker_routes_google.py).
 
 Only the transport is mocked: no provider is contacted and nothing is billed.
 identity-edit and the Krea Nano Banana 2.1 / Veo 3.1 / Gemini Omni Flash 1.1

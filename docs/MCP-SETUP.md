@@ -1181,14 +1181,14 @@ start, for every call it serves.
   subagent sees its parent's `CLAUDE_CODE_SESSION_ID`, so a session and all
   its subagents move one CLI cursor. Over MCP they share the parent's server
   connection, and so its one cursor too.
-- **To give each subagent its own cursor**, pick a value per lane and have
-  the lane put it on every CLI call it makes:
-  `NEBULA_AGENT_SESSION=lane-a nebula point n4 --say "Lighting"`. Each lane
+- **To give each subagent its own cursor**, pick a value per subagent and have
+  the subagent put it on every CLI call it makes:
+  `NEBULA_AGENT_SESSION=agent-a nebula point n4 --say "Lighting"`. Each subagent
   then shows as its own cursor ("Claude Code · 2"). An MCP server's value
-  covers all of its callers, so lanes that need their own cursors use the
+  covers all of its callers, so subagents that need their own cursors use the
   CLI.
-- It also keys the lane's scene reads (below), so a lane reads and writes
-  with the same value.
+- The same value keys that subagent's scene reads (below), so the subagent
+  reads and writes with it.
 - An agent that uses both MCP and the CLI under one name shows two cursors
   unless both use the same `NEBULA_AGENT_SESSION`.
 
@@ -5785,8 +5785,8 @@ server process; set `NEBULA_AGENT_SESSION` to choose it), and the CLI sends
 own channel's read first, and falls back only when that channel never read
 the scene:
 
-- with a session, against that session's own read (two lanes with their own
-  sessions never share a read); if that session never read it, against the
+- with a session, against that session's own read (two sessions of one agent
+  never share a read); if that session never read it, against the
   newest read by any session of that name, else the name's read with no
   session;
 - with no session (as `nebula set` and a plain PUT send by default), against
@@ -5798,7 +5798,7 @@ read it, but an MCP look never refreshes a CLI read: a `nebula set` built
 on an older `nebula look` is refused even after a fresh MCP look, though
 the MCP look saw the current scene. That refusal is the safe failure: run
 `nebula look`, then redo your change on what it shows. MCP and the CLI share
-one read only when both send the same `NEBULA_AGENT_SESSION`. A lane that
+one read only when both send the same `NEBULA_AGENT_SESSION`. A subagent that
 writes with its own session must read with that session too.
 
 **What counts as a read.** The export, the snapshot and `GET /api/graph`

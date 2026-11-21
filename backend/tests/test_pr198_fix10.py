@@ -64,14 +64,14 @@ def test_m1_a_session_that_never_read_is_held_to_the_names_read(api):  # noqa: F
 
 def test_m1_lanes_still_apart_and_name_only_as_before(api):  # noqa: F811
     node = _cinema(api)
-    one = {**CODEX, "X-Nebula-Agent-Session": "lane-1"}
-    two = {**CODEX, "X-Nebula-Agent-Session": "lane-2"}
+    one = {**CODEX, "X-Nebula-Agent-Session": "agent-1"}
+    two = {**CODEX, "X-Nebula-Agent-Session": "agent-2"}
     assert api.client.get("/api/canvas/snapshot", headers=one).status_code == 200
     _person_types(api, node)
     assert api.client.get("/api/graph/export", headers=two).status_code == 200
-    # Lane 1's own read is older: refused, though the name's newest read is current.
-    assert _put(api, node, one, _scene("a quiet street", "lane 1 stale")).status_code == 409
-    assert _put(api, node, two, _scene("the person typed this", "lane 2 on top")).status_code == 200
+    # Session 1's own read is older: refused, though the name's newest read is current.
+    assert _put(api, node, one, _scene("a quiet street", "agent 1 stale")).status_code == 409
+    assert _put(api, node, two, _scene("the person typed this", "agent 2 on top")).status_code == 200
 
 
 def test_m1_a_verified_token_is_not_the_names_reader(api, monkeypatch):  # noqa: F811
