@@ -5,12 +5,12 @@ import { heldProposalLine, heldQuestionsLine } from '../../store/heldAssetPropos
 import { isWaiting, proposalCount, questionCount, waitingByAgent, type HeldAsk, type WaitingProposal, type WaitingQuestions } from './agentNeedsYou';
 
 /**
- * The Agents panel's rows (Q125 item 2, Justin 2026-10-24: "Yes, all four, in
- * that order"), derived from what the stores already hold: each agent's
- * status line and cursor (agentRosterStore, agentPresenceStore), and the open
- * question sets and proposals this tab may answer (their own stores). Pure,
- * so the rules are tested apart from the corner. Copy is GM - Design's,
- * 2026-10-25, verbatim.
+ * The Agents panel's rows (the plan Justin approved 2026-10-24), derived
+ * from what the stores already hold: each agent's status line and cursor
+ * (agentRosterStore, agentPresenceStore), and the open question sets and
+ * proposals this tab may answer (their own stores). Pure, so the rules are
+ * tested apart from the corner. Copy is from the design (2026-10-25),
+ * verbatim.
  */
 
 export const AGENTS_HEADING = 'Agents';
@@ -20,8 +20,8 @@ export const SHOW_ON_CANVAS = 'Show on canvas';
 export const OPEN_QUESTIONS = 'Open questions';
 export const OPEN_PROPOSAL = 'Open proposal';
 export const OPEN_NEXT = 'Open next';
-/** A Needs-you row's third line with no status (GM's review of PR #193: never a
- *  pointer action, live cursor or not): questions, or questions and proposals. */
+/** A Needs-you row's third line with no status (design, PR #193: never a pointer
+ * action, live cursor or not): questions, or questions and proposals. */
 export const WAITING_ANSWER = 'Waiting for your answer.';
 export const WAITING_OK = 'Waiting for your OK.';
 /** Only when the panel is open as the last agent leaves. */
@@ -46,7 +46,7 @@ export interface RosterStatus {
   at: number;
 }
 
-/** A node a run the agent started is running now (Q125 item 3), `at` (when it started) in this tab's clock. */
+/** A node a run the agent started is running now, `at` (when it started) in this tab's clock. */
 export interface RosterRun {
   agent: RosterAgent;
   runId: string;
@@ -62,7 +62,8 @@ export interface RosterDid {
   nodeId: string | null;
   label: string | null;
   /** When it happened, in this tab's clock; left out, when the cursor last moved.
-   *  A pointer gesture GM cut keeps the action before it, with its own time. */
+   * A pointer gesture that no longer counts as an action keeps the action
+   * before it, with its own time. */
   at?: number;
 }
 
@@ -87,9 +88,9 @@ export interface RosterInput {
   /** The asks this tab knows only from their Updates (agentNeedsYou heldAsks). */
   held?: HeldAsk[];
   /** Whether this tab isn't confirmed as the person (heldLock useTabHeld). Only then is a
-   * Needs-you row locked, whatever it would open (GM r5 2b: a demoted tab's synced asks lock
-   * too); in the person's tab an Update its ask hasn't reached opens and says what became of
-   * it. Default false (the connected tab). */
+   * Needs-you row locked, whatever it would open (a demoted tab's synced asks
+   * lock too); in the person's tab an Update its ask hasn't reached opens and says what
+   * became of it. Default false (the connected tab). */
   tabHeld?: boolean;
   /** A node's name on the canvas now (its label, else its type's name), or null when it isn't there. */
   nodeLabel: (nodeId: string) => string | null;
@@ -119,9 +120,9 @@ export interface RosterRow {
   /** The node a click brings into view; null when the row has no place on the canvas. */
   flyTo: string | null;
   next: RosterNext | null;
-  /** GM's tooltip; null when the row is not a button. */
+  /** The tooltip, from the design; null when the row is not a button. */
   tooltip: string | null;
-  /** GM, 2026-10-29: why the row can't open its ask yet (this tab isn't
+  /** Design, 2026-10-29: why the row can't open its ask yet (this tab isn't
    * connected as the person, so it knows the ask only from its Update): the
    * row's action is locked, with this as its tooltip; null when it opens. */
   locked: string | null;
@@ -223,7 +224,8 @@ function rowFor(entry: Gathered, now: number, nodeLabel: (id: string) => string 
     const counted = countLine(counts);
     return {
       agent, group: 'needsYou', counts, countLine: counted, statusText,
-      // GM: "A blocked agent 'looking at' a node tells the person nothing."
+      // Design: "A blocked agent 'looking at' a node tells the
+      // person nothing."
       line: statusText ?? (counts.questions > 0 ? WAITING_ANSWER : WAITING_OK),
       flyTo, next, tooltip, locked,
       // A locked row's reason is its line (aria-describedby, AgentRoster), not said twice in its name.

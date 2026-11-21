@@ -33,7 +33,7 @@ export function MoodboardBundlePreview({ value, variant = 'card' }: { value: unk
   if (!bundle) return null;
   const limits = LIMITS[variant];
   // Only Nebula's own files are drawn (lib/storedImage.ts): a run saved
-  // before Q98 may name an old board's link to another site.
+  // before board images were checked may name an old board's link to another site.
   const drawable = bundle.thumbnails.flatMap((url) => storedImageView(url).src ?? []);
   const shown = drawable.slice(0, limits.thumbnails);
   const more = drawable.length - shown.length;

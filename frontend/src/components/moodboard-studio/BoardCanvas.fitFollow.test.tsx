@@ -5,7 +5,7 @@ import type { MoodboardImage, MoodboardPlacement } from '../../types';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-// #209, GM (a): the Board view refits when its column resizes, only while the
+// PR #209: the Board view refits when its column resizes, only while the
 // camera is still where the last whole-board fit left it. React Flow is a
 // stand-in with a camera, a measured size (the board column) the test
 // changes, and move callbacks the test calls the way @xyflow 12.10.2 does:
@@ -14,14 +14,14 @@ import { resolve } from 'node:path';
 //   the test calls it;
 // - a scroll pan's first wheel event calls only onMoveStart; after a burst of
 //   exactly one event (one mouse notch) its flag sticks, and every later
-//   scroll calls only onMove, then onMoveEnd (review 3, MEDIUM-1);
+//   scroll calls only onMove, then onMoveEnd;
 // - the autopan and the pan to a focused card move the camera with no source
 //   event;
 // - a drag's mousemove carries the pointer's travel from the press (d3 pans
 //   the camera by it);
 // - unlike React Flow, its store never resets when the view closes, and its
 //   setViewport runs no move-end timer: BoardCanvas.unmount.test.tsx runs the
-//   close on React Flow's real store (#213 review 1 NIT-5).
+//   close on React Flow's real store (PR #213).
 
 type View = { x: number; y: number; zoom: number };
 type FlowProps = {
@@ -104,7 +104,7 @@ vi.mock('@xyflow/react', async (importOriginal) => {
   };
 });
 
-// The edge chip, recorded: the board's press handler (#210 round 6t: the chip follows its tiles).
+// The edge chip, recorded: the board's press handler (PR #210: the chip follows its tiles).
 type ChipRect = { x: number; y: number; width: number; height: number };
 const chip = vi.hoisted(() => ({ onShow: null as null | ((rects: ChipRect[], focus: boolean) => void) }));
 vi.mock('./OutsideChip', () => ({
@@ -328,7 +328,7 @@ describe('a fitted board follows its column', () => {
     expect(flow.setViewport).not.toHaveBeenCalled();
   });
 
-  it('an Update\'s Show frames its cards; a later resize frames them again in the new column (GM r113 4)', () => {
+  it('an Update\'s Show frames its cards; a later resize frames them again in the new column', () => {
     mounted();
     act(() => { useBoardCanvasStore.getState().requestFrame('k1', ['ca']); });
     runFrames();
@@ -374,7 +374,7 @@ describe('a fitted board follows its column', () => {
   });
 });
 
-describe('fitted is read from the camera (review 3, MEDIUM-1)', () => {
+describe('fitted is read from the camera', () => {
   it('one wheel notch, Fit, then a scroll pan React Flow reports only through onMove: the pan is kept through a resize', () => {
     mounted();
     notch();
@@ -404,7 +404,7 @@ describe('fitted is read from the camera (review 3, MEDIUM-1)', () => {
     expect(flow.setViewport).not.toHaveBeenCalled();
   });
 
-  it('a stuck-flag pan 40 ms into a refit spring stops the spring and keeps the pan (C3)', () => {
+  it('a stuck-flag pan 40 ms into a refit spring stops the spring and keeps the pan', () => {
     mounted();
     notch();
     act(() => { fitButton().click(); });
@@ -463,7 +463,7 @@ describe('fitted is read from the camera (review 3, MEDIUM-1)', () => {
     expect(flow.setViewport).not.toHaveBeenCalled();
   });
 
-  it('a person who pans back exactly onto the fit: kept as on the fit, but a panned view, so a resize keeps it (GM r113 5)', () => {
+  it('a person who pans back exactly onto the fit: kept as on the fit, but a panned view, so a resize keeps it', () => {
     mounted();
     notch(50);
     expect(kept().fitted).toBe(false);
@@ -485,7 +485,7 @@ describe('fitted is read from the camera (review 3, MEDIUM-1)', () => {
 
 describe('a camera kept from earlier in the visit', () => {
   it('kept while fitted, at another column size: it opens fitted to the column it has now, then follows it', () => {
-    // Fitted at 1440 wide, then List, the window narrowed, back to Board (review 2, H).
+    // Fitted at 1440 wide, then List, the window narrowed, back to Board.
     useBoardCanvasStore.setState({ viewports: { k1: { x: 46, y: 261.5, zoom: 0.319 } }, fitted: { k1: true }, placed: { k1: { kind: 'board' } } });
     flow.state.width = 430;
     mount();
@@ -515,7 +515,7 @@ describe('a camera kept from earlier in the visit', () => {
     expect(midway.zoom).not.toBeCloseTo(fitViewport(430, 851).zoom, 5);
     const late = flow.props!.onMoveEnd!;
     view.unmount();
-    act(() => { late(null, midway); }); // its 150 ms timer, after the view closed (review 2, H4)
+    act(() => { late(null, midway); }); // its 150 ms timer, after the view closed
     expect(kept()).toEqual({ viewport: fitViewport(430, 851), fitted: true });
   });
 
@@ -545,7 +545,7 @@ describe('a camera kept from earlier in the visit', () => {
     expect(flow.props?.defaultViewport).toEqual(target);
   });
 
-  it('a notch during a spring, then the spring\'s stale move end: the store keeps the camera, not the spring frame (LOW-2)', () => {
+  it('a notch during a spring, then the spring\'s stale move end: the store keeps the camera, not the spring frame', () => {
     mounted();
     press('Zoom in');
     step(16);
@@ -634,10 +634,10 @@ describe('the person takes the camera', () => {
   });
 });
 
-// #209 review 4 LOW-1 (GM): d3 calls React Flow's onMoveStart on the press
+// PR #209: d3 calls React Flow's onMoveStart on the press
 // of a right or middle button, or of the left with Space held, before any
 // pan. A press with no drag moves nothing, so the refit carries on to the fit.
-describe('a press with no pan (review 4 LOW-1)', () => {
+describe('a press with no pan', () => {
   const presses: Array<[string, () => MouseEvent]> = [
     ['a right press', () => new MouseEvent('mousedown', { button: 2 })],
     ['a middle press', () => new MouseEvent('mousedown', { button: 1 })],
@@ -674,9 +674,9 @@ describe('a press with no pan (review 4 LOW-1)', () => {
   }
 });
 
-// GM, review 4 question 2: landing on the exact fit by any route counts as fitted.
+// Landing on the exact fit by any route counts as fitted.
 describe('the zoom buttons', () => {
-  it('zoom in, then back out: back on the fit and kept so, but the person\'s camera: a resize (the offline row) keeps it (review 12 LOW-1, GM r113 5)', () => {
+  it('zoom in, then back out: back on the fit and kept so, but the person\'s camera: a resize (the offline row) keeps it', () => {
     mounted();
     press('Zoom in');
     runFrames();
@@ -727,7 +727,7 @@ describe('the zoom buttons', () => {
   });
 });
 
-// #209 review 4 NIT-3: the kept camera is written once a gesture, not each frame.
+// PR #209: the kept camera is written once a gesture, not each frame.
 describe('keeping the camera for the visit', () => {
   const writes = () => {
     let count = 0;
@@ -799,10 +799,10 @@ describe('motion', () => {
   });
 });
 
-// #213 review 1 LOW-1 (GM: the board's own click distance). d3 puts the
+// PR #213: the board's own click distance. d3 puts the
 // pressed board point back under the pointer on every mousemove, even a 1 px
 // jitter, so mid-spring a jitter moves the camera back toward the press.
-describe('a press that jitters within the click distance (#213 review 1 LOW-1)', () => {
+describe('a press that jitters within the click distance', () => {
   /** The camera d3 would make for a mousemove `dx` from the press: the pressed point back under the pointer. */
   const snap = (pressedAt: View, dx: number, dy = 0) => act(() => {
     Object.assign(flow.camera, { x: pressedAt.x + dx, y: pressedAt.y + dy, zoom: camera().zoom });
@@ -865,7 +865,7 @@ describe('a press that jitters within the click distance (#213 review 1 LOW-1)',
     expect(kept()).toEqual({ viewport: fit, fitted: true });
   });
 
-  it('a pinch at the press point while the press is held is a zoom, not jitter (review 2 R5)', () => {
+  it('a pinch at the press point while the press is held is a zoom, not jitter', () => {
     mounted();
     const fit = camera();
     pressMiddle();
@@ -886,10 +886,10 @@ describe('a press that jitters within the click distance (#213 review 1 LOW-1)',
   });
 });
 
-// GM, #213 round 3: fitted means the camera is on the fit of the layout the
+// PR #213: fitted means the camera is on the fit of the layout the
 // board has now, however it got there; a spring that lands on the fit is a fit.
-describe('on the fit of the layout the board has now (GM, #213 round 3)', () => {
-  it('a zoom-out spring that lands on the fit, with a resize while it runs: the zoom buttons are the person\'s, so it lands where it was going (GM r113 5)', () => {
+describe('on the fit of the layout the board has now', () => {
+  it('a zoom-out spring that lands on the fit, with a resize while it runs: the zoom buttons are the person\'s, so it lands where it was going', () => {
     mounted();
     press('Zoom in');
     runFrames();
@@ -906,7 +906,7 @@ describe('on the fit of the layout the board has now (GM, #213 round 3)', () => 
     expect(useBoardCanvasStore.getState().placed.k1).toBeNull();
   });
 
-  it('a Fit spring with a resize while it runs: it follows the resize (review 1 LOW-2)', () => {
+  it('a Fit spring with a resize while it runs: it follows the resize', () => {
     mounted();
     notch();
     act(() => { fitButton().click(); });
@@ -959,7 +959,7 @@ describe('on the fit of the layout the board has now (GM, #213 round 3)', () => 
     ['zoom 0.11% off', { zoom: -0.0011 }, false],
   ];
   for (const [name, off, fitted] of edges) {
-    it(`a camera ${name} the fit is ${fitted ? '' : 'not '}kept as fitted; moved there, it is a panned view a resize keeps (GM r113 5)`, () => {
+    it(`a camera ${name} the fit is ${fitted ? '' : 'not '}kept as fitted; moved there, it is a panned view a resize keeps`, () => {
       mounted();
       const fit = fitViewport(870, 851);
       autopan({ x: fit.x + (off.x ?? 0), y: fit.y + (off.y ?? 0), zoom: fit.zoom * (1 + (off.zoom ?? 0)) });
@@ -989,11 +989,11 @@ describe('on the fit of the layout the board has now (GM, #213 round 3)', () => 
   });
 });
 
-// #210 round 6q (GM r95): at 1024 x 640 with the offline row up, a three-line
+// PR #210: at 1024 x 640 with the offline row up, a three-line
 // project line ran over the fitted card: the refit after the row opened
 // centred the cards in the shorter column, under the line. The notice stack's
 // band is outside the view (lib/boardViewInsets), measured at each fit.
-describe('the fit clears the Studio\'s notices (GM r95)', () => {
+describe('the fit clears the Studio\'s notices', () => {
   type Box = { top: number; height: number };
   const boxes = { board: { top: 49, height: 591 } as Box, stack: { top: 61, height: 62 } as Box };
   const rectOf = ({ top, height }: Box) => ({ top, bottom: top + height, height, left: 0, right: 870, width: 870, x: 0, y: top,
@@ -1028,7 +1028,7 @@ describe('the fit clears the Studio\'s notices (GM r95)', () => {
     expect(camera().y + 1000 * camera().zoom).toBeLessThanOrEqual(boxes.board.height - 53 + 0.5);
   });
 
-  it('GM r95\'s case: the offline row opens (the column 49 px shorter): the refit keeps the cards below the line', () => {
+  it('the offline row opens (the column 49 px shorter): the refit keeps the cards below the line', () => {
     mountWithNotices();
     act(() => {
       boxes.board = { top: 98, height: 542 };
@@ -1048,12 +1048,12 @@ describe('the fit clears the Studio\'s notices (GM r95)', () => {
   });
 });
 
-// #210 round 6r (GM r101): one flag, "view is fitted", set by every fit,
+// PR #210: one flag, "view is fitted", set by every fit,
 // refit and Show and cleared by any pan or zoom the person makes. While it is
 // set, a notice line appearing or going frames the same cards again in the new
 // view insets, on the board's spring (a jump under reduced motion); once
-// cleared, #213 round 3 holds: a line never moves the camera.
-describe('a line over a fitted view (GM r101)', () => {
+// cleared, a line never moves the camera (PR #213).
+describe('a line over a fitted view', () => {
   type Box = { top: number; height: number };
   const boxes = { board: { top: 49, height: 591 } as Box, stack: { top: 61, height: 0 } as Box };
   const rectOf = ({ top, height }: Box) => ({ top, bottom: top + height, height, left: 0, right: 870, width: 870, x: 0, y: top,
@@ -1169,7 +1169,7 @@ describe('a line over a fitted view (GM r101)', () => {
 
   for (const [name, move] of [['a drag pan', dragPan], ['a wheel notch', () => notch()], ['a pinch', pinch],
     ['a keyboard pan (no source event)', keyboardPan]] as const) {
-    it(`after ${name} by the person: a line appearing or going leaves the camera (#213 round 3)`, () => {
+    it(`after ${name} by the person: a line appearing or going leaves the camera`, () => {
       open();
       move();
       const moved = camera();
@@ -1288,9 +1288,9 @@ describe('a line over a fitted view (GM r101)', () => {
     expect(flow.setViewport).not.toHaveBeenCalled();
   });
 
-  // #210 round 6s (GM r105 2): the flag travels with the kept camera. List and
+  // PR #210: the flag travels with the kept camera. List and
   // back isn't a pan: the Board view reopens with the camera and its flag.
-  describe('the flag travels with the kept camera (GM r105 2)', () => {
+  describe('the flag travels with the kept camera', () => {
     /** The Show's framing of cards ca and cb (the stand-in's bounds: 2000 + the right card's x - 1040 wide). */
     const twoCards = (rightX = 520) => {
       const top = boxes.stack.height > 0 ? bandEnd() : 0;
@@ -1455,10 +1455,10 @@ describe('a line over a fitted view (GM r101)', () => {
     });
   });
 
-  // #210 round 6t (GM r113 3-6, review 12): the chip keeps and follows its
-  // tiles, any fitted view refits on a column resize, only the person's own
-  // framing sets the flag, and a later line frames whatever is left.
-  describe('the person\'s framing and what follows it (GM r113)', () => {
+  // PR #210: the chip keeps and follows its tiles, any fitted view refits on a
+  // column resize, only the person's own framing sets the flag, and a later
+  // line frames whatever is left.
+  describe('the person\'s framing and what follows it', () => {
     /** The camera that frames `b` in the view as it is now (below a line that shows). */
     const frameOf = (b: ChipRect, width = 870, height = boxes.board.height) => {
       const top = boxes.stack.height > 0 ? bandEnd() : 0;
@@ -1537,7 +1537,7 @@ describe('a line over a fitted view (GM r101)', () => {
       expect(useBoardCanvasStore.getState().placed.k1).toEqual({ kind: 'area', bounds: tileD });
     });
 
-    it('the chip\'s framing refits on a column resize (GM r113 4)', () => {
+    it('the chip\'s framing refits on a column resize', () => {
       openChip(withD());
       dragPan();
       pressChip();
@@ -1551,7 +1551,7 @@ describe('a line over a fitted view (GM r101)', () => {
       expect(useBoardCanvasStore.getState().placed.k1).toEqual({ kind: 'cards', ids: ['cd'] });
     });
 
-    it('a Show whose cards an agent removed, partly: a later line frames what is left (GM r113 6)', () => {
+    it('a Show whose cards an agent removed, partly: a later line frames what is left', () => {
       const view = open();
       dragPan();
       act(() => { useBoardCanvasStore.getState().requestFrame('k1', ['ca', 'cb']); });
@@ -1564,7 +1564,7 @@ describe('a line over a fitted view (GM r101)', () => {
       expect(useBoardCanvasStore.getState().placed.k1).toEqual({ kind: 'cards', ids: ['ca'] });
     });
 
-    it('a Show whose cards an agent removed, all of them: a later line clears the flag and the camera stays still (GM r113 6, review 12 N2)', () => {
+    it('a Show whose cards an agent removed, all of them: a later line clears the flag and the camera stays still', () => {
       const view = open();
       dragPan();
       act(() => { useBoardCanvasStore.getState().requestFrame('k1', ['ca']); });
@@ -1584,7 +1584,7 @@ describe('a line over a fitted view (GM r101)', () => {
       expect(flow.setViewport).not.toHaveBeenCalled();
     });
 
-    it('a Show whose cards an agent removed while in List: it reopens where it was kept, and the flag clears (GM r113 6)', () => {
+    it('a Show whose cards an agent removed while in List: it reopens where it was kept, and the flag clears', () => {
       const view = open();
       dragPan();
       act(() => { useBoardCanvasStore.getState().requestFrame('k1', ['ca']); });
@@ -1598,7 +1598,7 @@ describe('a line over a fitted view (GM r101)', () => {
       expect(useBoardCanvasStore.getState().placed.k1).toBeNull();
     });
 
-    it('List and back, a pan, then Fit: the flag is set again, so a later line refits (review 12 N3)', () => {
+    it('List and back, a pan, then Fit: the flag is set again, so a later line refits', () => {
       const view = open();
       view.unmount();
       render(ui());
@@ -1627,7 +1627,7 @@ describe('a line over a fitted view (GM r101)', () => {
       expectClose(camera(), fitBelowLine());
     });
 
-    it('an app refit never sets the flag: a line while panned, then a resize, moves nothing (GM r113 5)', () => {
+    it('an app refit never sets the flag: a line while panned, then a resize, moves nothing', () => {
       open();
       dragPan();
       const panned = camera();
@@ -1644,9 +1644,9 @@ describe('a line over a fitted view (GM r101)', () => {
   });
 });
 
-// #213 review 1 NIT-2: what the camera check counts as a move.
-describe('a move is any change of the camera (#213 review 1 NIT-2)', () => {
-  it('a pinch that changes only the zoom stops a refit spring (F1)', () => {
+// PR #213: what the camera check counts as a move.
+describe('a move is any change of the camera', () => {
+  it('a pinch that changes only the zoom stops a refit spring', () => {
     mounted();
     resize(430, 851);
     step(0);
@@ -1660,7 +1660,7 @@ describe('a move is any change of the camera (#213 review 1 NIT-2)', () => {
     expect(flow.setViewport).not.toHaveBeenCalled();
   });
 
-  it('a 0.3 px pan stops a refit spring: no tolerance on what counts as a move (F3)', () => {
+  it('a 0.3 px pan stops a refit spring: no tolerance on what counts as a move', () => {
     mounted();
     resize(430, 851);
     step(0);
@@ -1674,7 +1674,7 @@ describe('a move is any change of the camera (#213 review 1 NIT-2)', () => {
     expect(flow.setViewport).not.toHaveBeenCalled();
   });
 
-  it('React Flow makes its camera again under a pan not kept yet: the pan is put back and kept at once (G11)', () => {
+  it('React Flow makes its camera again under a pan not kept yet: the pan is put back and kept at once', () => {
     mounted();
     act(() => {
       flow.camera.x -= 90;
@@ -1691,10 +1691,10 @@ describe('a move is any change of the camera (#213 review 1 NIT-2)', () => {
   });
 });
 
-// GM, #213 round 3b: fitted is the person's intent. A card added or moved
+// PR #213: fitted is the person's intent. A card added or moved
 // while the board is fitted keeps it fitted: the camera doesn't move, and the
 // next resize refits to the cards there are then.
-describe('cards added or moved while fitted (GM, #213 round 3b)', () => {
+describe('cards added or moved while fitted', () => {
   const rerender = (view: ReturnType<typeof mount>, list: MoodboardImage[]) =>
     view.rerender(<BoardCanvas boardKey="k1" images={list} onMove={() => {}} onDropFiles={() => {}} />);
   const added = [...images, { id: 'd', url: '/api/outputs/d.png', weight: 1, notes: '', privateNote: '', excluded: false, placements: [card('cd', 1560)] }];
@@ -1757,7 +1757,7 @@ describe('cards added or moved while fitted (GM, #213 round 3b)', () => {
     expect(flow.setViewport).not.toHaveBeenCalled();
   });
 
-  it('a pan back exactly onto the fit, then a card added: kept as fitted, but a panned view, so a resize keeps it (GM r113 5)', () => {
+  it('a pan back exactly onto the fit, then a card added: kept as fitted, but a panned view, so a resize keeps it', () => {
     const view = mounted();
     autopan({ ...fitViewport(870, 851), x: -400 });
     expect(kept().fitted).toBe(false);
@@ -1805,8 +1805,8 @@ describe('cards added or moved while fitted (GM, #213 round 3b)', () => {
   });
 });
 
-// Review 2 LOW-2 and NIT-2: the band measured in a browser, and the close keep's flag.
-describe('the measured control-bar band (review 2 LOW-2)', () => {
+// The band measured in a browser, and the close keep's flag.
+describe('the measured control-bar band', () => {
   /** Lay out the board 851 tall and its bar `band` px from the bottom; `on` false is no layout (the view closing). */
   const layout = (band: number) => {
     const state = { on: true };
@@ -1844,7 +1844,7 @@ describe('the measured control-bar band (review 2 LOW-2)', () => {
   });
 });
 
-describe('the close keep\'s flag (review 2 R9)', () => {
+describe('the close keep\'s flag', () => {
   it('a pan back onto the fit, closed before it is kept: kept fitted, so it reopens fitted to its column then', () => {
     const view = mounted();
     act(() => {
@@ -1863,9 +1863,9 @@ describe('the close keep\'s flag (review 2 R9)', () => {
   });
 });
 
-describe('review 7 (saveaway-merge-logic-r6b): Fit with held spots after the #213 merge', () => {
+describe('Fit with held spots after the PR #213 merge', () => {
   const held = [{ id: 'placeholder-1', x: 4000, y: 100, width: 300, height: 200, source: { kind: 'file' as const, name: 'a.png' } }];
-  it('R7-F1: Fit with a held spot is a fit: a resize refits it, and it is kept fitted', () => {
+  it('Fit with a held spot is a fit: a resize refits it, and it is kept fitted', () => {
     render(<BoardCanvas boardKey="k1" images={images} onMove={() => {}} onDropFiles={() => {}} placeholders={held} />);
     flow.setViewport.mockClear();
     notch();
@@ -1877,7 +1877,7 @@ describe('review 7 (saveaway-merge-logic-r6b): Fit with held spots after the #21
     expect(camera()).not.toEqual(fitCam);
     expect(kept().fitted).toBe(true);
   });
-  it('R7-F2: a fitted board, a paste held, a resize: still fitted after the spot has gone', () => {
+  it('a fitted board, a paste held, a resize: still fitted after the spot has gone', () => {
     const wide = [{ id: 'placeholder-1', x: 3000, y: 400, width: 300, height: 200, source: { kind: 'file' as const, name: 'a.png' } }];
     const view = render(<BoardCanvas boardKey="k1" images={images} onMove={() => {}} onDropFiles={() => {}} />);
     expect(kept().fitted).toBe(true);

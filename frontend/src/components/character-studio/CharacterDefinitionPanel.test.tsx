@@ -43,8 +43,8 @@ describe('Character Studio reference views', () => {
   });
 });
 
-// error-copy round 2 (GM): "Couldn't upload {filename}." then the reason;
-// on 1fc3d846 this said "Upload failed — retry." whatever happened.
+// Design: "Couldn't upload {filename}." then the reason; on 1fc3d846 this
+// said "Upload failed — retry." whatever happened.
 describe('Character Studio reference upload failures', () => {
   afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 

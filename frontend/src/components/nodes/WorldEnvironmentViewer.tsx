@@ -40,10 +40,10 @@ import {
 import { RequestFailedError } from '../../lib/errorCopy';
 import { disposeSparkQuietly, disposeSparkWhenSettled } from '../../lib/sparkDispose';
 
-/** Error copy round 3e (GM): the SPZ format check's line on the card. */
+/** The SPZ format check's line on the card. */
 const WORLD_SPZ_FORMAT_LINE = "This world’s preview file is damaged or in a format Nebula can’t open. "
   + 'Use the panorama or the downloaded splat in a 3D viewer.';
-/** GM (PR #203 r1): the same check's line for a World v2 PLY splat (Idol),
+/** Design, PR #203: the same check's line for a World v2 PLY splat (Idol),
  * which has no panorama, and its too-large line. */
 export const WORLD_PLY_FORMAT_LINE = 'Nebula can’t open this splat. Download it to try a desktop 3D viewer.';
 export const WORLD_PLY_TOO_LARGE_LINE = 'This splat is too large to open in the browser. '
@@ -51,7 +51,7 @@ export const WORLD_PLY_TOO_LARGE_LINE = 'This splat is too large to open in the 
 
 export type WorldNavigationMode = 'orbit' | 'fly';
 export type WorldViewerStatus = 'loading' | 'ready' | 'error';
-/** Why the viewer couldn't show the splat (GM, PR #203 r3, each its own
+/** Why the viewer couldn't show the splat (design, PR #203, each its own
  * line): its file failed the format check ('format'), is past the size caps
  * ('too-large'), is gone (404, 'missing'), the browser has no WebGL 2
  * ('webgl'), the file didn't load (any other HTTP error or a dropped
@@ -93,8 +93,8 @@ export interface WorldEnvironmentViewerProps {
   onStatusChange?: (status: WorldViewerStatus) => void;
   /** Called with the reason when the status turns to 'error'. */
   onFailure?: (failure: WorldViewerFailure) => void;
-  /** The fallback shows nothing: the dialog says the reason in its own
-   * words, centred in its stage (the World v2 splat preview, GM PR #203 r2). */
+  /** The fallback shows nothing: the dialog says the reason in its own words,
+   * centred in its stage (the World v2 splat preview, design, PR #203). */
   quietFallback?: boolean;
 }
 
@@ -269,7 +269,7 @@ function WorldSplatScene({
           : [];
         if (framing === 'object' && mesh.packedSplats) {
           // An object is drawn at one size whatever its file's units
-          // (objectUnitScale, review r3 LOW-3), then framed.
+          // (objectUnitScale), then framed.
           const unit = objectUnitScale(sampledCenters, sampleWorldSplatExtents(mesh.packedSplats, mesh.matrixWorld));
           if (unit !== 1) {
             mesh.scale.multiplyScalar(unit);
@@ -304,10 +304,10 @@ function WorldSplatScene({
       } catch (error) {
         if (!cancelled && !isAbortError(error)) {
           console.warn('[nebula] World splat load failed:', error);
-          // Error copy round 3e (GM): the format check's own text ("not a
-          // valid supported SPZ file (invalid NGSP magic)") stays in the
-          // console above; the card reads a written line.
-          // Past the fetch, the bytes passed the check: Spark couldn't read or draw them.
+          // The format check's own text ("not a valid supported SPZ file
+          // (invalid NGSP magic)") stays in the console above; the card reads a
+          // written line. Past the fetch, the bytes passed the check: Spark
+          // couldn't read or draw them.
           const failure: WorldViewerFailure = fetched ? 'other' : fetchFailure(error);
           onError(
             error instanceof WorldSplatTooLargeError ? (format === 'ply' ? WORLD_PLY_TOO_LARGE_LINE : error.message)
@@ -431,9 +431,9 @@ function OrbitNavigation({
 }) {
   const { camera, gl } = useThree();
   const perspectiveCamera = camera as PerspectiveCamera;
-  // Made in an effect, with its cleanup (review r3 LOW-4): the constructor
-  // attaches its listeners, so a memo's discarded copy (StrictMode renders
-  // twice) stayed on the canvas and every wheel zoomed twice.
+  // Made in an effect, with its cleanup: the constructor attaches
+  // its listeners, so a memo's discarded copy (StrictMode renders twice)
+  // stayed on the canvas and every wheel zoomed twice.
   const controlsRef = useRef<OrbitControls | null>(null);
   useEffect(() => {
     const next = new OrbitControls(perspectiveCamera, gl.domElement);
@@ -641,8 +641,8 @@ function ViewerFallback({
   detail?: string;
   quiet?: boolean;
 }) {
-  // The dialog says why in its own line (GM, PR #203 r2: the specific line
-  // replaces "Interactive preview unavailable", never both).
+  // The dialog says why in its own line (design, PR #203: the specific
+  // line replaces "Interactive preview unavailable", never both).
   if (quiet) return <div className="world-environment-viewer__fallback" aria-hidden="true" />;
   return (
     <div className="world-environment-viewer__fallback" role="img" aria-label={`${label}. Interactive 3D preview unavailable.`}>

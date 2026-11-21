@@ -278,8 +278,8 @@ export function CanvasFocusController() {
       clearRequest(request.requestId);
       // The UI store names what the canvas still has selected, as when the
       // shown node leaves (graphStore): its one node; over several, one of
-      // them unpinned ("N nodes selected"), none pinned; else none (review 7
-      // of PR #205, inspector NIT-2; review 8, lines-inspector MEDIUM-1).
+      // them unpinned ("N nodes selected"), none pinned; else none
+      // (PR #205).
       if (ui.selectedNodeId === request.nodeId) {
         const ringed = graph.nodes.filter((node) => node.selected);
         ui.selectNode(ringed.length === 1 || (ringed.length > 1 && !ui.inspectorPinned) ? ringed[0].id : null, { keepPin: true });
@@ -315,7 +315,7 @@ export function CanvasFocusController() {
 
 export function Canvas() {
   useSlavaHandleMagnetism();
-  // Round 20 (M1): read-only while the tab follows an agent's switch.
+  // Read-only while the tab follows an agent's switch.
   useFollowingReadOnly();
 
   const nodes = useGraphStore((s) => s.nodes);
@@ -325,9 +325,9 @@ export function Canvas() {
   const storeOnConnect = useGraphStore((s) => s.onConnect);
   const executeGraph = useGraphStore((s) => s.executeGraph);
   const isExecuting = useGraphStore((s) => s.isExecuting);
-  // Offline is read-only (GM, round 14 of PR #114).
-  // Offline or following an agent's switch: one read-only state (design).
-  // Selecting stays local view state; it is published unless offline.
+  // Offline is read-only (design, PR #114). Offline or following an
+  // agent's switch: one read-only state (design). Selecting stays local
+  // view state; it is published unless offline.
   const lock = useCanvasLock();
   const readOnly = lock.locked;
   const offline = lock.offline;
@@ -453,8 +453,8 @@ export function Canvas() {
   // Publish only IDs. The backend resolves authoritative node data on read,
   // keeping transient selection out of saved graph files and stale handles out
   // of CLI/MCP context. Debounce marquee churn while preserving the final set.
-  // Round 16 (L1): selecting while offline is local view state; nothing is
-  // sent then, and the selection in hand goes out once Nebula answers again.
+  // Selecting while offline is local view state; nothing is sent then, and the
+  // selection in hand goes out once Nebula answers again.
   useEffect(() => {
     if (offline) return undefined;
     const controller = new AbortController();
@@ -631,27 +631,26 @@ export function Canvas() {
   const connectStartRef = useRef<{ nodeId: string; handleId: string; handleType: 'source' | 'target' } | null>(null);
   const connectionSucceededRef = useRef(false);
 
-  // The Delete key: a node holding World Labs state stays, and the canvas
-  // says why (error copy round 3b). Refused here, before React Flow removes
-  // anything, so its wires stay too; one notice per press. Otherwise it
-  // deletes at once, and the store says "Deleted the node." with Undo: undo
-  // puts back everything a delete removed (GM, 2026-10-23, lib/deleteNotice.ts).
-  // A Cinema scene with a shot rendering stays, and so do its wires: the
-  // store keeps it out of the delete and says so (GM, PR #198 r3 item 1).
-  // Never behind an open modal dialog (review 8 of PR #195, M-1): the Delete
-  // key is the canvas's own (onKeyDown below), and this refuses any delete
-  // that would still reach React Flow while one is open.
+  // The Delete key: a node holding World Labs state stays, and the canvas says
+  // why (error copy). Refused here, before React Flow removes anything, so its
+  // wires stay too; one notice per press. Otherwise it deletes at once, and the
+  // store says "Deleted the node." with Undo: undo puts back everything a delete
+  // removed (design, 2026-10-23, lib/deleteNotice.ts). A Cinema scene with a
+  // shot rendering stays, and so do its wires: the store keeps it out of the
+  // delete and says so (design, PR #198). Never behind an open modal dialog
+  // (PR #195): the Delete key is the canvas's own (onKeyDown below), and this
+  // refuses any delete that would still reach React Flow while one is open.
   const onBeforeDelete = useCallback(async ({ nodes: doomed, edges }: { nodes: Node[]; edges: Edge[] }) => {
     if (isModalDialogOpen()) return false;
     if (doomed.length === 0) return true;
     const state = useGraphStore.getState();
     if (!state.allowCanvasDelete(doomed.map((node) => node.id))) return false;
     // Deleted nodes' wires go with each node's own DELETE; React Flow
-    // removes only wires between nodes that stay (PR #198 round 5).
+    // removes only wires between nodes that stay (PR #198).
     return { nodes: doomed, edges: wiresDeletedWith(doomed.map((node) => node.id), edges) };
   }, []);
   const flowStore = useStoreApi();
-  // A card springing its width has React Flow measure its node at once (lib/cardWidthSpring.ts, GM r107).
+  // A card springing its width has React Flow measure its node at once (lib/cardWidthSpring.ts, design).
   const remeasureNode = useFlowNodeRemeasure();
 
   const onConnectStart: OnConnectStart = useCallback((_event, params) => {
@@ -675,11 +674,10 @@ export function Canvas() {
     connectionSucceededRef.current = false;
     if (!info || !info.nodeId || !info.handleId) return;
     if (connectionSucceeded) return;
-    // GM r26, 3: a drop on a handle the canvas refused (useIsValidConnection:
-    // a wrong kind or a loop) says why, on kept and normal tabs alike; a
-    // silent drop looks like a missed one.
-    // A drop the canvas refused on a handle says why (GM r26, 3), a handle
-    // of the same kind included (GM r28, 1), and opens nothing.
+    // Design: a drop on a handle the canvas refused (useIsValidConnection: a
+    // wrong kind or a loop) says why, on kept and normal tabs alike; a silent
+    // drop looks like a missed one. A drop the canvas refused on a handle
+    // says why, a handle of the same kind included, and opens nothing.
     if (useGraphStore.getState().sayRefusedDrop(info, connectionState)) return;
     if (connectionState.toHandle || connectionState.toNode || connectionState.isValid !== null) return;
 
@@ -691,9 +689,9 @@ export function Canvas() {
     if (target.closest('.react-flow__handle') || target.closest('.react-flow__node')) return;
     const elementsAtDrop = document.elementsFromPoint(point.x, point.y);
     if (elementsAtDrop.some((el) => el.closest('.react-flow__handle') || el.closest('.react-flow__node'))) return;
-    // GM PR #205 r4 item 3: the picker opens during a run too. Adding a node
-    // and connecting two are each allowed while a run goes, so the connected
-    // add is as well (no lock, no line).
+    // Design, PR #205: the picker opens during a run too. Adding a node and
+    // connecting two are each allowed while a run goes, so the connected add
+    // is as well (no lock, no line).
 
     showConnectionPopup({
       position: point,
@@ -707,11 +705,11 @@ export function Canvas() {
     (event: React.DragEvent) => {
       event.preventDefault();
       // Nothing lands while following or offline: files, a character, a
-      // moodboard or a library node (fix round 6 of PR #200; the store's edit
-      // gate refused the node drops too, the handler now says so itself).
-      // While kept (GM r19 on PR #199, 5) a library node lands on this tab
-      // only; files refuse in canvasFileDrop, and a character or moodboard
-      // (backend assets) in the store's kept gate, each with its kept line.
+      // moodboard or a library node (PR #200; the store's edit gate refused
+      // the node drops too, the handler now says so itself). While kept
+      // (design, PR #199), a library node lands on this tab only; files
+      // refuse in canvasFileDrop, and a character or moodboard (backend
+      // assets) in the store's kept gate, each with its kept line.
       if (refuseTabOnlyEdit()) return;
       setFitFirstNodes(false);
 
@@ -803,10 +801,10 @@ export function Canvas() {
   }, [hideContextMenu]);
 
   // A drag-select: the unpinned Inspector follows it, and closes only if it
-  // ends with none selected (GM PR #205 r16 item 5).
+  // ends with none selected (design, PR #205).
   const onSelectionStart = useCallback(() => noteCanvasSelectionDrag(true), []);
   const onSelectionEnd = useCallback(() => noteCanvasSelectionDrag(false), []);
-  // A drag the canvas started ends with it (review 8, lines-inspector NIT-2).
+  // A drag the canvas started ends with it.
   useEffect(() => () => noteCanvasSelectionDrag(false), []);
 
   // Right-click on empty canvas offers "Leave a note for agents here…".
@@ -851,8 +849,8 @@ export function Canvas() {
         return;
       }
 
-      // Ctrl+Enter: Run canvas. GM PR #205 r4 item 4: while a wait holds
-      // it (this tab's run or its start, Create's launch, an import), the
+      // Ctrl+Enter: Run canvas. Design, PR #205: while a wait holds it
+      // (this tab's run or its start, Create's launch, an import), the
       // press says the palette's line in the key presses' place.
       if (isCtrlOrCmd && event.key === 'Enter') {
         event.preventDefault();
@@ -878,8 +876,8 @@ export function Canvas() {
         if (event.repeat) return;
         if (event.target instanceof Element && event.target.closest('.nokey')) return;
         // While this tab runs something nothing is deleted, and the store
-        // says why the selection stays (PR #198 review 4, M1: the lock was
-        // silent; wires alone too, round 5 N1).
+        // says why the selection stays (PR #198: the lock was silent;
+        // wires alone too).
         if (isExecuting) {
           const graph = useGraphStore.getState();
           if (graph.nodes.some((node) => node.selected) || graph.edges.some((edge) => edge.selected)) {
@@ -1008,7 +1006,7 @@ export function Canvas() {
           defaultEdgeOptions={{ type: 'typed-edge' }}
           proOptions={{ hideAttribution: true }}
           // The Delete key is the canvas's own (onKeyDown): React Flow's never
-          // asked whether a modal dialog is open (review 8, M-1).
+          // asked whether a modal dialog is open.
           deleteKeyCode={null}
           onBeforeDelete={onBeforeDelete}
           {...CANVAS_INTERACTION_PROPS}
@@ -1028,14 +1026,14 @@ export function Canvas() {
           <CanvasFocusController />
           <HoldRevealController pending={covered} holding={hold.holding} empty={hold.nodes.length === 0} fitOwed={fitOwed} onRevealed={onRevealed} />
           {/* Floating panels stop below the selection toolbar (lib/bottomBar.ts
-              floatingTopLimit; GM - Design, 2026-10-23). The marker is on the
-              panel, the toolbar's layout box: the toolbar's entry animation
-              transforms it, and a measured line would ease down with it. With
-              nothing selected the panel is empty, 0 px wide but still one
-              toolbar tall (canvas.css), so an open Inspector holds its place
-              (GM, round 3: "A panel shouldn't move unless someone moves it").
-              data-toolbar-slot: the Agent log's ceiling counts the slot only
-              where it overlaps the slot's reserved width (GM r70). */}
+              floatingTopLimit; design, 2026-10-23). The marker is on the panel,
+              the toolbar's layout box: the toolbar's entry animation transforms
+              it, and a measured line would ease down with it. With nothing
+              selected the panel is empty, 0 px wide but still one toolbar tall
+              (canvas.css), so an open Inspector holds its place (design: "A
+              panel shouldn't move unless someone moves it"). data-toolbar-slot:
+              the Agent log's ceiling counts the slot only where it overlaps the
+              slot's reserved width (design). */}
           <Panel position="top-center" className="selection-toolbar-panel" data-top-bar="" data-toolbar-slot="">
             <SelectionToolbar />
           </Panel>

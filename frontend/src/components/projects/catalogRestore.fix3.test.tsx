@@ -1,9 +1,8 @@
 /**
- * Fix round 3 of PR #199 (GM - Design r4 and r5, 2026-10-27; review 3's
- * M-B and L-5): the notice says only lines that are still true, against
- * the projects and Recently deleted as they are now; "Open Recently
- * deleted" only while Recently deleted holds one of its items; the limit
- * lines; the waiting line on the Projects home; the saved toast.
+ * PR #199 (design, 2026-10-27): the notice says only lines that are still
+ * true, against the projects and Recently deleted as they are now; "Open
+ * Recently deleted" only while Recently deleted holds one of its items; the
+ * limit lines; the waiting line on the Projects home; the saved toast.
  */
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
@@ -39,7 +38,7 @@ const trashed = (id: string, name: string): TrashedProject => ({
 const now = (projects: ProjectSummary[], trash: TrashedProject[], canvasNotFiled: { reason: 'projects' | 'storage'; projectLimit?: number } | null = null) =>
   ({ projects, trash, canvasNotFiled });
 
-// The review's S1: Hero added back into Recently deleted, plus a reverted Logo (not read whole).
+// Hero added back into Recently deleted, plus a reverted Logo (not read whole).
 const s1 = restore({
   addedBack: [{ id: HERO, name: 'Hero', trashed: true }], addedBackCount: 1,
   reverted: [{ id: LOGO, name: 'Logo' }], revertedCount: 1, damagedReadWhole: false,
@@ -47,7 +46,7 @@ const s1 = restore({
 const heroLine = '“Hero”, a newer project it found, is in Recently deleted. Restore it from there to keep it.';
 const logoLine = '“Logo” went back to its version in that copy, so its latest edits aren’t there.';
 
-describe('GM r4: the notice only shows lines that are still true', () => {
+describe('the notice only shows lines that are still true', () => {
   it('says Hero is in Recently deleted only while it is there', () => {
     const before = catalogRestoreNotice(s1, NOW, now([project(LOGO, 'Logo')], [trashed(HERO, 'Hero')]));
     expect(before.lines).toContain(heroLine);
@@ -82,7 +81,8 @@ describe('GM r4: the notice only shows lines that are still true', () => {
     // The person deletes Dunes again and restores Hero; Scratch turns up (an agent's recover).
     const none = catalogRestoreNotice(record, NOW, now([project(HERO, 'Hero'), project(SCRATCH, 'Scratch')], [trashed(DUNES, 'Dunes')]));
     expect(none.text).toBe(`${OPEN} from 2 days ago. ${KEPT}`);
-    // Stacked at first, so it stays one line per outcome (GM r6, bug 1).
+    // Stacked at first, so it stays one line per outcome (it used to turn
+    // inline once lines dropped).
     expect(none.lines).toEqual([`${OPEN} from 2 days ago.`, KEPT]);
   });
 
@@ -109,7 +109,7 @@ describe('GM r4: the notice only shows lines that are still true', () => {
   });
 });
 
-describe('GM r5: the limit lines, in the canvas line\'s place', () => {
+describe('the limit lines, in the canvas line\'s place', () => {
   it('words the project limit with the number', () => {
     expect(canvasLimitLine('projects', { projectLimit: 500, trashHasItems: false }))
       .toBe("The canvas you had open couldn’t be saved as its own project because you’ve reached the limit of 500 projects. Nothing in it is lost. Delete a project and Nebula will save it.");
@@ -139,7 +139,7 @@ describe('GM r5: the limit lines, in the canvas line\'s place', () => {
   });
 });
 
-describe('GM r5: the waiting line and the saved toast', () => {
+describe('the waiting line and the saved toast', () => {
   it('words the waiting line for each limit', () => {
     expect(canvasWaitingLine('projects', { projectLimit: 500, trashHasItems: true }))
       .toBe("The canvas you had open isn’t saved as a project yet because you’ve reached the limit of 500 projects. Nothing in it is lost. Delete a project and Nebula will save it.");

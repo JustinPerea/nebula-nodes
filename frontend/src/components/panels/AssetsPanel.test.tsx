@@ -198,8 +198,8 @@ describe.each([
   it("a project item offers Move to Global; a refused move says why", async () => {
     api[kind === 'moodboard' ? 'fetchMoodboards' : 'fetchCharacters'].mockResolvedValue([
       { ...(kind === 'moodboard' ? board : character), projectId: 'pA' }]);
-    // Round 3e: a refusal arrives as the API's typed error (apiRequest), not a plain Error,
-    // whose own text no surface shows any more.
+    // A refusal arrives as the API's typed error (apiRequest), not a plain Error, whose own
+    // text no surface shows any more.
     api.moveStoredAsset.mockRejectedValueOnce(new RequestFailedError('Couldn’t move it.', 404, { reason: 'No project has the id.' }));
     await openTab(tab);
     fireEvent.click(screen.getByRole('tab', { name: 'Project' }));
@@ -215,7 +215,7 @@ describe.each([
 // A Character or Style saved before Nebula checked its images can hold an
 // outside link: the row keeps it listed but never loads that picture.
 describe('Assets panel images from outside Nebula', () => {
-  it('a board row shows its placeholder and says why (Q98)', async () => {
+  it('a board row shows its placeholder and says why', async () => {
     api.fetchMoodboards.mockResolvedValue([{ ...board, thumbnail: 'https://example.com/x.png' }]);
     await openTab('Moodboards');
     expect(await screen.findByText('Image link from outside Nebula')).toBeTruthy();
@@ -274,7 +274,7 @@ describe('Assets panel Styles', () => {
     presets.fetchPresets.mockResolvedValue([style]);
     trash.fetchTrash.mockResolvedValue([{ kind: 'style', id: 's0', name: 'Old look', projectId: null,
       deletedAt: '2026-10-20T12:00:00Z', deletedBy: { kind: 'agent', name: 'GM - Design' } }]);
-    // What deletePreset throws (error-copy round 2): its heading and the backend's reason.
+    // What deletePreset throws (error-copy): its heading and the backend's reason.
     presets.deletePreset.mockRejectedValueOnce(
       new RequestFailedError('Couldn’t delete the style.', 404, { detail: "Style 's1' not found" }));
     renderPanel();

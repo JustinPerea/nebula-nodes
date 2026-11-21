@@ -69,7 +69,7 @@ export function CharacterDefinitionPanel({
     const uploads = Array.from(files).map((file) => {
       const fd = new FormData();
       fd.append('file', file);
-      // GM, error-copy round 2: "Couldn’t upload {filename}." then the reason.
+      // Design: "Couldn’t upload {filename}." then the reason.
       return apiRequest(`Couldn’t upload ${quoted(file.name)}.`, '/api/uploads', { method: 'POST', body: fd })
         .then((r) => r.json())
         .then((data: { filePath: string; url: string }) => data.url);

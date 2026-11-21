@@ -37,14 +37,14 @@ export function CinemaShotsRail({
   onReorder,
 }: CinemaShotsRailProps) {
   const [dragId, setDragId] = useState<string | null>(null);
-  // Round 23 (review 22, L-3): moving, removing and adding shots edit the
-  // canvas, so they take the canvas lock; selecting a shot only looks.
+  // Moving, removing and adding shots edit the canvas, so they take the
+  // canvas lock; selecting a shot only looks.
   const lock = useCanvasLock();
   const selectorRefs = useRef(new Map<string, HTMLButtonElement>());
   const addRef = useRef<HTMLButtonElement>(null);
   const pendingFocus = useRef<{ shotId: string | null; removedId?: string } | null>(null);
   const activeRuns = useGraphStore((state) => state.activeRuns);
-  // A run of the graph holds the shots only while it is on this scene (L2).
+  // A run of the graph holds the shots only while it is on this scene.
   const sceneState = useGraphStore((state) => state.nodes.find((node) => node.id === cinemaNodeId)?.data.state);
   const tabStopId = scene.shots.some((shot) => shot.id === selectedShotId)
     ? selectedShotId : scene.shots[0]?.id;
@@ -71,7 +71,7 @@ export function CinemaShotsRail({
   const reorder = (shotId: string, targetIndex: number, focusSelector: boolean) => {
     // Offline or following the order can't save (the store refuses it): the
     // arrows are disabled, a drag doesn't start, and Alt + arrow keys do
-    // nothing but pulse the banner or the project bar (PR #198 r5, #195 r23).
+    // nothing but pulse the banner or the project bar (PR #198, PR #195).
     if (refuseCanvasEdit()) return;
     const shots = [...scene.shots];
     const from = shots.findIndex((shot) => shot.id === shotId);
@@ -121,8 +121,8 @@ export function CinemaShotsRail({
   };
 
   return (
-    // GM note (fix round 1 of PR #200): the selected shot uses the shared
-    // selected style, the node's category colour (never the accent).
+    // Design note (PR #200): the selected shot uses the shared selected
+    // style, the node's category colour (never the accent).
     <div className="cinema-shots-rail" role="group" aria-label="Shots"
       style={{ ['--node-category-color' as string]: CINEMA_CATEGORY_COLOR }}>
       {scene.shots.map((shot, idx) => {
@@ -134,7 +134,7 @@ export function CinemaShotsRail({
           name: (n: number) => `${owner.status === 'cancelling' ? 'Stopping' : 'Generating'} shot ${n}`,
         } : statusBadge(shot);
         const thumb = shot.output?.imageUrl ?? null;
-        // A shot that is rendering can't be removed (GM, PR #198 r2): × is
+        // A shot that is rendering can't be removed (design, PR #198): × is
         // disabled and says why; the store and the backend refuse it too.
         const block = shotRemovalBlock(activeRuns, cinemaNodeId, shot, sceneState);
         return (
@@ -187,8 +187,8 @@ export function CinemaShotsRail({
               </>}
               <button type="button" className="cinema-shots-rail__remove"
                 aria-label={`Remove shot ${idx + 1}`}
-                // M2: a run that holds the shot says so first, over following
-                // and offline (lib/canvasLock's order).
+                // A run that holds the shot says so first, over following and
+                // offline (lib/canvasLock's order).
                 {...lockedAction(lock, { kept: 'scene', title: 'Remove shot', offline: 'remove shots' }, block
                   ? { verb: OFFLINE_VERBS.removeShots, run: true, runTitle: shotRemovalBlockTitle(block, `Shot ${idx + 1}`) }
                   : { verb: OFFLINE_VERBS.removeShots })}

@@ -9,9 +9,8 @@ import '../../styles/nodes.css';
 function RerouteNodeComponent({ data }: NodeProps) {
   return (
     <div className="reroute-node" data-pending={pendingAttr(data.pending)}>
-      {/* The dot has no body, so its run error (a wire it needs, error copy
-          round 3e) hangs below it at a card's width, and so does whose
-          placeholder it is (Q125 item 3). */}
+      {/* The dot has no body, so its run error (a wire it needs, error copy)
+          hangs below it at a card's width, and so does whose placeholder it is. */}
       <NodeRunError data={data as unknown as NodeData} className="reroute-node__run-error nodrag nowheel" />
       <PlaceholderLine pending={data.pending} className="reroute-node__pending" />
       <Handle

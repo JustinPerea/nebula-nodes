@@ -48,24 +48,24 @@ export function OnboardingOverlay() {
     // first) has made the page behind inert and noted the opener for close.
     focusCard();
     // The page behind, the proposal bar with it, is inert while it is open:
-    // ModalPortal does that for every modal dialog (PR #203 round 7).
+    // ModalPortal does that for every modal dialog (PR #203).
     const containFocus = (event: FocusEvent) => {
       // A closing dialog's focus return (ModalPortal) is no slip.
       if (isReturningFocus()) return;
       // A modal dialog opened over the tour keeps its own focus.
       if (keyBlockedByModal(overlay)) return;
-      // The app's notices are the trap's second region (GM r25); the
+      // The app's notices are the trap's second region (design); the
       // proposal bar is behind the tour, not one of them.
       if (event.target instanceof Node && !overlay.contains(event.target) && !inNoticeAboveDialogs(event.target)) focusCard();
     };
     document.addEventListener('focusin', containFocus);
     const containUnfocusedKey = (event: globalThis.KeyboardEvent) => {
       if (event.target instanceof Node && overlay.contains(event.target)) return;
-      // Review 15 LOW-A (fix round 18): a notice's keys are its own (Enter
-      // and Space press its button, Shift+Tab leaves it; Escape: GM r27,
-      // lib/modalFocus noticeKeys), never the tour's.
+      // A notice's keys are its own (Enter and Space press its button,
+      // Shift+Tab leaves it; Escape: lib/modalFocus noticeKeys), never the
+      // tour's.
       if (inNoticeAboveDialogs(event.target)) return;
-      // A modal dialog opened over the tour owns the keys (review 8, L-d).
+      // A modal dialog opened over the tour owns the keys.
       if (keyBlockedByModal(overlay)) return;
       event.preventDefault();
       event.stopImmediatePropagation();
@@ -77,8 +77,8 @@ export function OnboardingOverlay() {
       document.removeEventListener('focusin', containFocus);
       document.removeEventListener('keydown', containUnfocusedKey, true);
       // Back to whatever opened the tour, else the help button, never to the
-      // proposal bar (GM r10 item 2: seeing the bar again is the cue).
-      // ModalPortal does it once the page behind is usable again.
+      // proposal bar (design: seeing the bar again is the cue). ModalPortal
+      // does it once the page behind is usable again.
     };
   }, [active, finish]);
 

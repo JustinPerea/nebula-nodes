@@ -19,7 +19,7 @@ interface StoredAssetPickerProps {
   label: string;
   value: string;
   onChange: (id: string) => void;
-  /** Offline: the choice is read-only (round 15 of PR #114). */
+  /** Offline: the choice is read-only (PR #114). */
   readOnly?: boolean;
 }
 

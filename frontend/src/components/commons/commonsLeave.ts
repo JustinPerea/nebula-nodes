@@ -4,18 +4,18 @@ import { CommonsRequestError } from '../../lib/commonsRequestError';
 import { canTryAgain, failureCopy, oneLine } from '../../lib/errorCopy';
 
 /**
- * Leaving the Commons with unsaved labels (commons-leave, GM - Design,
- * 2026-10-22). Moving between the Commons' sections isn't leaving: CommonsView
- * keeps Blind labeling and Agent review mounted once opened, so their drafts
- * live as long as the Commons does. The real exits (its Back, Projects, the
- * browser's Back or a hash change, the Updates corner's Show, See all and
- * Review) ask first in a small popover anchored to what was clicked: Save and
- * leave, Discard and leave, Stay. Agents' and the system's exits stay held
- * as #163 built them (lib/commonsUnsaved), with no popover.
+ * Leaving the Commons with unsaved labels (design, 2026-10-22). Moving between
+ * the Commons' sections isn't leaving: CommonsView keeps Blind labeling and
+ * Agent review mounted once opened, so their drafts live as long as the
+ * Commons does. The real exits (its Back, Projects, the browser's Back or a
+ * hash change, the Updates corner's Show, See all and Review) ask first in a
+ * small popover anchored to what was clicked: Save and leave, Discard and
+ * leave, Stay. Agents' and the system's exits stay held as #163 built them
+ * (lib/commonsUnsaved), with no popover.
  */
 
-/** `retry`: saving again could work (GM: only then is Save and leave offered
- * again). `reason` is the popover's line and `message` the panel banner's: both the one
+/** `retry`: saving again could work (only then is Save and leave offered again).
+ * `reason` is the popover's line and `message` the panel banner's: both the one
  * line in the because form ("Nebula couldn’t save your labels because …"). */
 export type SaveResult = { ok: true } | { ok: false; reason: string; message: string; retry: boolean;
   /** Which panel's save failed (set by the leave, not by the panel). */
@@ -29,7 +29,7 @@ type SaveFailure = Extract<SaveResult, { ok: false }>;
  * same request would get again: a conflict ("changed in another window"), a
  * closed batch, no session (any other 4xx). The reason is copy: a Commons
  * request's error carries it (lib/commonsApi); any other error says the
- * connection line or GM's general line, never its own message.
+ * connection line or the design's general line, never its own message.
  */
 export function saveFailure(error: unknown): SaveFailure {
   const retry = error instanceof CommonsRequestError ? canTryAgain(error.status) : true;

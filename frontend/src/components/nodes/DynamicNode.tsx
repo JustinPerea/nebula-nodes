@@ -39,7 +39,7 @@ function isDynamicData(data: NodeData): data is DynamicNodeData {
 function DynamicNodeComponent({ id, data, selected }: NodeProps) {
   const nodeData = data as unknown as NodeData;
   const batchPreview = useBatchPreview(id, nodeData);
-  // GM r107: the card's width springs when its own content widens it.
+  // Design: the card's width springs when its own content widens it.
   const cardRef = useRef<HTMLDivElement | null>(null);
   useCardWidthSpring(cardRef, useNodeRemeasure(id));
   const previewOutputs = batchPreview.outputs;
@@ -136,7 +136,7 @@ function DynamicNodeComponent({ id, data, selected }: NodeProps) {
           aria-label="Show node settings"
           onClick={handleInspectorButtonClick}
           onMouseDown={(e) => e.stopPropagation()}
-          // Live while kept (GM r17 on PR #199): it opens the Inspector, where a
+          // Live while kept (design, PR #199): it opens the Inspector, where a
           // param edit stays on this tab as typing does; its writes are gated.
           title="Show node settings"
         >

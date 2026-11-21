@@ -13,7 +13,7 @@ export function useRemotionKeyboard({ remotionNodeId, currentFrame }: UseRemotio
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       // Nothing acts behind a modal dialog, focus on the page or on its
-      // buttons included (review 8, L-d).
+      // buttons included.
       if (e.defaultPrevented || keyBlockedByModal()) return;
       // Ignore if user is typing in an input/textarea
       const target = e.target as HTMLElement | null;

@@ -20,7 +20,7 @@ const UNDO_NOTICE_MS = 10000;
  */
 export function SettingsNoticeBar() {
   const stored = useSettingsDraftStore((s) => s.notice);
-  // Round 17 (review 13 LOW-3): offline first, the bar with it. A because line hidden offline
+  // Offline first, the bar with it. A because line hidden offline
   // (hooks/useOfflineFirstBecause) would leave an empty bar, so the notice doesn't show; back
   // online it does, if it is still there.
   const shownMessage = useOfflineFirstBecause(stored?.message ?? null);
@@ -28,14 +28,14 @@ export function SettingsNoticeBar() {
   // Held per notice, so a notice that vanished under the pointer can't pin the next one.
   const [heldId, setHeldId] = useState<number | null>(null);
   const held = !!notice && heldId === notice.id;
-  // PR #204 round 11 (review 9 LOW-1): Undo removes the key (DELETE /api/settings/api-keys/…,
-  // the person's alone), so it locks with the providers' words, its line under it.
+  // PR #204: Undo removes the key (DELETE /api/settings/api-keys/…, the person's alone), so
+  // it locks with the providers' words, its line under it.
   const undoLock = usePersonLock('change provider settings', !!notice?.undoKey);
-  // Round 13 (review 10 LOW-3): with the Providers line on screen, Undo points at it and shows no
-  // second copy, so nothing is said twice, nor again inside this live region. Round 14 (review 11
-  // NIT-1, LOW-4): decided from state while rendering (groupLockLines, which ProvidersTab's line
-  // registers), not by reading the page after a commit, so a demote never puts the copy in the
-  // live region even for one commit, and the panel is never observed.
+  // With the Providers line on screen, Undo points at it and shows no second copy, so nothing is
+  // said twice, nor again inside this live region. Decided from state while rendering
+  // (groupLockLines, which ProvidersTab's line registers), not by reading the page after a
+  // commit, so a demote never puts the copy in the live region even for one commit, and the panel
+  // is never observed.
   const groupLineId = useGroupLockLineId('change provider settings');
   const groupLine = undoLock.shown ? groupLineId : null;
 
@@ -59,7 +59,7 @@ export function SettingsNoticeBar() {
               aria-describedby={groupLine ?? undoLock.control()['aria-describedby']} onClick={undoLock.guard(() => {
               const key = notice.undoKey!;
               focusRowAfterMove(key);
-              // A handoff the undo didn't use never waits for a later mount (copy LOW-1).
+              // A handoff the undo didn't use never waits for a later mount.
               void import('../../../lib/settingsWrites').then((writes) => writes.undoAddedKey(notice.id)).then(() => settleRowFocus(key));
             })}>Undo</button>
           )}

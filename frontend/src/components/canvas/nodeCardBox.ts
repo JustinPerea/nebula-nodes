@@ -38,7 +38,7 @@ export function nodeCardBox(state: Pick<ReactFlowState, 'nodeLookup' | 'transfor
 
 /**
  * Where an agent's pill anchors (AgentNodeMarkLayer): the drawn card, so
- * the pill's 6 px gap is above the edge the person sees (GM - Design,
+ * the pill's 6 px gap is above the edge the person sees (design,
  * 2026-10-25), not above the empty room the node box keeps for its settings
  * bar. While that bar floats over the card (the node selected with others),
  * the box starts at the bar, so the pill sits above it and never covers it.

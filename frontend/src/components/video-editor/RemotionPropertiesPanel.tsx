@@ -47,9 +47,9 @@ export function RemotionPropertiesPanel({ remotionNodeId }: RemotionPropertiesPa
   const updateTrackItemSpatial = useGraphStore((s) => s.updateTrackItemSpatial);
   const updateKeyframe = useGraphStore((s) => s.updateKeyframe);
   const deleteKeyframe = useGraphStore((s) => s.deleteKeyframe);
-  // Round 23 (review 22, L-3): every field here edits the layer on the
-  // canvas, so the fields sit in one fieldset the canvas lock disables (a
-  // disabled fieldset disables each control inside it).
+  // Every field here edits the layer on the canvas, so the fields sit in
+  // one fieldset the canvas lock disables (a disabled fieldset disables
+  // each control inside it).
   const lock = useCanvasLock();
 
   const manifest = ((node?.data.params as { manifest?: VideoGraphManifest } | undefined)?.manifest) ?? null;

@@ -32,20 +32,20 @@ const shotFailedLine = (number: number) => `Shot ${number} failed. Open Studio t
 
 export function CinemaSceneNode({ id, data, selected }: NodeProps) {
   const enterCinemaEditor = useUIStore((s) => s.enterCinemaEditor);
-  // Edits on screen that the backend didn't take (GM, PR #198 r6 item 1):
-  // the line that said why, kept as the mark's title.
+  // Edits on screen that the backend didn't take (design, PR #198): the
+  // line that said why, kept as the mark's title.
   const kept = useGraphStore((s) => s.unsavedScenes[id] ?? null);
-  // GM r34: a scene with a state line says it with the name the card shows now.
+  // Design: a scene with a state line says it with the name the card shows now.
   const live = useGraphStore((s) => (kept ? sceneMarkLine(s, id) : null));
   const unsaved = kept ? live ?? kept : null;
-  // A [Try again] on its way keeps the mark's popover and its button (GM r29 call 2).
+  // A [Try again] on its way keeps the mark's popover and its button.
   const stopped = useGraphStore((s) => s.stoppedScenes[id] === true || id in s.sceneTries);
   // A run the daily total holds waits on this scene: its title row says so, as
   // a model card's header does (NodeWaitSwap; the card never changes size).
   const nodeWait = useNodeWait(id);
   const { params, keyStatus } = data as CinemaSceneNodeData;
-  // Read through a guard (PR #198 review 3, L4): a scene whose data is
-  // damaged still draws its card.
+  // Read through a guard (PR #198): a scene whose data is damaged
+  // still draws its card.
   const { shots, sheetUrl, refCount } = sceneCardView(params?.scene);
   const shotCount = shots.length;
   const inputPorts = NODE_DEFINITIONS['cinema-scene'].inputPorts;
@@ -63,8 +63,8 @@ export function CinemaSceneNode({ id, data, selected }: NodeProps) {
     : [`${shotCount} shot${shotCount === 1 ? '' : 's'}`, refsText].filter(Boolean).join(' · ');
 
   return (
-    // GM r7 item 2: one selection style. The card carries its category's
-    // colour as ModelNode does, and cinema-node.css selects it in that colour.
+    // Design: one selection style. The card carries its category's colour as
+    // ModelNode does, and cinema-node.css selects it in that colour.
     <div className={`cinema-scene-node ${selected ? 'cinema-scene-node--selected' : ''}`} data-pending={pendingAttr(data.pending)}
       style={{ ['--node-category-color' as string]: SCENE_CATEGORY_COLOR }}>
       <div className="cinema-scene-node__title" {...nodeWaitHeaderProps(id, nodeWait)}>
@@ -75,9 +75,9 @@ export function CinemaSceneNode({ id, data, selected }: NodeProps) {
         )}
         <NodeWaitSwap nodeId={id} wait={nodeWait} />
       </div>
-      {/* GM r9: "Unsaved", under the header so it never wraps the title; its
-          tooltip is the sentence of the toast that said why. Stopped, a
-          click opens that line with [Try again] (GM r12 item 1). */}
+      {/* Design: "Unsaved", under the header so it never wraps the title;
+          its tooltip is the sentence of the toast that said why. Stopped, a
+          click opens that line with [Try again]. */}
       {unsaved && (
         <div className="cinema-scene-node__unsaved-row">
           <SceneUnsavedMark nodeId={id} line={unsaved} stopped={stopped} />
@@ -96,8 +96,8 @@ export function CinemaSceneNode({ id, data, selected }: NodeProps) {
 
       <div className="cinema-scene-node__summary">{summary}</div>
 
-      {/* The scene node's own run error (error copy round 3e); each shot's
-          shows in its panel and as the ⚠ beside its port. */}
+      {/* The scene node's own run error (error copy); each shot's shows in
+          its panel and as the ⚠ beside its port. */}
       <NodeRunError data={data as unknown as NodeData} className="cinema-scene-node__run-error" />
 
       <div className="cinema-scene-node__input-ports">

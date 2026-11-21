@@ -7,7 +7,7 @@ import type { LeaveAsking, LeaveChoice } from './commonsLeave';
 import { offlineMark, useBackendOffline } from '../../lib/useBackendOffline';
 
 /**
- * The Commons' leave popover (commons-leave). GM - Design's copy, verbatim:
+ * The Commons' leave popover (commons-leave). The design's copy, verbatim:
  * "Your labels aren’t saved." with Save and leave (primary), Discard and
  * leave, Stay; after a failed save one line, "Nebula couldn’t save your labels because …",
  *  and no Save and leave when saving again can't work (a conflict:
@@ -26,7 +26,7 @@ export function CommonsLeavePopover({ asking, unsaved, running, onChoose, onStay
   onStay: (returnFocus: boolean) => void;
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
-  // Round 16 (L4): offline Save and leave is disabled (it would be refused),
+  // Offline Save and leave is disabled (it would be refused),
   // and focus starts on Stay; Discard and leave stays, since it sends nothing.
   const readOnly = useBackendOffline();
   const anchorRef = useMemo(() => ({ current: asking.anchor }), [asking.anchor]);
@@ -40,7 +40,7 @@ export function CommonsLeavePopover({ asking, unsaved, running, onChoose, onStay
       }
     });
   }, [onStay, asking.anchor]);
-  // Asked from the Updates corner: open beside the list or card, not over it (GM).
+  // Asked from the Updates corner: open beside the list or card, not over it (design).
   const outside = asking.anchor?.closest<HTMLElement>('.agent-notes-panel, .agent-note-card') ?? null;
   const position = useAnchoredPopover(anchorRef, panelRef, dismiss, 'auto', 280, outside, asking.seq);
 
@@ -51,8 +51,8 @@ export function CommonsLeavePopover({ asking, unsaved, running, onChoose, onStay
   }, [position, asking.seq, readOnly]);
 
   const failed = asking.failure !== null;
-  // GM: a conflict (or another refusal saving again would get) drops Save and
-  // leave; Stay is where the person can reload.
+  // A conflict (or another refusal saving again would get) drops Save and
+  // leave (design); Stay is where the person can reload.
   const settled = failed && !asking.retry;
   // Labels to save come first; a grading run alone gets its own ask.
   const labels = failed || unsaved || !running;

@@ -72,14 +72,14 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe('the composer’s locks (r50)', () => {
+describe('the composer’s locks', () => {
   it('no session listening: the line, Copy command, aria-disabled but focusable, the draft kept', async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
     render(<AgentLog />);
     const box = field();
     expect(box.getAttribute('aria-disabled')).toBe('true');
-    // GM r89.4: not connected, the product as the lock line names it.
+    // Design: not connected, the product as the lock line names it.
     expect(box.getAttribute('placeholder')).toBe('Message Claude Code');
     expect(box.getAttribute('aria-label')).toBe('Message Claude Code');
     expect(describedText(box)).toBe(NOT_CONNECTED_LINE);
@@ -134,7 +134,7 @@ describe('the composer’s locks (r50)', () => {
   });
 });
 
-describe('sending (r50)', () => {
+describe('sending', () => {
   it('Enter sends to the recipient with the selected nodes, Shift+Enter doesn’t, and the panel stays closed', async () => {
     apiRequest.mockResolvedValue({ json: async () => ({ row: { id: 'm1', kind: 'message', at: 1, text: 'Warmer', state: 'sent' } }) });
     useGraphStore.setState({ nodes: [{ id: 'n1', position: { x: 0, y: 0 }, selected: true, data: { label: 'Hero shot' } }] as never });
@@ -223,7 +223,7 @@ describe('the collapsed bar', () => {
   });
 });
 
-describe('the collapsed bar, GM r94', () => {
+describe('the collapsed bar, a reply to a note', () => {
   it('an answer on a pin reads "Claude Code replied to your note"', () => {
     usePersonThreadStore.setState({ listeners: [listener()] });
     receiveSync('p1', [message()]);

@@ -21,7 +21,7 @@ function BoardCard({ data, width, selected }: NodeProps<BoardCardNodeType>) {
   const wide = (width ?? 0) >= useContext(BoardWideContext);
   const [failedThumb, setFailedThumb] = useState<string | null>(null);
   // Only Nebula's own files are loaded (lib/storedImage.ts): an old board's
-  // link to another site gets the placeholder (Q98).
+  // link to another site gets the placeholder.
   const view = storedImageView(data.url);
   const thumb = wide || !view.src ? null : overviewThumbnailUrl(view.src);
   const useThumb = thumb !== null && thumb !== failedThumb;
@@ -29,8 +29,8 @@ function BoardCard({ data, width, selected }: NodeProps<BoardCardNodeType>) {
   // Just filled a placeholder: the board's spring brings it in (BoardCanvas
   // writes each frame). Drawn afresh mid-fade, it starts where the spring is;
   // once the fill is over the opacity is the stylesheet's again.
-  // Keyed by the new image's id, not its file (review 4, MEDIUM-1): an older
-  // tile showing the same file is never hidden or faded.
+  // Keyed by the new image's id, not its file: an older tile showing the
+  // same file is never hidden or faded.
   const fill = useContext(BoardFillContext);
   const filling = data.filling === true;
   const cardRef = useRef<HTMLDivElement>(null);

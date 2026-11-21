@@ -20,7 +20,7 @@ export function RemotionNode({ id, data, selected }: NodeProps) {
   const enterRemotionEditor = useUIStore((s) => s.enterRemotionEditor);
   const params = (data as RemotionNodeData).params;
   const manifest = params?.manifest;
-  // Read through a guard (PR #198 review 3, L4): a damaged manifest still
+  // Read through a guard (PR #198): a damaged manifest still
   // draws its card.
   const layers = (Array.isArray(manifest?.timeline) ? manifest.timeline : [])
     .filter((layer) => Boolean(layer) && typeof layer === 'object');

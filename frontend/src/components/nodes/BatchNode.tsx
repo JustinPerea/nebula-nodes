@@ -25,10 +25,10 @@ function BatchNodeComponent({ id, data, selected }: NodeProps) {
   const authoringError = batchAuthoringError(nodeData.params);
   const name = batchName(nodeData.params);
   const isSelected = selected || selectedInUi;
-  // The run stopped at the cap check (error copy round 3e): its error says
-  // the cap with the field's label, so the card's own warning, which says
-  // the same, steps aside while both would show (GM: one fact once). The
-  // agents' text names the check word for word (backend engine._batch_items).
+  // The run stopped at the cap check (error copy): its error says the cap
+  // with the field's label, so the card's own warning, which says the same,
+  // steps aside while both would show (design: one fact once). The agents'
+  // text names the check word for word (backend engine._batch_items).
   const stoppedOnCap = nodeData.state === 'error' && /exceeding its batch_size_cap of \d+/.test(nodeData.error ?? '');
   const inspectorExpanded = useUIStore((state) => isSelected && state.panels.inspector.visible);
 
@@ -59,9 +59,9 @@ function BatchNodeComponent({ id, data, selected }: NodeProps) {
       {items.length > cap && !stoppedOnCap && <p className="batch-node__warning" role="alert">
         {items.length} items exceed the cap of {cap}. Reduce items or raise the cap in settings (maximum 25).
       </p>}
-      {/* The run error reads like every node card's (error copy round 3c-2):
-          the person's line, the classifier's, or GM's general line over a
-          closed Details. Agents read nodeData.error itself, unchanged. */}
+      {/* The run error reads like every node card's (error copy): the
+          person's line, the classifier's, or the general line (design) over
+          a closed Details. Agents read nodeData.error itself, unchanged. */}
       {nodeData.state === 'error' && nodeData.error && <div role="alert">
         <NodeError className="batch-node__warning" raw={nodeData.error} category={nodeData.errorCategory}
           friendly={nodeData.errorFriendly} person={nodeData.errorPerson}

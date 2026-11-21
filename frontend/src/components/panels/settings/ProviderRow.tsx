@@ -15,8 +15,8 @@ export function ProviderRow({ id, tone, name, status, statusTone, summary, wrapS
   status?: string;
   statusTone?: 'ok' | 'warn';
   summary?: string;
-  /** The summary is a sentence (the key's own note): it wraps, never cut
-   * with "…" (GM, PR #203 r14 item 1). A list of node names stays one line. */
+  /** The summary is a sentence (the key's own note): it wraps, never cut with
+   * "…" (design, PR #203). A list of node names stays one line. */
   wrapSummary?: boolean;
   /** Longer explanation of the status, on hover. */
   title?: string;

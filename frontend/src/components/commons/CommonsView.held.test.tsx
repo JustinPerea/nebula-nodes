@@ -1,4 +1,4 @@
-// GM, PR #202 r1: the Commons view shows its messages box, with the held
+// Design, PR #202: the Commons view shows its messages box, with the held
 // proposals line, while the tab is held and an Update asks about a reference,
 // so the promote adds only Review and nothing below moves.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -49,7 +49,7 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); useAssetProposalsStore.setState({ awaitingSync: false }); });
 
-describe('GM PR #202 r1: the Commons view while the tab is held', () => {
+describe('PR #202: the Commons view while the tab is held', () => {
   it('shows the messages box with the held line, and none once nothing is held', async () => {
     useAssetProposalsStore.setState({ awaitingSync: true });
     const view = render(<CommonsView />);

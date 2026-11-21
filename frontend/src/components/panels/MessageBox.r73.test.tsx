@@ -13,9 +13,9 @@ import { useGraphStore } from '../../store/graphStore';
 import { noteBackendConnection } from '../../lib/backendConnection';
 import type { ThreadRow } from '../../lib/personThread';
 
-/** GM - Design r73 on #225: the typed answer's You row (item 2: derived in
- * the person's tab, never sent or stored as a thread row) and the shared
- * word-boundary cut on the "Answering “…”" chip and "You answered “…”." (item 3). */
+/** Design, PR #225: the typed answer's You row (derived in the person's tab, never
+ * sent or stored as a thread row) and the shared word-boundary cut on the
+ * "Answering “…”" chip and "You answered “…”.". */
 
 const CLAUDE = { id: 'a1', name: 'Claude', color: '#E8825A', verified: true };
 const R73 = 'Use the same palette on the other three shots, or keep the warm one only for the hero?';
@@ -62,7 +62,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('r73 item 2: a typed answer shows as a You row', () => {
+describe('A typed answer shows as a You row', () => {
   it('sending one answer posts the answer once, no message; the You row follows the question, the card keeps its line', async () => {
     useAgentQuestionsStore.setState({ sets: { q1: { answerKey: 'k', view: setView('q1', [TYPED]) } } });
     receiveSync('p1', [questionRow('q1', Date.now() - 10_000, [TYPED])]);
@@ -117,7 +117,7 @@ describe('r73 item 2: a typed answer shows as a You row', () => {
   });
 });
 
-describe('r73 item 3: one word-boundary cut for the chip and "You answered"', () => {
+describe('One word-boundary cut for the chip and "You answered"', () => {
   const rangeRect = Object.getOwnPropertyDescriptor(Range.prototype, 'getBoundingClientRect');
 
   /** 6 px a character; the cut elements' line has 276 px: “…three shots…” (46 characters) just fits. */

@@ -34,9 +34,10 @@ import { isPersonRefusal, retryOnPromote } from '../../lib/clearsOnPromote';
 import { currentProject } from '../../lib/currentProject';
 
 const MAX_CONCURRENT = 2;
-/** A Generate that didn't start, named by its button (error copy round 3e). */
-// GM, round 3f: "Couldn’t generate." → "Couldn’t start the generation."; GM r12 (2), #204 round 9:
-// every Generate line opens "Nebula couldn’t start the generation." (lib/errorCopy's GENERATE_HEADING).
+/** A Generate that didn't start, named by its button (error copy). */
+// Design: "Couldn’t generate." → "Couldn’t start the generation." Design, PR #204:
+// every Generate line opens "Nebula couldn’t start the generation."
+// (lib/errorCopy's GENERATE_HEADING).
 
 export function CreateView() {
   const exitCreateView = useUIStore((s) => s.exitCreateView);
@@ -110,7 +111,7 @@ export function CreateView() {
   const focusDraft = useRef(false);
   const composerArea = useRef<HTMLDivElement>(null);
   // The composer is Creator Studio's bottom bar: it publishes where it starts,
-  // so the notices sit 8 px above it (GM - Design, 2026-10-23).
+  // so the notices sit 8 px above it (design, 2026-10-23).
   useBottomBarClearance([composerArea]);
   const canUndoReuse = reusedDraft?.fingerprint === JSON.stringify(draft);
   useEffect(() => {
@@ -161,10 +162,11 @@ export function CreateView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // GM, #204 r6: a refusal sentence doesn't belong in the toolbar row; Save
-  // style's lines show in the app's notice region, with the other save lines.
+  // Design, PR #204: a refusal sentence doesn't belong in the toolbar
+  // row; Save style's lines show in the app's notice region, with the
+  // other save lines.
   const styleLine = (line: string, error?: unknown) => useGraphStore.getState().notify(line, 'error', { error });
-  // GM r8 (3), #204 r7: Generate's lines too. A new Generate, a new draft or a reuse takes
+  // Design, PR #204: Generate's lines too. A new Generate, a new draft or a reuse takes
   // back the run line it showed (as the toolbar span cleared then), and only that line.
   const runLineShown = useRef<string | null>(null);
   const runLine = (line: string, error?: unknown) => { runLineShown.current = line; styleLine(line, error); };
@@ -178,8 +180,8 @@ export function CreateView() {
     }));
   };
 
-  /** Send one Style. GM r6 (1): refused only because this tab isn't connected
-   * as the person, it says so in the "because" form and sends the same Style
+  /** Send one Style. Design: refused only because this tab isn't connected as
+   * the person, it says so in the "because" form and sends the same Style
    * again on the promote (the person shouldn't redo a save Nebula already
    * has), for the project it was made in only. */
   const saveStyle = async (body: Parameters<typeof createPreset>[0]): Promise<void> => {
@@ -327,13 +329,13 @@ export function CreateView() {
       // creates the history/Stop owner. This survives leaving Create mid-launch.
       await store.executeClusterConcurrent(allNodeIds, { genId, prompt: currentDraft.prompt, ts, sessionId, modelNodeIds, allNodeIds });
     } catch (error) {
-      // Offline is read-only (round 15 of PR #114): a refused Generate says nothing.
+      // Offline is read-only (PR #114): a refused Generate says nothing.
       if (isOfflineRefusal(error)) return;
       if (mounted.current && !useGraphStore.getState().createCancelledLaunchIds.includes(genId)) {
-        // GM r8 (3), #204 r7: in the app's notice region, never the toolbar row. A cluster or
+        // Design, PR #204: in the app's notice region, never the toolbar row. A cluster or
         // start refused only for this tab goes on the promote (notify registers it by the
-        // refusal's own stamp: review 3 MEDIUM-1, #204 r5).
-        // GM r10 (3): refused only for this tab, GM's own line (Generate is one-shot).
+        // refusal's own stamp: PR #204). Design: refused only for this tab, it has its own
+        // line (Generate is one-shot).
         runLine(isPersonRefusal(error) ? generateRefusedCopy(clusterAdded) : failureMessage(error, GENERATE_HEADING), error);
       }
     } finally {

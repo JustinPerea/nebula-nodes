@@ -25,20 +25,19 @@ export function ProjectWorkspaceControls({ onHome, homeBusy = false }: { onHome?
   const scenesUnsaved = useGraphStore((state) => Object.keys(state.unsavedScenes).length > 0);
   const settled = status === 'saved' && !scenesUnsaved;
   const settledDelay = useSettleDelay(settled);
-  // Design, round 14 of PR #114: while offline "Not saved" and Try again hide (the
+  // Design, PR #114: while offline "Not saved" and Try again hide (the
   // banner says it); a retry couldn’t reach Nebula anyway.
   const offline = useBackendOffline();
   const failedLineId = useId();
   const failedLine = saveError ? besideButton(saveError) : 'Nebula couldn’t save the project. Try again.';
   const [draft, setDraft] = useState<string | null>(null);
-  // Round 20 (GM follow-up 1): while the tab follows an agent's switch the
-  // bar says "Opening “<project>”…" where the save state is. It never gets
-  // narrower than it was as the follow starts (measured then), and grows to
-  // fit the name (fix round 1 of PR #200, GM bug 1: only a name past 24
-  // characters is cut).
+  // While the tab follows an agent's switch the bar says
+  // "Opening “<project>”…" where the save state is. It never gets narrower
+  // than it was as the follow starts (measured then), and grows to fit the
+  // name (PR #200: only a name past 24 characters is cut).
   const following = useFollowingSwitch();
-  // GM r20 on PR #199: Projects would strand a kept canvas, so it holds,
-  // with the kept line for its verb (a press pulses it).
+  // Projects would strand a kept canvas (PR #199), so it holds, with the
+  // kept line for its verb (a press pulses it).
   const kept = useKeptCanvas();
   const bar = useRef<HTMLDivElement | null>(null);
   const [lockedWidth, setLockedWidth] = useState<number | null>(null);
@@ -47,9 +46,9 @@ export function ProjectWorkspaceControls({ onHome, homeBusy = false }: { onHome?
     const measured = bar.current?.getBoundingClientRect().width ?? null;
     setLockedWidth((width) => (followingSwitch() ? width ?? measured : null));
   }), []);
-  // Review 2 N-3: the canvas pill is centred, so a bar that grows would move
-  // the Canvas and Creator Studio tabs after it. While following, the pill
-  // grows to the left instead: it is shifted by half of what the bar grew
+  // The canvas pill is centred, so a bar that grows would move the Canvas
+  // and Creator Studio tabs after it. While following, the pill grows to
+  // the left instead: it is shifted by half of what the bar grew
   // (CanvasTabs.css --follow-grow), and the tabs stay put.
   useLayoutEffect(() => {
     const wrap = bar.current?.closest<HTMLElement>('.canvas-tabs-wrap');
@@ -78,15 +77,15 @@ export function ProjectWorkspaceControls({ onHome, homeBusy = false }: { onHome?
     if (save && name && name !== project.name) void useProjectStore.getState().rename(project.id, name);
     setDraft(null);
   };
-  // Review 9, M-3 (GM r14: the bar follows the card): a scene card with
-  // edits Nebula doesn't have makes the bar say "Unsaved changes" too.
-  // It wins over the project's own "Saving…", which would read as safe.
+  // The bar follows the card: a scene card with edits Nebula doesn't have
+  // makes the bar say "Unsaved changes" too. It wins over the project's own
+  // "Saving…", which would read as safe.
   const label = status === 'error' ? 'Save failed' : scenesUnsaved ? 'Unsaved changes'
     : status === 'saving' ? 'Saving…' : status === 'unsaved' ? 'Unsaved changes' : 'Saved';
   return (
     <div ref={bar} className={`project-workspace-controls${following ? ' project-workspace-controls--following' : ''}`}
-      // GM round 22 (B): while following, the whole bar names the project
-      // being opened in full (its tooltip and label); the slot may cut it.
+      // While following, the whole bar names the project being opened in
+      // full (its tooltip and label); the slot may cut it.
       {...(following ? { role: 'group', title: openingLine(following.projectName), 'aria-label': openingLine(following.projectName) } : {})}
       style={following && lockedWidth ? { minWidth: lockedWidth } : undefined}>
       <button type="button" className="project-workspace-controls__home" aria-label={homeBusy ? 'Saving…' : 'Back to projects'}
@@ -97,14 +96,14 @@ export function ProjectWorkspaceControls({ onHome, homeBusy = false }: { onHome?
         {homeBusy && <span className="project-workspace-controls__busy">Saving…</span>}
       </button>
       {following
-        // GM round 21 (item 1): the old project's name goes; the name slot
-        // reads "Opening “<project>”…", the name in full. Only a name past
-        // 24 characters is cut inside itself (openingName), keeping the
-        // closing quote and ellipsis; the title and label keep all of it.
+        // The old project's name goes; the name slot reads
+        // "Opening “<project>”…", the name in full. Only a name past 24
+        // characters is cut inside itself (openingName), keeping the closing
+        // quote and ellipsis; the title and label keep all of it.
         ? <span key={pulse} className={`project-workspace-controls__opening${pulse > 0 ? ' project-workspace-controls__opening--pulse' : ''}`}
             role="status" title={openingLine(following.projectName)} aria-label={openingLine(following.projectName)}>
             <span className="project-workspace-controls__opening-fixed" aria-hidden="true">Opening “</span>
-            {/* Its own direction (review 2 N-1): an RTL name, with its "…"
+            {/* Its own direction: an RTL name, with its "…"
                 inside, reads cut at its logical end. */}
             <bdi className="project-workspace-controls__opening-name" aria-hidden="true">{openingName(following.projectName)}</bdi>
             <span className="project-workspace-controls__opening-fixed" aria-hidden="true">”…</span>
@@ -112,7 +111,7 @@ export function ProjectWorkspaceControls({ onHome, homeBusy = false }: { onHome?
         : draft !== null
         ? <input className="project-workspace-controls__name project-workspace-controls__name-input" aria-label="Project name"
             autoFocus maxLength={120} value={draft} onFocus={(event) => event.target.select()}
-            // Offline (round 15 of PR #114): disabled with its draft kept, as a node's rename.
+            // Offline (PR #114): disabled with its draft kept, as a node's rename.
             disabled={offline} {...offlineMark(offline)}
             onChange={(event) => setDraft(event.target.value)} onBlur={() => { if (!isBackendOffline()) finishRename(true); }}
             onKeyDown={(event) => {
@@ -131,8 +130,8 @@ export function ProjectWorkspaceControls({ onHome, homeBusy = false }: { onHome?
       {following
         ? null
         : status === 'paused' && pausedBytes !== null
-        // Q118 (GM): the persistent state, where "Saved" usually is, in Save
-        // failed's warning colour; it opens the "what's large" panel.
+        // The persistent state, where "Saved" usually is, in Save failed's
+        // warning colour; it opens the "what's large" panel.
         ? <button type="button" className="project-workspace-controls__retry project-workspace-controls__paused"
             data-size-status="" title={HEADER_TOOLTIP} aria-haspopup="dialog" aria-expanded={panelOpen}
             onClick={() => useProjectStore.getState().openSizePanel()}>{headerLine(pausedBytes)}</button>
@@ -150,7 +149,7 @@ export function ProjectWorkspaceControls({ onHome, homeBusy = false }: { onHome?
         : <span className={`project-workspace-controls__status${settled ? ' project-workspace-controls__status--settled' : ''}`}
             style={settledDelay ? { animationDelay: settledDelay } : undefined} role="status">{label}</span>}
       {/* While following, the save state and the count (the canvas that is going) give their room to the
-          opening line, which takes the whole slot at the locked width (GM round 22, B). */}
+          opening line, which takes the whole slot at the locked width. */}
       {!following && <span className="project-workspace-controls__count">{nodeCount} {nodeCount === 1 ? 'node' : 'nodes'}</span>}
     </div>
   );

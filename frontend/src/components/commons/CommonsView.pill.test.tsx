@@ -1,5 +1,5 @@
-// GM, PR #202 r2, item 4: a held tab shows the PROPOSAL pill on a Commons
-// tile from the Update refs it already has (their target id), never from the
+// Design, PR #202: a held tab shows the PROPOSAL pill on a Commons tile from
+// the Update refs it already has (their target id), never from the
 // person-only list, so the promote changes nothing on the tile. A withdrawn
 // or expired proposal's Update resolves and takes the pill with it.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -66,7 +66,7 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); useAssetProposalsStore.setState({ awaitingSync: false }); });
 
-describe('GM PR #202 r2: the PROPOSAL pill while the tab is held', () => {
+describe('PR #202: the PROPOSAL pill while the tab is held', () => {
   it('shows from the held Update\'s target, and the promote leaves the tile exactly as it was', async () => {
     useAssetProposalsStore.setState({ awaitingSync: true });
     setUpdates([update('pa_1', 'ast_2')]);

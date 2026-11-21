@@ -1,13 +1,13 @@
 /**
- * Round 15 of PR #199 (GM r19 and review 13), the Projects home.
- * - GM r19 (a): "Nebula couldn’t read the whole damaged file…" only when the
- *   damaged file had records Nebula couldn't read (`damagedRecordsUnread`).
- * - GM r19 (b): the open canvas's project is said once: the canvas line
- *   owns it, and the left-out-at-limit line names only the others.
- * - Review 13 merge-integrity MEDIUM-1: the restore notices above the stack
- *   follow its focus rule (× → the notice now in its place, else the heading).
- * - Review 13 merge-integrity LOW-1: the restore copy loads lazily.
- * - Review 13 merge-integrity LOW-2 (M5): the [Reload Nebula] label.
+ * PR #199, the Projects home.
+ * - "Nebula couldn’t read the whole damaged file…" only when the damaged
+ *   file had records Nebula couldn't read (`damagedRecordsUnread`).
+ * - The open canvas's project is said once: the canvas line owns it, and
+ *   the left-out-at-limit line names only the others.
+ * - The restore notices above the stack follow its focus rule (× → the
+ *   notice now in its place, else the heading).
+ * - The restore copy loads lazily.
+ * - The [Reload Nebula] label.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen } from '@testing-library/react';
@@ -38,7 +38,7 @@ const props = (more: Partial<ProjectHomeProps> = {}): ProjectHomeProps => ({ pro
 
 afterEach(() => { primeRestoreCopyForTests(restoreCopy); });
 
-describe('GM r19 (a): the not-read-whole line only for records Nebula couldn’t read', () => {
+describe('the not-read-whole line only for records Nebula couldn’t read', () => {
   it('a file cut only past its last record (every record read): no "may be missing"', () => {
     const lines = catalogRestoreNotice(leftOut({ damagedRecordsUnread: false })).lines ?? [];
     expect(lines).not.toContain(NOT_READ_WHOLE);
@@ -56,7 +56,7 @@ describe('GM r19 (a): the not-read-whole line only for records Nebula couldn’t
   });
 });
 
-describe('GM r19 (b): the open canvas’s project is said once, by its canvas line', () => {
+describe('the open canvas’s project is said once, by its canvas line', () => {
   it('the canvas waits on the limit: the left-out line names only the others', () => {
     const restore = leftOut({ openProjectMissing: EPSILON, openProjectName: 'Epsilon', canvasNotFiled: { reason: 'projects' },
       damagedRecordsUnread: false });
@@ -72,7 +72,7 @@ describe('GM r19 (b): the open canvas’s project is said once, by its canvas li
   });
 });
 
-describe('review 13 MEDIUM-1: the restore notices follow the notice stack’s focus rule', () => {
+describe('the restore notices follow the notice stack’s focus rule', () => {
   const copyNotice = { line: 'Nebula was updated. Your edits are in “Alpha (recovered)”.', restore: null };
   it('× on the restore notice moves focus to the notice now in its place (the copy notice’s ×), not the heading', () => {
     const view = render(<ProjectHome {...props({ catalogRestore: leftOut(), copyNotice })} />);
@@ -103,7 +103,7 @@ describe('review 13 MEDIUM-1: the restore notices follow the notice stack’s fo
   });
 });
 
-describe('review 13 LOW-1: the restore copy loads when a restore notice needs it', () => {
+describe('the restore copy loads when a restore notice needs it', () => {
   it('nothing loads for a home with no restore; a restore notice loads it and then says it', async () => {
     primeRestoreCopyForTests(null);
     const view = render(<ProjectHome {...props()} />);
@@ -114,7 +114,7 @@ describe('review 13 LOW-1: the restore copy loads when a restore notice needs it
   });
 });
 
-describe('review 13 LOW-2 (M5): [Reload Nebula] after an update', () => {
+describe('[Reload Nebula] after an update', () => {
   it('replaces Try again', () => {
     const onRetry = vi.fn();
     render(<ProjectHome {...props({ error: 'Nebula was updated while this tab was open.', retry: 'reloadNebula', onRetry })} />);

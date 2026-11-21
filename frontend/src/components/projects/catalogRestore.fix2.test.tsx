@@ -1,10 +1,10 @@
 /**
- * Fix round 2 of PR #199 (GM - Design r3, 2026-10-27; review 2's L6): the
- * B layout (an opening line, one outcome per line, "The damaged file was
- * kept." last), the open canvas's sentence and its "(recovered)" name, no
- * comma before the age, GM's age scale, the not-read-whole sentence, the
- * rebuild's Agent log line, and "Open Recently deleted" that never outlives
- * its use or moves focus for an agent.
+ * PR #199 (design, 2026-10-27): the stacked layout (an opening line, one
+ * outcome per line, "The damaged file was kept." last), the open canvas's
+ * sentence and its "(recovered)" name, no comma before the age, the design's
+ * age scale, the not-read-whole sentence, the rebuild's Agent log line, and
+ * "Open Recently deleted" that never outlives its use or moves focus for an
+ * agent.
  */
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
 import { act, fireEvent, render, screen } from '@testing-library/react';
@@ -29,7 +29,7 @@ const trashedRows = (...names: string[]) => rows(...names).map((row) => ({ ...ro
 const older = { source: 'catalog.json.bak.1', copyAt: TWO_DAYS_AGO };
 const line = (overrides: Partial<CatalogRestore>) => catalogRestoreLine(restore(overrides), NOW);
 
-describe('GM r3 string 1: the open canvas, saved as its own project', () => {
+describe('the open canvas, saved as its own project', () => {
   it('names the project it was, and "Recovered canvas" when that is unknown', () => {
     expect(recoveredCanvasSentence('Alpha (recovered)'))
       .toBe('The canvas you had open was saved as its own project, “Alpha (recovered)”, so nothing in it is lost.');
@@ -45,10 +45,10 @@ describe('GM r3 string 1: the open canvas, saved as its own project', () => {
   });
 });
 
-describe('GM r3: the open project that couldn\'t be added back, saved from its canvas', () => {
-  // The live check's B: the canvas sentence is the one sentence for that
-  // project (GM: one sentence for "couldn't restore"); its failed add-back
-  // isn't said again beside "so nothing in it is lost".
+describe('the open project that couldn\'t be added back, saved from its canvas', () => {
+  // The canvas sentence is the one sentence for that project (design: one
+  // sentence for "couldn't restore"); its failed add-back isn't
+  // said again beside "so nothing in it is lost".
   const canvas = { recoveredCanvas: { id: 'c'.repeat(32), name: 'Scratch (recovered)' }, openProjectMissing: 's'.repeat(32) };
   const scratch = { id: 's'.repeat(32), name: 'Scratch', reason: 'incomplete' };
 
@@ -69,7 +69,7 @@ describe('GM r3: the open project that couldn\'t be added back, saved from its c
   });
 });
 
-describe('GM r3 strings 2 and 3: the age, with no comma before it', () => {
+describe('the age, with no comma before it', () => {
   it('has no comma before the age in any form', () => {
     expect(line({ ...older })).toBe(`${OPEN} from 2 days ago. No projects were missing.`);
     expect(line({ ...older, cameBack: rows('Draft'), cameBackCount: 1, addedBack: rows('X'), addedBackCount: 1 }))
@@ -98,7 +98,7 @@ describe('GM r3 strings 2 and 3: the age, with no comma before it', () => {
   });
 });
 
-describe('GM r3 string 4: a damaged file that was not read whole', () => {
+describe('a damaged file that was not read whole', () => {
   it('says so in place of "No projects were missing."', () => {
     expect(line({ damagedReadWhole: false }))
       .toBe(`${OPEN}. Nebula couldn’t read the whole damaged file, so changes made after that copy may be missing. ${KEPT}`);
@@ -107,7 +107,7 @@ describe('GM r3 string 4: a damaged file that was not read whole', () => {
   });
 });
 
-describe('GM r3: the B layout', () => {
+describe('the stacked layout', () => {
   it('stacks one outcome per line after the opening, in order, with the kept line last', () => {
     const notice = catalogRestoreNotice(restore({
       ...older, addedBack: trashedRows('Newer'), addedBackCount: 1,
@@ -126,9 +126,9 @@ describe('GM r3: the B layout', () => {
     expect(notice.openRecentlyDeleted).toBe(true);
   });
 
-  // GM round 5 (fix round 5 of PR #199): always stacked, one outcome per
-  // line from the first render; GM r3's inline single outcome is retired.
-  it('stacks a single outcome too (GM round 5; was inline, as in A)', () => {
+  // Always stacked, one outcome per line from the first render; the
+  // earlier inline single outcome is retired.
+  it('stacks a single outcome too (it used to be inline)', () => {
     const notice = catalogRestoreNotice(restore({ ...older, reverted: rows('Logo'), revertedCount: 1 }), NOW);
     expect(notice.lines).toEqual([`${OPEN} from 2 days ago.`, "“Logo” went back to its version in that copy, so its latest edits aren’t there.", KEPT]);
     expect(notice.text).toBe(`${OPEN} from 2 days ago. “Logo” went back to its version in that copy, so its latest edits aren’t there. ${KEPT}`);
@@ -144,7 +144,7 @@ describe('GM r3: the B layout', () => {
       id: '0'.repeat(32), name: 'Newer', createdAt: TWO_DAYS_AGO, updatedAt: TWO_DAYS_AGO, lastOpenedAt: TWO_DAYS_AGO,
       nodeCount: 0, edgeCount: 0, thumbnail: null, deletedAt: TWO_DAYS_AGO, purgeAt: '2026-11-24T11:00:00+00:00',
     } as TrashedProject];
-    // Logo is in the list and Newer in Recently deleted (the notice says only what still holds: fix round 3).
+    // Logo is in the list and Newer in Recently deleted (the notice says only what still holds).
     const logo = { id: 'l'.repeat(32), name: 'Logo', createdAt: TWO_DAYS_AGO, updatedAt: TWO_DAYS_AGO, lastOpenedAt: null,
       nodeCount: 0, edgeCount: 0, thumbnail: null };
     const { container } = render(<ProjectHome projects={[logo]} loading={false} busy={false} error={null} trash={trash}
@@ -162,7 +162,7 @@ describe('GM r3: the B layout', () => {
   });
 });
 
-describe('GM r3 string 5: the rebuild\'s Agent log line', () => {
+describe('the rebuild\'s Agent log line', () => {
   it('says what it recovered, what it could not, and where the file is', () => {
     const rebuilt = { kind: 'rebuilt' as const, source: null };
     expect(catalogRestoreLogLine(restore({ ...rebuilt, addedBack: rows('Hero study'), addedBackCount: 1 })))
@@ -174,7 +174,7 @@ describe('GM r3 string 5: the rebuild\'s Agent log line', () => {
   });
 });
 
-describe('review 2, L6: "Open Recently deleted"', () => {
+describe('"Open Recently deleted"', () => {
   const trashed = (name: string, id: string): TrashedProject => ({
     id, name, createdAt: TWO_DAYS_AGO, updatedAt: TWO_DAYS_AGO, lastOpenedAt: TWO_DAYS_AGO,
     nodeCount: 0, edgeCount: 0, thumbnail: null, deletedAt: TWO_DAYS_AGO, purgeAt: '2026-11-24T11:00:00+00:00',

@@ -59,16 +59,15 @@ export function RunHistoryPanel() {
   const isExecuting = useGraphStore((s) => s.isExecuting);
   const isCancelling = useGraphStore((s) => s.isCancelling);
   const cancelExecution = useGraphStore((s) => s.cancelExecution);
-  // Offline is read-only (round 15 of PR #114), and so is following an
-  // agent's switch (GM round 22, A: one state, lib/canvasLock): Rerun,
-  // Retry, Recover and Forget ID are disabled and look it.
+  // Offline is read-only (PR #114), and so is following an agent's
+  // switch (one state, lib/canvasLock): Rerun, Retry, Recover and Forget ID
+  // are disabled and look it.
   const lock = useCanvasLock();
-  // GM, PR #203 r8 item 3: a replay that would run a node that can't start
-  // without its key (a keyed route's missing key) is locked as the
-  // other Runs are (aria-disabled, focusable, its line as the reason). The
-  // store's refusal stays behind it.
-  // Read again only when a record, the keys or the canvas's placeholders
-  // change, never on a drag (review r5 NIT-1).
+  // Design, PR #203: a replay that would run a node that can't start
+  // without its key (a keyed route's missing key) is locked as the other
+  // Runs are (aria-disabled, focusable, its line as the reason). The
+  // store's refusal stays behind it. Read again only when a record, the
+  // keys or the canvas's placeholders change, never on a drag.
   const settingsCache = useUIStore((s) => s.settingsCache);
   const placeholders = useMemo(() => placeholderKey(nodes), [nodes]);
   const keyLocks = useMemo(() => {
@@ -79,9 +78,9 @@ export function RunHistoryPanel() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [runHistory, placeholders, settingsCache]);
   const keyLockIdBase = useId();
-  // Whose each record is (review 20 of PR #199, LOW-2; GM r34 A1): one the
-  // open canvas owns is named by its node; the one Nebula's open-hold
-  // verdict names, by the verdict's names; any other as another project's.
+  // Whose each record is (design, PR #199): one the open canvas owns is
+  // named by its node; the one Nebula's open-hold verdict names, by the
+  // verdict's names; any other as another project's.
   const openHold = useProjectStore((s) => s.openHold);
   const openId = useProjectStore((s) => s.activeProject?.id ?? null);
   // A store method read through its selector, not the function imported:
@@ -90,15 +89,15 @@ export function RunHistoryPanel() {
   const recoveryOnCanvas = useGraphStore((s) => s.providerRecoveryOnCanvas);
   const owned = providerRecoveries.map((checkpoint) => recoveryOnCanvas(checkpoint));
   const verdictIndex = verdictRecordIndex(openHold, 'recovery', openId, providerRecoveries, owned);
-  // Each record's type, when it knows it (GM r36 item 1): the node type
-  // Nebula stored with it (the person-only places), or its World ID.
+  // Each record's type, when it knows it: the node type Nebula
+  // stored with it (the person-only places), or its World ID.
   const places = useGraphStore((s) => s.providerRecoveryPlaces);
   const recordName = (index: number, inSentence = false) => {
     const { runId, nodeId, existingWorldId } = providerRecoveries[index];
     const kind = recordNodeType(places[providerRecoveryPlaceKey(runId, nodeId)]?.nodeType, existingWorldId);
     return heldRecordName(nodes, nodeId, owned[index], index === verdictIndex ? openHold : null, inSentence, kind);
   };
-  // GM r34 A4: while Run history is open, the held reopen's Forget ID line
+  // Design: while Run history is open, the held reopen's Forget ID line
   // shows at the top of its safeguards (the rail's callout hides). Its own
   // polite region, mounted empty and then given the line, so the first
   // line is announced too.
@@ -107,7 +106,7 @@ export function RunHistoryPanel() {
 
   const [now, setNow] = useState(() => Date.now());
   const [clearingRecovery, setClearingRecovery] = useState<string | null>(null);
-  // "Forget ID" asks first, in the app's own dialog (GM, round 13 of PR #114).
+  // "Forget ID" asks first, in the app's own dialog (design, PR #114).
   const [confirmingForget, setConfirmingForget] = useState<{ runId: string; nodeId: string } | null>(null);
 
   const forgetRecovery = async (runId: string, nodeId: string) => {
@@ -116,8 +115,8 @@ export function RunHistoryPanel() {
     try {
       await deleteProviderRecovery(runId, nodeId);
     } catch (error) {
-      // Round 3b: a request's line or the store's written one; any other
-      // error says GM's general line, never its own message.
+      // A request's line or the store's written one; any other error
+      // says the general line, never its own message.
       showNotice(failureMessage(error, FORGET_RECOVERY_HEADING), 'error', error);
     } finally {
       setClearingRecovery(null);
@@ -132,8 +131,8 @@ export function RunHistoryPanel() {
     return () => window.clearInterval(id);
   }, [visible]);
 
-  // Closing Run history cancels a confirm that's open (review 13, L5: it
-  // stayed open behind the closing panel and came back when it reopened).
+  // Closing Run history cancels a confirm that's open (it stayed open
+  // behind the closing panel and came back when it reopened).
   useEffect(() => {
     if (!visible) setConfirmingForget(null);
   }, [visible]);
@@ -158,12 +157,12 @@ export function RunHistoryPanel() {
             className="panel__header-action run-history__action run-history__stop"
             onClick={() => void cancelExecution()}
             // Stop only reduces spend, so it stays enabled offline and goes
-            // through the network gate (round 16 of PR #114, M1).
+            // through the network gate (PR #114).
             disabled={!isExecuting || isCancelling}
             aria-busy={isCancelling}
             aria-label="Stop the run"
-            // GM, round 16: a label names the action (no period); a reason
-            // it's disabled is a sentence.
+            // Design: a label names the action (no period); a reason it's
+            // disabled is a sentence.
             title={isCancelling ? 'Stopping the run…' : isExecuting ? 'Stop the run' : 'Nothing is running.'}
           >
             <Square size={13} strokeWidth={2} aria-hidden="true" focusable="false" />
@@ -213,8 +212,8 @@ export function RunHistoryPanel() {
               {providerRecoveries.map((checkpoint, index) => {
                 const key = `${checkpoint.runId}:${checkpoint.nodeId}`;
                 const recoveryId = checkpoint.existingWorldId ?? checkpoint.resumeOperationId;
-                // GM, round 14 of PR #114: named by node, then "Operation ID"
-                // or "World ID", the ID in mono (was "n2 · operation op-…").
+                // Design, PR #114: named by node, then "Operation ID" or
+                // "World ID", the ID in mono (was "n2 · operation op-…").
                 const name = recordName(index);
                 const idLabel = recoveryIdLabel(checkpoint.existingWorldId);
                 return (
@@ -229,11 +228,11 @@ export function RunHistoryPanel() {
                         type="button"
                         className="run-history__forget"
                         onClick={() => setConfirmingForget({ runId: checkpoint.runId, nodeId: checkpoint.nodeId })}
-                        // Review 7, L5: canvasLock's order (run, then
-                        // following, then offline); GM, round 15 of PR #114's title.
+                        // canvasLock's order (run, then following, then offline);
+                        // the title is PR #114's.
                         {...lock.act({ disabled: clearingRecovery === key, title: FORGET_TITLE, kept: 'forget' }, { run: isExecuting, runTitle: runFinishesLine(RUN_LOCK_VERBS.forgetRun) })}
-                        // GM, round 14: its name says which ID it forgets;
-                        // its row (node and ID) stays its description.
+                        // Design: its name says which ID it forgets; its
+                        // row (node and ID) stays its description.
                         aria-label={forgetAriaLabel(recordName(index, true))}
                         aria-describedby={`run-history-recovery-${key}`}
                       >
@@ -264,11 +263,10 @@ export function RunHistoryPanel() {
                 const source = nodes.find((node) => node.id === input.nodeId)?.data.params._paperSource as PaperSourceRecord | undefined;
                 return source?.state === 'current' && Boolean(source.snapshot);
               });
-              // L6 (GM r9 answer 3): one order, as the toolbar's:
-              // kept first (lib/canvasLock; GM r19 on PR #199), then the missing key (withKeyLock, GM PR #203 r11
-              // item 3), then the run, following, offline (lib/canvasLock).
-              // Offline, its own verb (PR #200 review 3 LOW-1; GM
-              // #200 r4 item 2: "You can rerun it when Nebula reconnects.").
+              // Design: one order, as the toolbar's: kept first (lib/canvasLock;
+              // design, PR #199), then the missing key (withKeyLock; design, PR #203),
+              // then the run, following, offline (lib/canvasLock). Offline, its own
+              // verb (design, PR #200: "You can rerun it when Nebula reconnects.").
               const replayProps = withKeyLock(lockedAction(lock, {
                 kept: recoveryReplayReady ? 'recover' : r.status === 'failed' ? 'retry' : 'rerun',
                 title: recoveryReplayReady
@@ -276,7 +274,7 @@ export function RunHistoryPanel() {
                   : 'Run this again with the same nodes and settings',
                 offline: recoveryReplayReady ? OFFLINE_RECOVER : r.status === 'failed' ? OFFLINE_RETRY : OFFLINE_RERUN,
               },
-              // GM r37: while a run goes, what unlocks it, by its own verb.
+              // Design: while a run goes, what unlocks it, by its own verb.
               { run: isExecuting, runTitle: runFinishesLine(recoveryReplayReady ? OFFLINE_RECOVER : r.status === 'failed' ? OFFLINE_RETRY : OFFLINE_RERUN) }),
               keyLock, keyLockId);
               const latestProps = withKeyLock(lockedAction(lock, {

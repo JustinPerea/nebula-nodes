@@ -1,11 +1,10 @@
 /**
- * Fix round 9 of PR #199. GM r10: canvases are named in the order they were
- * saved, which is number order, in the notice, the toast and the counted
- * forms (with the over-limit tail). GM r11, 4: an agent's copy of the
- * person's canvas is named as the agent's, on its own line ("Codex’s
- * changes were saved…", "An agent’s" when unknown), saved or waiting, in
- * the notice and the toast alike; "the canvas you had open" only ever
- * means the person's own.
+ * PR #199: canvases are named in the order they were saved, which is number
+ * order, in the notice, the toast and the counted forms (with the
+ * over-limit tail). An agent's copy of the person's canvas is named as the
+ * agent's, on its own line ("Codex’s changes were saved…", "An agent’s"
+ * when unknown), saved or waiting, in the notice and the toast alike; "the
+ * canvas you had open" only ever means the person's own.
  */
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
@@ -30,7 +29,7 @@ const restored = (extra: Record<string, unknown> = {}) => ({
 const base = { projects: [], loading: false, busy: false, error: null,
   onCreate: vi.fn(), onOpen: vi.fn(), onRename: vi.fn(), onDelete: vi.fn(), onRetry: vi.fn() } satisfies ProjectHomeProps;
 
-describe('GM r10: in the order they were saved', () => {
+describe('in the order they were saved', () => {
   it('the restore notice names “Recovered canvas” before “Recovered canvas 2”', () => {
     // The live canvas, filed second, is the restore's own; the held one, filed first, joined it.
     const notice = catalogRestoreNotice(restored({
@@ -40,13 +39,13 @@ describe('GM r10: in the order they were saved', () => {
     expect(notice.lines).toContain('The canvases you had open were saved as their own projects, “Recovered canvas” and “Recovered canvas 2”, so nothing in them is lost.');
   });
 
-  it('the toast too; with no time, by id, then as listed (never a number read in a name: PR #199 review 19 item 12)', () => {
+  it('the toast too; with no time, by id, then as listed (never a number read in a name)', () => {
     expect(canvasSavedToast('Recovered canvas', [{ id: B, name: 'Recovered canvas 2' }, { id: A, name: 'Recovered canvas' }]))
       .toBe('The canvases you had open were saved as their own projects, “Recovered canvas” and “Recovered canvas 2”.');
     expect(savedOrder([{ name: 'X 3' }, { name: 'X' }, { name: 'X 2' }]).map((row) => row.name)).toEqual(['X 3', 'X', 'X 2']);
   });
 
-  it('GM r10, 4: "Other canvases…", and from 4 on the count, with the over-limit tail', () => {
+  it('"Other canvases…", and from 4 on the count, with the over-limit tail', () => {
     expect(canvasSavedToast('B', [{ name: 'A' }, { name: 'B' }], false, true))
       .toBe('Other canvases you had open were saved as their own projects, “A” and “B”.');
     const four = [{ name: 'R' }, { name: 'R 2' }, { name: 'R 3', overSaveLimit: true }, { name: 'R 4' }];
@@ -55,7 +54,7 @@ describe('GM r10: in the order they were saved', () => {
   });
 });
 
-describe("GM r11, 4: the agent's copy is the agent's", () => {
+describe("the agent's copy is the agent's", () => {
   it('the restore notice: the original, then the copy on its own line, verbatim', () => {
     const notice = catalogRestoreNotice(restored({
       recoveredCanvas: { id: A, name: 'Recovered canvas' },

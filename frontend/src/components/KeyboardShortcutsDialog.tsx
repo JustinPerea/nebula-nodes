@@ -14,7 +14,7 @@ export function KeyboardShortcutsDialog({ cardRef, onClose }: {
 }) {
   const titleId = useId();
   const closeRef = useRef<HTMLButtonElement>(null);
-  // GM r94.2: "/" names the agent as the Message box's field does.
+  // Design: "/" names the agent as the Message box's field does.
   const messageLabel = `Message ${availabilityLabel(useMessageAvailability())}`;
 
   useEffect(() => {

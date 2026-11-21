@@ -1,12 +1,10 @@
 /**
- * Fix round 8 of PR #199 (GM r9, GM's answers to review 8, and GM's rule (a)
- * on the Undo check): the restore notice names every canvas filed while it
- * shows and no toast does; a later filing on its own says "Another canvas…";
- * every saved canvas over the limit gets the plural "They're over…"; the
- * held canvases that couldn't be read merge into the restore notice (closing
- * "The damaged files were kept.") or stand alone with ×; and the person's
- * Agent log rows when an agent's write saved the
- * canvas first (rule (a)).
+ * PR #199: the restore notice names every canvas filed while it shows and no
+ * toast does; a later filing on its own says "Another canvas…"; every saved
+ * canvas over the limit gets the plural "They're over…"; the held canvases
+ * that couldn't be read merge into the restore notice (closing "The damaged
+ * files were kept.") or stand alone with ×; and the person's Agent log rows
+ * when an agent's write saved the canvas first.
  */
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
@@ -30,7 +28,7 @@ const restored = (extra: Record<string, unknown> = {}) => ({
 }) as never;
 const now = (projects = [{ id: A, name: 'Recovered canvas' }, { id: B, name: 'Recovered canvas 2' }]) => ({ projects, trash: [] });
 
-describe("GM's answer 1 to review 8: the restore notice names every canvas filed", () => {
+describe("the restore notice names every canvas filed", () => {
   it('one sentence for both, "so nothing in them is lost", verbatim', () => {
     const notice = catalogRestoreNotice(restored({ alsoFiled: [{ id: B, name: 'Recovered canvas 2' }] }), Date.now(), now());
     expect(notice.lines).toContain('The canvases you had open were saved as their own projects, “Recovered canvas” and “Recovered canvas 2”, so nothing in them is lost.');
@@ -43,7 +41,7 @@ describe("GM's answer 1 to review 8: the restore notice names every canvas filed
     expect(notice.lines).toContain('The canvas you had open was saved as its own project, “Recovered canvas”, so nothing in it is lost.');
   });
 
-  it('the over-limit tail, and the plural when every one is over (GM r9, 1)', () => {
+  it('the over-limit tail, and the plural when every one is over', () => {
     const some = catalogRestoreNotice(restored({ alsoFiled: [{ id: B, name: 'Recovered canvas 2', overSaveLimit: true }] }), Date.now(), now());
     expect(some.lines).toContain("The canvases you had open were saved as their own projects, “Recovered canvas” and “Recovered canvas 2”, so nothing in them is lost. “Recovered canvas 2” is over the save limit, so new changes to it won’t save until it’s smaller.");
     const every = catalogRestoreNotice(restored({ recoveredCanvas: { id: A, name: 'Recovered canvas', overSaveLimit: true },
@@ -70,7 +68,7 @@ describe('The toast for a later filing on its own', () => {
       .toBe("Another canvas you had open was saved as its own project, “B”. It’s over the save limit, so new changes won’t save until it’s smaller.");
   });
 
-  it('GM r9 (1): every one over is not named again', () => {
+  it('every one over is not named again', () => {
     expect(canvasSavedToast('B', [{ name: 'A', overSaveLimit: true }, { name: 'B', overSaveLimit: true }]))
       .toBe("The canvases you had open were saved as their own projects, “A” and “B”. They’re over the save limit, so new changes to them won’t save until they’re smaller.");
     expect(canvasSavedToast('A', [{ name: 'A', overSaveLimit: true }])).toBe(
@@ -78,7 +76,7 @@ describe('The toast for a later filing on its own', () => {
   });
 });
 
-describe('GM r9: the held canvases that couldn\'t be read', () => {
+describe('the held canvases that couldn\'t be read', () => {
   const base = { projects: [project(A, 'Recovered canvas')], loading: false, busy: false, error: null,
     onCreate: vi.fn(), onOpen: vi.fn(), onRename: vi.fn(), onDelete: vi.fn(), onRetry: vi.fn() } satisfies ProjectHomeProps;
 
@@ -106,7 +104,7 @@ describe('GM r9: the held canvases that couldn\'t be read', () => {
   });
 });
 
-describe("GM's rule (a): the person's Agent log rows when the canvas was saved first", () => {
+describe("the person's Agent log rows when the canvas was saved first", () => {
   it('edit, clear, load, verbatim; "An agent" when unknown', () => {
     expect(canvasHeldLogLine('Codex', 'changed', 'Recovered canvas', true))
       .toBe('Codex changed a copy of the canvas you had open. The original was saved as its own project, “Recovered canvas”.');

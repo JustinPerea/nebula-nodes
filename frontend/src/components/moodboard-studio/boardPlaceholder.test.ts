@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { PLACEHOLDER_LABEL_MAX, clipGraphemes, placeholderLabel } from './boardPlaceholder';
 
-// A placeholder's label (GM r5): the file's name in its top-left corner, cut
-// by grapheme cluster so an emoji, a flag or an accented letter stays whole.
+// A placeholder's label: the file's name in its top-left corner, cut by
+// grapheme cluster so an emoji, a flag or an accented letter stays whole.
 
 describe('a placeholder\'s label', () => {
   it('is the file\'s name', () => {

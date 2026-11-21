@@ -6,11 +6,11 @@ import { resolve } from 'node:path';
 import type { Character } from '../../types';
 
 /**
- * error-copy round 2 (GM - Design): "Couldn't save the character." Character
- * Studio's save goes through the same two-line notice as the board, heading
- * over reason, and its Retry is the retry (GM's WRAP rule: the reason drops
- * its "try again"). On 1fc3d846 a 503 read "Update character failed: 503".
- * The real lib/api.ts and apiFetch run; only the browser's fetch is stubbed.
+ * Error copy: "Couldn't save the character." Character Studio's save goes
+ * through the same two-line notice as the board, heading over reason, and
+ * its Retry is the retry (design, WRAP rule: the reason drops its "try
+ * again"). On 1fc3d846 a 503 read "Update character failed: 503". The real
+ * lib/api.ts and apiFetch run; only the browser's fetch is stubbed.
  */
 
 vi.mock('../../lib/wsClient', () => ({ wsClient: { subscribe: () => () => {}, connect: () => {}, send: () => {} } }));
@@ -108,7 +108,7 @@ describe('a Character save that fails', () => {
   });
 });
 
-// Round 3 (GM): "Make Retry redo the failed action, never a different one."
+// Design: "Make Retry redo the failed action, never a different one."
 // Character Studio shares the Studio's store: its Retry (the notice's and the
 // toolbar's) is a save, so it shows only beside a save's own failure.
 describe('the Character Try again', () => {
@@ -146,9 +146,9 @@ describe('the Character Try again', () => {
   });
 });
 
-// Review of round 3: a failed save is still owed when another line (no
-// project open) replaces its own. The toolbar keeps its Retry, which saves;
-// the notice keeps that line in full, with no Retry of its own.
+// A failed save is still owed when another line (no project open) replaces
+// its own. The toolbar keeps its Retry, which saves; the notice keeps that
+// line in full, with no Retry of its own.
 describe('a Character save still owed under another line', () => {
   it('keeps the toolbar Try again, and Try again saves again', async () => {
     state.put = 503;

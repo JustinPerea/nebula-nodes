@@ -53,9 +53,9 @@ function ResultCardOutput({ node, prompt, url, onOpenInCanvas, onUseAsInput, onD
   url: string | null;
 }) {
   const [saved, setSaved] = useState(false);
-  // Round 23 (review 22, L-3): Delete removes the generation's nodes from the
-  // canvas, so it takes the canvas lock. Open in canvas, Use as input, Reveal,
-  // Save to folder, Download and Compare only look or copy, and stay enabled.
+  // Delete removes the generation's nodes from the canvas, so it takes the
+  // canvas lock. Open in canvas, Use as input, Reveal, Save to folder,
+  // Download and Compare only look or copy, and stay enabled.
   const lock = useCanvasLock();
   const [dlOpen, setDlOpen] = useState(false);
   const [saving, setSaving] = useState(false);

@@ -4,23 +4,23 @@ import { FORGET_BODY, FORGET_LABEL, forgetHeading } from '../../lib/worldLabsWai
 import '../../styles/prompt-dialog.css';
 import { useCanvasLock } from '../../lib/canvasLock';
 
-/** Run history's "Forget ID" confirm (GM - Design, round 13 of PR #114), in
- * the app's own dialog on the page body, never window.confirm. The same
- * pattern as the Projects screen's "Continue without them" confirm
- * (UnsavedEditsNotice): focus starts on Cancel, Escape is Cancel, Tab stays
- * inside, and focus goes back where it was when it closes. The forget runs
- * only from its "Forget ID" button.
+/** Run history's "Forget ID" confirm (design, PR #114), in the app's own
+ * dialog on the page body, never window.confirm. The same pattern as the
+ * Projects screen's "Continue without them" confirm (UnsavedEditsNotice):
+ * focus starts on Cancel, Escape is Cancel, Tab stays inside, and focus
+ * goes back where it was when it closes. The forget runs only from its
+ * "Forget ID" button.
  *
- * Round 14 (GM): Cancel on the left, "Forget ID" on the right in the
- * destructive style (the selection toolbar trash's red text on the secondary
- * button; orange is run/go). Review 13, L5: the dialog owns Escape and Tab
- * whenever it is open, however focus got where it is (a click on the
- * backdrop sent it to the page), through a capture listener on the document,
- * so Escape never reaches Run history or the rail behind it; the backdrop
- * keeps focus where it was. It renders only while Run history is visible,
- * and closing Run history cancels it (review 14, nit 1: the old `closing`
- * prop could never be true, so it is gone). Offline (round 15), its "Forget
- * ID" is disabled, as the row's is; Cancel still closes it. */
+ * Design: Cancel on the left, "Forget ID" on the right in the destructive
+ * style (the selection toolbar trash's red text on the secondary button;
+ * orange is run/go). The dialog owns Escape and Tab whenever it is open,
+ * however focus got where it is (a click on the backdrop sent it to the
+ * page), through a capture listener on the document, so Escape never
+ * reaches Run history or the rail behind it; the backdrop keeps focus where
+ * it was. It renders only while Run history is visible, and closing Run
+ * history cancels it (the old `closing` prop could never be true, so it is
+ * gone). Offline, its "Forget ID" is disabled, as the row's is; Cancel still
+ * closes it. */
 export function ForgetRecoveryConfirm({ name, onCancel, onConfirm }: {
   /** The node as recordNodeName says it (quoted card title, or the removed forms). */
   name: string;
@@ -70,8 +70,7 @@ export function ForgetRecoveryConfirm({ name, onCancel, onConfirm }: {
     return () => document.removeEventListener('keydown', onKeyDown, true);
   }, []);
 
-  // Through ModalPortal, as every modal in the app (#195's review 9; the
-  // round 21 merge).
+  // Through ModalPortal, as every modal in the app (PR #195).
   return (
     <ModalPortal>
     {/* A press on the backdrop keeps focus in the dialog (it did nothing else
@@ -84,8 +83,7 @@ export function ForgetRecoveryConfirm({ name, onCancel, onConfirm }: {
         <div className="prompt-dialog__actions">
           <button type="button" ref={cancel} onClick={onCancel}>Cancel</button>
           {/* Forgetting writes the node's recovery (deleteProviderRecovery):
-              the canvas lock, following as well as offline (fix round 2 of
-              PR #200, review 2 L-5). */}
+              the canvas lock, following as well as offline (PR #200). */}
           <button type="button" className="prompt-dialog__destructive" {...lock.act({ offline: true, kept: 'forget' })}
             onClick={onConfirm}>{FORGET_LABEL}</button>
         </div>

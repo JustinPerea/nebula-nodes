@@ -5,7 +5,7 @@ import { LineText } from '../../LineText';
  * A Settings row's line for its last failed write. A line that lost nothing
  * (another Nebula was saving the settings, so the change waits) is neutral,
  * colour too: the row's muted text and a polite status, not the error colour
- * and an alert (GM, PR #203 r39). `id` is the write's key or field name;
+ * and an alert (design, PR #203). `id` is the write's key or field name;
  * `message` may be the row's own line instead (a folder picker's), which is
  * never neutral.
  */

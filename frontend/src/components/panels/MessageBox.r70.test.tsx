@@ -14,11 +14,11 @@ import { noteBackendConnection } from '../../lib/backendConnection';
 import type { ChannelListener, ThreadRow } from '../../lib/personThread';
 import { answeredLine, answeredQuote } from '../../lib/personThreadBox';
 
-/** GM - Design r70 on #225 (round 2b): 1 (the fold is the same chip working
- * and settled: the same element, the same class, only words and the dot
- * change), the strings ("You answered “…”." cut inside its quotes; the
- * answering chip's × is "Stop answering" and its removal sends a plain
- * message). The CSS and the handle are tests/messageBoxLog.r70.test.tsx. */
+/** Design, PR #225: the fold is the same chip working and settled (the same
+ * element, the same class, only words and the dot change), and the strings
+ * ("You answered “…”." cut inside its quotes; the answering chip's × is
+ * "Stop answering" and its removal sends a plain message). The CSS and the
+ * handle are tests/messageBoxLog.r70.test.tsx. */
 
 const CLAUDE = { id: 'a1', name: 'Claude', color: '#E8825A', verified: true };
 const KEY = '0123456789ab';
@@ -60,7 +60,7 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe('r70 1: the working fold is the settled chip', () => {
+describe('the working fold is the settled chip', () => {
   it('settling keeps the same element and class; only the words and the breathing dot change', () => {
     const at = Date.now() - 5_000;
     usePersonThreadStore.setState({ listeners: [listener()], activity: { [KEY]: { at: Date.now() - 500, line: 'Cooler sky' } } });
@@ -93,7 +93,7 @@ function openSet(questions: { id: string; text: string; options: string[]; multi
   receiveSync('p1', [{ id: 'q', kind: 'question', at: Date.now(), questionId: 'q1', agent: CLAUDE, questions }]);
 }
 
-describe('r70 strings', () => {
+describe('the answer strings', () => {
   it('"You answered “…”." keeps the closing quote and full stop outside the cut words', () => {
     const long = 'Keep the warm one for the hero, and use the cooler palette on the other three shots, all of them';
     const parts = answeredQuote([{ choices: [], text: `  ${long}\n` }])!;
@@ -114,7 +114,7 @@ describe('r70 strings', () => {
     expect(line.querySelector('.message-box__answered-words')!.textContent).toBe('Square, please');
   });
 
-  it.each(['.', '?', '!'])('GM r94: the typed row drops its period after words that end in “%s”', (mark) => {
+  it.each(['.', '?', '!'])('Design: the typed row drops its period after words that end in “%s”', (mark) => {
     openSet([{ id: 'x', text: 'Which crop?', options: [], multiple: false, allowText: true }],
       { status: 'answered', answers: [{ questionId: 'x', answered: true, choices: [], text: `From the other tab${mark}` }] });
     useUIStore.setState({ agentLogOpen: true });

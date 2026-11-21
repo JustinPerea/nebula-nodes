@@ -1,9 +1,8 @@
 /**
- * Fix round 5 of PR #199 (GM r7 and round 5's answers, review 5's nits,
- * 2026-10-28): the restore notice is one outcome per line from the first
- * render; the Undo toast leaves on its own time as the app's other toasts
- * do. (Restore disabled at the project limit is gone: a restore may pass
- * it, Justin 2026-10-29, fix round 12.)
+ * PR #199 (2026-10-28): the restore notice is one outcome per line from the
+ * first render; the Undo toast leaves on its own time as the app's other
+ * toasts do. (Restore disabled at the project limit is gone: a restore may
+ * pass it, Justin, 2026-10-29.)
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen } from '@testing-library/react';
@@ -56,7 +55,7 @@ describe('Restore is never greyed by the project limit (Justin, 2026-10-29)', ()
   });
 });
 
-describe('GM round 5, 3: the restore notice is stacked from the first render', () => {
+describe('the restore notice is stacked from the first render', () => {
   it('stacks the opening, the not-read-whole line and the kept line on first load', () => {
     const notice = catalogRestoreNotice(restore({ damagedReadWhole: false }), NOW, { projects: [], trash: [] });
     expect(notice.lines).toEqual([`${OPEN}.`, NOT_WHOLE, KEPT]);
@@ -76,7 +75,7 @@ describe('GM round 5, 3: the restore notice is stacked from the first render', (
   });
 });
 
-describe('review 5, N-2: the Undo toast times out like the app\'s other toasts', () => {
+describe('the Undo toast times out like the app\'s other toasts', () => {
   beforeEach(() => { vi.useFakeTimers(); });
   afterEach(() => { vi.useRealTimers(); });
 
@@ -93,7 +92,7 @@ describe('review 5, N-2: the Undo toast times out like the app\'s other toasts',
   });
 });
 
-describe('GM held model: the Agent log lines', () => {
+describe('the held-canvas model: the Agent log lines', () => {
   it('words a hold an agent caused, named and unnamed', () => {
     expect(canvasHeldLogLine('Codex', 'cleared'))
       .toBe('Codex cleared the canvas. The one you had open is kept until Nebula can save it as a project.');

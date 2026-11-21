@@ -8,27 +8,27 @@ import { drawsAsMissingKey } from '../../lib/missingKeyTone';
 interface NodeErrorProps {
   category?: string;
   friendly?: string;
-  /** The handler's line for the person (error copy round 3c). */
+  /** The handler's line for the person (error copy). */
   person?: string;
-  /** That line was written for a provider's answer: its words go behind
-   * Details (round 3d). */
+  /** That line was written for a provider's answer: its words go
+   * behind Details. */
   providerText?: boolean;
-  /** The provider the run called (round 3f): GM's general line names it. */
+  /** The provider the run called: the general line (design) names it. */
   provider?: string;
   /** Where it shows: "shot" on the Cinema shot panel, whose heading and
-   * general line say "the shot" (rounds 3f and 3g). */
+   * general line say "the shot". */
   surface?: NodeErrorSurface;
   /** A heading other than the surface's own. */
   heading?: string;
   /** Nebula refused the run before it started (node data `errorNotStarted`):
-   * "Nebula couldn’t start the run." (GM, PR #203 r32). */
+   * "Nebula couldn’t start the run." (design, PR #203). */
   notStarted?: boolean;
-  /** The error itself is a missing-key one (node data `errorMissingKey`, which the
-   * backend sets where it builds the missing-key line): something to do, not a
-   * failure, so it draws in the neutral look of a waiting stop, with the error's
-   * own heading (copy sweep item 12). Colour only. The flag is the only input for most node
-   * kinds. For four kinds (worldlabs-environment, style-reference, speridlabs-idol, veo-3) the
-   * card's `keyStatus === 'missing'` also stands in, through `drawsAsMissingKey`
+  /** The error itself is a missing-key one (node data `errorMissingKey`, which the backend
+   * sets where it builds the missing-key line): something to do, not a failure, so it draws in
+   * the neutral look of a waiting stop, with the error's own heading (copy sweep). Colour
+   * only. The flag is the only input for most node kinds. For four kinds
+   * (worldlabs-environment, style-reference, speridlabs-idol, veo-3) the card's
+   * `keyStatus === 'missing'` also stands in, through `drawsAsMissingKey`
    * (lib/missingKeyTone.ts), until the follow-up pull request; so on those four another
    * failing check on a node whose key is missing draws neutral too.
    */
@@ -39,19 +39,19 @@ interface NodeErrorProps {
 }
 
 /**
- * A node's run error on its card (error copy round 3c, GM - Design): the
- * heading "Couldn’t run the node." over the person's line, the classifier's
- * line, or GM's general line, with the raw provider text behind a collapsed
- * Details toggle when the line isn't it (lib/nodeErrorCopy.ts). A line the
- * handler wrote for the person never shows the specific text: that is for
- * agents. A line Nebula wrote itself (a refused start, a pre-run check) has
- * no category and shows as it is. Safety/moderation blocks keep their calmer
- * treatment.
+ * A node's run error on its card (error copy, design): the heading
+ * "Couldn’t run the node." over the person's line, the classifier's line,
+ * or the general line (design), with the raw provider text behind a
+ * collapsed Details toggle when the line isn't it (lib/nodeErrorCopy.ts). A
+ * line the handler wrote for the person never shows the specific text: that
+ * is for agents. A line Nebula wrote itself (a refused start, a pre-run
+ * check) has no category and shows as it is. Safety/moderation blocks keep
+ * their calmer treatment.
  */
 export function NodeError({ category, friendly, person, providerText, provider, surface, heading, notStarted, missingKey, raw, className = 'model-node__error' }: NodeErrorProps) {
   const copy = nodeErrorCopy({ raw, category, friendly, person, providerText, provider, surface, heading, notStarted });
   const blocked = category === 'blocked' && !person;
-  // A stop that waits for the person is a notice, not an error (GM, PR #203 r39 item 1).
+  // A stop that waits for the person is a notice, not an error (design, PR #203).
   const tone = category === WAITING_CATEGORY ? 'waiting' : missingKey ? 'key' : blocked ? 'blocked' : null;
   const modifier = `${className.split(' ').at(-1)}--${tone}`;
   return (
@@ -65,12 +65,12 @@ export function NodeError({ category, friendly, person, providerText, provider, 
 }
 
 /**
- * A card's run error, from its node data (error copy round 3e): the same
- * NodeError every card shows while the node's state is "error", nothing
- * otherwise, so it clears when the node runs again and reads the same after
- * a reload (a graph sync carries the same fields). `className` fits it to
- * the card ("<card>__run-error"); the shared look comes from
- * model-node__error, kept last so a block gets its calmer modifier.
+ * A card's run error, from its node data (error copy): the same NodeError
+ * every card shows while the node's state is "error", nothing otherwise, so
+ * it clears when the node runs again and reads the same after a reload (a
+ * graph sync carries the same fields). `className` fits it to the card
+ * ("<card>__run-error"); the shared look comes from model-node__error, kept
+ * last so a block gets its calmer modifier.
  */
 export function NodeRunError({ data, className }: {
   data: Pick<NodeData, 'state' | 'definitionId' | 'keyStatus' | 'error' | 'errorMissingKey' | 'errorCategory' | 'errorFriendly' | 'errorPerson' | 'errorProviderText' | 'errorProvider' | 'errorNotStarted'>;

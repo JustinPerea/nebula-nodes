@@ -48,7 +48,7 @@ export interface BoardCanvasProps {
    *  the board, else the middle of the view, and the view at paste time
    *  (Cmd+V, Justin decided 2026-10-31). The Studio's paste reads it. */
   pasteTarget?: MutableRefObject<(() => BoardTarget) | null>;
-  /** Spots held for files still uploading (GM r4 answer 1): drawn as placeholder tiles. */
+  /** Spots held for files still uploading: drawn as placeholder tiles. */
   placeholders?: BoardPlaceholder[];
   /** Tiles just added outside the view: the board shows its edge chip for them. */
   outside?: OutsideTiles | null;
@@ -56,10 +56,10 @@ export interface BoardCanvasProps {
   onOutsideDone?: () => void;
   /** Filled placeholders whose image has finished fading in: the Studio drops them. */
   onPlaceholdersFilled?: (ids: string[]) => void;
-  /** Nebula is offline (GM r12 2): editing is paused, so Add images is
+  /** Nebula is offline: editing is paused, so Add images is
    *  disabled with the offline reason and an empty board shows no drop hint. */
   offline?: boolean;
-  /** The Studio's notice stack over the board's top (#210 round 6q, GM r95): while a line shows, the band down to
+  /** The Studio's notice stack over the board's top (PR #210): while a line shows, the band down to
    *  its bottom is outside the view (lib/boardViewInsets), so a fit or a refit never frames a card under a line. */
   notices?: RefObject<HTMLElement | null>;
 }
@@ -70,7 +70,7 @@ export interface BoardTarget {
   at: { x: number; y: number };
   view: NodeRect | null;
   /** What of the board is really seen, for the outside chip's area rule
-   *  (GM r15 2, lib/boardPlacement SeenArea). Left out, the view. */
+   *  (lib/boardPlacement SeenArea). Left out, the view. */
   seen?: SeenArea | null;
   aim: boolean;
   /** The view's bottom edge is the toolbar's top (lib/boardPlacement `band`). */
@@ -79,7 +79,7 @@ export interface BoardTarget {
 
 export type { BoardPlaceholder } from './boardPlaceholder';
 
-/** Tiles placed outside the view (GM, #210 answer 1): their rects, the first
+/** Tiles placed outside the view (design, PR #210): their rects, the first
  *  one's image for the chip's thumbnail (once uploaded), and how many. */
 export interface OutsideTiles {
   id: number;
@@ -91,12 +91,12 @@ export interface OutsideTiles {
  *  image that took its spot (focus moves on to that image's card). */
 type PlaceholderData = { label: string; fillId?: string };
 
-/** A placeholder tile (GM r5): a calm fill, a dashed edge one screen pixel
+/** A placeholder tile (design): a calm fill, a dashed edge one screen pixel
  *  wide at any zoom, and its label (the file's name) in the top-left corner.
  *  The edge is an SVG stroke whose width divides by the zoom (the CSS): a
  *  CSS border of 1px / zoom is snapped to whole pixels by Chrome before the
  *  zoom scales it, so it drew 3 px at zoom 3 and 0.75 px at 0.25, and
- *  non-scaling-stroke ignores the board's CSS scale() (live, r4). */
+ *  non-scaling-stroke ignores the board's CSS scale() (seen live). */
 function BoardPlaceholderNode({ data }: NodeProps<Node<PlaceholderData, 'placeholder'>>) {
   return (
     <div className="moodboard-board__placeholder">
@@ -145,7 +145,7 @@ const ARIA_LABELS = {
 };
 
 /** Runs `start` once the card `find` returns has decoded its image (or has
- *  none), or after FILL_DECODE_WAIT_MS at most (review 4, NIT-3). Returns a cancel. */
+ *  none), or after FILL_DECODE_WAIT_MS at most. Returns a cancel. */
 function whenDecoded(find: () => HTMLElement | null, start: () => void): () => void {
   let stopped = false;
   let frame = 0;
@@ -175,7 +175,7 @@ function whenDecoded(find: () => HTMLElement | null, start: () => void): () => v
 }
 
 /**
- * The Board view (moodboard canvas plan C1, PR5): the board's references as
+ * The Board view (PR #127): the board's references as
  * cards on a second React Flow canvas, where the server placed them.
  *
  * It has its own ReactFlowProvider. App.tsx wraps every view in one
@@ -212,7 +212,7 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, pasteTarget: pasteTa
   const selection = useBoardSelection(boardKey);
   const setSelection = useBoardCanvasStore((state) => state.setSelection);
   const savedViewport = useRef(useBoardCanvasStore.getState().viewports[boardKey]).current;
-  // Fitted (#209, GM (a)): a fresh open is, and so is a camera kept from
+  // Fitted (PR #209): a fresh open is, and so is a camera kept from
   // earlier in the visit that was fitted when it was kept. Either is fit at
   // once to the column the board has now, at the first size it's measured
   // at (boardFitFollow): a fitted camera kept at another column size, or with
@@ -254,7 +254,7 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, pasteTarget: pasteTa
   const build = useMemo(() => createBoardNodeBuilder(), []);
   const selected = useMemo(() => new Set(selection), [selection]);
   // The images now filling a held spot, by id: only their cards' nodes change
-  // when a placeholder fills or goes (review 4, LOW-5).
+  // when a placeholder fills or goes.
   const fillIdsKey = placeholders.flatMap((spot) => (spot.filled ? [spot.filled.imageId] : [])).join('\n');
   const fillIds = useMemo(() => new Set(fillIdsKey ? fillIdsKey.split('\n') : []), [fillIdsKey]);
   const nodes = useMemo(() => build(images, selected, moving, fillIds), [build, images, selected, moving, fillIds]);
@@ -274,7 +274,7 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, pasteTarget: pasteTa
   const shown = useMemo<Node[]>(() => (held.length === 0 ? nodes : [...held.map((spot) => ({
     id: spot.id, type: 'placeholder', position: { x: spot.x, y: spot.y }, width: spot.width, height: spot.height,
     measured: { width: spot.width, height: spot.height }, draggable: false, selectable: false, focusable: true,
-    // Its spoken name says what is coming (GM r8 answer 6). It can't be
+    // Its spoken name says what is coming. It can't be
     // selected, moved or deleted, so React Flow's description of those keys
     // (aria-describedby) is dropped.
     ariaLabel: placeholderSpokenName(spot.source), domAttributes: { 'aria-describedby': undefined },
@@ -282,11 +282,11 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, pasteTarget: pasteTa
   })), ...nodes]), [nodes, held]);
   heldNodesRef.current = shown.length === nodes.length ? [] : shown.slice(0, shown.length - nodes.length);
   // Images taking their spot: each fades in over its placeholder on the
-  // board's spring (GM r5, corrected: a spring, not a timed fade), written
-  // straight to the card's opacity per frame; reduced motion swaps at once.
-  // The fade waits until the card's image has decoded (review 4, NIT-3), so
-  // a slow first load never fades in an empty card; the placeholder shows
-  // meanwhile. Then the placeholder goes. Keyed by the new image's id.
+  // board's spring (a spring, not a timed fade), written straight to the
+  // card's opacity per frame; reduced motion swaps at once. The fade waits
+  // until the card's image has decoded, so a slow first load never fades in
+  // an empty card; the placeholder shows meanwhile. Then the placeholder
+  // goes. Keyed by the new image's id.
   const fillProgress = useRef(new Map<string, number>());
   const fill = useMemo<BoardFill>(() => ({ progress: (imageId) => fillProgress.current.get(imageId) ?? 0 }), []);
   const fades = useRef(new Map<string, () => void>());
@@ -456,11 +456,11 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, pasteTarget: pasteTa
   }, [flowStore]);
   // The camera as this view last saw it: where its own move left it, or
   // where the last outside move did. A move callback with the camera still
-  // there moved nothing (#209 review 4 LOW-1: a right or middle press, or
+  // there moved nothing (PR #209: a right or middle press, or
   // Space+click, with no drag, reaches onMoveStart before any pan).
   const seen = useRef<Viewport | null>(null);
   // An outside move's camera not kept yet: a pan or pinch keeps its camera
-  // once, when it ends, not on every frame (#209 review 4 NIT-3).
+  // once, when it ends, not on every frame (PR #209).
   const unkept = useRef(false);
   const moveCamera = useCallback((viewport: Viewport) => {
     ownMove.current = true;
@@ -471,9 +471,9 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, pasteTarget: pasteTa
       seen.current = readCamera();
     }
   }, [setViewport, readCamera]);
-  // The view insets (lib/boardViewInsets, GM #213 round 3): the control
+  // The view insets (lib/boardViewInsets, PR #213): the control
   // bar's band is outside, so a fit or a Show frames its cards above it, and
-  // so is the notice stack's band while a line shows (#210 round 6q, GM r95),
+  // so is the notice stack's band while a line shows (PR #210),
   // measured when the fit is made. The last measured insets are kept for
   // when there is no layout to measure (the view closing).
   const noticesRef = useRef(notices);
@@ -490,9 +490,8 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, pasteTarget: pasteTa
   /**
    * The whole-board fit in a column this size: the one fit computation, for
    * Fit, the fit on open and the follower alike. Held spots count, as cards
-   * on their way in (GM r8 answer 4; GM r11 2: a Fit with a held spot is a
-   * fit, and follows its column). Null only when there are no cards and no
-   * held spots.
+   * on their way in (a Fit with a held spot is a fit, and follows its
+   * column). Null only when there are no cards and no held spots.
    */
   const fitFor = useCallback((width: number, height: number): Viewport | null => {
     const all = [...nodesRef.current, ...heldNodesRef.current];
@@ -500,7 +499,7 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, pasteTarget: pasteTa
   }, [frame, getNodesBounds]);
   const fitForRef = useRef(fitFor);
   fitForRef.current = fitFor;
-  // A whole-board fit's refit while its column resizes (#209): `follow` knows
+  // A whole-board fit's refit while its column resizes (PR #209): `follow` knows
   // whether the camera is on the fit, by comparing it.
   const fitRef = useRef<(instant: boolean) => boolean>(() => false);
   // The app's refit of what the flag names (reframe, below).
@@ -512,34 +511,31 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, pasteTarget: pasteTa
     fitFor: (width, height) => fitForRef.current(width, height),
     // On open, the fit; after that, a column resize frames again what the flag names (reframe: the app's refit).
     refit: (instant) => (instant ? fitRef.current(true) : reframeRef.current()),
-    // A column resize refits a view the flag says is fitted, of any kind (GM r113 4), and only that: a panned view
-    // isn't refit, even one back on the fit (GM r113 5). A whole-board flag also needs the camera still where the
+    // A column resize refits a view the flag says is fitted, of any kind, and only that: a panned view
+    // isn't refit, even one back on the fit. A whole-board flag also needs the camera still where the
     // fit left it (a move no callback reported clears it).
     follows: (fitted) => placed.current !== null && (placed.current.kind !== 'board' || fitted),
   });
-  // The view is fitted (#210 round 6r, GM r101): the camera is where the app
-  // last framed it, and for what: the whole board (`kind: 'board'`), or the
-  // cards an Update's Show or the outside chip brought into view (`cards`).
-  // Only the person's own framing sets it (GM r113 5): Fit, Shift+1, a Show,
-  // the chip's press (round 6s, GM r105 1), or opening the board fresh. The
-  // app's refits (a line coming or going, a column resize, the fit on open of
-  // a kept camera) keep it as it is and never set it. Only the person clears
-  // it, by moving the camera (a pan, a pinch, a wheel, the zoom buttons, a
-  // keyboard zoom); an agent's change to the board doesn't. While it is set,
-  // a notice line appearing or going, or the column resizing, frames the
-  // same cards again in the view as it is now (reframe); once cleared,
-  // neither moves the camera (#213 r3). The flag is kept with the camera for
-  // the visit (the store's `placed`), so it comes back with the camera from
-  // List (savedPlaced).
+  // The view is fitted (PR #210): the camera is where the app last framed it, and for what:
+  // the whole board (`kind: 'board'`), or the cards an Update's Show or the outside chip
+  // brought into view (`cards`). Only the person's own framing sets it: Fit, Shift+1, a
+  // Show, the chip's press, or opening the board fresh. The app's refits (a line coming or
+  // going, a column resize, the fit on open of a kept camera) keep it as it is and never
+  // set it. Only the person clears it, by moving the camera (a pan, a pinch, a wheel, the
+  // zoom buttons, a keyboard zoom); an agent's change to the board doesn't. While it is
+  // set, a notice line appearing or going, or the column resizing, frames the same cards
+  // again in the view as it is now (reframe); once cleared, neither moves the camera
+  // (PR #213). The flag is kept with the camera for the visit (the store's `placed`), so
+  // it comes back with the camera from List (savedPlaced).
   const placed = useRef<BoardPlaced | null>(savedPlaced);
   const place = useCallback((value: BoardPlaced | null) => {
     placed.current = value;
     useBoardCanvasStore.getState().setPlaced(boardKey, value);
   }, [boardKey]);
   /**
-   * Spring the camera to `to`. A spring that lands on the fit is a fit (GM,
-   * #213 round 3: Fit, a refit, or a zoom or Show that lands there), so a
-   * resize while it runs refits it as it would a Fit.
+   * Spring the camera to `to`. A spring that lands on the fit is a fit (PR #213:
+   * Fit, a refit, or a zoom or Show that lands there), so a resize while it
+   * runs refits it as it would a Fit.
    */
   const springTo = useCallback((to: Viewport) => {
     const fitted = follow.current!.onFit(to);
@@ -569,16 +565,15 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, pasteTarget: pasteTa
   // from the camera itself (a move's own viewport can be a spring frame
   // React Flow reports 150 ms late). While a spring runs, the store holds
   // where it lands (springTo). Once the view has closed, React Flow's store
-  // holds its reset camera (0, 0, 1), so a late move end keeps nothing
-  // (#213 review 1 MEDIUM-1).
+  // holds its reset camera (0, 0, 1), so a late move end keeps nothing (PR #213).
   const closed = useRef(false);
   const keepCamera = useCallback(() => {
     unkept.current = false;
     if (springTarget.current || closed.current) return;
     useBoardCanvasStore.getState().setViewport(boardKey, getViewport(), follow.current!.fitted);
   }, [boardKey, getViewport]);
-  // The tiles a Show or the chip framed are followed as they change (GM r113
-  // 3): a placeholder becomes its image's card when it lands, a provisional
+  // The tiles a Show or the chip framed are followed as they change: a
+  // placeholder becomes its image's card when it lands, a provisional
   // card its saved one. What each tile stands for (its image) is learned
   // while it is on the board, so a tile whose id went is found by its image.
   const tileImage = useRef(new Map<string, string>());
@@ -628,10 +623,9 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, pasteTarget: pasteTa
     if (instant && !panZoom) return false;
     const to = fitFor(width, height);
     if (!to) return false;
-    // The person's Fit or Shift+1 sets the flag, and so does opening the
-    // board fresh (GM r113 5); the fit on open of a camera kept from earlier
-    // in the visit keeps the flag it was kept with (GM r105 2). The app's
-    // refits never come here: they are reframe's.
+    // The person's Fit or Shift+1 sets the flag, and so does opening the board fresh;
+    // the fit on open of a camera kept from earlier in the visit keeps the flag it was
+    // kept with. The app's refits never come here: they are reframe's.
     if (!instant || !savedViewport) place(WHOLE_BOARD);
     if (!instant) {
       springTo(to);
@@ -661,7 +655,7 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, pasteTarget: pasteTa
     if (at.kind === 'cards' && nodesRef.current.length === 0) return;
     reframePending.current = false;
     const to = framePlaced(at, width, height);
-    // None of the cards it framed is left (GM r113 6): the flag clears, and the camera stays where it was kept.
+    // None of the cards it framed is left: the flag clears, and the camera stays where it was kept.
     if (!to && at.kind === 'cards') place(null);
     if (!to || sameCamera(readCamera(), to)) return;
     moveCamera(to);
@@ -723,7 +717,7 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, pasteTarget: pasteTa
     });
   }, [flowStore, cameraMade]);
 
-  // An Update's Show (Q113 c): spring the camera to the cards it names, once
+  // An Update's Show: spring the camera to the cards it names, once
   // the view has its size (a Show from List mounts this view first).
   const frameRequest = useBoardCanvasStore((state) => state.frameRequest);
   useEffect(() => {
@@ -762,13 +756,12 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, pasteTarget: pasteTa
   }, [flowStore, getViewport, springTo, place]);
 
   /**
-   * The app's refit (#210 round 6r, GM r101; round 6t, GM r113 4-6): while
-   * the view is fitted, what the flag names is framed again in the view as
-   * it is now, on the board's spring (a jump under reduced motion), so a
-   * line never covers a card the person framed and a resized column keeps
-   * them in view. It keeps the flag as it is and never sets it. A Show's or
-   * the chip's cards are framed as many as are left; with none left, the
-   * flag clears and the camera stays still. False when nothing moved.
+   * The app's refit (PR #210): while the view is fitted, what the flag names is
+   * framed again in the view as it is now, on the board's spring (a jump under
+   * reduced motion), so a line never covers a card the person framed and a
+   * resized column keeps them in view. It keeps the flag as it is and never sets
+   * it. A Show's or the chip's cards are framed as many as are left; with none
+   * left, the flag clears and the camera stays still. False when nothing moved.
    */
   const reframe = useCallback((): boolean => {
     const at = placed.current;
@@ -818,7 +811,7 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, pasteTarget: pasteTa
   // onMoveStart (@xyflow/system 0.0.76). Whether the board is still fitted is
   // read from the camera (boardFitFollow), not from these calls.
   //
-  // A move is one only when the camera changed (#209 review 4 LOW-1, GM): a
+  // A move is one only when the camera changed (PR #209): a
   // right or middle press, or Space+click, reaches onMoveStart on the press,
   // before any pan, and a press with no drag moves nothing, so a refit
   // carries on to the fit. React Flow applies a move to its store before it
@@ -831,7 +824,7 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, pasteTarget: pasteTa
   // unkept then, or when the view closes, is kept from `seen`.
   //
   // A press that hasn't gone past the click distance is a click, not a drag
-  // (#213 review 1 LOW-1, GM: the board's own click distance): d3 puts the
+  // (PR #213: the board's own click distance): d3 puts the
   // pressed board point back under the pointer on every mousemove, even a
   // 1 px jitter, and while a refit spring runs that moves the camera back
   // toward where it was at the press. That isn't the person's move: the
@@ -873,7 +866,7 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, pasteTarget: pasteTa
   }, [outsideMove]);
   const onCameraMove = useCallback((event: unknown) => outsideMove(false, event), [outsideMove]);
   // Only a move end the person made (d3's end carries their mouseup or
-  // wheel) ends a press (GM r5). React Flow also ends a gesture on a 150 ms
+  // wheel) ends a press. React Flow also ends a gesture on a 150 ms
   // timer, with no source event, after the camera's own moves (each spring
   // frame is one), and that timer can fire while a press is still held: it
   // keeps the camera, but the press goes on.
@@ -885,7 +878,7 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, pasteTarget: pasteTa
   // camera not kept yet (React Flow's move end comes 150 ms after a scroll
   // pan, and a drag's at its release) is kept now, from `seen`: this runs as
   // a layout cleanup, before React Flow's own (its StoreUpdater, a child)
-  // resets its store to the camera (0, 0, 1) (#213 review 1 MEDIUM-1). The
+  // resets its store to the camera (0, 0, 1) (PR #213). The
   // spring stops here too, so no frame moves a camera React Flow has reset.
   // From here on nothing is kept (`closed`): React Flow's late move end
   // would read the reset camera.
@@ -913,11 +906,11 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, pasteTarget: pasteTa
   };
 
   // The toolbar is the board's bottom bar: the app's notices stack above it
-  // (lib/bottomBar.ts, GM #210 item 6), and new tiles land above it.
+  // (lib/bottomBar.ts, PR #210), and new tiles land above it.
   useBottomBarClearance([controlsRef]);
 
   /** The board the person can see, in board coordinates, inside the view
-   *  insets (lib/boardViewInsets, #213: the toolbar's band is outside), so a
+   *  insets (lib/boardViewInsets, PR #213: the toolbar's band is outside), so a
    *  tile placed in it is fully visible. Fit, an Update's Show and the
    *  chip's press frame into the same view (`frame`). */
   const viewRect = (): NodeRect | null => {
@@ -931,7 +924,7 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, pasteTarget: pasteTa
   };
 
   /**
-   * What of the board the person really sees (GM r15 2), in board
+   * What of the board the person really sees, in board
    * coordinates: the board's pane clipped to the window, less the boxes that
    * cover it there, each as it really is: the toolbar pill (every
    * `data-bottom-bar` box), the notice region's reserved band across its own
@@ -989,9 +982,9 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, pasteTarget: pasteTa
     return () => { if (pasteTargetRef.current === read) pasteTargetRef.current = null; };
   }, [pasteTargetRef]);
 
-  /** Focus on the board itself (GM r4 answer 6: never the page body). */
+  /** Focus on the board itself (never the page body). */
   // The board takes focus; if it can't (hidden, or with no size), the view
-  // switch does, so focus never falls to the page body (review 5, NIT-6).
+  // switch does, so focus never falls to the page body.
   const focusBoard = useCallback(() => {
     wrapperRef.current?.focus({ preventScroll: true });
     if (document.activeElement && document.activeElement !== document.body) return;
@@ -999,7 +992,7 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, pasteTarget: pasteTa
   }, []);
 
   // After a chip press from the keyboard, focus follows the first pasted
-  // tile (GM r4 answer 6): onto it once it is drawn in view, and onto it
+  // tile: onto it once it is drawn in view, and onto it
   // again when its placeholder becomes the card (a new element). Only while
   // focus would otherwise be on the board or nowhere, and for a short while.
   const focusFollow = useRef<{ x: number; y: number; until: number } | null>(null);
@@ -1011,7 +1004,7 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, pasteTarget: pasteTa
     }
     const active = document.activeElement;
     if (active && active !== document.body && active !== wrapperRef.current) return true;
-    // The card at the spot before its placeholder (both sit there while it fades in, review 4 NIT-2).
+    // The card at the spot before its placeholder (both sit there while it fades in).
     const there = shownRef.current.filter((item) => item.position.x === spot.x && item.position.y === spot.y);
     const node = there.find((item) => item.type === 'card') ?? there[0];
     const element = node ? wrapperRef.current?.querySelector<HTMLElement>(`.react-flow__node[data-id="${node.id}"]`) : null;
@@ -1023,15 +1016,15 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, pasteTarget: pasteTa
   useEffect(() => () => { focusFollow.current = null; }, []);
 
   // Focus on a tile that is being replaced moves on to what replaces it
-  // (review 4, HIGH-1 and MEDIUM-2; GM: never the page body, never pulled
-  // from elsewhere): a placeholder its image has filled hands focus to that
-  // image's card as soon as the card is drawn, however long the upload took;
-  // a provisional card hands it to its saved card. React Flow adds and drops
-  // node elements a commit after the board's own effects, so this runs on
-  // every change of the board's DOM (a MutationObserver, before paint), not
-  // only in an effect. If the focused tile's element goes first, focus is
-  // parked on the board (never the body) and moves on when the card comes.
-  // Focus anywhere else is left where the person put it.
+  // (never the page body, never pulled from elsewhere): a placeholder its
+  // image has filled hands focus to that image's card as soon as the card is
+  // drawn, however long the upload took; a provisional card hands it to its
+  // saved card. React Flow adds and drops node elements a commit after the
+  // board's own effects, so this runs on every change of the board's DOM (a
+  // MutationObserver, before paint), not only in an effect. If the focused
+  // tile's element goes first, focus is parked on the board (never the body)
+  // and moves on when the card comes. Focus anywhere else is left where the
+  // person put it.
   const focused = useRef<{ element: HTMLElement; imageId: string | null } | null>(null);
   const parked = useRef<{ imageId: string; until: number } | null>(null);
   const handOff = useCallback(() => {
@@ -1123,12 +1116,11 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, pasteTarget: pasteTa
   }, [handOff]);
 
   /** The chip's press: the tiles into view on the board's fit spring (for a
-   *  tile bigger than the view, a zoom out until it is whole, GM r4 answer
-   *  9). It is a Show (round 6s, GM r105 1): the view is fitted to the
-   *  tiles, which it keeps and follows (GM r113 3: a tile moved, a
-   *  placeholder that lands), so a line or a resize frames them again. Only
-   *  tiles not on the board yet fall back to their area. With `focus`, focus
-   *  goes to the first tile. */
+   *  tile bigger than the view, a zoom out until it is whole). It is a Show:
+   *  the view is fitted to the tiles, which it keeps and follows (a tile
+   *  moved, a placeholder that lands), so a line or a resize frames them
+   *  again. Only tiles not on the board yet fall back to their area. With
+   *  `focus`, focus goes to the first tile. */
   const showOutside = useCallback((rects: NodeRect[], focus: boolean) => {
     const { width, height } = flowStore.getState();
     if (!width || !height || rects.length === 0) return;
@@ -1215,7 +1207,7 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, pasteTarget: pasteTa
               aria-label="Zoom in" title="Zoom in">+</button>
             <button type="button" className="moodboard-board__control moodboard-board__control--text" onClick={() => fit(false)}
               aria-label="Fit the moodboard" title="Fit the moodboard (Shift+1)">Fit</button>
-            {/* Live while files upload (GM): each upload is its own placeholder, so the toolbar has no status. */}
+            {/* Live while files upload (design): each upload is its own placeholder, so the toolbar has no status. */}
             <label className={`moodboard-board__control moodboard-board__control--text${offline ? ' moodboard-board__control--disabled' : ''}`}
               title={offline ? offlineDisabledReason('add images') : 'Add images to the middle of the view'} {...offlineMark(offline)}>
               <span aria-hidden="true">Add images</span>
@@ -1233,7 +1225,7 @@ function BoardFlow({ boardKey, images, onMove, onDropFiles, pasteTarget: pasteTa
       {nodes.length === 0 && held.length === 0 && (
         <div className="moodboard-board__empty" role="note">
           <span className="moodboard-board__empty-title">No references yet</span>
-          {/* Not while offline (GM r12 2): a drop is paused then; the hint comes back on reconnect. */}
+          {/* Not while offline: a drop is paused then; the hint comes back on reconnect. */}
           {!offline && <span className="moodboard-board__empty-hint">Drop images here. They land where you drop them.</span>}
         </div>
       )}

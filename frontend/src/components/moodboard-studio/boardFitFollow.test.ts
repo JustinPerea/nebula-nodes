@@ -2,8 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { getViewportForBounds } from '@xyflow/react';
 import { createBoardFitFollow, FIT_TOLERANCE_PX, FIT_TOLERANCE_ZOOM, sameCamera, type BoardFitFollow, type FitCamera } from './boardFitFollow';
 
-// #209, GM (a): refit on a column resize only while the board is fitted.
-// GM, #213 round 3: fitted means the camera is on the fit of the layout the
+// PR #209 (design): refit on a column resize only while the board is fitted.
+// PR #213 (design): fitted means the camera is on the fit of the layout the
 // board has now (its cards in its column), however it got there.
 
 /** The whole-board fit in a column this size: any function of the size will do. */
@@ -172,7 +172,7 @@ describe('fitted is read from the camera', () => {
     expect(refit).toHaveBeenCalledTimes(1);
   });
 
-  it('a spring heading to the fit counts as fitted while it runs, and where it lands (#213 round 3b)', () => {
+  it('a spring heading to the fit counts as fitted while it runs, and where it lands (PR #213)', () => {
     const { follow, camera, resize, board } = harness(false);
     resize(870, 851);
     follow.headingToFit();
@@ -196,7 +196,7 @@ describe('fitted is read from the camera', () => {
     expect(follow.fitted).toBe(false);
   });
 
-  it('a spring heading to the fit, then a resize: it refits to the new column (#213 review 1 LOW-2)', () => {
+  it('a spring heading to the fit, then a resize: it refits to the new column (PR #213)', () => {
     const { follow, refit, flush, camera, opened, resize } = harness();
     opened();
     Object.assign(camera, { x: 200, y: 10, zoom: 0.5 }); // mid-spring
@@ -207,7 +207,7 @@ describe('fitted is read from the camera', () => {
     expect(camera).toEqual(fitAt(430, 851));
   });
 
-  it('the camera\'s own move elsewhere (zoom buttons, Show): off the fit it is not fitted, back on it it is (GM, review 4)', () => {
+  it('the camera\'s own move elsewhere (zoom buttons, Show): off the fit it is not fitted, back on it it is', () => {
     const { follow, refit, flush, camera, opened, resize } = harness();
     opened();
     follow.headingToFit();
@@ -257,10 +257,10 @@ describe('fitted is read from the camera', () => {
   });
 });
 
-// GM, #213 round 3: the fit of the layout the board has now, however the
+// PR #213 (design): the fit of the layout the board has now, however the
 // camera got there; a camera on the fit of the column before a resize is
 // what a refit frame asks about.
-describe('fitted means on the fit of the layout the board has now (GM, #213 round 3)', () => {
+describe('fitted means on the fit of the layout the board has now (design, PR #213)', () => {
   it('not fitted, then the column resizes: a camera that lands on the new column\'s fit (a Show of every card) is fitted', () => {
     const { follow, refit, flush, camera, opened, resize } = harness();
     opened();
@@ -304,7 +304,7 @@ describe('fitted means on the fit of the layout the board has now (GM, #213 roun
   });
 });
 
-describe('the tolerance: half a screen pixel, and 0.1% of the fit\'s zoom (GM, #213 round 3 and r5)', () => {
+describe('the tolerance: half a screen pixel, and 0.1% of the fit\'s zoom (design, PR #213)', () => {
   it('is pinned', () => {
     expect(FIT_TOLERANCE_PX).toBe(0.5);
     expect(FIT_TOLERANCE_ZOOM).toBe(0.001);
@@ -325,7 +325,7 @@ describe('the tolerance: half a screen pixel, and 0.1% of the fit\'s zoom (GM, #
     expect(sameCamera({ x: 0, y: 0, zoom: 1.0011 }, { x: 0, y: 0, zoom: 1 })).toBe(false);
   });
 
-  it('at the board\'s minimum zoom (0.02), a 5% pinch about the fit\'s own origin is not the fit (review 2 LOW-1)', () => {
+  it('at the board\'s minimum zoom (0.02), a 5% pinch about the fit\'s own origin is not the fit', () => {
     // A 300-reference board (about 2,500 x 22,000 board px) in a 719 x 402 column clamps to the minimum zoom.
     const fit = getViewportForBounds({ x: 0, y: 0, width: 2500, height: 22000 }, 719, 402, 0.02, 1, 0.12);
     expect(fit.zoom).toBe(0.02);
@@ -339,9 +339,9 @@ describe('the tolerance: half a screen pixel, and 0.1% of the fit\'s zoom (GM, #
   });
 });
 
-// GM, #213 round 3b: fitted is the person's intent. A card added or moved
+// PR #213 (design): fitted is the person's intent. A card added or moved
 // while fitted keeps it fitted; only a camera move off the fit clears it.
-describe('cards change while fitted (GM, #213 round 3b)', () => {
+describe('cards change while fitted (design, PR #213)', () => {
   it('a card added while fitted: still fitted, the camera stays, and the next resize refits to the cards there are now', () => {
     const { follow, refit, flush, camera, opened, resize, board, fitNow } = harness();
     opened();
@@ -413,8 +413,8 @@ describe('cards change while fitted (GM, #213 round 3b)', () => {
   });
 });
 
-// GM r5: one tolerance whether a move was reported or not (review 2 NIT-1).
-describe('a move within the tolerance keeps the anchor, reported or not (GM r5)', () => {
+// One tolerance whether a move was reported or not.
+describe('a move within the tolerance keeps the anchor, reported or not', () => {
   it('fitted, a card added (fitted by the anchor), then 0.3 px of drift: still fitted, unreported or reported', () => {
     const { follow, camera, opened, board } = harness();
     opened();
@@ -436,7 +436,7 @@ describe('a move within the tolerance keeps the anchor, reported or not (GM r5)'
     expect(follow.fitted).toBe(false);
   });
 
-  it('a move that lands on the old column\'s fit while a refit waits sets the anchor: a card added before the frame still refits (review 2 R10)', () => {
+  it('a move that lands on the old column\'s fit while a refit waits sets the anchor: a card added before the frame still refits', () => {
     const { follow, refit, flush, camera, opened, resize, board } = harness();
     opened();
     resize(430, 851); // the frame waits
@@ -461,7 +461,7 @@ describe('a move within the tolerance keeps the anchor, reported or not (GM r5)'
   });
 });
 
-// #210 round 6t (GM r113 4, 5): the Board view decides whether a resize refits
+// PR #210 (design): the Board view decides whether a resize refits
 // from its own "view is fitted" flag (`follows`), given what the camera says.
 describe('follows: the caller decides whether a resize refits', () => {
   const withFollows = (follows: (fitted: boolean) => boolean) => {

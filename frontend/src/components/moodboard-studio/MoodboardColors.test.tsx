@@ -65,7 +65,7 @@ describe('MoodboardColors', () => {
   });
 
   it('says when the saved colors counted transparent areas as dark', () => {
-    // GM r1 on #208, verbatim: the backend sends it, the Studio shows it as is.
+    // The line from #208, verbatim: the backend sends it, the Studio shows it as is.
     const line = 'These colors counted transparent areas as dark. Analyze again to update them.';
     const old = analysis({ version: 3, outdated: line, colors: [{ ...NAVY, sources: undefined }] });
     const { container } = render(<><AnalysisOutdated analysis={old} /><SourcesOutdated analysis={old} /></>);

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { imageStepWords, keptUndoLine, lookNameInLine, partialUndoLine, undoneLine } from './undoLines';
 
-describe('the undo and redo toasts’ words (design r160 and r161)', () => {
+describe('the undo and redo toasts’ words', () => {
   it('have no colon: the step’s label sits in curly quotes', () => {
     expect(undoneLine('undo', 'Made image 3 the cover')).toBe('Undid “Made image 3 the cover”');
     expect(undoneLine('redo', 'Made image 3 the cover')).toBe('Redid “Made image 3 the cover”');

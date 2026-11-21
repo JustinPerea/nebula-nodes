@@ -5,20 +5,19 @@ import type { ProposalView } from '../../lib/wsClient';
 
 /**
  * What needs the person, per agent: the open question sets and proposals of
- * the open project this tab can answer (Q125 item 2). One rule for the
- * Agents panel's Needs-you group (agentRosterModel) and the closed Updates
- * chip's badge (GM - Design's review of PR #193: "A waiting question blocks
- * an agent, so 'Updates 0' mustn't hide it"), so the two counts always
- * match. Pure, and in the corner's chunk (the chip reads it through
- * AgentNotesCorner's useNeedsYouCount); the panel's own chunk is never
- * pulled in for a count.
+ * the open project this tab can answer. One rule for the Agents panel's
+ * Needs-you group (agentRosterModel) and the closed Updates chip's badge
+ * (design, PR #193: "A waiting question blocks an agent, so
+ * 'Updates 0' mustn't hide it"), so the two counts always match. Pure, and
+ * in the corner's chunk (the chip reads it through AgentNotesCorner's
+ * useNeedsYouCount); the panel's own chunk is never pulled in for a count.
  *
- * GM, 2026-10-29 (the held needs-you count): a tab that isn't connected as
- * the person holds none of those (they go to the person's sockets only), yet
- * the agents still wait. So the open project's unresolved ask Updates come
- * into the same rule (`held`): each one stands for its ask until this tab
- * holds the ask itself (the person's sync after the promote), matched by id,
- * so the count and the rows never change on the promote. Only what the
+ * Design, 2026-10-29 (the held needs-you count): a tab that isn't connected
+ * as the person holds none of those (they go to the person's sockets only),
+ * yet the agents still wait. So the open project's unresolved ask Updates
+ * come into the same rule (`held`): each one stands for its ask until this
+ * tab holds the ask itself (the person's sync after the promote), matched by
+ * id, so the count and the rows never change on the promote. Only what the
  * Updates already carry: who asks, its kind and target, when (the ref's
  * `since`), and a question set's count; never their text.
  */
@@ -40,7 +39,7 @@ export interface HeldAsk {
   createdAt: number;
   /** How many questions a set asks; for a proposal, how many open asks its
    * Update stands for (an asset Update one agent's asks on one target share:
-   * the ref's `asks`, PR #204 review 1 MEDIUM-1). */
+   * the ref's `asks`, PR #204). */
   count: number;
 }
 
@@ -163,8 +162,8 @@ export function heldAsks(notes: readonly AgentNote[], holds: (id: string) => boo
       const id = typeof op?.proposalId === 'string' ? op.proposalId : '';
       const target = typeof op?.target === 'string' && ASK_TARGETS.has(op.target) ? op.target as HeldAsk['target'] : null;
       if (!id || !target || holds(id)) continue;
-      // A shared asset Update stands for all its agent's open asks on that target,
-      // from the oldest one's time, as the connected tab counts and orders them (MEDIUM-1).
+      // A shared asset Update stands for all its agent's open asks on that target, from the
+      // oldest one's time, as the connected tab counts and orders them.
       asks.push({ agent, kind: 'proposal', id, target, targetId: typeof op?.targetId === 'string' ? op.targetId : null,
         createdAt: note.proposal?.firstSince ?? note.proposal?.since ?? at, count: note.proposal?.asks ?? 1 });
     } else if (note.about === 'question') {

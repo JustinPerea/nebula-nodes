@@ -99,7 +99,7 @@ describe('AssetProposalStrip', () => {
       vi.useRealTimers();
     }
   });
-  it('never says "You pinned" over an image that is gone (Q90 a): the pin no longer counts', () => {
+  it('never says "You pinned" over an image that is gone: the pin no longer counts', () => {
     useAssetProposalsStore.getState().open(coverProposal({
       change: { cover: { from: null, to: '/api/outputs/c.png', fromBy: null,
         lostPin: { url: '/api/outputs/a.png', by: { kind: 'person', name: 'You' } } } },
@@ -149,7 +149,7 @@ describe('AssetProposalStrip', () => {
     expect(strip.textContent).toContain('Newest image');
   });
 
-  it('comes into view when the person clicks Review on its Update (Q92 a)', () => {
+  it('comes into view when the person clicks Review on its Update', () => {
     const scrolled = vi.fn();
     const original = HTMLElement.prototype.scrollIntoView;
     HTMLElement.prototype.scrollIntoView = scrolled;

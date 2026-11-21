@@ -12,7 +12,7 @@ import { NodeTypeIcon } from './NodeTypeIcon';
 import '../../styles/node-card-boundary.css';
 import '../../styles/card-fallback.css';
 
-/** The line under a card whose chunk could not be fetched, offline (GM - Design, 2026-11-14). */
+/** The line under a card whose chunk could not be fetched, offline (design, 2026-11-14). */
 export const FALLBACK_LINE_OFFLINE = 'Nebula couldn’t load this node because you’re offline. It’ll try again when you’re back online.';
 /** The same, online. */
 export const FALLBACK_LINE_ONLINE = 'Nebula couldn’t load this node because part of the app didn’t download. Reload the page to try again.';

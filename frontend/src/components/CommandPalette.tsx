@@ -23,12 +23,12 @@ import { composing } from '../lib/imeComposing';
 import { canvasWait } from '../lib/runLock';
 import '../styles/command-palette.css';
 
-/** A palette command's line while the canvas is kept (GM r17 on PR #199). */
+/** A palette command's line while the canvas is kept (design, PR #199). */
 function paletteKeptAction(id: string): KeptAction | 'live' {
   if (id === 'action:run') return 'run';
   if (id === 'action:load') return 'load';
   if (id === 'agent:ask') return 'ask';
-  // GM r19 (5): adding a node is the kept tab's own now.
+  // Design: adding a node is the kept tab's own now.
   if (id.startsWith('node:')) return 'live';
   return 'other';
 }
@@ -53,8 +53,8 @@ export function CommandPalette() {
   const dialogRef = useRef<HTMLDivElement | null>(null);
 
   const { screenToFlowPosition, fitView } = useReactFlow();
-  // Round 23 (review 22, L-3): the commands that change the canvas (acts)
-  // take the canvas lock, as every other surface does.
+  // The commands that change the canvas (acts) take the canvas lock, as
+  // every other surface does.
   const lock = useCanvasLock();
   const paletteId = useId();
   const listId = `${paletteId}-list`;
@@ -64,7 +64,7 @@ export function CommandPalette() {
   const addNode = useGraphStore((s) => s.addNode);
   const executeGraph = useGraphStore((s) => s.executeGraph);
   const isExecuting = useGraphStore((s) => s.isExecuting);
-  // A run waiting for its inputs counts as starting (review 15, M-B).
+  // A run waiting for its inputs counts as starting.
   const runStarting = useGraphStore((s) => s.runStarting);
   const isImportingGraph = useGraphStore((s) => s.isImportingGraph);
   const launching = useGraphStore((s) => s.createLaunchingIds);
@@ -182,7 +182,7 @@ export function CommandPalette() {
     };
     function onKey(e: KeyboardEvent) {
       // The open palette is a modal dialog itself: its own ⌘K closes it,
-      // unless another modal dialog is on top of it (review 9, L-1).
+      // unless another modal dialog is on top of it.
       if (!isPaletteHotkey(e, openRef.current ? dialogRef.current : null)) return;
       e.preventDefault();
       if (openRef.current) close();
@@ -226,8 +226,8 @@ export function CommandPalette() {
   const run = useCallback(
     (cmd: PaletteCommand | undefined) => {
       if (!cmd || cmd.enabled === false) return;
-      // Enter on an acting command while locked: refused, with the pulse.
-      // A node command is the kept tab's own while kept (GM r19 on PR #199, 5).
+      // Enter on an acting command while locked: refused, with the pulse. A
+      // node command is the kept tab's own while kept (design, PR #199).
       if (cmd.acts && (paletteKeptAction(cmd.id) === 'live' ? refuseTabOnlyEdit() : refuseCanvasEdit())) return;
       if (!cmd.keepsOpen) close();
       cmd.perform();
@@ -245,7 +245,7 @@ export function CommandPalette() {
   }, [query, close]);
 
   // Escape leaves the agent prompt, else closes the palette: from the field
-  // and, through the dialog (review 10, L-1), from anything else in it.
+  // and, through the dialog, from anything else in it.
   const escape = () => {
     if (mode === 'agent') {
       setMode('commands');
@@ -258,7 +258,7 @@ export function CommandPalette() {
 
   const onInputKeyDown = (e: React.KeyboardEvent) => {
     // A key that ends or commits an IME composition is the input method's,
-    // never the palette's (review 11): Escape doesn't close, Enter doesn't run.
+    // never the palette's: Escape doesn't close, Enter doesn't run.
     if (composing(e)) return;
     if (e.key === 'Escape') {
       e.preventDefault();
@@ -288,14 +288,14 @@ export function CommandPalette() {
 
   const indexById = new Map(flat.map((c, i) => [c.id, i] as const));
 
-  // Review 9, L-1: it covers the window, so it is a modal dialog. Focus stays
-  // in it: Tab wraps, and a click on its text (a group label) that drops focus
-  // on the page brings it back to the search field, so no canvas key (Delete,
-  // ⌘Enter, ⌘Z) acts on the graph behind it (lib/canvasShortcutScope.ts).
-  // Review 10, L-1: keys with focus on an item (or "Clear search") were lost,
-  // since only the field read them. Escape works as from the field; the arrows
-  // move the active item, as from the field, and focus with it, passing over
-  // an item that can't take focus and stopping at the ends.
+  // It covers the window, so it is a modal dialog. Focus stays in it: Tab
+  // wraps, and a click on its text (a group label) that drops focus on the
+  // page brings it back to the search field, so no canvas key (Delete, ⌘Enter,
+  // ⌘Z) acts on the graph behind it (lib/canvasShortcutScope.ts). Keys with
+  // focus on an item (or "Clear search") were lost, since only the field read
+  // them. Escape works as from the field; the arrows move the active item, as
+  // from the field, and focus with it, passing over an item that can't take
+  // focus and stopping at the ends.
   const onDialogKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if (composing(e)) return;
     if (e.target === inputRef.current && (e.key === 'Escape' || e.key === 'ArrowDown' || e.key === 'ArrowUp')) return;
@@ -311,8 +311,8 @@ export function CommandPalette() {
       e.preventDefault();
       const step = e.key === 'ArrowDown' ? 1 : -1;
       const next = at + step;
-      // Review 2 of PR #205 (lines LOW-1): a locked row is reached too
-      // (aria-disabled, never native disabled), so its line is read.
+      // PR #205: a locked row is reached too (aria-disabled, never native
+      // disabled), so its line is read.
       if (next < 0 || next >= items.length) return;
       items[next].focus();
       return;
@@ -339,10 +339,10 @@ export function CommandPalette() {
         <input
           ref={inputRef}
           className="command-palette__input"
-          // Review 2 of PR #205 (lines LOW-1): the combobox pattern. Focus stays
-          // in the field and the active row is its active descendant, so a
-          // screen reader reads the row reached by the arrows, a locked one's
-          // line too (its aria-describedby).
+          // PR #205: the combobox pattern. Focus stays in the field and the
+          // active row is its active descendant, so a screen reader reads the
+          // row reached by the arrows, a locked one's line too (its
+          // aria-describedby).
           {...(mode === 'agent' ? {} : {
             role: 'combobox',
             'aria-label': 'Search commands and nodes',
@@ -378,8 +378,8 @@ export function CommandPalette() {
                   const isSel = index === safeSelected;
                   const { disabled: actDisabled, ...act }: ActProps = cmd.acts ? lock.act({ disabled: cmd.enabled === false, kept: paletteKeptAction(cmd.id) }) : { disabled: false, title: undefined };
                   const disabled = cmd.acts ? Boolean(actDisabled) : cmd.enabled === false;
-                  // GM PR #205 r2 item 3: the run's lock line is the row's own
-                  // text (a canvas lock's title, when there is one, wins).
+                  // Design, PR #205: the run's lock line is the row's own text
+                  // (a canvas lock's title, when there is one, wins).
                   const lockLine = disabled && !act.title ? cmd.lockLine : undefined;
                   const lockId = lockLine ? `${paletteId}-lock-${index}` : undefined;
                   return (
@@ -390,8 +390,8 @@ export function CommandPalette() {
                       role="option"
                       aria-selected={isSel}
                       className={`command-palette__item${isSel ? ' command-palette__item--selected' : ''}${disabled ? ' command-palette__item--disabled' : ''}`}
-                      // The lock line below (GM PR #205 r2 item 3) describes the row, so
-                      // its name is the title alone (not read twice); act's spread has none.
+                      // The lock line below (design, PR #205) describes the row, so its name
+                      // is the title alone (not read twice); act's spread has none.
                       aria-label={lockLine ? cmd.title : undefined}
                       aria-describedby={lockId}
                       onMouseEnter={() => setSelected(index)}

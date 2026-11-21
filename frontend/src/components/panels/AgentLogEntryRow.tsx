@@ -12,7 +12,7 @@ export function AgentLogEntryRow({ entry: e }: { entry: AgentLogEntry }) {
       data-source={e.source}
       // The log's source column names the agent, so a line reads whole without
       // it ("Couldn’t run “Writer” because ..."): the row's accessible name
-      // starts with the source, as the line used to (GM - Design, PR #212 r2).
+      // starts with the source, as the line used to (design, PR #212).
       aria-label={`${e.agent?.name ?? e.source}: ${line}`}
       data-agent={e.agent?.id}
       style={e.agent ? { ['--agent-log-source-color' as string]: e.agent.color, ['--agent-log-name-color' as string]: e.agent.ink ?? e.agent.color } : undefined}

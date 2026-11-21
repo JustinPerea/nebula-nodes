@@ -40,13 +40,13 @@ export function VideoPreview({ sourceUrl, editNode }: Props) {
   const showingRendered = renderedPreviewUrl != null;
   const videoSrc = renderedPreviewUrl ?? sourceUrl;
   // The preview's bottom edge carries the app's notices (the transport row
-  // publishes its top edge: GM - Design, round 4b, "so notices sit over the
+  // publishes its top edge, per the design: "so notices sit over the
   // preview's bottom edge"). The rendered preview has native controls on its
   // video's bottom edge, so while it shows, the picture stops above the
-  // notice region's reserved band, the way floating panels do (GM, round 2:
-  // "Floating panels stop above a reserved notice band, whether or not a
-  // notice is showing"): a notice never covers its scrubber or time. The
-  // source preview has no controls there and keeps its full height. The
+  // notice region's reserved band, the way floating panels do (per the
+  // design: "Floating panels stop above a reserved notice band, whether or
+  // not a notice is showing"): a notice never covers its scrubber or time.
+  // The source preview has no controls there and keeps its full height. The
   // preview writes the inset as `--notice-band-inset`, which only the video
   // reads (EditorView.css), so the preview keeps its size and the transport
   // and timeline under it never move.
@@ -114,7 +114,7 @@ export function VideoPreview({ sourceUrl, editNode }: Props) {
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.defaultPrevented || e.key !== ' ' || e.repeat || e.altKey || e.ctrlKey || e.metaKey) return;
-      // Never plays behind a modal dialog (review 8, L-d).
+      // Never plays behind a modal dialog.
       if (keyBlockedByModal()) return;
       const target = e.target;
       // Native activation/typing owns Space on controls, including a child

@@ -74,33 +74,31 @@ export function RemotionTimeline({
   onScrub,
   timelineState,
 }: RemotionTimelineProps) {
-  // The timeline writes a drop into the rows it was given (the action's
-  // start and end, in place) before it calls onActionMoveEnd, and each block
-  // keeps where it was dragged in its own state. A drop refused while locked
-  // would stay drawn where it was let go, though nothing was saved, until the
+  // The timeline writes a drop into the rows it was given (the action's start
+  // and end, in place) before it calls onActionMoveEnd, and each block keeps
+  // where it was dragged in its own state. A drop refused while locked would
+  // stay drawn where it was let go, though nothing was saved, until the
   // manifest next changed. `redraw` draws the timeline again from the
-  // manifest (fresh rows, a new mount), so the block goes back to where it
-  // is (fix round 5 of PR #200, review 5 N-5; live: fresh rows alone left the
-  // block where it was dropped).
+  // manifest (fresh rows, a new mount), so the block goes back to where it is
+  // (PR #200, live: fresh rows alone left the block where it was dropped).
   const [redraw, setRedraw] = useState(0);
   const editorData = useMemo(() => { void redraw; return manifestToEditorData(manifest); }, [manifest, redraw]);
 
   const updateTrackItemTime = useGraphStore((s) => s.updateTrackItemTime);
-  // Round 23 (review 22, L-3): moving and resizing a layer edit the canvas;
-  // while following or offline the timeline doesn't drag (selecting and
-  // scrubbing still work).
+  // Moving and resizing a layer edit the canvas; while following or offline
+  // the timeline doesn't drag (selecting and scrubbing still work).
   const lock = useCanvasLock();
   const setSelectedTrackItem = useUIStore((s) => s.setSelectedTrackItem);
   const toggleSelectedTrackItem = useUIStore((s) => s.toggleSelectedTrackItem);
   const selectedTrackItemId = useUIStore((s) => s.selectedTrackItemId);
   const selectedTrackItemIds = useUIStore((s) => s.selectedTrackItemIds);
 
-  // A redraw is a new mount, which starts scrolled to 0: it keeps where the
-  // person had scrolled (fix round 6 of PR #200, review 6 N-5). The old
-  // timeline's scroll is taken as it goes (this cleanup runs before the new
-  // one mounts); the new one reports 0 as it mounts, which is ignored, and
-  // is then scrolled back. Live: restoring from the last onScroll alone
-  // found 0, the new mount's own report.
+  // A redraw is a new mount, which starts scrolled to 0: it keeps where
+  // the person had scrolled (PR #200). The old timeline's scroll is
+  // taken as it goes (this cleanup runs before the new one mounts); the
+  // new one reports 0 as it mounts, which is ignored, and is then
+  // scrolled back. Live: restoring from the last onScroll alone found 0,
+  // the new mount's own report.
   const drawKey = `${redraw}:${lock.locked ? 'locked' : 'open'}`;
   const scrolledLeft = useRef(0);
   const restoring = useRef<number | null>(null);
@@ -141,8 +139,7 @@ export function RemotionTimeline({
           setSelectedTrackItem(action.id);
         }}
         // `disableDrag` stops the drag; a drag already under way when the
-        // lock starts ends without writing (fix round 4 of PR #200, review 4
-        // LOW-4).
+        // lock starts ends without writing (PR #200).
         onActionMoveEnd={({ action, start }) => {
           if (refuseCanvasEdit()) { setRedraw((n) => n + 1); return; }
           updateTrackItemTime(remotionNodeId, action.id, {

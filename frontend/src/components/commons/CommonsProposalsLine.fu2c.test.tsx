@@ -1,6 +1,5 @@
-// GM, PR #202 r2, item 3: no parentheses on the Commons line, held or
-// promoted, and the names through the shared name-list helper (4 or more
-// agents become a count).
+// Design, PR #202: no parentheses on the Commons line, held or promoted, and
+// the names through the shared name-list helper (4 or more agents become a count).
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, render } from '@testing-library/react';
 import type { AgentNote } from '../../lib/agentNotes';
@@ -63,7 +62,7 @@ describe('the shared name-list helper, for agents', () => {
   });
 });
 
-describe('GM PR #202 r2: no parentheses on the Commons line', () => {
+describe('PR #202: no parentheses on the Commons line', () => {
   it('held, then promoted: the same words, never "(N proposals)"', () => {
     act(() => session.reportPersonRequired());
     setUpdates([
@@ -111,10 +110,10 @@ describe('GM PR #202 r2: no parentheses on the Commons line', () => {
   });
 });
 
-// PR #202 review 2 LOW-A: a held line orders as the promoted one does, by when
+// PR #202: a held line orders as the promoted one does, by when
 // each ask was made (the ref's `since`, the proposal's createdAt), not by the
 // Update's time, which a fallback to an older ask leaves on the newer one.
-describe('review 2 LOW-A: the same order held and promoted', () => {
+describe('the same order held and promoted', () => {
   const withSince = (note: AgentNote, since: number): AgentNote => ({ ...note, proposal: { ...note.proposal, since } });
   const known = (id: string, asset: string, agent: (typeof AGENTS)[number], at: number) => ({
     ...commonsProposal({ id, agent: { id: agent.id, name: agent.name, color: agent.color }, createdAt: at,
@@ -174,7 +173,7 @@ describe('review 2 LOW-A: the same order held and promoted', () => {
   });
 });
 
-describe('review 2 NIT-B: a promoted line\'s dot checks the agent colour', () => {
+describe('a promoted line\'s dot checks the agent colour', () => {
   it('a malformed colour gets the fallback, as on the held line and the card', () => {
     // Straight into the store, past its own clean(): the line checks the colour itself too.
     const view = commonsProposal({ id: 'pa_r', agent: { id: 'x', name: 'Mallory', color: 'red' } });
@@ -184,7 +183,7 @@ describe('review 2 NIT-B: a promoted line\'s dot checks the agent colour', () =>
   });
 });
 
-describe('review 2 NIT-B: "changed" keeps the read state the server sends', () => {
+describe('"changed" keeps the read state the server sends', () => {
   it('a read Update stays read when it changes in place, and the count stays', () => {
     const key = surfaceKey({ kind: 'canvas', projectId: 'p1' });
     const read = { ...update('pa_1', 'ast_1'), readAt: '2026-10-29T12:01:00.000Z' };

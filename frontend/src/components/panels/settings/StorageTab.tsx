@@ -43,9 +43,9 @@ function FolderField({ field, label, saved, placeholder, hint, lock }: {
   });
   const commit = () => {
     if (draft === undefined || lock.locked) return;
-    // Round 16 (L3): going offline disables the field, which blurs it. That
-    // blur isn't the person leaving the field, so nothing is sent and the
-    // draft stays for when Nebula answers again.
+    // Going offline disables the field, which blurs it. That blur isn't the
+    // person leaving the field, so nothing is sent and the draft stays for
+    // when Nebula answers again.
     if (isBackendOffline()) return;
     if (draft.trim() === saved.trim()) { setDraft(undefined); return; }
     void saveField(field, draft);
@@ -102,14 +102,14 @@ function FolderField({ field, label, saved, placeholder, hint, lock }: {
 
 export function StorageTab({ saved }: { saved: SettingsDraft }) {
   const telemetryPending = useSettingsDraftStore((s) => !!s.pending.zoomTelemetryEnabled);
-  // GM, PR #205 r1 answer 6: the switch shows the person's new position at
-  // once while it saves (held, then locked after 150 ms); a failed save puts
-  // back the saved value.
+  // Design, PR #205: the switch shows the person's new position at once
+  // while it saves (held, then locked after 150 ms); a failed save puts back
+  // the saved value.
   const [telemetryTo, setTelemetryTo] = useState<boolean | null>(null);
   const telemetryError = useSettingsDraftStore((s) => s.errors.zoomTelemetryEnabled);
   const desktop = typeof window !== 'undefined' && !!window.nebulaDesktop?.folders;
-  // PR #204 round 10 (GM r15, r17 item 4): every setting here is PUT /api/settings, the person's
-  // alone, so the folders and the telemetry switch lock as one group with one line at the top.
+  // Design, PR #204: every setting here is PUT /api/settings, the person's alone, so the folders
+  // and the telemetry switch lock as one group with one line at the top.
   const lock = usePersonLock('change storage settings');
 
   return (

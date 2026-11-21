@@ -20,10 +20,10 @@ export interface BoardToast {
 }
 
 /**
- * The Studio's undo toast (plan section 5.4, Q15): Delete offers Undo here,
+ * The Studio's undo toast: Delete offers Undo here,
  * and an undo says what it left alone. It stays while the pointer is on it
  * or focus is in it, and Escape (from inside it) closes it. In the app's
- * notice region, on the Board and in the List view alike (GM - Design,
+ * notice region, on the Board and in the List view alike (design,
  * 2026-10-23: "One region, one stack, and nothing else draws toasts.").
  */
 export function BoardUndoToast({ toast, onDismiss, leave }: {
@@ -33,20 +33,20 @@ export function BoardUndoToast({ toast, onDismiss, leave }: {
   leave?: LeaveProps;
 }) {
   const [held, setHeld] = useState(false);
-  // Waiting behind a capped popover (GM r13 2): its timer holds, so it isn't lost.
+  // Waiting behind a capped popover: its timer holds, so it isn't lost.
   const waiting = useSlotWaiting('board');
   const dismissRef = useRef(onDismiss);
   useEffect(() => { dismissRef.current = onDismiss; }, [onDismiss]);
 
   // The deadline belongs to the toast, not to this mount: the Studio draws
   // the toast again when the person switches Board and List (each view
-  // renders its own), and a remount must keep the time it had left (GM's
-  // #210 check: a line stayed up past its 6 s across the switch). Leaving
+  // renders its own), and a remount must keep the time it had left (a check
+  // on PR #210: a line stayed up past its 6 s across the switch). Leaving
   // the toast after holding it gives it a fresh BOARD_TOAST_MS, as before.
   const wasHeld = useRef(false);
   useEffect(() => {
     if (held || waiting) {
-      // Held (or waiting behind a capped popover, GM r13 2), the old deadline is void: a remount meanwhile (the view
+      // Held (or waiting behind a capped popover), the old deadline is void: a remount meanwhile (the view
       // switched under the pointer) starts a fresh BOARD_TOAST_MS too.
       wasHeld.current = true;
       deadlines.delete(toast);

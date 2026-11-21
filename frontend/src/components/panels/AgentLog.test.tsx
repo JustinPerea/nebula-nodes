@@ -11,7 +11,7 @@ function setChatVisible(visible: boolean) {
   }));
 }
 
-describe('AgentLog visibility (Q38)', () => {
+describe('AgentLog visibility', () => {
   beforeEach(() => {
     window.localStorage.clear();
     useUIStore.setState({ agentLogEnabled: true });
@@ -220,7 +220,7 @@ describe('a dragged log (stored position)', () => {
   });
 });
 
-// PR9a: "See all actions →" at the foot of the Updates list opens the log,
+// PR #124: "See all actions →" at the foot of the Updates list opens the log,
 // so its expanded state lives in uiStore (agentLogOpen / openAgentLog).
 describe('the expanded state lives in uiStore', () => {
   beforeEach(() => {
@@ -253,7 +253,7 @@ describe('the expanded state lives in uiStore', () => {
   });
 });
 
-describe('a neutral line (PR #212 round 2)', () => {
+describe('a neutral line (PR #212)', () => {
   beforeEach(() => {
     window.localStorage.clear();
     useUIStore.setState({ agentLogEnabled: true, agentLogOpen: true });
@@ -270,8 +270,8 @@ describe('a neutral line (PR #212 round 2)', () => {
     const muted = rows.find((row) => row.textContent!.includes('proposal slots are full'))!;
     expect(muted.classList.contains('agent-log__entry--muted')).toBe(true);
     expect(muted.querySelector('.agent-log__source')!.textContent).toBe('Claude Code');
-    // GM - Design (PR #212 r2, item 2): the line reads whole without the name, and the row's
-    // accessible name starts with the source.
+    // Design, PR #212: the line reads whole without the name, and the row's accessible name
+    // starts with the source.
     expect(muted.querySelector('.agent-log__msg')!.textContent).toBe(
       'Couldn’t run “Writer” because it would pass the $5 daily total and all 3 proposal slots are full.');
     expect(muted.getAttribute('aria-label')!.startsWith('Claude Code: ')).toBe(true);

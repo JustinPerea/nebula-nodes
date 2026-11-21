@@ -17,8 +17,8 @@ export function cancelRowFocus(key: string) { if (focusOnMount === key) focusOnM
 /** Ask for the handoff only when the change moves the row: from the section
  * it is shown in now (a held row's, else where its key puts it) to the one
  * ``after`` names. A row that stays where it is never remounts, and a handoff
- * left waiting would take focus from wherever the person is the next time
- * the row mounts, a tab switch say (review 11 of PR #203, copy LOW-1). */
+ * left waiting would take focus from wherever the person is the next time the
+ * row mounts, a tab switch say. */
 export function focusRowIfItMoves(key: string, shownNow: boolean, after: boolean) {
   if (shownNow !== after) focusRowAfterMove(key); else cancelRowFocus(key);
 }
@@ -48,12 +48,12 @@ export function nousConnected(health: Pick<ProviderHealthState, 'providers' | 'c
   return providerCheckIsCurrent(entry, health.checkedAt) && Boolean(entry?.configured);
 }
 
-/** Each row of the Providers tab by whether it is connected: the one
- * source for the section a row is listed in, the "Connected · N" heading and
- * the tab's badge (review 11 of PR #203, copy NIT-2). A key row when its key
- * is set as the run reads it (isKeySet), Krea's sign-in row unless it is
- * disconnected (signing in and an error are listed with the connected), and
- * Nous when its last check found it signed in. */
+/** Each row of the Providers tab by whether it is connected: the one source
+ * for the section a row is listed in, the "Connected · N" heading and the
+ * tab's badge. A key row when its key is set as the run reads it (isKeySet),
+ * Krea's sign-in row unless it is disconnected (signing in and an error are
+ * listed with the connected), and Nous when its last check found it signed
+ * in. */
 export function connectedRows({ apiKeys, kreaStatus, health }: ConnectionState): Record<string, boolean> {
   return {
     ...Object.fromEntries(Object.keys(PROVIDER_KEY_LABELS).map((key) => [key, isKeySet(apiKeys, key)])),
@@ -62,9 +62,9 @@ export function connectedRows({ apiKeys, kreaStatus, health }: ConnectionState):
   };
 }
 
-/** The rows counted as connected, as the Providers tab shows them: a row
- * held where it stood while the person is in it counts in the section it is
- * shown in (GM, PR #203 r21 item 3), so the badge and "Connected · N" agree. */
+/** The rows counted as connected, as the Providers tab shows them: a row held
+ * where it stood while the person is in it counts in the section it is shown in
+ * (design, PR #203), so the badge and "Connected · N" agree. */
 export function shownConnected(state: ConnectionState, held: Readonly<Record<string, boolean>>): number {
   const rows = connectedRows(state);
   return Object.keys(rows).filter((id) => (Object.hasOwn(held, id) ? held[id] : rows[id])).length;

@@ -134,12 +134,12 @@ describe('Moodboard Studio rail', () => {
 });
 
 describe('Moodboard Studio strength', () => {
-  it("says the strength is the total the moodboard’s images share on Krea 2 (Q21 b)", async () => {
+  it("says the strength is the total the moodboard’s images share on Krea 2", async () => {
     await openStudio('g1', 'global', 'Global board');
     expect(screen.getByText("Strength 0.70 · the total the moodboard’s images share on Krea 2")).toBeTruthy();
   });
 
-  it('says the board is off at 0, and back on above it (Q36 a)', async () => {
+  it('says the board is off at 0, and back on above it', async () => {
     boards.g1 = board({ strength: 0 });
     await openStudio('g1', 'global', 'Global board');
     expect(screen.getByText('Strength 0.00 · moodboard off: connected nodes get none of it')).toBeTruthy();
@@ -436,12 +436,12 @@ describe('Moodboard Studio Move', () => {
 
   it("doesn't move when saving the edits fails, and a refused move keeps the draft", async () => {
     await openStudio('g1', 'global', 'Global board');
-    // What the API throws (error-copy round 2): its heading and the reason.
+    // What the API throws: its heading and the reason.
     api.updateMoodboard.mockRejectedValueOnce(new RequestFailedError('Couldn’t save the moodboard.', 409, { detail: 'The disk is full.' }));
     fireEvent.change(screen.getByDisplayValue('Global board'), { target: { value: 'Unsaved' } });
     openMove();
     fireEvent.click(screen.getByRole('menuitem', { name: 'Move to Project' }));
-    // A saved board's own failed save keeps the edit for Try again: the neutral line (round 6g, brief 7a), never the server's words (GM r16).
+    // A saved board's own failed save keeps the edit for Try again: the neutral line, never the server's words.
     await waitFor(() => expect(document.body.textContent).toContain('Nebula couldn’t save the moodboard because the server didn’t accept this save. Try again.'));
     expect(document.body.textContent).not.toContain('The disk is full.');
     expect(api.moveStoredAsset).not.toHaveBeenCalled();

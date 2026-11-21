@@ -22,7 +22,7 @@ export function ModelPicker({ value, onSelect, onClose, selectedParams }: ModelP
   const providers = useMemo(() => [...new Set(getCreateModels().flatMap(supportedModelProviders))]
     .sort((left, right) => providerLabel(left).localeCompare(providerLabel(right))), []);
   usePanelFocus(true, panelRef, onClose, { initialFocus: 'input', trap: true });
-  // Review 6 MEDIUM-3: centred above the notice band, so a notice never lands on its list.
+  // Centred above the notice band, so a notice never lands on its list.
   const clearance = useNoticeClearance();
 
   const groups = useMemo(() => {

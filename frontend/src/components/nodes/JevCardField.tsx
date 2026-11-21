@@ -25,7 +25,7 @@ const stop = (event: React.SyntheticEvent) => event.stopPropagation();
  * path the Inspector uses, so the two always show the same value. */
 export function JevCardField({ nodeId, definition, field, params, portWired = false, portLabel }: JevCardFieldProps) {
   const updateNodeData = useGraphStore((s) => s.updateNodeData);
-  const lock = useCanvasLock(); // offline or following (GM round 22, A)
+  const lock = useCanvasLock(); // offline or following
   const readOnly = lock.locked;
   const inputId = useId();
   const param = definition.params.find((p) => p.key === field.key);

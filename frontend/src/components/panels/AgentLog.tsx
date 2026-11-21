@@ -70,10 +70,10 @@ function naturalLogHeight(log: HTMLElement): number {
 }
 
 /** The Message box's open log has no state height: it follows its content
- * (up to 50vh) or the person's height (GM r61 answer 1, inline). With no
- * give in force that is its own height; while a give is in force (the
- * registered --agent-log-give, its spring back included) its height is the
- * given one, so the last height it had with none is kept. */
+ * (up to 50vh) or the person's height, which is set inline. With no give in
+ * force that is its own height; while a give is in force (the registered
+ * --agent-log-give, its spring back included) its height is the given one,
+ * so the last height it had with none is kept. */
 function messagingNaturalHeight(log: HTMLElement, previous: number | null): number {
   const inline = Number.parseFloat(log.style.height);
   if (Number.isFinite(inline) && inline > 0) return inline;
@@ -94,9 +94,9 @@ function verticalPadding(element: HTMLElement): number {
   return (Number.parseFloat(style.paddingTop) || 0) + (Number.parseFloat(style.paddingBottom) || 0);
 }
 
-/** The floor it gives way to (GM r6): its header and 2 rows of the body,
- * with the body's padding and the log's borders; and the Message box's
- * composer, which stays whole at its foot. */
+/** The floor it gives way to: its header and 2 rows of the body, with the
+ * body's padding and the log's borders; and the Message box's composer,
+ * which stays whole at its foot. */
 function logFloor(log: HTMLElement): number {
   const head = log.querySelector<HTMLElement>('.agent-log__drag-row');
   const body = log.querySelector<HTMLElement>('.agent-log__body');
@@ -106,12 +106,12 @@ function logFloor(log: HTMLElement): number {
   return head.offsetHeight + verticalPadding(body) + 2 * bodyLine(log, body) + (composer?.offsetHeight ?? 0) + Math.max(0, borders);
 }
 
-/** GM r61 answer 1: the person's height stays at least the header, one row
- * and the composer, and at most the viewport less the top chrome, from the
- * edge the log is pinned by. GM r70: the top chrome's line is the selection
- * toolbar slot's bottom + 12 px when the log's span overlaps the slot,
- * shown or not (selecting a node never moves the log); otherwise the top
- * bar's + 12 px (the Updates chip's row, --agent-log-top-chrome). */
+/** Design: the person's height stays at least the header, one row and the
+ * composer, and at most the viewport less the top chrome, from the edge the
+ * log is pinned by. The top chrome's line is the selection toolbar
+ * slot's bottom + 12 px when the log's span overlaps the slot, shown or not
+ * (selecting a node never moves the log); otherwise the top bar's + 12 px
+ * (the Updates chip's row, --agent-log-top-chrome). */
 function resizeBounds(log: HTMLElement, edge: 'top' | 'bottom'): HeightBounds {
   const head = log.querySelector<HTMLElement>('.agent-log__drag-row');
   const body = log.querySelector<HTMLElement>('.agent-log__body');
@@ -128,7 +128,7 @@ function resizeBounds(log: HTMLElement, edge: 'top' | 'bottom'): HeightBounds {
   return { min: Math.ceil(min), max: Math.floor(max) };
 }
 
-/** GM r70: the handle is a focusable separator; it reads the log's height
+/** Design: the handle is a focusable separator; it reads the log's height
  * in px between its bounds (written on each measure: the height follows
  * the content until the person sets it). */
 function describeHandle(log: HTMLElement, edge: 'top' | 'bottom'): void {
@@ -210,7 +210,7 @@ function clearPersistedPosition() {
 }
 
 /** The log counts as docked on the right within this of the edge, and low
- * enough for a notice to reach within this of the bottom (L7). */
+ * enough for a notice to reach within this of the bottom. */
 const AGENT_LOG_EDGE_PX = 64;
 const AGENT_LOG_LOW_PX = 360;
 /** The gap a notice keeps from the log (--sr-space-2). */
@@ -220,10 +220,10 @@ export function AgentLog() {
   const isExecuting = useGraphStore((s) => s.isExecuting);
   const enabled = useUIStore((s) => s.agentLogEnabled);
   const setEnabled = useUIStore((s) => s.setAgentLogEnabled);
-  // Shown by default whether or not the chat is open (Q38, Justin 2026-10-20:
-  // "it can be toggled off to get out of the way"). It docks in the
-  // bottom-right column above the chat launcher, and the docked chat sits
-  // above it (layouts.css).
+  // Shown by default whether or not the chat is open (Justin 2026-10-20: "it
+  // can be toggled off to get out of the way"). It docks in the bottom-right
+  // column above the chat launcher, and the docked chat sits above it
+  // (layouts.css).
   const visible = enabled;
   // "Agent log hidden · Show again", only after the log's own hide control.
   const [hiddenNotice, setHiddenNotice] = useState(false);
@@ -241,18 +241,18 @@ export function AgentLog() {
   }
 
   // Expanded or not lives in uiStore, so the Updates list's "See all
-  // actions →" can open it (PR9a). It starts collapsed, and collapses again
+  // actions →" can open it (PR #124). It starts collapsed, and collapses again
   // when the log unmounts (leaving the canvas), as its local state did.
   const open = useUIStore((s) => s.agentLogOpen);
   const setOpen = useUIStore((s) => s.setAgentLogOpen);
-  // Collapsed for the proposal card (GM r7 step 4), or reopened over that by
-  // the person: the region's measure stays the open log's while the card
-  // holds it, and its collapse is offered only while it may collapse.
+  // Collapsed for the proposal card, or reopened over that by the person: the
+  // region's measure stays the open log's while the card holds it, and its
+  // collapse is offered only while it may collapse.
   const cardHold = useUIStore((s) => s.agentLogCardHold);
   const cardFolded = cardHold === 'card' && !open;
   const openSize = useRef<{ natural: number; floor: number } | null>(null);
   // The drag in progress ends here (its listeners and the hold), from any
-  // of its ends (round 3l, GM r69 b).
+  // of its ends.
   const endDragRef = useRef<(() => void) | null>(null);
   // The pointer that pressed the header, captured once a drag starts.
   const pointerRef = useRef<number | null>(null);
@@ -265,13 +265,13 @@ export function AgentLog() {
   // Every agent's actions and the chat's thinking lines, collected while
   // this panel is unmounted too (store/agentLogStore.ts).
   const entries = useAgentLogStore((s) => s.entries);
-  // The Message box (GM - Design r50): the thread with the terminal Claude
-  // lives in the log, its composer at the foot, expanded or not.
+  // The Message box: the thread with the terminal Claude lives in the log,
+  // its composer at the foot, expanded or not.
   const threadCount = usePersonThreadStore((s) => s.rows.length);
   const [position, setPosition] = useState<Position | null>(readInitialPosition);
   const logRef = useRef<HTMLDivElement | null>(null);
-  // GM r61 answer 1: the height follows the content (up to 50vh) until the
-  // person drags the handle; from then on theirs wins, until a double-click.
+  // Design: the height follows the content (up to 50vh) until the person
+  // drags the handle; from then on theirs wins, until a double-click.
   const [personHeight, setPersonHeight] = useState<number | null>(readPersonHeight);
   const resizeRef = useRef<{ startY: number; start: number; edge: 'top' | 'bottom'; bounds: HeightBounds } | null>(null);
 
@@ -382,24 +382,23 @@ export function AgentLog() {
     return () => window.cancelAnimationFrame(frameId);
   }, [visible, position]);
 
-  // PR #198 review 6, L7 (GM r9 answer 5): the notice region keeps clear of
-  // the log while it sits on the right edge, low enough for a toast to reach
-  // it: --agent-log-clearance is the room it takes from the right
+  // Design, PR #198: the notice region keeps clear of the log while it sits
+  // on the right edge, low enough for a toast to reach it:
+  // --agent-log-clearance is the room it takes from the right
   // (noticeRegion.css), 0 otherwise. Measured, since the log can be dragged
-  // and resized. --agent-log-top is how far its top edge (plus the gap)
-  // sits above the window's bottom: a proposal card too narrow beside the
-  // log sits above it instead (GM - Design, PR #216 r1; canvasProposals.css).
-  // The log never moves for the card; at short heights its body gives way
-  // (GM r6, below).
+  // and resized. --agent-log-top is how far its top edge (plus the gap) sits
+  // above the window's bottom: a proposal card too narrow beside the log sits
+  // above it instead (design, PR #216; canvasProposals.css). The log never
+  // moves for the card; at short heights its body gives way (see below).
   // Dragged off the dock, its box goes on the root as --agent-log-float-*
   // (window px): the proposal card clears it when it sits in the card's
-  // column (GM - Design, PR #216 r4 6; lib/noticeStackPlace.ts).
-  // GM - Design, PR #216 r6: at short heights the docked, open log's body
-  // gives way to a proposal card, down to a floor of its header and 2 rows
-  // (the notice region writes --agent-log-squeeze; layouts.css). So that
-  // giving way never moves the line the region measures, --agent-log-top is
-  // the top the log has with no give (its own height, --agent-log-natural-h),
-  // and --agent-log-floor is how short it may get.
+  // column (design, PR #216; lib/noticeStackPlace.ts).
+  // Design, PR #216: at short heights the docked, open log's body gives way
+  // to a proposal card, down to a floor of its header and 2 rows (the notice
+  // region writes --agent-log-squeeze; layouts.css). So that giving way never
+  // moves the line the region measures, --agent-log-top is the top the log
+  // has with no give (its own height, --agent-log-natural-h), and
+  // --agent-log-floor is how short it may get.
   useEffect(() => {
     const root = document.documentElement;
     const log = logRef.current;
@@ -419,8 +418,8 @@ export function AgentLog() {
       const docked = rect.width > 0 && window.innerWidth - rect.right <= AGENT_LOG_EDGE_PX
         && rect.bottom >= window.innerHeight - AGENT_LOG_LOW_PX;
       // The height it has with no give, and its floor of header and 2 rows:
-      // the open log's own, kept while the card holds it collapsed (GM r7);
-      // a log the person collapsed is its header and gives nothing.
+      // the open log's own, kept while the card holds it collapsed; a log the
+      // person collapsed is its header and gives nothing.
       const held = !open && cardHold === 'card' && openSize.current;
       if (open) {
         const natural = (log.classList.contains('agent-log--messaging')
@@ -446,8 +445,7 @@ export function AgentLog() {
       // Its box is read again once those and its marks are written: a re-run
       // of this effect clears them first, and a top-pinned log's shift and
       // its height are drawn from them, so a box read before is off by that
-      // (round 3f: read at -16 px, the card collapsed and reopened the log in
-      // a loop).
+      // (read at -16 px, the card collapsed and reopened the log in a loop).
       if (docked) {
         clear(FLOAT);
         log.dataset.docked = 'true';
@@ -489,9 +487,9 @@ export function AgentLog() {
     };
   }, [visible, open, position, cardHold, personHeight]);
 
-  // A smaller window keeps the person's height within it (r61: at most the
+  // A smaller window keeps the person's height within it (at most the
   // viewport less the top chrome), and so does opening it: a height kept from
-  // before the r70 ceiling, or from a taller window, comes down to it.
+  // before that ceiling existed, or from a taller window, comes down to it.
   useEffect(() => {
     if (!visible || personHeight === null) return undefined;
     function handleResize() {
@@ -579,7 +577,7 @@ export function AgentLog() {
       const dx = ev.clientX - d.startX;
       const dy = ev.clientY - d.startY;
       if (!d.moved && Math.abs(dx) + Math.abs(dy) < DRAG_THRESHOLD) return;
-      // GM r57 Q1: the person's hand wins. While held, the log rises above
+      // Design: the person's hand wins. While held, the log rises above
       // the proposal card and the card holds still; it places once at the
       // drop (NoticeRegion).
       if (!d.moved) {
@@ -604,10 +602,10 @@ export function AgentLog() {
       persistPosition(next);
     }
 
-    // Round 3l (GM r69 b): the hold ends on the drop and on every way a
-    // drop can be lost: the window losing focus (Cmd-Tab, a system dialog),
-    // the pointer cancelled or its capture lost, and the page hidden. A lost
-    // hold would stop the card and the notices placing until the next click.
+    // Design: the hold ends on the drop and on every way a drop can be lost:
+    // the window losing focus (Cmd-Tab, a system dialog), the pointer
+    // cancelled or its capture lost, and the page hidden. A lost hold would
+    // stop the card and the notices placing until the next click.
     function onHidden() {
       if (document.visibilityState === 'hidden') onUp();
     }
@@ -655,8 +653,8 @@ export function AgentLog() {
     setOpen(!open);
   }
 
-  // GM r61 answer 1: the handle. A drag sets the person's height, within
-  // its bounds; a double-click gives the height back to the content.
+  // Design: the handle. A drag sets the person's height, within its
+  // bounds; a double-click gives the height back to the content.
   const edge = resizeEdge(position);
 
   function applyHeight(height: number) {
@@ -673,10 +671,10 @@ export function AgentLog() {
     const start = log.offsetHeight;
     const bounds = resizeBounds(log, edge);
     resizeRef.current = { startY: e.clientY, start, edge, bounds };
-    // GM r112.4: the press alone never changes the height. Resizing lifts
-    // the content cap, so the rendered height is written first (a drag
-    // starts from it), and the ceiling (154 at the top) holds while the
-    // hand moves: the lifted cap is the drag's own bound, never the CSS's.
+    // Design: the press alone never changes the height. Resizing lifts the
+    // content cap, so the rendered height is written first (a drag starts
+    // from it), and the ceiling (154 at the top) holds while the hand
+    // moves: the lifted cap is the drag's own bound, never the CSS's.
     log.style.height = `${start}px`;
     log.style.maxHeight = `${Math.max(bounds.max, start)}px`;
     log.dataset.resizing = '';
@@ -715,7 +713,7 @@ export function AgentLog() {
   function handleResizeKey(e: React.KeyboardEvent<HTMLDivElement>) {
     const log = logRef.current;
     if (!log) return;
-    // GM r70: Enter does what a double-click does.
+    // Design: Enter does what a double-click does.
     if (e.key === 'Enter') {
       e.preventDefault();
       handleResizeReset();
@@ -740,15 +738,15 @@ export function AgentLog() {
   // anchored there, so expanding it grows upward and stays on screen.
   const containerStyle: React.CSSProperties = {
     ...(position ? { ...edgeStyle(position), left: position.left, right: 'auto' } : {}),
-    // The person's height (r61 answer 1); collapsed, layouts.css and
-    // messageBox.css decide the height whatever it is.
+    // The person's height; collapsed, layouts.css and messageBox.css
+    // decide the height whatever it is.
     ...(personHeight !== null ? { height: personHeight } : {}),
   };
   // "Agent log hidden" shows where the dragged log was.
   const noticeStyle: React.CSSProperties = position ? { ...edgeStyle(position) } : {};
   const latestEntry = entries.length > 0 ? entries[entries.length - 1] : null;
   const statusLabel = isExecuting ? 'streaming' : latestEntry ? latestEntry.agent?.name ?? latestEntry.source : 'standby';
-  // GM r70: an agent's name is its cursor label ("Claude", "Claude · 2"), in
+  // Design: an agent's name is its cursor label ("Claude", "Claude · 2"), in
   // its own case; the state words stay the telemetry's lowercase.
   const statusIsName = !isExecuting && Boolean(latestEntry?.agent?.name);
   const countLabel = countNoun(entries.length, 'event');
@@ -845,13 +843,13 @@ export function AgentLog() {
           type="button"
           className="agent-log__header"
           onClick={handleToggleClick}
-          // GM r57 Q5: folded for the card, a sighted person reads why too;
+          // Design: folded for the card, a sighted person reads why too;
           // after their own collapse it is "Expand agent log" again.
           title={open ? 'Collapse agent log' : cardFolded ? LOG_CARD_FOLD_DESCRIPTION : 'Expand agent log'}
           aria-expanded={open}
-          // GM r11: folded for the proposal card is not the person's collapse,
-          // and doesn't read as one to a screen reader or an agent reading
-          // the accessibility tree.
+          // Design: folded for the proposal card is not the person's collapse,
+          // and doesn't read as one to a screen reader or an agent reading the
+          // accessibility tree.
           {...(cardFolded ? { 'aria-description': LOG_CARD_FOLD_DESCRIPTION } : {})}
         >
           <span className="agent-log__title">

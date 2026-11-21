@@ -31,21 +31,21 @@ export interface AgentNotesAdapter {
   runAction: (note: AgentNote, action: AgentNoteAction) => void | Promise<void>;
   /** Why an action can't run any more ("Expired"), or null while it can. */
   actionState?: (action: AgentNoteAction) => string | null;
-  /** An action button's accessible name, when its visible word alone doesn't say enough (GM r108 c). */
+  /** An action button's accessible name, when its visible word alone doesn't say enough. */
   actionLabel?: (note: AgentNote, action: AgentNoteAction) => string | undefined;
   /** A board image's number now (the Studio's board), to draw `#n` in the text. */
   numberFor?: (ref: string) => number | null;
   /** Whether hovering an entry or a card outlines its refs (the canvas's
    *  outline layer draws nodes only; a board's refs are images). */
   outlines?: boolean;
-  /** The Agents panel's Working row (Q125 item 2): these nodes in view and
-   *  outlined, as Show does; from another screen, the canvas first. */
+  /** The Agents panel's Working row: these nodes in view and outlined, as
+   * Show does; from another screen, the canvas first. */
   showNodes?: (nodeIds: string[], color: string) => void | Promise<void>;
   /** The Agents panel's Needs-you row: open a proposal where it is decided, as Review does. */
   reviewProposal?: (proposal: { proposalId: string; target: string; targetId: string | null }) => Promise<void>;
 }
 
-/** The hollow ring's tooltip (Q125 item 2, GM): an agent that named itself, with no token. */
+/** The hollow ring's tooltip: an agent that named itself, with no token. */
 export const NAMED_ITSELF = 'This agent named itself.';
 
 export function AuthorDot({
@@ -75,10 +75,10 @@ export function AuthorDot({
 }
 
 /**
- * A done card's picture (Q125 item 3; GM - Design, 2026-10-25): below the
- * message, 96 px tall, natural aspect, never cropped, capped at the card's
- * width. A video shows its first frame with its length in mono in the
- * corner. None for a failed run, or when the file can't be read.
+ * A done card's picture (design, 2026-10-25): below the message, 96 px
+ * tall, natural aspect, never cropped, capped at the card's width. A video
+ * shows its first frame with its length in mono in the corner. None for a
+ * failed run, or when the file can't be read.
  */
 export function RunThumbnail({ run }: { run: AgentNoteRun | null | undefined }) {
   const [failed, setFailed] = useState(false);
@@ -107,10 +107,10 @@ export function RunThumbnail({ run }: { run: AgentNoteRun | null | undefined }) 
 }
 
 /**
- * GM: a failed run's card gets the error icon by its message, never a red
- * edge. The glyph a node's own failure shows (a failed Cinema shot's ⚠; the
- * card's error block itself has no icon), and aria-hidden: the message
- * already says "failed" (GM - Design, 2026-10-25).
+ * Design: a failed run's card gets the error icon by its message, never a
+ * red edge. The glyph a node's own failure shows (a failed Cinema shot's ⚠;
+ * the card's error block itself has no icon), and aria-hidden: the message
+ * already says "failed" (design, 2026-10-25).
  */
 export function RunOutcomeIcon({ run }: { run: AgentNoteRun | null | undefined }) {
   if (run?.outcome !== 'failure') return null;
@@ -128,7 +128,7 @@ export function BusyButton({ className, onClick, children, op, lock, label }: {
   /** The action's kind, for the corner to find this button again (focus after a popover). */
   op?: string;
   /** Why it can't act yet (heldLock useNoteLock, components/PersonLock): aria-disabled, still
-   * focusable, pointing at the line under the buttons; no tooltip (PR #204 round 10). */
+   * focusable, pointing at the line under the buttons; no tooltip (PR #204). */
   lock?: PersonLock | null;
   /** An accessible name that starts with the visible word (WCAG 2.5.3). */
   label?: string;
@@ -160,17 +160,17 @@ export function NoteButtons({
   /** `anchor`: the clicked button, where the Commons asks before leaving. */
   onAction: (action: AgentNoteAction, anchor: HTMLElement) => void;
   onShow: (anchor: HTMLElement) => void;
-  /** PR #204 round 11 (GM r19 item 3): the arrival card's one lock for its ask and its ×; the
-   * card renders that line, so these buttons render none of their own. */
+  /** Design, PR #204: the arrival card's one lock for its ask and its ×; the card renders
+   * that line, so these buttons render none of their own. */
   sharedLock?: PersonLock | null;
 }) {
   const controls = noteControls(note, { showLabel: adapter.showLabel(note), actionState: adapter.actionState });
-  // GM, #204 r3 item 2: an ask this tab doesn't hold yet keeps its Review or Answer, locked.
+  // Design, PR #204: an ask this tab doesn't hold yet keeps its Review or Answer, locked.
   const ownLock = useNoteLock(note);
   const lock = sharedLock ?? ownLock;
   const held = lock.locked;
-  // Round 18i (GM r39 Fix E): a Commons proposal's Review while the Commons is off stays where it
-  // is, locked, with the reason under it; it is the lock that says why, before the person clicks.
+  // Design: a Commons proposal's Review while the Commons is off stays where it is, locked, with
+  // the reason under it; it is the lock that says why, before the person clicks.
   const commonsOff = useCommonsOff();
   const offLock = useLineLock(COMMONS_OFF_REVIEW_LINE, commonsOff && note.actions.some(reviewsCommons));
   if (controls.buttons.length === 0 && !controls.state) return null;

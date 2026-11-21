@@ -1,12 +1,12 @@
 import { useSyncExternalStore } from 'react';
 
-/** GM r16 on #208 (#204's one loading look): "Extracting colors…" shows
- *  only once an extract has run this long; a quick one changes nothing. */
+/** Design, PR #208 (PR #204's one loading look): "Extracting colors…" shows
+ * only once an extract has run this long; a quick one changes nothing. */
 export const PALETTE_PENDING_DELAY_MS = 300;
-/** GM r18 3 on #208: once shown, the line stays at least this long, and a
- *  palette ready sooner waits, so the new swatches and the Add / Extract row
- *  come back in one change and the line never just flashes. A retry from
- *  the can't-run line holds this long from its start (GM r22 Q4). */
+/** Design, PR #208: once shown, the line stays at least this long, and a
+ * palette ready sooner waits, so the new swatches and the Add / Extract row
+ * come back in one change and the line never just flashes. A retry from the
+ * can't-run line holds this long from its start. */
 export const PALETTE_LINE_MIN_MS = 400;
 export const PALETTE_PENDING_TEXT = 'Extracting colors…';
 
@@ -27,26 +27,26 @@ export type PaletteExtractView = {
   /** What the always-mounted status region reads. */
   status: string;
   /** Extract can't run at all (its code didn't load): the file Try again
-   *  sends again (GM r20 on #208). */
+   * sends again (design, PR #208). */
   cantRun: File | null;
 };
 
-/** A palette that came back to a node it could no longer be written to
- *  (GM r22 Q1): said on that node when the person is back on it. */
+/** A palette that came back to a node it could no longer be written to:
+ * said on that node when the person is back on it. */
 export type PaletteDropNote = {
   text: string;
   definitionId: string;
-  /** A file param's dropped upload (GM r48 bug 2 on #222): the param and
-   *  the value it held at the pick. Any change to that value clears the
-   *  line (fileDropNotes.ts). */
+  /** A file param's dropped upload (design, PR #222): the param
+   * and the value it held at the pick. Any change to that value clears
+   * the line (fileDropNotes.ts). */
   file?: { project: string | null; nodeId: string; key: string; value: unknown };
 };
 
 /**
- * Review 8 LOW-1 / GM r22 Q2 on #208: one source of truth per palette
- * control, outside any Inspector. A running extract is keyed on the project,
- * the graph generation (graphStore's canvasGeneration) and the node and
- * param (``paletteRunKey``), so an Inspector closed and opened again, or the
+ * Design, PR #208: one source of truth per palette control, outside any
+ * Inspector. A running extract is keyed on the project, the graph generation
+ * (graphStore's canvasGeneration) and the node and param
+ * (``paletteRunKey``), so an Inspector closed and opened again, or the
  * docked one and the popover, read the same "Extracting colors…", and an
  * extract can't show on the same node id in another project or a replaced
  * graph. Tab memory only: nothing is persisted.
@@ -70,7 +70,7 @@ function say(key: string, text: string): void {
   changed();
 }
 
-/** The key a running extract has (GM r22 Q2). */
+/** The key a running extract has. */
 export function paletteRunKey(project: string | null, generation: number, nodeId: string, paramKey: string): string {
   return `${project ?? ''}|${generation}|${nodeId}:${paramKey}`;
 }
@@ -82,9 +82,9 @@ export function paletteNoteKey(project: string | null, nodeId: string, paramKey:
 }
 
 export type StartOptions = {
-  /** A retry from the can't-run line (GM r22 Q4): no "Extracting colors…"
-   *  (the line stays), and the result waits out PALETTE_LINE_MIN_MS from
-   *  the start, so Try again holds its disabled look at least that long. */
+  /** A retry from the can't-run line: no "Extracting colors…" (the
+   * line stays), and the result waits out PALETTE_LINE_MIN_MS from the
+   * start, so Try again holds its disabled look at least that long. */
   retry?: boolean;
 };
 
@@ -112,7 +112,7 @@ export function startPaletteExtract<T>(key: string, run: () => Promise<T | null>
   }
   // The last extract's "Extracted N colors." (or a failure's line) goes;
   // nothing visible changes. Said again when it lands, so a second
-  // failure is announced again (GM r22 Q4).
+  // failure is announced again.
   say(key, '');
   const owner = entry;
   const ticket = ++owner.ticket;

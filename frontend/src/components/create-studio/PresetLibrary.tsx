@@ -43,7 +43,7 @@ export function PresetLibrary({ onApply, onSaveCurrent, onClose, reloadKey, savi
   }, [reloadKey, projectId, changed]);
 
   const rootRef = useRef<HTMLDivElement>(null);
-  // Capped at the band (lib/presetLibraryPlacement): one notice while it is open (GM r13 2).
+  // Capped at the band (lib/presetLibraryPlacement): one notice while it is open.
   useCappedPopover();
   const [placement, setPlacement] = useState<{ bottom: number; maxHeight: number } | null>(null);
   useLayoutEffect(() => {
@@ -59,7 +59,7 @@ export function PresetLibrary({ onApply, onSaveCurrent, onClose, reloadKey, savi
     return () => { observer?.disconnect(); window.removeEventListener('resize', place); };
   }, []);
   useEffect(() => {
-    // A modal dialog over Styles owns Escape (review 8, L-d).
+    // A modal dialog over Styles owns Escape.
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !keyBlockedByModal(rootRef.current)) onClose(); };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);

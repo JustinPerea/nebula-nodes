@@ -1,10 +1,9 @@
-// PR #202 review 1 NIT-1 and NIT-2, and GM's ruling on its Q1: the cases the
-// review's surviving mutations needed.
-// - NIT-2: a ref's `changes` is 1 to 999; 0 reads as absent ("a change").
+// Design, PR #202: the cases the review's surviving mutations needed.
+// - A ref's `changes` is 1 to 999; 0 reads as absent ("a change").
 // - A Commons Update with no count reads "a change", never "0 changes".
 // - Focus with two real cards goes to the one whose placeholder had it.
 // - No rule of the placeholder's own sets padding, so it keeps the real card's box.
-// - GM, Q1: an Update that falls back to the agent's older ask changes in
+// - Design: an Update that falls back to the agent's older ask changes in
 //   place: the corner's count and its arrival cards don't move for the swap.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { readdirSync, readFileSync } from 'node:fs';
@@ -47,7 +46,7 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); session.resetPersonSessionForTests(); });
 
-describe('review 1 NIT-2: a ref\'s count is 1 to 999', () => {
+describe('A ref\'s count is 1 to 999', () => {
   const ref = (changes: unknown) => sanitizeNote({ ...update('pa'), proposal: { id: 'pa', kind: 'commons', targetId: 'ast_1', changes } })?.proposal;
 
   it.each([[1, 1], [8, 8], [999, 999]])('keeps %s', (changes, kept) => {
@@ -59,7 +58,7 @@ describe('review 1 NIT-2: a ref\'s count is 1 to 999', () => {
   });
 });
 
-describe('review 1 NIT-1: a Commons Update with no count reads "a change", never "0 changes"', () => {
+describe('A Commons Update with no count reads "a change", never "0 changes"', () => {
   it.each([[null], [{}], [{ changes: 0 }]])('ref %j', (proposal) => {
     const note = update('pa_n', { proposal: proposal as AgentNote['proposal'] }, 'commons', 'ast_1');
     expect(heldProposalsFor([note], {}, true, 'commons', 'ast_1')[0].header).toBe('proposes a change to this reference');
@@ -69,7 +68,7 @@ describe('review 1 NIT-1: a Commons Update with no count reads "a change", never
   });
 });
 
-describe('review 1 NIT-1: focus with two real cards', () => {
+describe('Focus with two real cards', () => {
   it('the placeholder that had focus hands it to its own real card, not the first one', () => {
     act(() => session.reportPersonRequired());
     setUpdates([update('pa_a', { author: CODEX }), update('pa_b', { at: new Date(T0 + 1).toISOString() })]);
@@ -88,7 +87,7 @@ describe('review 1 NIT-1: focus with two real cards', () => {
   });
 });
 
-describe('review 1 NIT-1: nothing sets the placeholder\'s padding', () => {
+describe('Nothing sets the placeholder\'s padding', () => {
   it('in every stylesheet, no rule naming .asset-proposal--held sets padding, so the swap moves nothing', () => {
     const dir = resolve(process.cwd(), 'src/styles');
     const found: string[] = [];
@@ -107,7 +106,7 @@ describe('review 1 NIT-1: nothing sets the placeholder\'s padding', () => {
   });
 });
 
-describe('GM, PR #202 review 1 Q1: an Update falling back to the older ask changes in place', () => {
+describe('Design, PR #202: an Update falling back to the older ask changes in place', () => {
   it('the text and the ref change; the corner\'s count and its arrival cards stay as they were', () => {
     const newer = update('pa_new', { author: CODEX, text: 'Codex asks to change a reference in the Commons', proposal: { changes: 1 } },
       'commons', 'ast_1');

@@ -1,10 +1,9 @@
-// PR #200 fix round 23, GM r34 (review 19 NIT-4): while the person gate holds,
-// a new asset proposal reaches this tab only as its Update. Its strip shows a
-// placeholder built from the Update alone: the agent's name, the real card's
-// header, "You can review this when this tab is connected as you.", no
-// thumbnails, no buttons. The person's sync after the promote puts the real
-// card in its place (no spring-in); an Update resolved first (expired,
-// withdrawn) takes the placeholder with it.
+// Design, PR #200: while the person gate holds, a new asset proposal reaches
+// this tab only as its Update. Its strip shows a placeholder built from the
+// Update alone: the agent's name, the real card's header, "You can review this
+// when this tab is connected as you.", no thumbnails, no buttons. The person's
+// sync after the promote puts the real card in its place (no spring-in); an
+// Update resolved first (expired, withdrawn) takes the placeholder with it.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, render } from '@testing-library/react';
 import type { AgentNote } from '../../lib/agentNotes';
@@ -49,7 +48,7 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); session.resetPersonSessionForTests(); });
 
-describe('GM r34: a placeholder for a proposal this held tab knows only from its Update', () => {
+describe('Design: a placeholder for a proposal this held tab knows only from its Update', () => {
   it('held: the placeholder shows the agent, the real header and the one line; no thumbnails, no buttons, nothing sent', () => {
     act(() => session.reportPersonRequired());
     setUpdates([update('pa_new')]);
@@ -147,8 +146,9 @@ describe('GM r34: a placeholder for a proposal this held tab knows only from its
     expect(document.activeElement).toBe(container.querySelector('[data-held-proposal="pa_new"]'));
   });
 
-  // GM r35 (fix round 24): the dot and the name keep the asking agent's identity colour, from the same
-  // identity the real card's view carries (the Update's author is the proposal's agent).
+  // Design: the dot and the name keep the asking agent's identity colour,
+  // from the same identity the real card's view carries (the Update's author
+  // is the proposal's agent).
   it.each([['Codex', '#4F8CFF'], ['Claude Code', '#E8825A'], ['Argon', '#7C5CFF']])(
     'the placeholder\'s dot and name get the same colour as the real card\'s for %s', (name, color) => {
       act(() => session.reportPersonRequired());
@@ -177,7 +177,7 @@ describe('GM r34: a placeholder for a proposal this held tab knows only from its
     expect(css).toMatch(/\.asset-proposal__agent \{[^}]*color: var\(--agent-color\)/);
   });
 
-  // GM r35: the placeholder's Commons header matches the real card's for every N.
+  // Design: the placeholder's Commons header matches the real card's for every N.
   it.each([
     [1, 'Claude Code asks to change a reference in the Commons', 'proposes a change to this reference'],
     [2, 'Claude Code asks to make 2 changes to a reference in the Commons', 'proposes 2 changes to this reference'],

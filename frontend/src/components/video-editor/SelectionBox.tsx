@@ -211,8 +211,8 @@ export function SelectionBox({
     // Stop the event from bubbling to PlayerOverlay's onPointerDown — clicking
     // the box body should NOT trigger select/deselect logic; it starts a drag.
     e.stopPropagation();
-    // Round 23 (review 22, L-3): a move, resize or rotate edits the layer on
-    // the canvas; while following or offline it never starts.
+    // A move, resize or rotate edits the layer on the canvas; while
+    // following or offline it never starts.
     if (refuseCanvasEdit()) return;
 
     // Read the current spatial.x/y once at the start of the gesture so each
@@ -294,8 +294,8 @@ export function SelectionBox({
     const drag = dragRef.current;
     if (!drag || drag.pointerId !== e.pointerId) return;
     // A gesture under way when the lock starts ends there, writing nothing
-    // more (fix round 4 of PR #200, review 4 LOW-2's twin, found by LOW-4's
-    // per-handler check).
+    // more (PR #200: the twin of an earlier fix, found by a per-handler
+    // check).
     if (canvasLockNow().locked) {
       endDrag(e);
       return;

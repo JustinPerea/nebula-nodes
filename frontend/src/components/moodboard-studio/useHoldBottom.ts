@@ -1,10 +1,10 @@
 import { useEffect, useLayoutEffect, useRef } from 'react';
 
 /**
- * GM r6 on #208, item 4: "The brief holds its place ... clearing the line must
- * not move what's above it. When clearing the line would shorten a panel
- * scrolled to the bottom, put a bottom spacer of the removed height in its
- * place. The spacer collapses on the person's next scroll, or when the
+ * The design rule (PR #208): "The brief holds its place ... clearing the
+ * line must not move what's above it. When clearing the line would shorten a
+ * panel scrolled to the bottom, put a bottom spacer of the removed height in
+ * its place. The spacer collapses on the person's next scroll, or when the
  * panel's content next changes. No jump, and no automatic scroll."
  *
  * Render the returned ref on an element that is the last child of the
@@ -16,12 +16,13 @@ import { useEffect, useLayoutEffect, useRef } from 'react';
  * on screen moves. It is shown and sized through a data attribute and a CSS
  * variable (no React style prop), so React's renders leave it alone.
  *
- * The spacer never goes away in one step (#208 review 4, M1; GM r10: "Shrinking
- * it as the person scrolls up or the content grows is what 'no jump' meant").
- * Removing it at once would shorten the content again, the browser would clamp
- * scrollTop by its height, and the brief would jump on the next scroll or
- * keystroke. Instead, on a scroll that leaves the held place and on every
- * content change, it shrinks to exactly what the current scrollTop still needs
+ * The spacer never goes away in one step (PR #208; the design follow-up:
+ * "Shrinking it as the person scrolls up or the content grows is what 'no
+ * jump' meant"). Removing it at once would shorten the content again, the
+ * browser would clamp scrollTop by its height, and the brief would jump on
+ * the next scroll or keystroke. Instead, on a scroll that leaves the held
+ * place and on every content change, it shrinks to exactly what the current
+ * scrollTop still needs
  * (`need = scrollTop + clientHeight - (scrollHeight - spacer - gap)`), and it
  * goes once nothing is needed. So the content scrolls by the person's own
  * scroll, and content that grows takes the spacer's place.

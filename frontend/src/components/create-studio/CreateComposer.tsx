@@ -44,10 +44,10 @@ export function CreateComposer({
   onPromptChange, onSelectModel, onParamsChange, onGenerate, onAttach, onQuantityChange, onOpenStyles,
 }: CreateComposerProps) {
   const [pickerOpen, setPickerOpen] = useState(false);
-  // Round 23 (review 22, L-3): Generate adds the generation's nodes to the
-  // canvas and runs them, so it takes the canvas lock. The rest of the
-  // composer edits this Create session's own draft (createDraftStore, kept in
-  // the browser), never the canvas, and stays enabled.
+  // Generate adds the generation's nodes to the canvas and runs them, so it
+  // takes the canvas lock. The rest of the composer edits this Create
+  // session's own draft (createDraftStore, kept in the browser), never the
+  // canvas, and stays enabled.
   const lock = useCanvasLock();
   const [enhancing, setEnhancing] = useState(false);
   const [prevPrompt, setPrevPrompt] = useState<string | null>(null);
@@ -70,8 +70,8 @@ export function CreateComposer({
     if (promptRef.current) autoGrow(promptRef.current);
   }, [prompt]);
 
-  // PR #204 round 10 (GM r15): Enhance calls an LLM with the person's keys (POST
-  // /api/enhance-prompt: require_person), so it locks through the one lock, its line under the bar.
+  // Design, PR #204: Enhance calls an LLM with the person's keys (POST /api/enhance-prompt:
+  // require_person), so it locks through the one lock, its line under the bar.
   const enhanceLock = usePersonLock('enhance prompts');
   const handleEnhance = async () => {
     if (!canEnhance || enhanceLock.locked) return;
@@ -88,7 +88,7 @@ export function CreateComposer({
       if (mounted.current && request === enhanceRequest.current && currentPrompt.current === original) {
         const line = failureMessage(err, "Couldn’t enhance the prompt.");
         setEnhanceError(line);
-        clearSetterOnPromote(err, setEnhanceError, line, null); // clears-on-promote: create.enhance (GM, #204 r3)
+        clearSetterOnPromote(err, setEnhanceError, line, null); // clears-on-promote: create.enhance (PR #204)
       }
     } finally {
       if (mounted.current && request === enhanceRequest.current) setEnhancing(false);
