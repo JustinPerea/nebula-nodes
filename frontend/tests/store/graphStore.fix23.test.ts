@@ -256,7 +256,7 @@ const RUN_LOCK = { status: 409, body: { detail: 'A paid run is starting.', code:
 
 const OTHER_422 = { status: 422, body: {} };
 const SHOT2 = { status: 422, body: { detail: 'Shot 2 has no model.' } };
-const OTHER = (names: string) => `Nebula couldn’t save your changes to ${names}. Try again, or reload if it keeps happening.`;
+const OTHER = (names: string) => `Nebula couldn’t save your changes to ${names}. Try again, or reload the page if it keeps happening.`;
 const SHOT2_LINE = (name: string) => `Nebula couldn’t save your changes to “${name}”. Shot 2 has no model.`;
 const refuseWith = (h: ReturnType<typeof backend>, id: string, refusal: { status: number; body: Record<string, unknown> }, times = 1) => {
   for (let i = 0; i < times; i += 1) h.scenes.get(id)!.refuse.push(clone(refusal));

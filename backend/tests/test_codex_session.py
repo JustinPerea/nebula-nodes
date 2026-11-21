@@ -441,7 +441,7 @@ async def test_preflight_fails_closed(monkeypatch, tmp_path):
     assert refused.code == "codex_features_refused"
     seen["proc"] = proc(1, b"", b"Error: Unknown feature flag: hooks")
     refused = await codex_session.codex_feature_preflight(args, tmp_path)
-    assert refused == ("This version of Codex refused Nebula’s agent settings (`Error: Unknown feature flag: hooks`). "
+    assert refused == ("This version of Codex refused Nebula’s agent settings (Error: Unknown feature flag: hooks). "
                        "Update Codex and Nebula, then send again.")
     assert refused.code == "codex_features_refused"
     seen["proc"] = proc(0, b"nothing useful")
@@ -450,22 +450,29 @@ async def test_preflight_fails_closed(monkeypatch, tmp_path):
     assert refused.code == "codex_features_refused"
 
 
-def test_preflight_refused_flag_detail_is_one_short_line_with_no_path_and_nothing_a_code_span_cannot_hold():
+def test_preflight_refused_flag_detail_is_shown_only_when_plainly_safe():
     from services.chat_lines import one_line_detail
+    # A trace whose first line holds a path is left out whole (the full stderr stays in the server log).
     trace = ("Error: failed to read /Users/jane/.codex/config.toml: unknown field `hooks'\n"
-             "    at load (/Users/jane/work/codex/lib/config.js:41:9)\n    at main (/opt/codex/bin/codex.js:3:1)\n")
-    line = one_line_detail(trace)
-    assert line == "Error: failed to read config.toml: unknown field hooks"
-    assert "/" not in line and "jane" not in line and "`" not in line and "\n" not in line
-    # A Windows path, a quote, a curly quote and a trailing backslash can't break the span either.
-    assert one_line_detail('bad "flag" at C:\\Users\\jane\\codex.toml\\') == "bad flag at"
+             "    at load (/Users/jane/work/codex/lib/config.js:41:9)\n")
+    assert one_line_detail(trace) == ""
+    # A home path with a space, a URL with a query, a 40-character token, a key=value pair, a Windows path.
+    assert one_line_detail("failed to read /Users/Justin Perea/.codex/config.toml") == ""
+    assert one_line_detail("fetch failed https://h/x?token=abc") == ""
+    assert one_line_detail("bad credential " + "a1B2" * 10) == ""
+    assert one_line_detail("bad setting api_key=abc") == ""
+    assert one_line_detail("bad flag at C:\\Users\\jane\\codex.toml") == ""
+    # A quote or backtick a code span can't hold is not allowed either.
+    assert one_line_detail('bad "flag"') == "" and one_line_detail("bad `flag`") == ""
+    # A feature-name detail is plainly safe and shown, trailing punctuation trimmed, whitespace collapsed.
+    assert one_line_detail("Error:  Unknown feature flag: hooks.\nmore") == "Error: Unknown feature flag: hooks"
     assert one_line_detail("") == "" and one_line_detail("\n  \n") == ""
-    long = one_line_detail("x" * 400)
+    long = one_line_detail("word " * 60)
     assert len(long) <= 81 and long.endswith("…")
 
 
 @pytest.mark.asyncio
-async def test_preflight_a_refused_flag_with_a_home_path_and_a_trace_reaches_the_chat_as_one_short_line(monkeypatch, tmp_path):
+async def test_preflight_a_refused_flag_with_a_home_path_and_a_trace_reaches_the_chat_with_no_detail(monkeypatch, tmp_path):
     stderr = (b"Error: unknown feature `hooks' in /Users/jane/.codex/config.toml\n"
               b"    at load (/Users/jane/.nvm/versions/node/lib/codex.js:41:9)\n" + b"    at x\n" * 60)
     proc = MagicMock()
@@ -473,9 +480,9 @@ async def test_preflight_a_refused_flag_with_a_home_path_and_a_trace_reaches_the
     proc.communicate = AsyncMock(return_value=(b"", stderr))
     monkeypatch.setattr(codex_session.asyncio, "create_subprocess_exec", AsyncMock(return_value=proc))
     refused = await codex_session.codex_feature_preflight(["codex", "exec", "--disable", "hooks"], tmp_path)
-    assert refused == ("This version of Codex refused Nebula’s agent settings (`Error: unknown feature hooks in config.toml`). "
+    assert refused == ("This version of Codex refused Nebula’s agent settings. "
                        "Update Codex and Nebula, then send again.")
-    assert refused.count("`") == 2 and "\n" not in refused and "jane" not in refused and len(refused) < 200
+    assert refused.count("`") == 0 and "\n" not in refused and "jane" not in refused and len(refused) < 200
 
 
 @pytest.mark.asyncio

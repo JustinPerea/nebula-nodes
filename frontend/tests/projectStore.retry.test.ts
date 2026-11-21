@@ -430,7 +430,7 @@ describe('the startup load never shows an error\'s own message', () => {
     vi.mocked(projects.getProject).mockRejectedValueOnce(new Error('internal: snapshot.nodes is not iterable'));
     await useProjectStore.getState().initialize();
     expect(useProjectStore.getState().error)
-      .toBe("Nebula couldn’t load your projects because the server didn’t accept it. Try again, or reload if it keeps happening.");
+      .toBe("Nebula couldn’t load your projects because the server didn’t accept it. Try again, or reload the page if it keeps happening.");
     expect(offer()).not.toBe('none');
   });
 
@@ -450,7 +450,7 @@ describe('the startup load never shows an error\'s own message', () => {
 });
 
 describe("every Projects action reads a plain Error through design's mapping", () => {
-  const GENERAL = "Try again, or reload if it keeps happening.";
+  const GENERAL = "Try again, or reload the page if it keeps happening.";
   const RAW = 'internal: snapshot.nodes is not iterable at /Users/someone/state.json';
 
   it.each([

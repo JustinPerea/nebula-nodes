@@ -27,25 +27,28 @@ GRANT_OVERLAP_CODE = "agent_grant_overlap"
 KNOWLEDGE_CODE = "agent_knowledge_unavailable"
 CODEX_FEATURES_CODE = "codex_features_refused"
 CODEX_CHATGPT_CODE = "codex_chatgpt_required"
-# What the person is asked to do with a notice Nebula skipped part of a reply: nothing, so no action.
 # Where the Connect ChatGPT account button is: the connect section that opens above the message box when Codex is the
 # agent (frontend/src/components/panels/ChatPanel.tsx, agentConnectHint). Settings has no such control.
 CONNECT_CHATGPT = "Connect ChatGPT account above the message box"
+# What the person is asked to do with a notice Nebula skipped part of a reply: nothing, so no action.
 OVERSIZED_EVENT_LINE = "Part of the reply was too large to show, so Nebula skipped it."
 
 
 _DETAIL_MAX = 80
-_PATH_PREFIX = re.compile(r"(?:[^\s/\\]*[/\\])+")
-_UNSAFE_IN_SPAN = re.compile(r"[`'\"“”‘’\\]")
+# Plainly safe: letters, digits, spaces and `_ - . , : ' ( )`. No slash, backslash, `=`, `?`, `@` or `~`
+# (a path, a URL, a key=value pair, an address), and no run of 20 or more token characters (a secret).
+_SAFE_DETAIL = re.compile(r"[A-Za-z0-9 _\-.,:'()]+")
+_TOKEN_RUN = re.compile(r"[A-Za-z0-9_-]{20,}")
 
 
 def one_line_detail(raw: str) -> str:
-    """What a CLI printed on stderr, cut to one short line that is safe inside a code span: the first non-empty
-    line, a file path reduced to its file name, no quote or backtick (a code span can't hold them), at most
-    ``_DETAIL_MAX`` characters. Empty when nothing is left."""
+    """What a CLI printed on stderr, kept only when its first non-empty line is short and plainly safe (see
+    ``_SAFE_DETAIL``); otherwise empty, so the line shows no detail. At most ``_DETAIL_MAX`` characters."""
     first = next((line for line in raw.splitlines() if line.strip()), "")
-    text = _UNSAFE_IN_SPAN.sub("", _PATH_PREFIX.sub("", first))
-    text = " ".join(text.split()).rstrip(".:; ")
+    text = " ".join(first.split())
+    if not text or not _SAFE_DETAIL.fullmatch(text) or _TOKEN_RUN.search(text):
+        return ""
+    text = text.rstrip(".:; ")
     if len(text) > _DETAIL_MAX:
         text = text[:_DETAIL_MAX].rstrip(" .:;,") + "…"
     return text

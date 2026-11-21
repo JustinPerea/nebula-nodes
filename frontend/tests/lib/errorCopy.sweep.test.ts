@@ -18,7 +18,7 @@ import { getBackendBaseUrl } from '../../src/lib/backend';
 // A failure is one sentence in the because form: "Nebula couldn’t {what} because {clause}".
 const LOST = "the server isn’t answering. Check that Nebula is running, then try again.";
 const NO_ANSWER = "the server didn’t respond. Try again.";
-const REFUSED = "the server didn’t accept it. Try again, or reload if it keeps happening.";
+const REFUSED = "the server didn’t accept it. Try again, or reload the page if it keeps happening.";
 const what = (heading: string) => heading.replace(/^(?:Nebula )?[Cc]ouldn['’]t /, '').replace(/\.$/, '');
 const line = (heading: string, clause: string) => `Nebula couldn’t ${what(heading)} because ${clause}`;
 
@@ -164,8 +164,8 @@ describe('the chat image chip (one short line under the file name)', () => {
     expect(chatUploadChipError(413, undefined)).toBe('Image > 20MB');
     expect(chatUploadChipError(415, undefined)).toBe('Not an image');
     expect(chatUploadChipError(503, 'Internal Server Error')).toBe('Nebula didn’t respond. Try again.');
-    expect(chatUploadChipError(400, undefined)).toBe('Try again, or reload if it keeps happening.');
+    expect(chatUploadChipError(400, undefined)).toBe('Try again, or reload the page if it keeps happening.');
     expect(chatUploadChipError(400, 'That image is empty.')).toBe('That image is empty.');
-    expect(chatUploadChipError(422, [{ loc: ['body', 'file'], msg: 'field required' }])).toBe('Try again, or reload if it keeps happening.');
+    expect(chatUploadChipError(422, [{ loc: ['body', 'file'], msg: 'field required' }])).toBe('Try again, or reload the page if it keeps happening.');
   });
 });

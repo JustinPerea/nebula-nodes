@@ -77,7 +77,7 @@ describe('Krea connection contract', () => {
     // Error copy (design): "Couldn't {verb} {object}." then the reason;
     // never "Could not", and still never the error's own text (it can hold
     // credential-bearing URLs).
-    const GENERAL = 'because the server didn’t accept it. Try again, or reload if it keeps happening.';
+    const GENERAL = 'because the server didn’t accept it. Try again, or reload the page if it keeps happening.';
     const HEADING = 'Nebula couldn’t update the Krea connection';
     apiFetchMock.mockRejectedValueOnce(new Error('https://private.test/?token=fixture-secret'));
     await expect(connectKrea()).rejects.toThrow(`${HEADING} ${GENERAL}`);

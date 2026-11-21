@@ -12,7 +12,7 @@ from __future__ import annotations
 
 # GM's 4xx fallback, the same words the frontend shows for a refusal with no reason.
 # Round 3f (GM): under a heading, "drop "That didn't work."".
-FALLBACK = "Try again, or reload if it keeps happening."
+FALLBACK = "Try again, or reload the page if it keeps happening."
 
 # GM's lines, verbatim.
 BAD_FILTERS = "Those filters didn’t work. Clear them and try again."

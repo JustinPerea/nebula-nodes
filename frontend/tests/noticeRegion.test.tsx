@@ -147,7 +147,7 @@ describe('one app-level notice region', () => {
   it('a canvasNotice event (an alert turned notice) lands there too', async () => {
     const { container } = render(<App />);
     await screen.findByTestId('canvas');
-    act(() => showNotice("Couldn't save the graph. Try again, or reload if it keeps happening."));
+    act(() => showNotice("Couldn't save the graph. Try again, or reload the page if it keeps happening."));
     const notice = await screen.findByRole('alert', {}, LAZY);
     expectInRegion(notice, container);
     fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));

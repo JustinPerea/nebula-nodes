@@ -260,15 +260,44 @@ describe('the preflight refusals the backend sends draw their code as spans', ()
     expect(codes(el)).toEqual(['browser_use', 'hooks']);
     expect(el.textContent).toBe('Codex has features on that Nebula hasn’t reviewed (browser_use, hooks (no longer listed)), so it didn’t start. Update Nebula, then send again.');
   });
-  it('a refused flag shows its short detail as one span, with its apostrophes and punctuation left alone', () => {
-    const el = shown('This version of Codex refused Nebula’s agent settings (`Error: unknown feature hooks in config.toml`). Update Codex and Nebula, then send again.');
-    expect(codes(el)).toEqual(['Error: unknown feature hooks in config.toml']);
-    expect(el.textContent).toContain('Nebula’s agent settings (Error: unknown feature hooks in config.toml). Update');
+  it('a refused flag shows its short detail as plain words in the brackets, with no span', () => {
+    const el = shown('This version of Codex refused Nebula’s agent settings (unknown feature x). Update Codex and Nebula, then send again.');
+    expect(codes(el)).toEqual([]);
+    expect(el.textContent).toBe('This version of Codex refused Nebula’s agent settings (unknown feature x). Update Codex and Nebula, then send again.');
   });
-  it('a detail the backend left a quote or backtick in would not break the line: the span is refused, the words stay', () => {
-    // The backend takes those characters out (chat_lines.one_line_detail); this is what the page does if one got through.
-    const el = shown("This version of Codex refused Nebula’s agent settings (`unknown field `hooks'). Update Codex and Nebula, then send again.");
-    expect(el.textContent).toContain('Update Codex and Nebula, then send again.');
-    expect(el.textContent).toContain('settings (');
+});
+
+describe('punctuation that touches a span stays on the span’s line', () => {
+  const html = (text: string) => render(<p>{curledWithCodeSpans(text)}</p>).container.firstElementChild as HTMLElement;
+  const groups = (el: HTMLElement) => [...el.querySelectorAll('.code-glue')];
+  it('an opening bracket before a span and a closing bracket after it share one no-break group with it', () => {
+    const el = html('Codex has features Nebula hasn’t reviewed (`example_feature`), so it didn’t start.');
+    expect(groups(el)).toHaveLength(1);
+    expect(groups(el)[0].textContent).toBe('(example_feature),');
+    expect(groups(el)[0].querySelector('code')?.textContent).toBe('example_feature');
+    expect(el.textContent).toBe('Codex has features Nebula hasn’t reviewed (example_feature), so it didn’t start.');
+  });
+  it('a comma or a full stop after a span, and a quote before it, glue the same way', () => {
+    const el = html('See "`a`, `b`" and `c`.');
+    expect(groups(el).map((g) => g.textContent)).toEqual(['"a,', 'b"', 'c.']);
+    const two = html('Features (`a`, `b`).');
+    expect(groups(two).map((g) => g.textContent)).toEqual(['(a,', 'b).']);
+    expect(two.textContent).toBe('Features (a, b).');
+  });
+  it('the group does not wrap and the span inside it takes normal white space back, so a long span still wraps', () => {
+    document.body.className = 'app-slava-restraint';
+    const el = html('(`x`)');
+    const group = groups(el)[0];
+    expect(cascaded(group).get('|white-space')?.value).toBe('nowrap');
+    const code = group.querySelector('code')!;
+    expect(cascaded(code).get('|white-space')?.value).toBe('normal');
+    expect(cascaded(code).get('|overflow-wrap')?.value).toBe('anywhere');
+  });
+  it('text with no touching punctuation is unchanged: the span stands alone, with no group', () => {
+    const el = html('Run `nebula apply` now, then `check` it.');
+    expect(groups(el)).toHaveLength(0);
+    expect(codes(el)).toEqual(['nebula apply', 'check']);
+    expect([...el.childNodes].map((n) => n.nodeName)).toEqual(['#text', 'CODE', '#text', 'CODE', '#text']);
+    expect(el.textContent).toBe('Run nebula apply now, then check it.');
   });
 });

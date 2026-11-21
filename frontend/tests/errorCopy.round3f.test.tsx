@@ -8,7 +8,7 @@
  *   keeps failing, Details shows what {Provider} said." With no provider:
  *   "Run the node again. If it keeps failing, open Details."
  * - Under any other heading (Projects, graph file, Commons…), drop "That
- *   didn't work." → "Try again, or reload if it keeps happening."
+ *   didn't work." → "Try again, or reload the page if it keeps happening."
  *
  * The card knows the provider from the run (the backend's ErrorEvent
  * `provider`, from the route the node called; node data `errorProvider`),
@@ -52,7 +52,7 @@ afterEach(() => resetDeletedSceneEditsForTests());
 
 const CARD_PROVIDER = 'Nebula couldn’t run the node. Run it again. If it keeps failing, “Details” shows what fal.ai said.';
 const CARD_PLAIN = 'Nebula couldn’t run the node. Run it again. If it keeps failing, open “Details”.';
-const ELSEWHERE = 'Try again, or reload if it keeps happening.';
+const ELSEWHERE = 'Try again, or reload the page if it keeps happening.';
 const SERVER = "Nebula’s server isn’t answering. Make sure it’s running, then try again.";
 const RAW = 'FAL submit failed (500): {"detail":"upstream exploded","request_id":"req_123"}';
 

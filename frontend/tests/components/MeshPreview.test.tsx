@@ -117,7 +117,7 @@ describe('MeshPreview', () => {
       fireEvent.click(preview);
       await waitFor(() => expect(preview.getAttribute('data-status')).toBe('error'));
       expect(document.querySelector('.mesh-modal__fallback-copy')?.textContent)
-        .toBe('Nebula couldn’t load the 3D preview because the server didn’t accept it. Try again, or reload if it keeps happening.');
+        .toBe('Nebula couldn’t load the 3D preview because the server didn’t accept it. Try again, or reload the page if it keeps happening.');
     } finally {
       if (original) Object.defineProperty(URL, 'createObjectURL', original);
       else delete (URL as unknown as Record<string, unknown>).createObjectURL;

@@ -502,7 +502,7 @@ async def codex_feature_preflight(exec_args: list[str], workdir: Path) -> str | 
         # The CLI's stderr is cut to one short line, paths reduced to file names; the rest stays out of the chat.
         detail = one_line_detail(stderr.decode("utf-8", errors="replace"))
         # (For a developer: the fix is the reviewed feature list in services/agent_profiles.py.)
-        why = f" (`{detail}`)" if detail else ""
+        why = f" ({detail})" if detail else ""
         return PreflightRefusal(f"This version of Codex refused Nebula’s agent settings{why}. Update Codex and Nebula, then send again.")
     unreviewed = unreviewed_codex_features(stdout.decode("utf-8", errors="replace"))
     if unreviewed is None:

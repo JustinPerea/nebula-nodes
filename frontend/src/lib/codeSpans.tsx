@@ -28,7 +28,7 @@ function quotedRuns(text: string): Array<[number, number]> {
   return runs;
 }
 
-export function withCodeSpans(text: string): ReactNode {
+function splitCodeSpans(text: string): ReactNode {
   if (!text.includes('`')) return text;
   const runs = quotedRuns(text);
   const out: ReactNode[] = [];
@@ -51,18 +51,64 @@ export function withCodeSpans(text: string): ReactNode {
   return out;
 }
 
+/** An opening bracket or quote right before a span, and a closing bracket, quote, comma or full stop right after it. */
+const OPENERS = /[([{“‘"']+$/;
+const CLOSERS = /^[)\]}”’"',.]+/;
+export const CODE_GLUE_CLASS = 'code-glue';
+
+/**
+ * Punctuation that touches a span stays on the span's line: the span is an inline-block, so a line may break
+ * before and after it, which left "(" at the end of one line and the span at the start of the next. The touching
+ * punctuation and the span go in one no-break group (CSS: `.code-glue`, white-space: nowrap); the span itself
+ * takes `white-space: normal` back, so a span wider than the line still wraps inside itself. Text with no
+ * touching punctuation is returned as it was.
+ */
+function glueToSpans(parts: ReactNode): ReactNode {
+  if (!Array.isArray(parts)) return parts;
+  const isSpan = (part: ReactNode) => part !== undefined && typeof part !== 'string';
+  const items: ReactNode[] = [...parts];
+  const out: ReactNode[] = [];
+  items.forEach((part, index) => {
+    if (typeof part === 'string') {
+      // The text a neighbouring span already took its closer from is cut at the closer.
+      const before = isSpan(items[index - 1]) ? part.match(CLOSERS)?.[0] ?? '' : '';
+      let rest = part.slice(before.length);
+      const after = isSpan(items[index + 1]) ? rest.match(OPENERS)?.[0] ?? '' : '';
+      rest = rest.slice(0, rest.length - after.length);
+      if (rest) out.push(rest);
+      return;
+    }
+    const prev = items[index - 1];
+    const next = items[index + 1];
+    let opener = '';
+    if (typeof prev === 'string') {
+      const rest = isSpan(items[index - 2]) ? prev.replace(CLOSERS, '') : prev;
+      opener = rest.match(OPENERS)?.[0] ?? '';
+    }
+    const closer = typeof next === 'string' ? next.match(CLOSERS)?.[0] ?? '' : '';
+    if (!opener && !closer) { out.push(part); return; }
+    const key = (part as { key?: string | null }).key ?? index;
+    out.push(<span key={`glue-${key}`} className={CODE_GLUE_CLASS}>{opener}{part}{closer}</span>);
+  });
+  return out;
+}
+
+export function withCodeSpans(text: string): ReactNode {
+  return glueToSpans(splitCodeSpans(text));
+}
+
 const MASK = '\uE000';
 /**
  * A line in `code` mode: code spans are found first, on the words as they came, and only the prose between them is curled,
  * so a span (`cmd's`) is never changed whichever way curlApostrophes would have paired the backticks.
  */
 export function curledWithCodeSpans(text: string): ReactNode {
-  const node = withCodeSpans(text);
+  const node = splitCodeSpans(text);
   if (typeof node === 'string') return curlApostrophes(node);
   if (!Array.isArray(node)) return node;
   // The prose is curled as one text with each span masked by a placeholder, so a '…' quote that crosses a span
   // stays protected as one quote. The placeholder is a private-use character; text that holds it is curled piece by piece.
-  if (text.includes(MASK)) return node.map((part) => (typeof part === 'string' ? curlApostrophes(part) : part));
+  if (text.includes(MASK)) return glueToSpans(node.map((part) => (typeof part === 'string' ? curlApostrophes(part) : part)));
   const spans = node.filter((part) => typeof part !== 'string');
   const prose = curlApostrophes(node.map((part) => (typeof part === 'string' ? part : MASK)).join('')).split(MASK);
   const out: ReactNode[] = [];
@@ -70,5 +116,5 @@ export function curledWithCodeSpans(text: string): ReactNode {
     if (piece) out.push(piece);
     if (index < spans.length) out.push(spans[index]);
   });
-  return out;
+  return glueToSpans(out);
 }

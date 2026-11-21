@@ -80,14 +80,39 @@ const COMMENT_MARKER = /^\s*(?:\/\/+|#+|\*(?!\/)|\/\*+|<!--)[ \t]?/;
 
 /** Two string literals written one after the other ("a" "b", the Python way), or joined with a "+" ('a' + 'b', the
  * JS way, the "+" at the end of a line or the start of the next): the quotes and what sits between them go, so
- * the words are one run, as the person sees them. An f or r prefix on the second literal goes with it. */
-const ADJACENT_LITERALS = /(["'])[ \t]*(?:\r?\n[ \t]*)?(?:\+[ \t]*(?:\r?\n[ \t]*)?)?[fr]?(["'])/g;
+ * the words are one run, as the person sees them. Only literals of the same quote kind that are code-adjacent
+ * (nothing but white space, one line break and a "+" between them) join, so prose with quotes in it ('users' "Run
+ * cost"') is left as it is. A literal is a quote that does not follow a word character, with an optional Python
+ * prefix (r, f, rf, b, u in either case); a JS backtick literal counts when it has no `${}`. */
+const LITERAL = /(?<![\w$])([rRbBfFuU]{1,2})?(?:(["'])((?:\\.|(?!\2)[^\\\n])*)\2|`((?:\\[\s\S]|[^\\`])*)`)/g;
+const LITERAL_GAP = /^[ \t]*(?:\r?\n[ \t]*)?(?:\+[ \t]*(?:\r?\n[ \t]*)?)?$/;
+
+export function joinAdjacentLiterals(text: string): string {
+  type Lit = { start: number; end: number; open: number; quote: string };
+  const literals: Lit[] = [];
+  for (const m of text.matchAll(LITERAL)) {
+    const quote = m[2] ?? '`';
+    // A backtick literal with an interpolation is code, not one run of words.
+    if (quote === '`' && m[4].includes('${')) continue;
+    const start = m.index;
+    literals.push({ start, end: start + m[0].length, open: start + (m[1]?.length ?? 0) + 1, quote });
+  }
+  let out = '';
+  let from = 0;
+  literals.forEach((lit, index) => {
+    const next = literals[index + 1];
+    if (!next || next.quote !== lit.quote || !LITERAL_GAP.test(text.slice(lit.end, next.start))) return;
+    out += text.slice(from, lit.end - 1);
+    from = next.open;
+  });
+  return out + text.slice(from);
+}
 
 /** The text as a person reads it: string literals written side by side or joined with "+" made one, consecutive
  * comment lines joined into one line (the way check-internal-ids joins them), a path that breaks after its ">" (or
  * opens the next line with one) joined, and runs of spaces made one. */
 export function readAsProse(text: string): string {
-  const lines = text.replace(/\u00a0/g, ' ').replace(ADJACENT_LITERALS, '').split('\n');
+  const lines = joinAdjacentLiterals(text.replace(/\u00a0/g, ' ')).split('\n');
   const out: string[] = [];
   for (const line of lines) {
     const last = out.length - 1;
@@ -233,6 +258,29 @@ describe('badSettingsPaths reads a path the way a person does', () => {
     expect(badSettingsPaths("const t = 'Open Settings > ' + 'Providers.';")).toEqual([]);
     // Nothing else is joined: a literal and a name, or two separate statements, stay apart.
     expect(badSettingsPaths('a = "Settings > Providers"\nb = "Run cost"')).toEqual([]);
+  });
+
+  it('joins only code-adjacent literals of one quote kind: prose with quotes in it is left alone', () => {
+    // A closing ' then a " opening the next quote is prose (a possessive and a quoted name), not two literals.
+    expect(readAsProse('Ask the users\' "Run cost" group')).toBe('Ask the users\' "Run cost" group');
+    expect(readAsProse('Say "Settings > Preferences > " then \'Run cost\'.')).toBe('Say "Settings > Preferences > " then \'Run cost\'.');
+    expect(readAsProse('the "a" \'b\'')).toBe('the "a" \'b\'');
+    expect(badSettingsPaths('Open the users\' "Settings > Preferences > Personal agents" group.')).toEqual([]);
+  });
+
+  it('reads a JS backtick literal without ${} as a literal, and leaves one with ${} alone', () => {
+    const wrong = [{ path: 'Settings > Preferences > Run cost', why: 'not a section of Preferences' }];
+    expect(badSettingsPaths('const t = `Open Settings > Preferences > ` + `Run cost.`;')).toEqual(wrong);
+    expect(badSettingsPaths('const t = `Open Settings > Preferences > `\n  + `Run cost.`;')).toEqual(wrong);
+    expect(readAsProse('x = `a ${b}` + `c`')).toBe('x = `a ${b}` + `c`');
+  });
+
+  it('accepts a Python string prefix: r, f, rf, b, in either case', () => {
+    const wrong = [{ path: 'Settings > Preferences > Run cost', why: 'not a section of Preferences' }];
+    expect(badSettingsPaths('x = rf"Open Settings > Preferences > " rf"Run cost."')).toEqual(wrong);
+    expect(badSettingsPaths('x = (R"Open Settings > Preferences > "\n     Rb"Run cost.")')).toEqual(wrong);
+    expect(readAsProse('x = f"a" r"b" b"c"')).toBe('x = f"abc"');
+    expect(readAsProse('x = rf\'a\' + fr\'b\'')).toBe('x = rf\'ab\'');
   });
 
   it('reads doubled spaces as one', () => {

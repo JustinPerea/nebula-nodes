@@ -14,7 +14,7 @@ import {
 
 const LOST = "Nebula’s server isn’t answering. Make sure it’s running, then try again.";
 const NO_ANSWER = "Nebula didn’t respond. Try again.";
-const REFUSED = "Try again, or reload if it keeps happening.";
+const REFUSED = "Try again, or reload the page if it keeps happening.";
 const ACCESS = "You don’t have access to this anymore. Reload to sign in again.";
 const TOO_LARGE = "That’s too large to save.";
 
@@ -133,10 +133,10 @@ describe('heading + reason + kind', async () => {
     [409, 'This moodboard changed in another tab.', 'This moodboard changed in another tab.',
       line('this moodboard changed in another tab.'), line('this moodboard changed in another tab.'), 'refused'],
     // The 4xx fallback keeps its "Try again, or reload" on its own and ends in the button's "Try again." beside one.
-    [400, undefined, REFUSED, line('the server didn’t accept it. Try again, or reload if it keeps happening.'),
+    [400, undefined, REFUSED, line('the server didn’t accept it. Try again, or reload the page if it keeps happening.'),
       line('the server didn’t accept it. Try again.'), 'refused'],
     [422, [{ loc: ['body', 'images', 0, 'url'], msg: 'field required' }], REFUSED,
-      line('the server didn’t accept it. Try again, or reload if it keeps happening.'), line('the server didn’t accept it. Try again.'), 'refused'],
+      line('the server didn’t accept it. Try again, or reload the page if it keeps happening.'), line('the server didn’t accept it. Try again.'), 'refused'],
     [403, undefined, ACCESS, line('you don’t have access to this anymore. Reload to sign in again.'),
       line('you don’t have access to this anymore. Reload to sign in again.'), 'refused'],
     [413, undefined, TOO_LARGE, line('it’s too large.'), line('it’s too large.'), 'refused'],
@@ -173,7 +173,7 @@ describe('heading + reason + kind', async () => {
   });
 
   it('a failure that isn\'t a request\'s says the general line under the heading the screen gives it', () => {
-    const general = line('the server didn’t accept it. Try again, or reload if it keeps happening.');
+    const general = line('the server didn’t accept it. Try again, or reload the page if it keeps happening.');
     expect(copy.failureCopy(new Error('Unexpected token <'), { heading: HEADING })).toEqual({ heading: '', reason: general,
       button: line('the server didn’t accept it. Try again.'), cause: REFUSED, what: WHAT });
     expect(copy.failureCopy(new copy.ConnectionLostError(new TypeError('Failed to fetch')), { heading: HEADING, short: true }).reason)
@@ -196,7 +196,7 @@ describe('requestError reads the answer and keeps the status in the console', as
     const list = [{ loc: ['body', 'images', 0, 'url'], msg: 'field required' }];
     const error = await copy.requestError("Couldn't save the moodboard.",
       new Response(JSON.stringify({ detail: list }), { status: 422, headers: { 'Content-Type': 'application/json' } }));
-    expect(error.message).toBe('Nebula couldn’t save the moodboard because the server didn’t accept it. Try again, or reload if it keeps happening.');
+    expect(error.message).toBe('Nebula couldn’t save the moodboard because the server didn’t accept it. Try again, or reload the page if it keeps happening.');
     expect(error.detail).toEqual(list);
     const reasoned = await copy.requestError("Couldn't move the moodboard.",
       new Response(JSON.stringify({ detail: 'That project is gone.' }), { status: 404 }));
@@ -228,7 +228,7 @@ describe('the ending beside a retry button', () => {
     expect(besideButton('Nebula couldn’t load your projects because the server isn’t answering. Check that Nebula is running, then try again.'))
       .toBe('Nebula couldn’t load your projects because the server isn’t answering. Try again.');
     // The 4xx fallback ends in the button's "Try again." too; a line with another ending is as it was.
-    expect(besideButton('Nebula couldn’t open the project because the server didn’t accept it. Try again, or reload if it keeps happening.'))
+    expect(besideButton('Nebula couldn’t open the project because the server didn’t accept it. Try again, or reload the page if it keeps happening.'))
       .toBe('Nebula couldn’t open the project because the server didn’t accept it. Try again.');
     expect(besideButton('Projects could not be loaded.')).toBe('Projects could not be loaded.');
   });

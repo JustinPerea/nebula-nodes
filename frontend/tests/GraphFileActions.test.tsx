@@ -167,7 +167,7 @@ describe('workspace-independent graph file actions', () => {
     mocks.saveToFile.mockRejectedValueOnce(new Error('bundle broke'));
     render(<GraphFileActions />);
     await act(async () => { requestGraphSave(); });
-    await waitFor(() => expect(useGraphStore.getState().undoNotice?.text).toBe('Nebula couldn’t save the canvas because the server didn’t accept it. Try again, or reload if it keeps happening.'));
+    await waitFor(() => expect(useGraphStore.getState().undoNotice?.text).toBe('Nebula couldn’t save the canvas because the server didn’t accept it. Try again, or reload the page if it keeps happening.'));
   });
 
   it('saves the live Canvas camera when disabled Commons falls back to Canvas', async () => {
@@ -356,7 +356,7 @@ describe('workspace-independent graph file actions', () => {
       expect(createProject).toHaveBeenCalledOnce();
       expect(flags()).toEqual([true]);
       expect(useGraphStore.getState().nodes.map((item) => item.id)).toEqual(['existing']);
-      expect(notices).toEqual(["Nebula couldn’t load the canvas because the server didn’t accept it. Try again, or reload if it keeps happening."]);
+      expect(notices).toEqual(["Nebula couldn’t load the canvas because the server didn’t accept it. Try again, or reload the page if it keeps happening."]);
     });
 
     it("waiting behind #178's screen, or turned away with its own line: no second line, nothing loaded", async () => {

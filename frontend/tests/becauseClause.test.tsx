@@ -81,7 +81,7 @@ describe('the status rows', () => {
     ['a rate limit', NO_RESPONSE_COPY, 429, 'the server is busy. Try again in a moment.', 'the server is busy. Try again.'],
     ['a server error', NO_RESPONSE_COPY, 500, 'the server hit an error. Try again.', 'the server hit an error. Try again.'],
     ['no access', ACCESS_LOST_COPY, 403, 'you don’t have access to this anymore. Reload to sign in again.', 'you don’t have access to this anymore. Reload to sign in again.'],
-    ['a refusal with no reason', REFUSED_FALLBACK_COPY, 400, 'the server didn’t accept it. Try again, or reload if it keeps happening.', 'the server didn’t accept it. Try again.'],
+    ['a refusal with no reason', REFUSED_FALLBACK_COPY, 400, 'the server didn’t accept it. Try again, or reload the page if it keeps happening.', 'the server didn’t accept it. Try again.'],
     ['too large', TOO_LARGE_COPY, 413, 'it’s too large.', 'it’s too large.'],
   ];
   it.each(cases)('%s', (_name, reason, status, alone, button) => {
@@ -333,7 +333,7 @@ describe('FailureLines', () => {
     expect(failureMessage(new RequestFailedError("Couldn't rename the project.", 429), "Couldn't x."))
       .toBe('Nebula couldn’t rename the project because the server is busy. Try again in a moment.');
     expect(failureMessage(new TypeError('boom'), "Couldn't open the file.")).toBe(
-      'Nebula couldn’t open the file because the server didn’t accept it. Try again, or reload if it keeps happening.');
+      'Nebula couldn’t open the file because the server didn’t accept it. Try again, or reload the page if it keeps happening.');
   });
 });
 

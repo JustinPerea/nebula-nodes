@@ -43,7 +43,7 @@ export function sceneRunLockLine(scenes: readonly string[]): string {
 
 /** GM r32 answer 2: a refusal Nebula has no line of its own for ("other"),
  * a stop line with [Try again], its wording as it stood (GM r31): "Nebula
- * couldn’t save your changes to “Opening”. Try again, or reload if it keeps
+ * couldn’t save your changes to “Opening”. Try again, or reload the page if it keeps
  * happening." Scenes refused for the same reason share one line. */
 export function sceneOtherStopLine(scenes: readonly string[], reason: string): string {
   return `Nebula couldn’t save your changes to ${quotedNames(scenes, 'scenes')}. ${reason}`;

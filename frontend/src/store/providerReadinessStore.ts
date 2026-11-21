@@ -24,7 +24,7 @@ const forgottenSinceCheck = new Set<string>();
  * answering. Make sure it's running, then try again." That is the request
  * with no answer (CONNECTION_LOST_COPY). Design: ""Nebula didn't
  * respond" is wrong when something did answer. → "Couldn’t check the
- * connections. Try again, or reload if it keeps happening."", for any
+ * connections. Try again, or reload the page if it keeps happening."", for any
  * answered failure, a malformed answer included. */
 const CHECK_HEADING = "Couldn’t check the connections.";
 let expiryTimer: ReturnType<typeof setTimeout> | undefined;

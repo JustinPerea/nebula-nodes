@@ -47,7 +47,7 @@ export const NO_RESPONSE_COPY = 'Nebula didn’t respond. Try again.';
  * Also what a failure that isn't a request's says (copyForError). Round 3f
  * (GM): "Under any other heading (Projects, graph file, Commons…), drop
  * "That didn't work."". A node card says its own (lib/nodeErrorCopy.ts). */
-export const REFUSED_FALLBACK_COPY = "Try again, or reload if it keeps happening.";
+export const REFUSED_FALLBACK_COPY = "Try again, or reload the page if it keeps happening.";
 /** 401 or 403 with no reason (GM). */
 export const ACCESS_LOST_COPY = 'You don’t have access to this anymore. Reload to sign in again.';
 /** 413 with no reason (GM). */
@@ -260,7 +260,7 @@ export const NOT_ANSWERING_RETRY_CLAUSE = 'the server isn’t answering. Try aga
 const SERVER_BUSY_RETRY_CLAUSE = 'the server is busy. Try again.';
 /** GM r30: a 4xx with no readable reason, and any reason not listed above (GM r31's wording). */
 export const LOAD_NOT_ACCEPTED = 'the server didn’t accept it. Try again.';
-const NOT_ACCEPTED_ALONE = 'the server didn’t accept it. Try again, or reload if it keeps happening.';
+const NOT_ACCEPTED_ALONE = 'the server didn’t accept it. Try again, or reload the page if it keeps happening.';
 /** The backend's answer when it runs without the Commons (backend commons/activation, routes/commons
  * activation_dep), and GM r30's page line for it. The Commons is on only when the backend starts
  * with NEBULA_COMMONS_ENABLED=1: no setting turns it on, so the line names none. */

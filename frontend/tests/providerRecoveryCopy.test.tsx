@@ -18,7 +18,7 @@ const INITIAL_GRAPH_STATE = { ...useGraphStore.getState() };
 const INITIAL_UI_STATE = { ...useUIStore.getState() };
 const FORGET = "Couldn't forget the recovery safeguard.";
 const FORGET_ONE_LINE = "Nebula couldn’t forget the recovery safeguard";
-const GENERAL = "Try again, or reload if it keeps happening.";
+const GENERAL = "Try again, or reload the page if it keeps happening.";
 const checkpoint = { runId: 'paid-run', nodeId: 'world-node', resumeOperationId: 'operation-saved', existingWorldId: null, durable: true };
 
 function forget() {

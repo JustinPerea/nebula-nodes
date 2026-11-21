@@ -49,7 +49,7 @@ const scene = (id: string, label: string, x: number) => ({ id, type: 'cinemaScen
   data: { label, definitionId: 'cinema-scene', params: {}, state: 'idle', outputs: {} } });
 const RUN_ONE = 'Your changes to “Opening” are kept. Nebula will save them when the run finishes.';
 const RUN_TWO = 'Your changes to “Opening” and “Ref scene” are kept. Nebula will save them when the run finishes.';
-const REASON = 'Try again, or reload if it keeps happening.';
+const REASON = 'Try again, or reload the page if it keeps happening.';
 const OTHER_ONE = `Nebula couldn’t save your changes to “Opening”. ${REASON}`;
 const lineOf = (text: string) => screen.getByText(text).closest('[data-scene-stop]') as HTMLElement;
 const base = { stoppedScenes: {}, sceneTries: {}, scenePopover: null, undoNotice: null, messageNotice: null, sceneClashes: {} };

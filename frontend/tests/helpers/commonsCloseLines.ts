@@ -23,7 +23,7 @@ export const CLOSE_LINES: Array<[string, number, string | undefined, string, 'li
     'Nebula couldn’t close the batch because its held-out set no longer exists. Reload to get the latest references.', 'locked'],
   ['409, the integrity check', 409, "The held-out set doesn't match what was saved, so Nebula stopped and changed nothing.",
     'Nebula couldn’t close the batch because the held-out set doesn’t match what was saved. Nothing was changed. Reload to check it again.', 'locked'],
-  ['409, a reason not listed (its words to the console)', 409, 'Try again, or reload if it keeps happening.',
+  ['409, a reason not listed (its words to the console)', 409, 'Try again, or reload the page if it keeps happening.',
     'Nebula couldn’t close the batch because the server didn’t accept the request. Try again.', 'live'],
   ['422, another 4xx', 422, undefined, 'Nebula couldn’t close the batch because the server didn’t accept the request. Try again.', 'live'],
   ['415, another 4xx', 415, 'Content-Type must be application/json', 'Nebula couldn’t close the batch because the server didn’t accept the request. Try again.', 'live'],

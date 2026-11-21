@@ -500,11 +500,50 @@ describe('the chat line per event kind', () => {
   });
 
   it('a failed Stop is a because line in the warning ink, as any error-tone line is', async () => {
-    const line = 'Nebula couldn’t stop the reply because the server didn’t accept it. Try again, or reload if it keeps happening.';
+    const line = 'Nebula couldn’t stop the reply because the server didn’t accept it. Try again, or reload the page if it keeps happening.';
     await sendAndReceive({ type: 'cancellation', status: 'failed', active: true, message: 'cancel failed' });
     const text = await screen.findByText(line);
     expect(toneOf(line)).toBe('error');
     // The warning ink is the line not being marked a neutral because line (LineText draws a marked one in the neutral ink).
+    expect(text.closest('[data-line-because]')).toBeNull();
+    expect(text.closest('[data-chat-system-tone]')?.querySelector('[data-line-because]')).toBeNull();
+  });
+
+  // The connection-lost callers of the same notice (ChatPanel cancel(): socket not open, send throws; the socket
+  // closing after Stop was requested) draw in the warning ink too, not as a neutral because line.
+  async function stoppedWith(break_: (socket: ChatSocket) => void | Promise<void>) {
+    const socket = await connected();
+    await pickFake();
+    fireEvent.keyDown(screen.getByRole('dialog', { name: 'Chat model settings' }), { key: 'Escape' });
+    await sendText('Hello');
+    await waitFor(() => expect(socket.sent).toHaveLength(1));
+    await act(async () => { socket.receive({ type: 'session', sessionId: 'host-1', source: 'personal' }); });
+    const stop = await screen.findByRole('button', { name: 'Stop response' });
+    await break_(socket);
+    await act(async () => { fireEvent.click(stop); });
+    return socket;
+  }
+  it.each([
+    ['the socket is not open when Stop is pressed', async (socket: ChatSocket) => {
+      Object.defineProperty(socket, 'readyState', { value: WebSocket.CLOSED, writable: true, configurable: true });
+    }, /couldn’t stop the reply/],
+    ['the Stop message cannot be sent', async (socket: ChatSocket) => {
+      socket.send = () => { throw new Error('socket is gone'); };
+    }, /couldn’t stop the reply/],
+  ])('a failed Stop when %s is in the warning ink, with no neutral because line', async (_name, breakIt, pattern) => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    await stoppedWith(breakIt);
+    const text = await screen.findByText(pattern);
+    expect(text.closest('[data-chat-system-tone]')?.getAttribute('data-chat-system-tone')).toBe('error');
+    expect(text.closest('[data-line-because]')).toBeNull();
+    expect(text.closest('[data-chat-system-tone]')?.querySelector('[data-line-because]')).toBeNull();
+  });
+
+  it('the notice for a connection that drops after Stop was requested is in the warning ink, with no neutral because line', async () => {
+    const socket = await stoppedWith(() => {});
+    await act(async () => { socket.close(); });
+    const text = await screen.findByText(/the connection dropped before Nebula confirmed the stop/);
+    expect(text.closest('[data-chat-system-tone]')?.getAttribute('data-chat-system-tone')).toBe('error');
     expect(text.closest('[data-line-because]')).toBeNull();
     expect(text.closest('[data-chat-system-tone]')?.querySelector('[data-line-because]')).toBeNull();
   });

@@ -214,7 +214,7 @@ describe('a lines chunk that fails to load (design: a press always answers)', ()
     expect(state.screen).toBe('home');
     expect(state.error?.startsWith(HEADING_LEAD)).toBe(true);
     // The general line (design) under the heading (the chunk's failure is no request's); only the kept form never says reload.
-    expect(state.error).toBe('Nebula couldn’t open the project because the server didn’t accept it. Try again, or reload if it keeps happening.');
+    expect(state.error).toBe('Nebula couldn’t open the project because the server didn’t accept it. Try again, or reload the page if it keeps happening.');
     expect(state.errorRetry).toEqual({ action: 'open', id: 'alpha' });
     expect(said()).toEqual([]);
     expect(chunk.loads).toBe(1);

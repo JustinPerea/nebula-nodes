@@ -4971,3 +4971,15 @@ body.app-slava-restraint .edit-node__open {
   font-size: 11px;
   cursor: pointer;
 }
+
+/* Punctuation touching a code span ("(" before it, ")" "," "." after it) shares a no-break group with it
+   (lib/codeSpans glueToSpans), so a line never breaks between a bracket and the span. nowrap would also stop
+   the span wrapping inside itself, so the span takes normal white space back: a span wider than the line still
+   wraps (overflow-wrap: anywhere above). The group is inline, not inline-block, so it adds no box. */
+body.app-slava-restraint .code-glue {
+  white-space: nowrap;
+}
+
+body.app-slava-restraint .code-glue .code-span {
+  white-space: normal;
+}

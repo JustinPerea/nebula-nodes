@@ -77,7 +77,7 @@ describe('Commons request failures carry copy and keep their status', () => {
   ])('a 4xx with %s says a written line, never the status or the raw detail', async (_name, make) => {
     answer = make;
     const error = await failure(() => commonsApi.status());
-    expect(error.reason).toBe("Try again, or reload if it keeps happening.");
+    expect(error.reason).toBe("Try again, or reload the page if it keeps happening.");
     expect(error.message).not.toMatch(/\d{3}|field required|loc/);
   });
 
@@ -92,7 +92,7 @@ describe('Commons request failures carry copy and keep their status', () => {
   });
 
   it('a failure that isn\'t a request\'s says design\'s general line, never its own message', () => {
-    const line = 'Nebula couldn’t save your labels because the server didn’t accept it. Try again, or reload if it keeps happening.';
+    const line = 'Nebula couldn’t save your labels because the server didn’t accept it. Try again, or reload the page if it keeps happening.';
     expect(saveFailure(new SyntaxError('Unexpected token < in JSON at position 0'))).toEqual({
       ok: false, reason: line, message: line, retry: true,
     });
