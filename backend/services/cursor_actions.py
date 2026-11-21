@@ -1,4 +1,4 @@
-"""What an agent can be doing at its cursor (GM - Design's cursor spec, §2).
+"""What an agent can be doing at its cursor (the design's cursor spec, §2).
 
 One list, in this order everywhere: POST /api/canvas/cursor
 (services/agent_presence.py), MCP point_at, the CLI's `nebula point
@@ -66,7 +66,7 @@ def session_ok(raw: object) -> bool:
 
 
 def _shown(text: str) -> str:
-    """The value as it may be echoed (review 2, LOW-1): a lone surrogate,
+    """The value as it may be echoed: a lone surrogate,
     a control character (ESC and its terminal sequences), a format
     character (zero-width, the bidi overrides such as RLO) or any other
     Unicode category C* code point becomes U+FFFD, so the line can't
@@ -98,7 +98,7 @@ def echoed(value: object) -> str:
 
 
 def refusal(value: object) -> str:
-    """The line an unknown action gets, everywhere (GM - Design, PR #211 r2):
+    """The line an unknown action gets, everywhere (design, PR #211):
     it echoes the value given, cleaned and cut (``echoed``)."""
     return f"\u201c{echoed(value)}\u201d isn\u2019t an action Nebula knows. Use one of {ACTIONS_LIST_TEXT}."
 

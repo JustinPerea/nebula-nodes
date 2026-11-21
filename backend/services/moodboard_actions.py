@@ -7,7 +7,7 @@ these helpers write its ``say``. Only the agent's own action is named, never
 what the person wrote: a private note is "private note changed", not its text.
 
 One set of words for the Agent log, the cursor's say and the journal, written
-once in ``services/moodboard_edits`` (GM - Design, PR #233): a board or a
+once in ``services/moodboard_edits`` (design, PR #233): a board or a
 project is its curly name ("Added image 3 to “Dusk”", never "board Dusk"), an
 image is "image 3" in a sentence ("#3" is for badges and chips), clauses join
 with "and", a field is a quoted label ("Changed “Direction” on “Dusk” and
@@ -114,7 +114,7 @@ def describe_move(board: Mapping[str, Any] | None, to: str) -> str:
 #
 # A board write shows on the person's screen as the agent's cursor on the
 # board, the image or the control it touched, with the line above as its say.
-# GM - Design's table (PR #233 r4):
+# The design's table (PR #233):
 #
 #   create, move, restore ......... the board, click
 #   add, place, set aside ......... the one image touched, else the board, click

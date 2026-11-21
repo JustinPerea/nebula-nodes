@@ -1,4 +1,4 @@
-"""The name a file param shows (GM r48 Q1 on #222), and the record of the
+"""The name a file param shows (design, PR #222), and the record of the
 names files were uploaded with.
 
 /api/uploads stores a file under its content hash ("3fa9…e1.png"), which

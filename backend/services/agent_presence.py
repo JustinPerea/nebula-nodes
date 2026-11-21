@@ -59,7 +59,7 @@ MAX_SAY_CHARS = 140
 # more room than a bubble. A line that carries what an agent sent (the raw
 # keys of "Set “Seed” and seed_mode") is cut at MAX_LOG_CHARS, never through
 # a character. Nebula's own whole line (a refused run's: clean_log ``whole``)
-# is never cut (GM, PR #203 r33 item 2): main._refused_run_log_line switches
+# is never cut (design, PR #203): main._refused_run_log_line switches
 # to its count form past MAX_LOG_CHARS instead, and a line still longer than
 # that is shown whole.
 MAX_LOG_CHARS = 600
@@ -115,7 +115,7 @@ class RequestHeadersContext:
     them directly); presence reads the headers from this request-local value.
 
     It sees every HTTP request, so it is also where an agent shows it is
-    still there (Q125 item 2): ``on_agent`` gets the identity of every
+    still there: ``on_agent`` gets the identity of every
     identified request, whatever the route (main passes the status book's
     ``saw``, which keeps that agent's status line alive). Never fails the
     request.
@@ -509,7 +509,7 @@ def parse_surface_target(raw: Any, boards: Collection[Mapping[str, Any]] | None,
             return target, names  # not pointable: the cursor is at the character itself
         if not isinstance(part, str) or part not in allowed:
             of = info.sub_of if sub_given is not None else info.item_of
-            if not allowed:  # a character's view (GM - Design's words; any action can send it)
+            if not allowed:  # a character's view (the design's words; any action can send it)
                 raise PresenceError(f"Nebula couldn\u2019t point at {info.sub_key} {names[info.sub_key]} because "
                                     f"{of} has no parts. Leave out the part.")
             raise PresenceError(f"{_quoted(part)} isn\u2019t a part of {of}. Use "
@@ -538,7 +538,7 @@ def changing_refusal(target: Mapping[str, Any], names: Mapping[str, Any]) -> str
     (main._settled_surface_names): nothing was stored, and the agent can point again."""
     info = SURFACE_TABLE[str(target.get("surface"))]
     item = names.get(info.name_key) or (surface_ids(target) or ("",))[0]
-    # GM - Design's wording (2026-11-14): what happened and why, then what to do.
+    # The design's wording (2026-11-14): what happened and why, then what to do.
     return (f"Nebula couldn\u2019t point at the {info.noun} {_quoted_name(item)} because it kept changing while "
             "Nebula checked it. Point at it again.")
 
@@ -584,7 +584,7 @@ def _clean_say(raw: Any) -> str:
     if not isinstance(raw, str):
         raise PresenceError("say must be text")
     text = " ".join(raw.split())
-    # Never through a character (an accent, an emoji sequence, a flag): review 7, L5.
+    # Never through a character (an accent, an emoji sequence, a flag).
     return text[:safe_cut(text, MAX_SAY_CHARS)]
 
 
@@ -626,12 +626,12 @@ class _SessionSlot:
     event: dict[str, Any] | None = None
     # When its cursor came to where it is (ms, AgentPresence._arrival): the
     # backend's arrival order, which every tab stacks by, before and after a
-    # reload (GM - Design, PR #211 r21). A move to the same node, or within
+    # reload (design, PR #211). A move to the same node, or within
     # ARRIVAL_RADIUS of the point it arrived at (`anchor`), keeps it.
     since: int = 0
     # Where it arrived (its target then): the spot later moves are measured
     # from, so a run of small moves can't keep the arrival over any
-    # distance (#211 review 9, LOW-1).
+    # distance (PR #211).
     anchor: dict[str, Any] | None = None
 
 
@@ -640,8 +640,7 @@ class _SessionSlot:
 # (AGENT_CURSOR_STACK.radiusPx), so a nudge never sends it to the back. It
 # is also the link of the target chain (carry_nodes), in canvas units at
 # zoom 1. The chain decides arrival only: which cursors join one column is
-# the tab's, in screen px, with arrow and label overlaps (GM - Design, #219
-# r24 Q2).
+# the tab's, in screen px, with arrow and label overlaps (design, PR #219).
 ARRIVAL_RADIUS = 16.0
 
 # Where a tab points at a node with no handle (agentCursorMotion.resolveAnchor):
@@ -732,11 +731,11 @@ class AgentPresence:
         self._watches: list[ItemWatch] = []
         # The last arrival handed out (ms): each new one is later, so no two
         # sessions share one and a clock stepped back never puts a new
-        # arrival ahead of the old ones (#211 review 9, LOW-2, NIT-3).
+        # arrival ahead of the old ones (PR #211).
         self._last_arrival = 0
         # Each person form's id (``eventId``): the Agent log lists an action
         # once by it, a live event and its replay alike, and never drops a
-        # real repeat (review 9, LOW-5). Per boot, so a restart can't reuse one.
+        # real repeat. Per boot, so a restart can't reuse one.
         self._boot = secrets.token_hex(4)
         self._event_seq = 0
         # Every node's box as the last graph sync had it (carry_nodes): what
@@ -779,16 +778,16 @@ class AgentPresence:
         the Agent log and moves no cursor, and the agent's cursor here keeps
         its last place.
 
-        ``did`` names what the action was in the Agents panel's words (Q125
-        item 2): ``{"verb": "Added", "nodeId", "label"}``, the verb past
+        ``did`` names what the action was in the Agents panel's words: ``{"verb":
+        "Added", "nodeId", "label"}``, the verb past
         tense, the node's name when it has one. With none (a line said in
-        place, or a pointer gesture GM cut: a click, a drag, a bare move to a
+        place, or a pointer gesture design cut: a click, a drag, a bare move to a
         spot), the cursor keeps the agent's last action wherever it goes,
         with that action's own time: the event's ``did`` carries
         ``secondsAgo``, 0 for an action that just happened.
         ``project_id`` is the project open when it happened: the roster
         lists a cursor only in its own project. ``log`` is the Agent log's
-        line when it isn't ``say`` (PR #198 r1): an action whose bubble says
+        line when it isn't ``say`` (PR #198): an action whose bubble says
         nothing still has one; the event carries it only when given.
         ``log_whole``: ``log`` is Nebula's own whole line, never cut
         (clean_log). ``node_ids``: the canvas nodes the action touched, a
@@ -898,7 +897,7 @@ class AgentPresence:
     def _slot(self, agent_id: str, raw: str, now: float) -> _SessionSlot | None:
         """This session's live slot, made on its first event with a target.
 
-        Numbers go among the agent's live sessions (GM - Design, PR #211 r1):
+        Numbers go among the agent's live sessions (design, PR #211):
         a new session takes the lowest number no live one holds, and the
         agent's plain cursor counts as 1 ("Claude"). A live session keeps its
         number until its cursor leaves, so nothing renumbers under the person.
@@ -909,7 +908,7 @@ class AgentPresence:
         At most SESSION_AGENT_MEMORY agents keep slots. Past that, the least
         recently seen agent with no live cursor goes; an agent with a live
         cursor is never pushed out, so its numbers never change under the
-        person (GM - Design, PR #211 r5). When every kept agent is live, a new
+        person (design, PR #211). When every kept agent is live, a new
         agent gets None: its events go out with no session, the plain agent
         cursor, until room frees.
         """
@@ -932,8 +931,8 @@ class AgentPresence:
                 # An agent can't flood the canvas with cursors: the least
                 # recently seen session goes. That is an idle one (quiet for
                 # SESSION_IDLE_SECONDS) whenever any is idle, since idle means
-                # seen longest ago; no separate idle rule is needed (review 2,
-                # N5 was an equivalent mutant of one).
+                # seen longest ago; no separate idle rule is needed (a mutant of one is
+                # equivalent).
                 victim = min(slots.items(), key=lambda item: item[1].last_t)[0]
                 del slots[victim]
             taken = {live.ordinal for live in slots.values()}
@@ -1003,7 +1002,7 @@ class AgentPresence:
         passes the node positions it sent. A session cursor whose node moved
         arrives now only when the move changed its target chain: the other
         cursors linked to it through targets ARRIVAL_RADIUS apart, from
-        targets alone, in canvas units at zoom 1 (GM - Design, #219 r24 Q2).
+        targets alone, in canvas units at zoom 1 (design, PR #219).
         A node moving with all its cursors keeps their places, however far.
         The backend holds every input, so every tab and a reload agree.
         The cursors one move makes arrive keep their order among themselves.
@@ -1016,7 +1015,7 @@ class AgentPresence:
         that spot shifts when a sibling gets a position or is deleted; an open
         canvas keeps such a node where it drew it (only a sync's ``moved``
         moves it), so it keeps the box it had here too: no false carry
-        (#219 review 2, LOW-3). Its first stored position is its first move."""
+        (PR #219). Its first stored position is its first move."""
         previous = self._boxes
         if positions is None:
             self._boxes = None
@@ -1076,7 +1075,7 @@ class AgentPresence:
 
         It adds ``session`` ({key, ordinal}), the plain cursor's too: the
         backend is the one place that numbers, so a tab never works out a
-        number for itself (GM - Design, PR #211 r3). The one event with no
+        number for itself (design, PR #211). The one event with no
         session is a new agent's past the agent cap (``_slot``): the tab
         draws it as the plain agent cursor, with no number. It shows ``shown`` (the
         action a backend edit really was) in place of ``action``. With
@@ -1087,10 +1086,10 @@ class AgentPresence:
         With ``live_only`` (an accept, main._accepted_person_form) it lands
         only on a cursor this session already has, live, and returns None
         otherwise: no slot is made, and an agent past the agent cap gets no
-        click either (GM - Design, PR #211 review 4: an unnumbered cursor
+        click either (design, PR #211: an unnumbered cursor
         can't be tied to the session). Liveness and the slot are read at one
         time, so a cursor whose TTL runs out between two reads never comes
-        back (review 4, NIT-1).
+        back.
         """
         if "target" not in event:
             # The Agent log only: no cursor, no session. Its id is for the
@@ -1295,7 +1294,7 @@ class AgentPresence:
         another agent's). ``holder`` is (agent id, session) of the agent that
         made the removal: its own cursor is on the sub-item it just removed
         and holds that spot, never flying to the item because its own target
-        went (GM - Design, PR #233 r4). Returns how many fell back. ``fell``
+        went (design, PR #233). Returns how many fell back. ``fell``
         collects each as the open tabs name it (``{"agentId", "key",
         "target", "anchorNames"?}``, key None for an agent's plain cursor),
         so the caller can move them there too."""
@@ -1535,7 +1534,7 @@ def redacted_node(node_id: str, node: Mapping[str, Any], definition: Mapping[str
         "id": node_id,
         "definitionId": definition_id,
         # The person's (or an agent's) name for it, else its canvas title
-        # (review 18 M-D: the name the canvas shows).
+        # (the name the canvas shows).
         "name": name,
         "params": safe_value(node.get("params") or {}, key="params"),
         "outputs": output_availability(node.get("outputs") or {}),
@@ -1543,13 +1542,13 @@ def redacted_node(node_id: str, node: Mapping[str, Any], definition: Mapping[str
     }
     if node.get("label") and name == node.get("label"):
         entry["model"] = definition.get("displayName") or definition_id
-    # An agent's placeholder (Q125 item 3): whose; runs skip it.
+    # An agent's placeholder: whose; runs skip it.
     from services.pending_nodes import owner as pending_owner  # imports this module
 
     who = pending_owner(node)
     if who is not None:
         entry["pending"] = {"agent": who["name"], "agentId": who["id"]}
-    # The name each file param shows the person (GM r48 Q1 on #222,
+    # The name each file param shows the person (design, PR #222,
     # services/upload_names.py): the name it was uploaded with, else the
     # path's base name, never a bare content hash ("Uploaded file"). Params
     # keep only the stored (hashed) path, and the private `_fileName` isn't

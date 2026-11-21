@@ -26,19 +26,19 @@ FIELDS = dict(type_style=TYPE_STYLES, spacing_density=SPACING, layout=LAYOUTS, m
 
 class EvaluationError(ValueError):
     """A refused labeling step. Most messages are written for the person
-    (GM approved "Labels changed in another tab. Reload before saving.")
+    (design approved "Labels changed in another tab. Reload before saving.")
     and are what the UI shows. A technical one (an OSError's text, a path)
     also carries `person`, the line the UI shows instead; the message is
-    logged (GM - Design, error-copy round 2)."""
+    logged (design)."""
 
     def __init__(self, message: str, person: str | None = None):
         super().__init__(message)
         self.person = person
 
 
-# Written to GM's patterns for the scan's technical failures (listed for GM).
+# Written to the design's patterns for the scan's technical failures (listed for design).
 SCAN_FILE_UNREADABLE = "A file in that folder couldn’t be read. Check that it opens, then scan again."
-# GM, error-copy round 3 (folders.py:96, verbatim): the folder's own line.
+# Design (verbatim, folders.py:96): the folder's own line.
 FOLDER_SHORTCUT = "Choose the folder itself, not a shortcut to it."
 REFERENCE_GONE = "That reference isn’t in this held-out set. Reload to get the latest references."
 INTEGRITY = "The held-out set doesn’t match what was saved, so Nebula stopped and changed nothing."

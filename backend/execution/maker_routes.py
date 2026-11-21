@@ -79,8 +79,8 @@ def _blocked_reason(definition: Mapping[str, Any], block: node_route.DirectBlock
 
 def _blocked_key_line(definition: Mapping[str, Any], direct_key: str,
                       block: node_route.DirectBlock | None = None) -> str:
-    """The person's line for a run the saved maker key can't take (error copy
-    3c-2; GM's words since round 3f: "These settings need your {other
+    """The person's line for a run the saved maker key can't take (the design's words:
+    "These settings need your {other
     provider} {key kind}. Add it in Settings, then run the node again.", and
     for several keys "... Add one in Settings, ..."). A BLOCKED setting is one
     only the copy route takes, so it names the copy's own key (the
@@ -170,8 +170,8 @@ def multi_route(clients: Mapping[str, Handler]) -> Handler:
         if route.kind == node_route.UNSET:
             unavailable = node_route.route_unavailable(definition, routed_params, api_keys) or {}
             message = str(unavailable.get("message") or "This node has no route it can run on")
-            # The chosen route needs a key that isn't saved: GM's key line
-            # (error copy round 3d). A route its params block keeps the
+            # The chosen route needs a key that isn't saved: the design's key line.
+            # A route its params block keeps the
             # pre-run check's own words.
             line = (node_route.missing_key_line_for(definition, route)
                     or (key_line(route.missing) if route.missing and route.block is None else None))

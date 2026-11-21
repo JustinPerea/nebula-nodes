@@ -1,8 +1,8 @@
 """Which run's result last landed on each node, in the order Nebula saw them.
 
 A node's run result (its outputs, state, run notes, error, batch previews) is
-the product of a run, not a setting. When a tab's late save (a handoff,
-PR #199 review 18 handoff-reopen MEDIUM-3) holds a result for a node whose
+the product of a run, not a setting. When a tab's late save (PR #199) holds a result for
+a node whose
 result Nebula's side changed too, the newer run wins. Every run reaches the
 backend (the tab's runs carry the tab's run id, an agent's carry theirs), so
 the order their results landed on each node is known here: each landing gets

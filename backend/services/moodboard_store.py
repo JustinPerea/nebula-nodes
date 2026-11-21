@@ -729,7 +729,7 @@ OVERRIDE_AUTHORS = ("person", "agent")
 
 
 class NotesOptInProtected(Exception):
-    """An agent tried to send the board's notes to generators (gap 18, P4).
+    """An agent tried to send the board's notes to generators.
 
     Notes are the person's words about the board, for them, their team and
     agents; whether generators get them is the person's call. An agent may
@@ -1398,7 +1398,7 @@ class MoodboardStore:
 
 
 def migrate_brief_fields() -> dict[str, Any]:
-    """Give every saved board its brief fields, once (decision B7).
+    """Give every saved board its brief fields, once.
 
     Each board file is backed up to ``<moodboards>/../moodboard-backups/
     brief-fields-<time>/`` before it changes, with ``migration-log.json``
@@ -1415,8 +1415,8 @@ def stamp_transparency_once() -> dict[str, Any]:
     (moodboard_analysis.ALPHA_VERSION) and that lack them or whose file has
     changed since, so a read can tell whether those colours are out of date
     without decoding an image. On any board, an entry stored with the facts
-    but no stamp (round 3 dev builds), or with the older ``[mtime_ns, size]``
-    stamp (rounds 4-5), is read again once and stamped. Run at
+    but no stamp (dev builds), or with the older ``[mtime_ns, size]``
+    stamp, is read again once and stamped. Run at
     startup, off the event loop. The files are decoded before the board
     lock is taken; under it the board is read again and only the entries
     still needing it get them. It only writes those keys on image entries

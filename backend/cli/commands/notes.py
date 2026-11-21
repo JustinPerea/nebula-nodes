@@ -45,7 +45,7 @@ def format_note(note: dict[str, Any]) -> str:
     who = f"{author} · {label}" if label else author
     state = ""
     if note.get("outcome"):
-        # An asset proposal's Update once the proposal closed (Q92 a): how it ended.
+        # An asset proposal's Update once the proposal closed: how it ended.
         state = f" [{note['outcome']}]"
     elif note.get("dismissedAt"):
         state = " [dismissed]"
@@ -85,7 +85,7 @@ def run_note(client: NebulaClient, args: argparse.Namespace, *, out: TextIO | No
         print(json.dumps(result, indent=2, ensure_ascii=False), file=out)
         return 0
     note = result.get("note") or {}
-    # A board's Updates show in Moodboard Studio on that board (Q113 c), the
+    # A board's Updates show in Moodboard Studio on that board, the
     # project's in the top right of every screen.
     where = ("this board's Updates (the person reads it in Moodboard Studio on that board, under This moodboard)"
              if board_id else "the canvas's Updates (the person reads it in the top right)")

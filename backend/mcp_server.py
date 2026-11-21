@@ -149,7 +149,7 @@ def argument_problem(tool: Any, arguments: dict[str, Any]) -> str | None:
     return None
 
 
-# Round 14 of PR #114: while the tab can't reach Nebula the person's canvas
+# PR #114: while the tab can't reach Nebula the person's canvas
 # is read-only (edits blocked, not queued). An agent meets the same outage as
 # a connect Nebula never took, so that tool error says what it means for the
 # canvas and to re-read it once Nebula is back.
@@ -299,17 +299,17 @@ def _sleep_unless_cancelled(seconds: float) -> None:
 
 @contextlib.contextmanager
 def _canvas_waiting_said() -> Iterator[None]:
-    """Every tool's refusal by the waiting-canvas guard (review 6 of PR #199,
-    M-1: any change to a canvas waiting to be saved as a project, at the
-    limit) reaches the agent as GM's line with "(409, canvas_waiting)", so
+    """Every tool's refusal by the waiting-canvas guard (PR #199: any change to a canvas
+    waiting to be saved as a project, at the
+    limit) reaches the agent as the design's line with "(409, canvas_waiting)", so
     it tells it from a stale revision, whichever tool sent the write."""
     try:
         yield
     except NebulaAPIError as exc:
         payload = exc.payload if isinstance(exc.payload, dict) else {}
         code = payload.get("code")
-        # canvas_held_full: the canvas is too big to keep aside (review 7, L-3);
-        # canvas_kept_in_tab: the person's tab keeps unsaved edits (GM r16).
+        # canvas_held_full: the canvas is too big to keep aside;
+        # canvas_kept_in_tab: the person's tab keeps unsaved edits (design).
         if code not in AGENT_REFUSAL_CODES or code in exc.detail:
             raise
         raise NebulaAPIError(f"{exc.detail} ({exc.status}, {code})", status=exc.status, kind=exc.kind,
@@ -385,11 +385,11 @@ def _agent_name(client: str) -> str:
 
 
 # One per server process, so one agent session's scene reads are its own:
-# two sessions of one agent (two Codex lanes) never share one (fix round 9,
-# M-2; services/scene_keys.py). NEBULA_AGENT_SESSION overrides it.
+# two sessions of one agent (two Codex sessions) never share one
+# (services/scene_keys.py). NEBULA_AGENT_SESSION overrides it.
 _AGENT_SESSION = os.environ.get("NEBULA_AGENT_SESSION") or secrets.token_hex(8)
 # A NEBULA_AGENT_SESSION the backend ignores for the cursor counts as unset
-# there (review 2, NIT-1): this process's own cursor, through the cursor-only
+# there: this process's own cursor, through the cursor-only
 # header. _AGENT_SESSION is still sent as given, so scene reads are unchanged.
 def _own_cursor_session(agent_session: str) -> str | None:
     return None if session_ok(agent_session) else secrets.token_hex(8)
@@ -800,7 +800,7 @@ def point_at(
     return _canvas_call("POST", "/api/canvas/cursor", ctx, json=body)
 
 
-# -- the Agents panel (Q125 item 2) ------------------------------------------------
+# -- the Agents panel ------------------------------------------------
 
 @_tool(annotations=_EDIT)
 def set_status(text: str, node_id: str | None = None, ctx: Context | None = None) -> dict[str, Any]:
@@ -933,7 +933,7 @@ def _with_identity_note(response: dict[str, Any]) -> dict[str, Any]:
 
 def _cost_classes_doc(fn: Any) -> Any:
     """Write the cost classes into a tool's description from the one table
-    (model_pricing.CLASS_ENTRIES; review 10 of PR #203, LOW-2), before the
+    (model_pricing.CLASS_ENTRIES; PR #203), before the
     tool is registered, so the two can't drift."""
     from services.model_pricing import class_entries_doc
 
@@ -1115,7 +1115,7 @@ def withdraw_proposal(proposal_id: str, ctx: Context | None = None) -> dict[str,
     return _canvas_call("DELETE", f"/api/canvas/proposals/{quote(proposal_id, safe='')}", ctx)
 
 
-# -- questions for the person (Q125 item 1) --------------------------------------
+# -- questions for the person --------------------------------------
 
 # MCP's names for a question's fields; the route takes camelCase.
 _QUESTION_FIELDS = {"allow_text": "allowText"}
@@ -1257,7 +1257,7 @@ def channel_status(ctx: Context | None = None) -> dict[str, Any]:
     one per session of yours ({listenerId, state, reason, projectId, since,
     seenAt}); none means Nebula doesn't count you as connected. With no
     agent token here, `token` is false, `listeners` null and `detail` says
-    what to do, as `nebula channel` does (review 3, NIT-2).
+    what to do, as `nebula channel` does.
     `thisServer.registerError`: why Nebula refused this listener (only an
     agent token from Settings › Connect your agent registers one, never an
     in-app agent's; `nebula mcp connect claude-code --channel` reads the
@@ -1351,7 +1351,7 @@ def read_thread(limit: int = 20, ctx: Context | None = None) -> dict[str, Any]:
     return _canvas_call("GET", "/api/canvas/thread", ctx, params={"limit": max(1, min(int(limit), 300))})
 
 
-# -- outside the graph: project covers and asset proposals (U16) -------------------
+# -- outside the graph: project covers and asset proposals -------------------
 # Same routes as the Projects screen and Moodboard Studio; get_proposal and
 # withdraw_proposal take these proposals' ids (pa_...) too.
 
@@ -1850,7 +1850,7 @@ def list_projects(ctx: Context | None = None) -> dict[str, Any]:
 @contextlib.contextmanager
 def _limit_said_whole() -> Iterator[None]:
     """A store limit's refusal (413) reaches the agent whole, as HTTP gives
-    it (review 5 of PR #199, L-2; GM r17: new_project too): the bare
+    it (PR #199; design: new_project too): the bare
     detail left out which limit and how many projects it holds."""
     try:
         yield
@@ -1881,7 +1881,7 @@ def _switch(path: str, body: dict[str, Any], ctx: Context | None) -> dict[str, A
         reply["warnings"] = result["warnings"]
     if result.get("renumbered"):
         # Nodes the person's Duplicate or Paste made got Nebula's ids at this
-        # open (PR #199 round 17): any id read before for them is stale.
+        # open (PR #199): any id read before for them is stale.
         reply["renumbered"] = result["renumbered"]
         reply["renumberedNote"] = (f"Nebula gave {counted(len(result['renumbered']), 'node')} its own ids at this "
                                    "open ({old: new}). Read the canvas again and use the ids you see.")
@@ -2113,8 +2113,8 @@ def _preview_with_error(node_id: str, port: str | None, size: str, ctx: Context 
             unquote(failed) if failed else None)
 
 
-# A Stop that reached Nebula before the run's start did (round 16 of PR
-# #114): the run id is refused from then on, so it never runs.
+# A Stop that reached Nebula before the run's start did (PR #114): the run id is refused from then
+# on, so it never runs.
 RUN_STOPPED_BEFORE_START = ("Stopped before it started. Nebula won't start a run with this id, "
                             "so nothing ran and nothing was spent.")
 CANCEL_BEFORE_START_NEXT = ("Nebula hadn't started this run yet. The stop is recorded, and Nebula "
@@ -2122,7 +2122,7 @@ CANCEL_BEFORE_START_NEXT = ("Nebula hadn't started this run yet. The stop is rec
 
 
 def run_no_record_next(run_id: Any) -> str:
-    """A run id Nebula has no record of (round 17 of PR #114, review 16 L1):
+    """A run id Nebula has no record of (PR #114):
     it may have run before Nebula restarted, so nothing is said about spend."""
     return (f"Nebula has no record of run {run_id}. If it started before Nebula restarted, "
             "check Run history for what it did.")
@@ -2133,8 +2133,8 @@ def _run_result(payload: dict[str, Any], ctx: Context | None) -> list:
     status = payload.get("status")
     if status == "waiting":
         # Over the person's daily total: nothing ran, and it waits for their
-        # OK as a proposal (GM's line in `message`, the numbers exact).
-        # The check-it hint in MCP's words: get_proposal("<id>") (GM - Design, 2026-10-31).
+        # OK as a proposal (the design's line in `message`, the numbers exact).
+        # The check-it hint in MCP's words: get_proposal("<id>") (design, 2026-10-31).
         shown = {key: payload[key] for key in ("status", "proposalId", "message", "dailyTotal", "alsoNeeds")
                  if key in payload}
         if isinstance(shown.get("message"), str) and isinstance(shown.get("proposalId"), str):
@@ -2557,7 +2557,7 @@ def commons_borrow(id: str, attribute: str, value: Any, used_in: dict, why: str,
                                "region_id": region_id, "brand": brand})
 
 
-# Reads that used to need raw HTTP (Justin's Q63 b, audit U13). Each calls
+# Reads that used to need raw HTTP (Justin's). Each calls
 # the route the Commons UI uses, in your brand scope.
 
 @_tool(annotations=_READ)
@@ -2749,9 +2749,9 @@ def extraction_correct(record: str, corrections: list[dict[str, Any]]) -> dict[s
     reason?}`: `op` is set, add or remove, and `path` is `brand` (text or null), a leaf of
     `structure.read.` (a region's `role` or `label`: `structure.read.regions.r1.role`; a text
     run's `content`, `weight` or `type_style`: `structure.read.text.t1.content`; a
-    `structure.read.reader_1.<field>.value` of summary, composition_notes, subject, type_style,
-    spacing_density, layout or medium; `structure.read.reader_1.keywords` with add or remove
-    and one vocabulary word) or anything under `shows.` (`shows.s1.statement`; a whole new show
+    `structure.read.reader_1.<field>.value` of summary, composition_notes, subject,
+    type_style, spacing_density, layout or medium; `structure.read.reader_1.keywords`
+    with add or remove and one vocabulary word) or anything under `shows.` (`shows.s1.statement`; a whole new show
     is `set` on `shows.<id>` with a statement and `evidence`, ids such as P0 from the
     palette; who added it, its status and its decision link are set for you). A whole
     region, text run or box can't be set, and a refusal names what can. A person's choices
@@ -3312,7 +3312,7 @@ def character_get(character: str, ctx: Context | None = None) -> dict[str, Any]:
     return _board_call(characters.get_character, _api(), character, _board_headers(ctx))
 
 
-# -- model catalogs for the universal nodes (MCP parity U10, 2026-10-20) ----------
+# -- model catalogs for the universal nodes (MCP parity, 2026-10-20) ----------
 # The same routes the Inspector's model pickers read; they ask the provider
 # (cached 5 minutes, Replicate schemas an hour) with the person's key, and
 # nothing is generated or billed. A model's ports come from
@@ -3457,7 +3457,7 @@ def model_schema(provider: str, model_id: str, ctx: Context | None = None) -> di
     return result
 
 
-# -- Krea discovery for outside agents (MCP parity U14, 2026-10-20) ---------------
+# -- Krea discovery for outside agents (MCP parity, 2026-10-20) ---------------
 # The read-only calls in-app turns get from the nebula_krea server, folded in
 # here so every agent on this server has them: the same allow-list
 # (KREA_READONLY_TOOLS) and the same backend routes (/api/krea/tools and
@@ -3642,7 +3642,7 @@ def style_delete(style: str, ctx: Context | None = None) -> dict[str, Any]:
     return _style_call(styles.delete_style, _api(), style, _board_headers(ctx))
 
 
-# -- projects without opening them, settings and providers (audit U3, U6) ------
+# -- projects without opening them, settings and providers ------
 # Each goes through the route the canvas uses (PUT /api/projects/{id}, GET
 # /api/projects/{id}, /api/settings, /api/health/providers,
 # /api/krea/connection); the reply is shaped in project_client.py, which the
@@ -3789,13 +3789,13 @@ async def _channel_fetch(path: str, params: dict[str, Any], timeout: float, agen
 
 CHANNEL_BEAT_SECONDS = 15.0  # services/channel_listeners.BEAT_SECONDS: how often it tells Nebula it listens
 # A beat Nebula refused (401, 409) or never answered is tried again this
-# often, not every second (review 4 NIT-2): within the 45 s an old entry
+# often, not every second: within the 45 s an old entry
 # lives, a successor on the same session asks about nine times.
 CHANNEL_RETRY_SECONDS = 5.0
-# This process's own (round 5, D2): Nebula refuses a second process that
+# This process's own: Nebula refuses a second process that
 # names the same agent session while this one's entry lives.
 _CHANNEL_NONCE = secrets.token_hex(12)
-# GM r112.5: a successor on the same session (Claude Code restarted its MCP
+# Design: a successor on the same session (Claude Code restarted its MCP
 # server, so the old process's entry still lives until its TTL) waits
 # quietly and connects by itself, nothing shown to the person. Past
 # SESSION_WAIT_SECONDS still refused, it is a real second process: then
@@ -3817,9 +3817,9 @@ async def _channel_beats(state: Any, agent: dict[str, str], clock: Any) -> None:
     tools. Only an agent token registers (Justin, 2026-11-03): a refusal (no
     token, or one Nebula doesn't know) is printed once to stderr after
     "error: ", and channel_status says it (``registerError``) until a beat
-    goes through. Each beat carries this process's nonce (D2): while
+    goes through. Each beat carries this process's nonce: while
     another process's entry for this session lives, Nebula refuses it
-    (409). That is first taken for a restart's leftover (GM r112.5): the
+    (409). That is first taken for a restart's leftover (design): the
     wait line goes to stderr once, and only past SESSION_WAIT_SECONDS is it
     Nebula's refusal, as above. The first beat Nebula takes hands the
     answer to the listener's state (ChannelState.beat_answered)."""
@@ -3938,8 +3938,8 @@ async def serve_channel(read_stream: Any, write_stream: Any, *, clock: Any = _ti
     async def fetch_pins() -> dict[str, Any]:
         # Which pins are still open, before a push decision that would hold
         # pins. A local GET that answers at once: past PIN_CHECK_TIMEOUT it
-        # failed, and is tried again later (review 5 of PR #114, L1). The
-        # Listener bounds the whole check itself (review 6, LOW-3).
+        # failed, and is tried again later (PR #114). The
+        # Listener bounds the whole check itself.
         return await _channel_fetch("/api/canvas/pins", {}, mcp_channel.PIN_CHECK_TIMEOUT, agent["name"])
 
     async def fetch_question(question_id: str) -> dict[str, Any]:
@@ -3950,7 +3950,7 @@ async def serve_channel(read_stream: Any, write_stream: Any, *, clock: Any = _ti
                                     mcp_channel.ANSWER_READ_TIMEOUT, agent["name"])
 
     # Each names this process (its nonce): Nebula answers only the process
-    # that holds this session's listener entry (review 4 LOW-4).
+    # that holds this session's listener entry.
     async def fetch_inbox() -> dict[str, Any]:
         # This session's own messages from the canvas's Message box: the
         # journal's person.message carries none (every agent reads it).

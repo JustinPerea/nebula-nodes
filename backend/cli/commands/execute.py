@@ -55,7 +55,7 @@ def _report(result: dict[str, Any], client: NebulaClient | None = None, *, verbo
     status = result.get("status")
     run_id = result.get("runId", "")
     if result.get("canvasSync") == "deferred":
-        # Round 23 (review 22, L-4): the run started; only the canvas's
+        # The run started; only the canvas's
         # update was late. Never a reason to run it again.
         print(f"note: {result.get('canvasSyncDetail') or 'The run started; open canvases catch up shortly.'}",
               file=sys.stderr)
@@ -64,7 +64,7 @@ def _report(result: dict[str, Any], client: NebulaClient | None = None, *, verbo
               "Check it with nebula proposals.")
         daily = result.get("dailyTotal") or {}
         if daily:
-            # The numbers exact beside the line (GM - Design, 2026-10-31).
+            # The numbers exact beside the line (design, 2026-10-31).
             print(f"  Daily total {_limit(daily.get('limitUsd'))}: {_usd(daily.get('usedUsd'))} used in the last "
                   f"24 hours, {_usd(daily.get('leftUsd'))} left; this run about {_usd(daily.get('runUsd'))}.")
         return EXIT_WAITING
@@ -83,12 +83,12 @@ def _report(result: dict[str, Any], client: NebulaClient | None = None, *, verbo
             print(format_run_results({**result, "duration": result.get("duration")}, **show))
         return 1
     if result.get("noRecord"):
-        # Round 17 of PR #114: no record here; it may have run before a restart.
+        # PR #114: no record here; it may have run before a restart.
         print(f"Nebula has no record of run {run_id}. If it started before Nebula restarted, "
               "check Run history for what it did.")
         return 1
     if status == "cancelled" and result.get("neverStarted"):
-        # Round 16 of PR #114: the stop beat the start, which Nebula refused.
+        # PR #114: the stop beat the start, which Nebula refused.
         print(f"Run {run_id} was stopped before it started, so nothing ran and nothing was spent.")
         return EXIT_CANCELLED
     if status == "cancelled":
@@ -122,7 +122,7 @@ def run_cancel(client: NebulaClient, run_id: str) -> int:
         print(f"Nebula has no record of run {run_id}. If it started before Nebula restarted, "
               "check Run history for what it did.")
     elif result.get("pendingAdmission"):
-        # The stop beat the run's start (round 16 of PR #114): Nebula refuses
+        # The stop beat the run's start (PR #114): Nebula refuses
         # that run id from now on.
         print(f"Run {run_id} hadn't started yet. Nebula won't start it now, so nothing runs and nothing is spent.")
     elif status in ("cancelled", "cancelling"):

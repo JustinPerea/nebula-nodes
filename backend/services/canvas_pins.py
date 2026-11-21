@@ -47,7 +47,7 @@ class PinError(Exception):
         self.status = status
         self.detail = detail
         # Beside `detail` in the answer, for agents (code, byte counts); the
-        # person reads only `detail` (GM r12 answer 3).
+        # person reads only `detail` (design).
         self.extra = dict(extra or {})
 
 
@@ -69,13 +69,13 @@ def _epoch(value: Any) -> float | None:
 _ANSI = ANSI_SEQUENCE
 
 
-# Review 11 MEDIUM-1 of PR #200 and GM r19 answer 1: what draws nothing is
+# Design, PR #200: what draws nothing is
 # hidden text, dropped from the shown form; only real emoji and real
 # variants keep their invisible parts. One rule for the variation selectors
-# (GM r21, PR #200 fix round 13): at most one selector stays, and only when
+# (design, PR #200): at most one selector stays, and only when
 # Unicode lists it for the character before it:
 # - E0100-E01EF only for a pair the Ideographic Variation Database
-#   registers (GM r23; IVD_Sequences.txt);
+#   registers (design; IVD_Sequences.txt);
 # - 180B-180D and 180F after a Mongolian letter;
 # - FE00-FE0F after a base StandardizedVariants.txt or
 #   emoji-variation-sequences.txt lists for that selector (an emoji's
@@ -84,7 +84,7 @@ _ANSI = ANSI_SEQUENCE
 # combining grapheme joiner and Khmer's inherent vowels. A zero-width joiner
 # stays inside an emoji ZWJ sequence; tag characters stay only as one of the
 # three RGI subdivision flags after U+1F3F4, England, Scotland and Wales
-# (review 12 M-1: any other tag run carried 7 hidden ASCII characters a
+# (any other tag run carried 7 hidden ASCII characters a
 # flag). The data is generated from Unicode's own files
 # (scripts/generate-pin-text-unicode.py), the same bytes the frontend's
 # pinDisplayText (lib/canvasPins.ts) reads, so the two never disagree.
@@ -101,7 +101,7 @@ def _within(spans: list[list[int]]) -> Callable[[int], bool]:
 
 
 def _ivd_pairs(text: str) -> dict[int, frozenset[int]]:
-    """The Ideographic Variation Database's registered pairs (GM r23): base
+    """The Ideographic Variation Database's registered pairs (design): base
     code point to the selector offsets from E0100 it registers. Decodes
     scripts/generate-pin-text-unicode.py's ivd_text."""
     pairs: dict[int, frozenset[int]] = {}
@@ -151,7 +151,7 @@ def _variation_selector(code: int) -> bool:
 
 
 def _selector_fits(base: str | None, code: int) -> bool:
-    """GM r21: this selector is listed for this base."""
+    """Design: this selector is listed for this base."""
     if base is None:
         return False
     if 0xFE00 <= code <= 0xFE0F:
@@ -193,7 +193,7 @@ def _plain(line: str) -> str:
             end = index + 1
             while end < size and "\U000E0020" <= line[end] <= "\U000E007E":
                 end += 1
-            # Only England, Scotland and Wales (review 12 M-1).
+            # Only England, Scotland and Wales.
             spec = "".join(chr(ord(tag) - 0xE0000) for tag in line[index + 1:end])
             if spec in _TAG_FLAGS and end < size and line[end] == CANCEL_TAG:
                 out.extend(line[index:end + 1])
@@ -209,7 +209,7 @@ def _plain(line: str) -> str:
             index += 1
             continue
         if _variation_selector(code):
-            # One, valid for its base (GM r21); a second finds a selector before it.
+            # One, valid for its base (design); a second finds a selector before it.
             if out and _selector_fits(out[-1], code):
                 out.append(char)
             index += 1
@@ -228,20 +228,20 @@ def _shown(raw: str, multiline: bool) -> str:
     # "[31m" once its ESC is dropped (design, PR #200: every string sequence
     # too).
     raw = _ANSI.sub("", raw)
-    # GM r19 answer 1 (whitespace): leading and trailing whitespace goes
+    # Design: leading and trailing whitespace goes
     # (stored that way too: typed_text), and the spaces and blank lines
     # inside count as typed, so they are never hidden text.
     if multiline:
         # str.splitlines knows every line break: \r\n, \r, \v, \f, NEL and
-        # U+2028/U+2029 (review 3 LOW-5), so each reads as \n on every surface.
+        # U+2028/U+2029, so each reads as \n on every surface.
         return "\n".join(_plain(line) for line in raw.splitlines()).strip()
     # One line: each line break reads as one space, never glued.
     return _plain(" ".join(raw.splitlines())).strip()
 
 
 def shown_text(raw: Any, *, multiline: bool = True) -> str:
-    """Note or reply text as every output shows it (GM r15 and r16, PR #200
-    fix round 10): the store keeps what was typed, and each output strips it,
+    """Note or reply text as every output shows it (design, PR #200): the store keeps
+    what was typed, and each output strips it,
     the API's pins, the journal and its summaries, the CLI, the channel push
     and the canvas display (frontend lib/canvasPins.ts pinDisplayText). No C0
     but \n, no C1, no ESC, no format characters. A note keeps its lines; a
@@ -251,19 +251,19 @@ def shown_text(raw: Any, *, multiline: bool = True) -> str:
     return _shown(raw if isinstance(raw, str) else str(raw), multiline)
 
 
-# GM r12 answer 3 (PR #200 fix round 11): only what shows counts against the
+# Design, PR #200: only what shows counts against the
 # cap, in characters as a person sees them (grapheme clusters) of the shown
 # text, the same strip every output uses; the composer counts the same way
 # (frontend lib/canvasPins.ts noteLength), so the two never disagree. What the
 # shown form drops (escape codes, control and format characters, marks that
 # draw nothing past the one a base may take) is the hidden text: up to
-# HIDDEN_TEXT_CHARACTERS of it (code points: GM r22 Q3, counted in
+# HIDDEN_TEXT_CHARACTERS of it (design: code points, counted in
 # characters, never bytes) is stored as typed.
 HIDDEN_TEXT_CHARACTERS = 1120
 HIDDEN_TOO_LONG = "This note has too much hidden text to save. Paste it as plain text, then try again."
 HIDDEN_TOO_LONG_CODE = "note_hidden_too_long"
 TOO_LONG_CODE = "note_too_long"
-# GM r23 lines: a code each so the canvas can say them (and, for a removed
+# Design: a code each so the canvas can say them (and, for a removed
 # node, hold Send note); agents read the detail.
 OPEN_NOTES_FULL_CODE = "open_notes_full"
 NODE_GONE_CODE = "pin_node_gone"
@@ -320,8 +320,8 @@ def _zwj_key(part: str) -> str:
 
 
 def _zwj_groups(parts: list[str]) -> list[int]:
-    """How many emoji of a ZWJ chain each character takes (review 12 L-2,
-    GM r21): each RGI ZWJ sequence in it is one, longest first from the
+    """How many emoji of a ZWJ chain each character takes (design): each RGI ZWJ
+    sequence in it is one, longest first from the
     left; every other emoji is one on its own, so 11 thumbs joined are 11."""
     keys = [_zwj_key(part) for part in parts]
     groups: list[int] = []
@@ -373,9 +373,9 @@ def text_length(shown: str) -> int:
     """Characters as a person sees them in already-shown text: a base and its
     marks are one, up to 32 (a mark after a line break is its own), two
     regional indicators (a flag) are one, Hangul jamo that make one syllable
-    are one (review 11 NIT-3, UAX #29 GB6-GB8), a subdivision flag is one,
+    are one (UAX #29 GB6-GB8), a subdivision flag is one,
     and a chain of emoji joined by ZWJ counts each RGI ZWJ sequence in it as
-    one and every other emoji on its own (review 12 L-2). No segmentation
+    one and every other emoji on its own. No segmentation
     package. The frontend's textLength is the same rule, code point for code
     point."""
     return sum(1 for _end in _character_ends(shown))
@@ -384,7 +384,7 @@ def text_length(shown: str) -> int:
 def clip_characters(shown: str, max_points: int) -> str:
     """The longest start of ``shown`` in whole characters that fits
     ``max_points`` code points with an ellipsis, never cutting a family or a
-    letter's accents (PR #200 fix round 14: an event's preview); ``shown``
+    letter's accents (PR #200: an event's preview); ``shown``
     itself when it fits."""
     if len(shown) <= max_points:
         return shown
@@ -404,13 +404,13 @@ EVENT_TEXT_POINTS = 160
 
 def event_text(text: Any, *, multiline: bool = True) -> str:
     """A pin's text (or reply) as an event carries it: in agents' form
-    (agent_text, GM r23), then cut on a
+    (agent_text, design), then cut on a
     character's edge to fit the events feed."""
     return clip_characters(agent_text(text, multiline=multiline), EVENT_TEXT_POINTS)
 
 
 def _agent_form(shown: str) -> str:
-    """Already-shown text as agents read it (GM r23, review 13 M-1): every
+    """Already-shown text as agents read it (design): every
     variation selector gone (FE00-FE0F, E0100-E01EF, 180B-180F), so a
     registered ideographic variant reads as its base ideograph and an emoji's
     FE0F as the bare emoji, and a zero-width joiner kept only inside an RGI
@@ -442,7 +442,7 @@ def _agent_form(shown: str) -> str:
 
 def agent_line(line: str) -> str:
     """One line of any text in agents' form, untrimmed: the shared rule for
-    what draws nothing (GM r26, PR #200 fix round 17). Control and format
+    what draws nothing (design, PR #200). Control and format
     characters go; a tag run stays only as the England, Scotland or Wales
     flag with its cancel tag (any other goes, leaving a plain 🏴 or nothing);
     a ZWJ stays only inside an RGI sequence; no variation selector. The
@@ -452,7 +452,7 @@ def agent_line(line: str) -> str:
 
 
 def agent_text(raw: Any, *, multiline: bool = True) -> str:
-    """Note or reply text as every agent-facing output carries it (GM r23):
+    """Note or reply text as every agent-facing output carries it (design):
     the shown form (shown_text) without variation selectors, and with a ZWJ
     only inside an RGI sequence. The pins list for agents, `nebula pins`,
     MCP, the events feed, agent start and the channel push all use it; only
@@ -462,8 +462,8 @@ def agent_text(raw: Any, *, multiline: bool = True) -> str:
 
 
 def _trimmed(raw: str) -> str:
-    """Whitespace and byte order marks off both ends (GM r19 answer 1; review
-    12 NIT-5: str.strip keeps a leading U+FEFF, the canvas's trim doesn't)."""
+    """Whitespace and byte order marks off both ends (design: str.strip keeps a leading
+    U+FEFF, the canvas's trim doesn't)."""
     while True:
         trimmed = raw.strip().strip("\ufeff")
         if trimmed == raw:
@@ -477,18 +477,18 @@ def clean_text(raw: Any, *, limit: int, label: str = "Note", multiline: bool = F
     itself (``typed_text``); this is the form every output shows.
 
     One line by default (a reply): each line break reads as a space.
-    ``multiline`` (the person's note: Shift+Enter in the dialog makes lines,
-    fix round 2 of PR #200, GM 2026-10-28 answer 5): agents get it as
+    ``multiline`` (the person's note: Shift+Enter in the dialog makes lines, PR #200,
+    design 2026-10-28): agents get it as
     written. Its newlines stay (every line break, ``\r\n``, ``\r``, U+2028
     and the rest, reads as ``\n``), a tab reads as a space, a terminal colour
     code goes whole, and every other control character is dropped. Either
     way, whitespace at the ends goes (the first line's indent too) and the
-    spaces and blank lines inside stay as typed and count (GM r19 answer 1,
-    PR #200 fix round 12; only the canvas display folds a run of blank lines).
+    spaces and blank lines inside stay as typed and count (design, PR #200; only the
+    canvas display folds a run of blank lines).
     """
     if not isinstance(raw, str):
         raise PinError(422, f"{label} must be text")
-    # GM r19 answer 1: the note is kept trimmed (typed_text), so what is
+    # Design: the note is kept trimmed (typed_text), so what is
     # saved is what was counted; its hidden text is what the trimmed note
     # holds past what shows.
     raw = _trimmed(raw)
@@ -499,7 +499,7 @@ def clean_text(raw: Any, *, limit: int, label: str = "Note", multiline: bool = F
         # The person's line comes from its code
         # (design, PR #200), never from these words.
         raise PinError(422, f"{label} must be {limit} characters or fewer", {"code": TOO_LONG_CODE, "limit": limit})
-    # GM r22 Q3 (fix round 14): hidden characters, never bytes. What shows
+    # Design: hidden characters, never bytes. What shows
     # can be any length in bytes (280 families are about 7 KB) and still save.
     hidden = len(raw) - len(text)
     if hidden > HIDDEN_TEXT_CHARACTERS:
@@ -510,10 +510,10 @@ def clean_text(raw: Any, *, limit: int, label: str = "Note", multiline: bool = F
 
 def typed_text(raw: Any, *, limit: int, label: str = "Note", multiline: bool = False) -> str:
     """What the store keeps: the text as typed, once clean_text has checked
-    it (GM r15 condition 1, r16 answer 3: notes and replies alike), trimmed
-    at both ends (GM r19 answer 1)."""
+    it (design condition 1: notes and replies alike), trimmed
+    at both ends (design)."""
     clean_text(raw, limit=limit, label=label, multiline=multiline)
-    # Trimmed at both ends (GM r19 answer 1, the one change to "as typed").
+    # Trimmed at both ends (design, the one change to "as typed").
     return _trimmed(raw)
 
 
@@ -521,8 +521,8 @@ def note_block(text: Any, indent: str) -> str:
     """A note of several lines, each on its own line under ``indent``.
 
     Every line is indented the same, so a list or an indented line keeps its
-    shape, and a blank line stays empty (fix round 5 of PR #200, review 5
-    LOW-4). The CLI (`nebula pins`, `nebula look`, `nebula start`) and the
+    shape, and a blank line stays empty (PR #200). The CLI (`nebula pins`,
+    `nebula look`, `nebula start`) and the
     channel push both print a note this way, so a line the person typed never
     starts where a line of the surrounding output does.
     """
@@ -563,7 +563,7 @@ ANOTHER_MODEL = "its node came back as another model"
 DELETED_SINCE = "deleted since"
 # A pin an undo left as it is says why twice: ``reason`` for agents to read,
 # ``code`` for the canvas to count by. Only "another-model" is said in the
-# person's notice (GM, 2026-10-23: "1 pin couldn't be re-attached."); a pin
+# person's notice (design, 2026-10-23: "1 pin couldn't be re-attached."); a pin
 # they deleted or changed since is their own doing and stays quiet.
 PIN_LEFT_CODES = {
     CHANGED_SINCE: "changed",
@@ -581,7 +581,7 @@ def pin_left(pin_id: str, reason: str) -> dict[str, str]:
 def public_pin(pin: Mapping[str, Any], *, person: bool = False) -> dict[str, Any]:
     """A pin as it is read: its note and reply in agents' form (agent_text)
     unless ``person`` (the person's own canvas: the shown form, which keeps
-    a registered variant, GM r23). The store keeps them as typed."""
+    a registered variant, design). The store keeps them as typed."""
     form = shown_text if person else agent_text
     out = {key: copy.deepcopy(value) for key, value in pin.items() if key not in _UNDO_KEYS}
     if "text" in out:
@@ -621,10 +621,10 @@ class CanvasPins:
         commit replaces catalog.json, whichever route or process makes it),
         so nothing has to remember to clear anything. Clearing a cache only
         after a project switch's broadcast let a listing taken meanwhile
-        answer with the project open before (review 4 of PR #114, H1); and
+        answer with the project open before (PR #114); and
         re-reading the whole catalog after every unrelated commit (an
-        autosave) cost a parse, an upgrade and a deep copy per listing
-        (review 5, M2). The store shares one projection per file with the
+        autosave) cost a parse, an upgrade and a deep copy per listing. The store shares
+        one projection per file with the
         workspace and the journal's project tag."""
         view = self.store.projection()
         return view.project_id, copy.deepcopy(list(view.pins))
@@ -639,7 +639,7 @@ class CanvasPins:
 
     def list(self, *, person: bool = False) -> dict[str, Any]:
         """The open project's pins; in the shown form for the person's canvas
-        (``person``), in agents' form otherwise (GM r23)."""
+        (``person``), in agents' form otherwise (design)."""
         project_id, pins = self._active()
         return {"projectId": project_id, "pins": [public_pin(pin, person=person) for pin in self._ordered(pins)]}
 
@@ -686,7 +686,7 @@ class CanvasPins:
     # add, remove and resolve answer the pin; their ``*_in`` twins answer
     # (project_id, pin): the project the write itself went to, for the
     # route's journal tag. A second read of the catalog after the write could
-    # name a project opened since (review 6 of PR #114, LOW-1).
+    # name a project opened since (PR #114).
     def add(
         self,
         text: Any,
@@ -739,7 +739,7 @@ class CanvasPins:
                     break
                 oldest = min(resolved, key=lambda p: str(p.get("createdAt") or ""))
                 pins.remove(oldest)
-            return public_pin(pin, person=True)  # the person's own create (GM r23)
+            return public_pin(pin, person=True)  # the person's own create (design)
 
         return self._write(mutate)
 
@@ -768,7 +768,7 @@ class CanvasPins:
                     pin["status"] = "resolved"
                     pin["reply"] = {"agent": identity.as_dict(), "text": text, "at": _iso(self._clock())}
                     return public_pin(pin)
-            # Round 23 (review 22, M-1): pins belong to a project, and an agent
+            # Pins belong to a project, and an agent
             # that read them before a switch holds another project's ids.
             raise PinError(404, f"No note {pin_id[:40]} on this canvas: that note isn't in the open project "
                                 "(it may have changed since you read it). Read the canvas again (look_at_canvas, "
@@ -808,7 +808,7 @@ class CanvasPins:
             else:
                 for key in _UNDO_KEYS:
                     pin.pop(key, None)
-            # Its public form (review 10 MEDIUM-1): the journal's pin.detached
+            # Its public form: the journal's pin.detached
             # reads it, so its note is the shown text; the store keeps it as typed.
             changed.append(public_pin(pin))
         return changed
@@ -872,7 +872,7 @@ class CanvasPins:
                 pin["detached"] = False
                 for key in ("detachedFrom", *_UNDO_KEYS):
                     pin.pop(key, None)
-                back_on.append(public_pin(pin))  # pin.reattached journals it: shown text (review 10 MEDIUM-1)
+                back_on.append(public_pin(pin))  # pin.reattached journals it: shown text
             left.extend(pin_left(pin_id, DELETED_SINCE) for pin_id in named if pin_id not in seen)
             return {"reattached": back_on, "left": left}
 
@@ -904,7 +904,7 @@ LINE_BREAK_MARK = " ⏎ "
 
 def one_line(text: Any) -> str:
     """A note on a one-line surface (an event summary, `nebula watch`): each
-    line break shows as " ⏎ " (fix round 3 of PR #200, review 3 LOW-5), so
+    line break shows as " ⏎ " (PR #200), so
     the note's second line never reads as the next event, and no two words
     are glued together."""
     return LINE_BREAK_MARK.join(line.strip() for line in agent_text(text).splitlines() if line.strip())
@@ -913,7 +913,7 @@ def one_line(text: Any) -> str:
 def _clip(text: str, limit: int, max_points: int) -> str:
     """The first ``limit`` characters a person sees, in at most
     ``max_points`` code points with the ellipsis, never half a family (PR
-    #200 fix round 14: the events feed cuts a summary past 200 code points
+    #200: the events feed cuts a summary past 200 code points
     wherever that falls)."""
     ends = list(_character_ends(text))
     if len(ends) <= limit and len(text) <= max_points:

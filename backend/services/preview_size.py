@@ -2,7 +2,7 @@
 
 The Inspector's preview (`.inspector__file-preview`) is laid out at 0 px
 until the image decodes, so the floating Inspector measured the wrong height
-on the first frames after it opened (#226 review 1, MEDIUM-1). With the size
+on the first frames after it opened (PR #226). With the size
 known when the file is stored, the preview gets its aspect ratio before it
 loads (`width`/`height` on the `<img>`) and the panel measures right on its
 first frame.
@@ -18,7 +18,7 @@ answer ``nebula upload`` and MCP ``upload_file`` return doesn't carry it).
 Where an agent or the CLI changes the file (``filePath``, ``_previewUrl``),
 ``main`` drops the size that went with the old one.
 
-Headers only, never pixels (#226 review 2, MEDIUM-2): Pillow's
+Headers only, never pixels (PR #226): Pillow's
 ``getexif()`` decodes a whole PNG when its EXIF isn't ahead of the pixel
 data, so the orientation is read from the EXIF block the header already
 holds (``info["exif"]``: JPEG's APP1, WebP's EXIF chunk, a PNG eXIf chunk

@@ -13,7 +13,7 @@ at all. A step can use the +refs earlier steps created (`+mood` in step 2
 means the node step 1 made for `+mood`): the CLI swaps in the node ids each
 apply returned in `idMap`, so the backend never holds plan state. A step may
 set `arrange` to have the canvas lay out that step's new nodes, and
-`pending` to make them the agent's placeholders (Q125 item 3). The checks
+`pending` to make them the agent's placeholders. The checks
 and the stop-and-report rule live in backend/apply_steps.py, shared with the
 MCP server's edit_canvas(steps=...).
 """

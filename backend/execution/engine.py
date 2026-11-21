@@ -383,7 +383,7 @@ NODE_DEFS: dict[str, dict[str, Any]] = {
         "envKeyName": "ANTHROPIC_API_KEY",
     },
     # The one definition here with no registry entry, so its ports carry the
-    # labels the log and the card name them by (review 17 copy-ui NIT-2).
+    # labels the log and the card name them by.
     "runway-gen4-turbo": {
         "inputPorts": [
             {"id": "image", "label": "Image", "required": True},
@@ -818,10 +818,9 @@ def unchosen_model_errors(
     run takes (services/model_choice.py ``unchosen``: the Krea gateway needs
     it; a maker's own API only what it sizes by): that route would refuse it,
     so the run is refused before anything runs or is priced, naming the node
-    and the field (GM - Design, round 12 addendum b; round 14, item 1:
-    "Set a width for “X” first.", "Choose an aspect ratio for “X” first.").
+    and the field ("Set a width for “X” first.", "Choose an aspect ratio for “X” first.").
     With no usable route, nothing here: the key or sign-in refusal says so
-    first (review 13, L-6). ``edges``: what is wired into each node, which
+    first. ``edges``: what is wired into each node, which
     can keep a run on Krea (node_route.with_wired_blockers)."""
     from services import model_choice
 
@@ -857,7 +856,7 @@ def _krea_plan_ready() -> bool:
 def _renamed(node: GraphNode, definition: Mapping[str, Any], name_of: Callable[[str], str] | None) -> str | None:
     """The node's own name when the person renamed it (``name_of``: the
     run's names, main._run_names), else None: a card line then names it by
-    its type, as before (GM, PR #203 r39 item 8)."""
+    its type, as before (design, PR #203)."""
     from services import node_route
 
     if name_of is None:
@@ -880,7 +879,7 @@ def validate_graph(
     lines that name it (the canvas's label), else its type's name."""
     errors: list[ValidationErrorDetail] = []
     # Each node's missing key (key names), for its one combined card line
-    # (_combine_needs; GM, PR #203 r38 item 1).
+    # (_combine_needs; design, PR #203).
     errors.extend(unchosen_model_errors(nodes, edges, api_keys, name_of=name_of))
     errors.extend(_iterator_validation_errors(nodes, edges))
 
@@ -979,7 +978,7 @@ def validate_graph(
                 errors.append(ValidationErrorDetail(
                     node_id=node.id, port_id="",
                     message="Sign in to Krea in Settings before running this recipe",
-                    # GM, PR #203 r21: Krea's one verb is the Settings button's, "Sign in".
+                    # Design, PR #203: Krea's one verb is the Settings button's, "Sign in".
                     person="Sign in to Krea in Settings, then run the node again.").marked("reason")
                     .keyed(KREA_SIGN_IN_NEED))
         from services import node_route
@@ -991,8 +990,7 @@ def validate_graph(
             unavailable = node_route.route_unavailable(node_def, routed, api_keys)
             if unavailable is not None:
                 # Only a key, with nothing else to switch to: a need like any
-                # other key's, so the node's inputs and it say one line (GM,
-                # PR #203 r38 item 1; review 19 of the PR, MEDIUM-1).
+                # other key's, so the node's inputs and it say one line (design, PR #203).
                 key_only = (unavailable["block"] is None and unavailable["missing"] and not unavailable["alternatives"]
                             and node_route.own_missing_key_line(node_def, routed, api_keys) is None)
                 errors.append(ValidationErrorDetail(
@@ -1045,7 +1043,7 @@ def validate_graph(
                         node_id=node.id,
                         port_id="prompt",
                         message=capability_error,
-                        # The card's line in GM's rules (round 3f); agents
+                        # The card's line in the design's rules; agents
                         # read the guardrail's text as it is.
                         person=GEMINI_OMNI_EXTENSION_LINE,
                     )
@@ -1057,7 +1055,7 @@ def validate_graph(
 
 def _combine_needs(errors: list[ValidationErrorDetail]) -> None:
     """A node with several needs (inputs with no wire, and its missing key)
-    says them in one card line, ending once (GM, PR #203 r38 item 1;
+    says them in one card line, ending once (design, PR #203;
     person_line.needs_card_line): each of those checks carries that line,
     so the card (each line once) reads it once. One need keeps its own."""
     from execution.person_line import needs_card_line
@@ -1343,7 +1341,7 @@ async def _execute_graph(
             # instruction-following models. The handler (and the cache key)
             # get these params; the node's own params (its saved recipe)
             # stay the person's. What it says (a board at strength 0 isn't
-            # sent, Q36 a; a node without an entry) joins this run's notes.
+            # sent; a node without an entry) joins this run's notes.
             board_notes: list[str] = []
             notes_token = execution_notes.set(board_notes)
             try:
@@ -1726,12 +1724,12 @@ async def _execute_graph(
 
         except Exception as exc:
             category, friendly, retryable = classify_error(str(exc), job_failure=is_job_failure(exc))
-            # The handler's own line, else GM's for a provider's answer from
-            # the shared table, naming the provider this run called (error
-            # copy round 3d, execution/provider_status.py).
+            # The handler's own line, else the design's for a provider's answer from
+            # the shared table, naming the provider this run called
+            # (execution/provider_status.py).
             card = card_line(exc, node.definition_id, node.params, api_keys)
             if isinstance(exc, ProposalNeeded):
-                # A stop by design, not a failure (GM, PR #203 r39 item 1): the
+                # A stop by design, not a failure (design, PR #203): the
                 # style, over the person's line. No classifier line: every
                 # agent reader (run records, the journal) reads the agent's words.
                 category, friendly, retryable = "waiting", None, False

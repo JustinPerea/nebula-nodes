@@ -31,19 +31,17 @@ def settings_path() -> Path:
     each call: NEBULA_SETTINGS_PATH when it is set, with "~" expanded to the
     home folder (never a folder named "~"), else the repo's settings.json.
     Read at call time, so a test sets the variable (monkeypatch.setenv) and
-    nothing reloads this module (review 13 of PR #203, LOW-2). An empty
-    value is unset, as paper_export_path reads it, never the working folder
-    (review 14, settings-gate NIT-3)."""
+    nothing reloads this module (PR #203). An empty
+    value is unset, as paper_export_path reads it, never the working folder."""
     raw = os.environ.get("NEBULA_SETTINGS_PATH")
     return (Path(raw) if raw else _DEFAULT_SETTINGS_PATH).expanduser()
 
 
 def settings_file() -> Path:
     """settings_path resolved: the one file every reader and writer uses
-    (agent_profiles' deny rules read settings_path too; review 12 of PR
-    #203, LOW-2). A symlink loop on the way is SettingsUnreadable, as any
-    file Nebula can't read, for reads, writes and start_here alike (review
-    14, settings-gate LOW-3: resolve() raised outside every handler)."""
+    (agent_profiles' deny rules read settings_path too; PR
+    #203). A symlink loop on the way is SettingsUnreadable, as any
+    file Nebula can't read, for reads, writes and start_here alike."""
     try:
         return settings_path().resolve()
     except (RuntimeError, OSError) as exc:  # 3.12 raises RuntimeError for a loop, 3.13 OSError
@@ -54,35 +52,33 @@ class SettingsUnreadable(ValueError):
     """The settings file is there but Nebula can't read it as settings: cut
     short, hand-edited, not text, not readable for this user, or a folder. A ValueError, as json.load's own error is, so
     every reader that failed closed on it still does; the settings routes
-    answer it with the 409 (main.SETTINGS_UNREADABLE; review 12, LOW-3;
-    review 13, HIGH-1 and LOW-3)."""
+    answer it with the 409 (main.SETTINGS_UNREADABLE)."""
 
 
 class SettingsUnwritable(PermissionError):
     """Nebula can read the settings file but can't write it either way a
     save may (save_settings: atomically, or in place where atomic isn't
-    safe). ``cause`` says what stops it, for the 409's line (GM, PR #203 r28
-    item 4; r31 items 1 and 2):
+    safe). ``cause`` says what stops it, for the 409's line (design, PR #203):
 
     - "file": the file is read-only for this user (or the disk is);
     - "folder": its folder takes no new file and the file can't be written
       in place (it isn't there yet, or it is read-only too);
     - "copy_folder": Nebula's own folder takes no copy of the file for an
-      in-place write (settings_copy_folder; GM, PR #203 r36 item B6a);
+      in-place write (settings_copy_folder; design, PR #203);
     - "not_a_folder": a folder on the way to it (or to the copy folder) is a
       file, so nothing can be saved there;
     - "in_the_way": a folder is at one of the save's fixed file names (the
-      temp file beside settings.json, the copy or its temp; review 18 of PR
-      #203, settings NIT-1), so the file can't be made there.
+      temp file beside settings.json, the copy or its temp; PR
+      #203), so the file can't be made there.
     - "temp_folder": the private temp folder beside the file can't be read
-      or checked (GM, PR #203 r26 item 2);
+      or checked (design, PR #203);
     - "temp_disk": that temp folder is on a different filesystem from the
-      file, so the rename would be a copy (GM, PR #203 r26 item 2).
+      file, so the rename would be a copy (design, PR #203).
 
     ``where`` is the path the line names: the file, its folder, the folder
     that refuses the copy, or the file that is in the way. ``creates``: for
     "copy_folder" when the folder that refuses is above Nebula's state
-    folder, the state folder it can't make (GM, PR #203 r38 item 4: the line
+    folder, the state folder it can't make (design, PR #203: the line
     names both); else None. The settings routes answer it with a 409, never
     a 500."""
 
@@ -98,8 +94,7 @@ class SettingsBusy(OSError):
     """Another Nebula's save holds the settings file past the wait
     (LOCK_TIMEOUT_SECONDS): its lock, or, where the filesystem takes no
     lock, its temp file (_open_temp). Nothing was written. The settings
-    routes answer it with a 409 (main SETTINGS_BUSY; review 18 of PR #203,
-    copy-ui LOW-3 and settings LOW-1), never a 500."""
+    routes answer it with a 409 (main SETTINGS_BUSY; PR #203), never a 500."""
 
     def __init__(self, message: str, where: str | Path) -> None:
         super().__init__(errno.EAGAIN, message, str(where))
@@ -112,16 +107,15 @@ _NOT_ALLOWED_ERRNOS = frozenset({errno.EACCES, errno.EPERM, errno.EROFS})
 
 def settings_write_block() -> SettingsUnwritable | None:
     """What stops a save from writing the settings file, or None when one
-    of the ways save_settings writes can (review 15 of PR #203,
-    settings-keychain MEDIUM-1 and LOW-1). Asked before a write changes
+    of the ways save_settings writes can (PR #203). Asked before a write changes
     anything (main._saved_settings_or_409); save_settings asks again, so a
     file that turned read-only in between is still refused.
 
     - A folder on the way that is a file: "not_a_folder", naming that file.
     - Folders that aren't there yet are made (a fresh install) when the
       nearest one that is takes a new folder; else "folder", naming that
-      nearest folder: the one whose permissions the person can change (GM,
-      PR #203 r33 item 5: "~/ro", never the "~/ro/nebula" that isn't there).
+      nearest folder: the one whose permissions the person can change (design,
+      PR #203: "~/ro", never the "~/ro/nebula" that isn't there).
     - A file that is there: writable for this user is enough (in place when
       its folder takes no temp file); read-only is "file".
     - No file yet: its folder must take one ("folder")."""
@@ -158,7 +152,7 @@ _NO_FILE_ERRORS = (FileNotFoundError, NotADirectoryError)
 
 
 # No settings file yet: _read_settings_file's answer, told apart from a file
-# whose JSON is ``null`` (review 13 of PR #203, HIGH-1).
+# whose JSON is ``null`` (PR #203).
 _MISSING: Any = object()
 
 
@@ -167,7 +161,7 @@ def _read_settings_file() -> Any:
     broken symlink, a folder on the way that is a file: _NO_FILE_ERRORS). A
     file that is there and can't be read (not JSON, not text, no
     permission, a folder, a symlink loop) raises SettingsUnreadable: every
-    other OSError (review 13 of PR #203, LOW-3; review 14, HIGH-1)."""
+    other OSError (PR #203)."""
     path = settings_file()
     try:
         with open(path, "r", encoding="utf-8") as f:
@@ -184,8 +178,8 @@ def _saved_or_default(saved: Any) -> Any:
     DEFAULT_SETTINGS itself); with no file, the defaults. A file that holds
     something other than an object (``null``, a list, a string) comes back
     as it is, nothing to merge into, so every reader fails closed on it and
-    every write gets the 409, as before round 13: ``null`` is no exception
-    (review 13 of PR #203, HIGH-1)."""
+    every write gets the 409, as before: ``null`` is no exception
+    (PR #203)."""
     if saved is _MISSING:
         return copy.deepcopy(DEFAULT_SETTINGS)
     if isinstance(saved, dict):
@@ -213,7 +207,7 @@ def parse_injected_keys(raw: str) -> dict[str, str]:
     """NEBULA_INJECTED_KEYS' value as keys: a JSON object of names to keys,
     without the empty ones. Anything else (empty, not JSON, not an object)
     is no keys. Read once, at import; tests call this directly rather than
-    reloading the module (review 13 of PR #203, LOW-2)."""
+    reloading the module (PR #203)."""
     if not raw:
         return {}
     try:
@@ -280,9 +274,8 @@ def load_settings() -> dict[str, Any]:
     if not isinstance(settings, dict):
         # A file that holds something other than an object (null, [], "x"):
         # every reader fails closed on what it holds, as it is. Checked
-        # first, so no step below meets a non-object (review 14,
-        # settings-gate MEDIUM-1: the desktop's injected keys raised a
-        # TypeError on it, a 500).
+        # first, so no step below meets a non-object (the desktop's injected keys
+        # raised a TypeError on it, a 500).
         return settings
 
     # Desktop mode: injected keys replace file-based apiKeys entirely.
@@ -294,8 +287,7 @@ def load_settings() -> dict[str, Any]:
     # function): trimmed, and one that is empty once trimmed (only spaces or
     # invisible marks, already stored that way) isn't set at all, for every
     # reader alike: the run gate, the handlers, describe_node, the masked
-    # GET /api/settings the canvas reads (GM, PR #203 r17 item 1; review 8,
-    # LOW-1).
+    # GET /api/settings the canvas reads (design, PR #203).
     if isinstance(settings.get("apiKeys"), dict):
         settings["apiKeys"] = read_keys(settings["apiKeys"])
     else:
@@ -319,7 +311,7 @@ def saved_keys_readable(saved: Any) -> bool:
 def saved_keys_hold_nothing(saved: Any) -> bool:
     """Whether the saved `apiKeys` is a value that holds no key at all
     (null, [], "", false, 0): a write may replace it, as it fills a file
-    that leaves `apiKeys` out (GM, PR #203 r23; review 11, LOW-3). Content
+    that leaves `apiKeys` out (design, PR #203). Content
     Nebula can't read (a list of keys, a string, a number) is never this."""
     if not isinstance(saved, dict) or "apiKeys" not in saved:
         return False
@@ -338,24 +330,24 @@ def saved_keys_writable(saved: Any) -> bool:
 def settings_file_path() -> str:
     """The settings file this backend reads and writes, as a full path:
     NEBULA_SETTINGS_PATH when it is set, resolved (settings_file; the 409
-    lines name it; GM, PR #203 r22 item 3)."""
+    lines name it; design, PR #203)."""
     return str(settings_file())
 
 
 def settings_file_shown() -> str:
     """The settings file as the 409 lines show it, to the person and to
     agents alike: the path as configured (never what a symlink at it points
-    to, which may be a folder; review 14, settings-gate NIT-2), made
+    to, which may be a folder), made
     absolute. Under the home folder it starts "~", so it wraps less
-    ("~/.nebula/settings.json"); anywhere else it stays absolute (GM, PR #203
-    r24 item 7). Never raises: a symlink loop still gets its line."""
+    ("~/.nebula/settings.json"); anywhere else it stays absolute (design, PR #203).
+    Never raises: a symlink loop still gets its line."""
     return shown_path(Path(os.path.abspath(settings_path())))
 
 
 def shown_path(path: Path) -> str:
     """``path`` (absolute) as the 409 lines show a path: from "~" when it is
     under the home folder, as written or resolved, else as it is. The folder
-    lines name the real folder this way (GM, PR #203 r31 items 1 and 2:
+    lines name the real folder this way (design, PR #203:
     "~/.nebula")."""
     homes = _home_for_shown_paths()
     if homes is None:
@@ -383,7 +375,7 @@ def _home_for_shown_paths() -> tuple[Path, Path] | None:
     points to, is under it either way): a real, absolute folder other than
     the filesystem's root. With HOME empty, relative or "/" (a launchd or
     sidecar environment can run that way), every path would be "under
-    home", so none is (review 13 of PR #203, LOW-4)."""
+    home", so none is (PR #203)."""
     try:
         raw = Path.home()
     except (RuntimeError, KeyError):
@@ -402,7 +394,7 @@ def load_saved_settings() -> dict[str, Any]:
     node_route.key_text. What a write starts from (PUT /api/settings, a
     key's DELETE), so a save changes only what it was asked to: an entry the
     person didn't change, a padded key, an empty one or one that isn't text,
-    is written back as it was (review 9 of PR #203, keys NIT-1). Readers use
+    is written back as it was (PR #203). Readers use
     load_settings."""
     return _saved_or_default(_read_settings_file())
 
@@ -424,7 +416,7 @@ def save_settings(settings: dict[str, Any]) -> None:
     # Keychain (via Electron) and in _INJECTED_KEYS (memory).
     #
     # The one exception to "a write keeps keys it can't read as saved"
-    # (main.KEYS_UNREADABLE; review 11 of PR #203, NIT-5): in desktop mode
+    # (main.KEYS_UNREADABLE; PR #203): in desktop mode
     # every save writes {} over the file's `apiKeys`, readable or not. Kept
     # on purpose: no reader uses the file's keys there (load_settings
     # replaces them with the injected ones), so nothing Nebula runs with is
@@ -472,7 +464,7 @@ def save_settings(settings: dict[str, Any]) -> None:
         # The file changed under the save (a symlink swapped in, another
         # file put in its place): decided again, as a new save would be.
         path = settings_file()
-    # Busy, a 409, never a bare 500 (review 19 of PR #203, settings NIT-2).
+    # Busy, a 409, never a bare 500 (PR #203).
     raise SettingsBusy("the settings file kept changing during the save", path)
 
 
@@ -483,8 +475,8 @@ class _InPlaceInstead(Exception):
 
 
 class _Changed(Exception):
-    """The file isn't the one the save decided on any more (NIT-3 of review
-    16: a symlink or another file swapped in): decide again."""
+    """The file isn't the one the save decided on any more (of: a symlink or another
+    file swapped in): decide again."""
 
 
 def _write(path: Path, data: bytes, before: os.stat_result | None, *, backup: bool, locked: bool = True) -> None:
@@ -519,7 +511,7 @@ def _replace_keeps_the_file(path: Path, before: os.stat_result) -> bool:
     user or one Nebula can give the new file back to (it runs as root). Its
     mode, group, ACL and extended attributes are carried onto the new file
     (_write_atomically); one that can't be carried falls back to in place
-    (review 16 of PR #203, settings MEDIUM-1). Unknown is no."""
+    (PR #203). Unknown is no."""
     if not stat.S_ISREG(before.st_mode) or before.st_nlink != 1:
         return False
     if hasattr(os, "geteuid") and before.st_uid != os.geteuid() and os.geteuid() != 0:
@@ -586,9 +578,9 @@ _COPYFILE_XATTR = 1 << 2
 
 def _carry_metadata(path: Path, temp_fd: int) -> None:
     """Give the temp file (open as ``temp_fd``) the old file's ACL and
-    extended attributes, so the rename loses neither (review 16 of PR #203,
-    settings MEDIUM-1), through _copy_metadata, the one seam on every
-    system. Descriptors only (round 23d: a path to the temp would follow a
+    extended attributes, so the rename loses neither (PR #203), through _copy_metadata,
+    the one seam on every
+    system. Descriptors only (a path to the temp would follow a
     folder swapped for a symlink after the save opened it): the old file is
     opened without following a symlink. A copy that fails, or a system with
     no way to copy them, writes the file in place instead."""
@@ -689,14 +681,14 @@ def _write_atomically(path: Path, data: bytes, before: os.stat_result | None, *,
     the old file's owner and group, mode, ACL and extended attributes, then
     renamed over the file, and the folder synced. It is removed on any
     failure, whatever was raised, so no copy of the keys is left beside the
-    file (review 15, settings-keychain LOW-2); a folder that takes no temp
+    file; a folder that takes no temp
     file, an owner, group or metadata that can't be carried, or a rename
     that is refused, falls back to the in-place write (_InPlaceInstead).
 
     Each save writes a temp file of its own, named for it (new_temp_path_for:
     ".settings.json.nebula-tmp-<pid>-<token>" beside the file), so no save
     can be handed another's file, and a judge of a stale temp can only ever
-    move a file that is truly orphaned (round 23 of PR #203: three saves
+    move a file that is truly orphaned (PR #203: three saves
     without flock, the shared name, torn settings.json). Before the rename
     the save checks the name still points at its own open file (_is_own:
     device and inode); if not, it writes again under a new name rather than
@@ -812,14 +804,14 @@ def _remove_own(temp: str, mine: tuple[int, int], dir_fd: int | None = None) -> 
 
 
 def temp_path_for(path: Path) -> Path:
-    """The shared temp name earlier rounds wrote (".settings.json.nebula-tmp"
+    """The shared temp name earlier versions wrote (".settings.json.nebula-tmp"
     beside the file): still swept, judged and denied, and the prefix of
     every save's own name (new_temp_path_for)."""
     return path.with_name(f".{path.name}{TEMP_SUFFIX_FIXED}")
 
 
 # Every save's temp file lives in one private folder beside the file it saves
-# (round 23b of PR #203): the agents' deny lists name the folder, so a temp
+# (PR #203): the agents' deny lists name the folder, so a temp
 # made after an agent's profile is built (Codex's deny paths are exact, and
 # its profile is built before the save) is inside a denied folder.
 TEMP_FOLDER = ".settings-nebula-tmp"
@@ -834,7 +826,7 @@ def _refuse_temp_folder(folder: Path, why: str, cause: str = "temp_folder") -> S
     return SettingsUnwritable(errno.EPERM, why, folder, cause)
 
 
-# Directory file descriptors (round 23c of PR #203): the private folder is
+# Directory file descriptors (PR #203): the private folder is
 # opened once, checked with fstat on the open descriptor, and every temp file
 # is made, judged, renamed and removed through that descriptor, so a folder
 # swapped for a symlink after the check is never written to.
@@ -866,7 +858,7 @@ def _open_private_folder(parent: Path, *, make: bool, restore: bool = False) -> 
     followed. ``make``: made 0700 when it isn't there, and a chmod 0700
     tried when it is open to others. ``restore``: the sweep's own, a chmod
     0700 (fchmod on the descriptor, only of a real directory this user owns)
-    when it was opened up since, so the temps inside are swept (round 23d). A folder that
+    when it was opened up since, so the temps inside are swept. A folder that
     can't be made raises the OSError (the caller's fallbacks)."""
     if not _HAS_DIR_FD:
         return None
@@ -972,8 +964,8 @@ def is_secret_temp_name(name: str) -> bool:
 
 def _open_temp(temp: str, *, locked: bool, dir_fd: int | None = None) -> int:
     """The temp file, new and this user's only (0600), never through a
-    symlink; ``temp`` is a name in the folder open as ``dir_fd`` (round 23c
-    of PR #203: nothing is reached by path then), else a path. A file already there (review 18 of PR #203, settings LOW-1):
+    symlink; ``temp`` is a name in the folder open as ``dir_fd`` (PR #203: nothing is
+    reached by path then), else a path. A file already there (PR #203):
 
     - with the lock (``locked``), a save cut short: removed, then made again;
     - without it (a filesystem that takes no flock), another save in flight
@@ -982,7 +974,7 @@ def _open_temp(temp: str, *, locked: bool, dir_fd: int | None = None) -> int:
       (SettingsBusy), so two saves never share the one name and a rename
       never puts another save's half-written file in place. A stale one is
       a save cut short, removed only while it is still the file judged
-      stale (_remove_judged; review 19 of PR #203, settings LOW-1): a save
+      stale (_remove_judged; PR #203): a save
       that made its own temp there since keeps it, and this one waits.
 
     A folder there raises FileExistsError (the caller's 409)."""
@@ -1022,7 +1014,7 @@ CLOCK_SLACK_SECONDS = 5.0
 
 
 def _folder_now(folder: Path, dir_fd: int | None = None) -> float:
-    """Now on ``folder``'s own clock (review 19 of PR #203, settings LOW-1):
+    """Now on ``folder``'s own clock (PR #203):
     the time a file just made there is stamped with, which on a network
     mount is the server's, not this machine's. A probe under a temp file's
     name (agents can't read it; a start sweeps one a kill left), made and
@@ -1050,7 +1042,7 @@ def _folder_now(folder: Path, dir_fd: int | None = None) -> float:
 def _stale(info: os.stat_result, now: float) -> bool:
     """A temp file a save cut short left, judged on its folder's clock
     (``now``): older than STALE_TEMP_SECONDS, or ahead of it by more than
-    CLOCK_SLACK_SECONDS (review 19 of PR #203, settings LOW-2), which no
+    CLOCK_SLACK_SECONDS (PR #203), which no
     save in flight can be."""
     age = now - info.st_mtime
     return age > STALE_TEMP_SECONDS or age < -CLOCK_SLACK_SECONDS
@@ -1119,7 +1111,7 @@ def _same_temp(a: os.stat_result, b: os.stat_result) -> bool:
 
 def _remove_judged(temp: str | Path, judged: os.stat_result, dir_fd: int | None = None) -> bool:
     """Remove the temp file judged stale, only while it is still that file
-    (review 19 of PR #203, settings LOW-1): moved to a name of its own in
+    (PR #203): moved to a name of its own in
     the judging folder beside it (out of agents' reach, on the same
     filesystem so the move is a rename), checked there by device, inode, modification time and size (_same_temp),
     then removed. Another file found there (a save that made its own since)
@@ -1171,7 +1163,7 @@ def _temp_waiting() -> None:
 def _sync(fd: int) -> None:
     """Make what was written to ``fd`` survive a power cut: F_FULLFSYNC
     where the system has it (macOS: fsync only reaches the drive's cache),
-    else fsync (review 17 of PR #203, settings NIT-4)."""
+    else fsync (PR #203)."""
     if _FULLFSYNC is not None:
         try:
             _fcntl(fd, _FULLFSYNC)
@@ -1200,8 +1192,7 @@ def _sync_folder(folder: Path) -> None:
 def _carry_owner(fd: int, before: os.stat_result) -> None:
     """The temp file takes the old file's owner and group where they differ
     (a setgid folder, a chgrp-ed file; another owner only as root); one
-    Nebula can't give it writes the file in place (review 16, settings
-    LOW-2: mutant S15)."""
+    Nebula can't give it writes the file in place."""
     info = os.fstat(fd)
     uid = before.st_uid if before.st_uid != info.st_uid else -1
     gid = before.st_gid if before.st_gid != info.st_gid else -1
@@ -1243,7 +1234,7 @@ def _read_all(fd: int, size: int) -> bytes:
 def _write_in_place(path: Path, data: bytes, before: os.stat_result, *, backup: bool) -> None:
     """The file written where it is, so its names, owner, ACL and attributes
     stay. Opened without following a symlink and checked to be the file the
-    save decided on (review 16, settings NIT-3), with a verified copy of the
+    save decided on, with a verified copy of the
     old file kept in Nebula's own folder while it is written (_keep_backup),
     and written so a failure leaves the old JSON or the new (_overwrite). Not atomic:
     a crash part way through the new text can leave the file mixed on a
@@ -1310,8 +1301,8 @@ def _write_new_in_place(path: Path, data: bytes) -> None:
 
 
 def _overwrite(fd: int, data: bytes, old: bytes) -> None:
-    """Write ``data`` over ``old`` so the file parses at every step (review
-    16 of PR #203, settings MEDIUM-1 b): JSON followed by spaces still
+    """Write ``data`` over ``old`` so the file parses at every step (PR #203): JSON
+    followed by spaces still
     parses. First grow the file with spaces to the new length (a full disk
     fails here, before the old JSON changes), then write the new JSON at 0,
     padded with spaces to the old length when it is shorter, then cut the
@@ -1344,8 +1335,8 @@ def _put_back(fd: int, old: bytes) -> bool:
 # NEBULA_STATE_DIR, else ~/.nebula: the settings folder may take no new
 # file, which is why the write is in place). The copy holds the keys in
 # plain text, so that folder is on every agent deny list
-# (agent_profiles.protected_agent_dirs; review 17 of PR #203, settings
-# MEDIUM-1). The copy is marked as Nebula's and carries the path it is for,
+# (agent_profiles.protected_agent_dirs; PR #203). The copy is marked as Nebula's and carries the
+# path it is for,
 # the new text being written and a hash of both; it is 0600, synced, read
 # back to check it, and removed once the write is done. At the next start, a
 # settings.json that doesn't parse while its copy is verified is put back
@@ -1358,7 +1349,7 @@ COPY_MARKER = "settings-copy"
 COPY_VERSION = 1
 # The file a restore replaced, kept beside the copies.
 REPLACED_PREFIX = "settings-replaced-"
-# A copy round 17 kept in the state folder itself, moved into the copy
+# A copy that an earlier version kept in the state folder itself, moved into the copy
 # folder at start (sweep_stale_temp_files) and never restored: it carries
 # no marker or hash to verify.
 LEGACY_PREFIX = "legacy-"
@@ -1411,8 +1402,8 @@ def _copy_digest(path: Path, text: str, next_text: str) -> str:
 
 
 def _make_copy_folder() -> Path:
-    """The copy folder, made 0700 at every level that isn't there yet
-    (review 17, settings NIT-2), and this user's only. One Nebula isn't
+    """The copy folder, made 0700 at every level that isn't there yet, and this user's
+    only. One Nebula isn't
     allowed to make is "copy_folder", naming the folder that refuses; a file
     on the way is "not_a_folder"."""
     folder = settings_copy_folder()
@@ -1422,7 +1413,7 @@ def _make_copy_folder() -> Path:
         state = _state_dir()
         if exc.cause == "copy_folder" and exc.where != state and state not in exc.where.parents:
             # A folder above the state folder refuses: the line names both
-            # (GM, PR #203 r38 item 4; review 18, settings NIT-2).
+            # (design, PR #203).
             exc.creates = state
         raise
     info = os.lstat(folder)
@@ -1560,7 +1551,7 @@ class _NotOurs(OSError):
 def _read_ours(target: Path) -> bytes:
     """``target``'s bytes, opened without following a symlink, only when it
     is a regular file with one name, this user's, that no one else can read
-    or write (review 17, settings LOW-2); else _NotOurs."""
+    or write; else _NotOurs."""
     flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0)
     try:
         fd = os.open(target, flags)
@@ -1590,9 +1581,9 @@ class NotRestored(NamedTuple):
     settings file (``path``) and why (``why``: what settings_write_block
     found, the copy folder refusing the replaced file, or the write's own
     error). The copy is left for the next start. A file Nebula isn't
-    allowed to change keeps nothing aside (review 18 of PR #203, settings
-    LOW-2); a write that fails after the replaced file was kept aside keeps
-    it, once however many starts meet it (review 19, settings LOW-4). The
+    allowed to change keeps nothing aside (PR #203); a write that fails after the
+    replaced file was kept aside keeps
+    it, once however many starts meet it. The
     caller logs and journals it."""
 
     path: Path
@@ -1623,8 +1614,8 @@ def restore_settings_from_backup() -> Restored | NotRestored | None:
     left, with its copy, as it is, and so is a copy that isn't provably
     Nebula's or is for another path.
 
-    The whole restore holds the save's lock (review 17 of PR #203,
-    settings LOW-1): another Nebula's save never runs between the read and
+    The whole restore holds the save's lock (PR #203): another Nebula's save never runs
+    between the read and
     the write, so a restore never drops that save's copy or puts an older
     copy over its newer save. Never raises."""
     try:
@@ -1675,15 +1666,14 @@ def _restore(path: Path, locked: bool = True) -> Restored | NotRestored | None:
     old = text.encode("utf-8")
     unfinished = _cut_short(current, old, next_text.encode("utf-8"))
     # A file Nebula can't write keeps nothing aside: the copy waits for a
-    # start that can put it back (review 18 of PR #203, settings LOW-2).
+    # start that can put it back (PR #203).
     block = settings_write_block()
     if block is not None:
         return NotRestored(path, block)
     try:
         aside = _keep_aside(current)
     except OSError as exc:
-        # The copy folder takes no file (review 19 of PR #203, settings
-        # LOW-3): not put back, said like any other, naming that folder.
+        # The copy folder takes no file (PR #203): not put back, said like any other, naming that folder.
         return NotRestored(path, _copy_folder_refusal(exc))
     try:
         _write(path, old, os.lstat(path), backup=False, locked=locked)
@@ -1718,11 +1708,11 @@ def _cut_short(current: bytes, old: bytes, new: bytes) -> bool:
 
 def _keep_aside(current: bytes) -> Path:
     """The file a restore replaces, kept in the copy folder (0600, synced)
-    so nothing in it is lost (review 17, settings LOW-2), once however many
-    starts meet it (review 18, settings LOW-2): a file of Nebula's already
+    so nothing in it is lost, once however many
+    starts meet it: a file of Nebula's already
     kept there with these bytes is used. A new one is named by the time and
-    a random suffix, never by its bytes (review 19 of PR #203, settings
-    NIT-1: the name agents see in ``keptAt`` says nothing about what's in it)."""
+    a random suffix, never by its bytes (PR #203: the name agents see in ``keptAt`` says
+    nothing about what's in it)."""
     folder = _make_copy_folder()
     for kept in sorted(folder.glob(f"{REPLACED_PREFIX}*.json")):
         try:
@@ -1753,8 +1743,8 @@ def _keep_aside(current: bytes) -> Path:
 
 # -- the person's Settings notice ---------------------------------------------------------
 
-# The line Settings shows at its top until the person dismisses it (GM, PR
-# #203 r38 item 5, r40 item 6: it lasts across restarts). Kept in the copy
+# The line Settings shows at its top until the person dismisses it (design, PR #203: it lasts
+# across restarts). Kept in the copy
 # folder, out of agents' reach (agent_profiles denies it), never journaled.
 NOTICE_FILE = "settings-notice.json"
 
@@ -1814,8 +1804,8 @@ _HELD = threading.local()
 
 @contextmanager
 def _save_lock(path: Path) -> Iterator[bool]:
-    """An exclusive flock for the whole save (review 16 of PR #203, settings
-    MEDIUM-1 c): on the file when it is there, else on its folder. A save
+    """An exclusive flock for the whole save (PR #203): on the file when it is there,
+    else on its folder. A save
     that waited while another replaced the file holds a lock on the old
     file, so it locks again until its lock is on the file that is there
     now. No lock where the system has none or the file and its folder can't
@@ -1843,8 +1833,8 @@ def _holds_lock() -> bool:
 
 @contextmanager
 def settings_transaction() -> Iterator[None]:
-    """The save's lock from a settings write's read to its save (review 17
-    of PR #203, settings LOW-3): PUT /api/settings and the key DELETE read
+    """The save's lock from a settings write's read to its save (PR #203): PUT
+    /api/settings and the key DELETE read
     the file, change it and save it inside one, so two writes of different
     keys, from two Nebulas or two requests, never lose one. The code inside
     must not await: the lock is this thread's."""
@@ -1884,7 +1874,7 @@ def _locked(path: Path) -> int | None:
             return fd
         os.close(fd)
         # What is at the path changed between the open and the lock: take it
-        # again, never past the deadline (round 18: a path that never held
+        # again, never past the deadline (a path that never held
         # still spun here forever).
         if time.monotonic() > deadline:
             raise SettingsBusy("the settings file kept changing during the lock", path)
@@ -1904,7 +1894,7 @@ def _lock_target(path: Path) -> int | None:
 
 def _lock_holds(fd: int, path: Path) -> bool:
     """Whether the lock on ``fd`` is the save's: what is at ``path`` now
-    (a file, or a folder where the file should be: round 18's transaction
+    (a file, or a folder where the file should be: 's transaction
     locks before the read that refuses it), or its folder while there is no
     file."""
     info = os.fstat(fd)
@@ -1935,7 +1925,7 @@ def _lock_waiting() -> None:
 
 def _make_folders(folder: Path, cause: str = "folder") -> None:
     """Every folder on the way that isn't there yet, each this user's only
-    (0700: a fresh install's settings hold keys; review 16, settings NIT-2).
+    (0700: a fresh install's settings hold keys).
     One Nebula isn't allowed to make names the folder that refuses it, as
     ``cause`` ("copy_folder" for the copy's folder)."""
     missing: list[Path] = []
@@ -1958,11 +1948,11 @@ def _make_folders(folder: Path, cause: str = "folder") -> None:
         os.chmod(level, 0o700)
 
 
-# The seams tests patch by name, so no other call in a request is touched
-# (review 15, sockets-tests NIT-2): the rename that puts a temp file in
+# The seams tests patch by name, so no other call in a request is touched:
+# the rename that puts a temp file in
 # place, the in-place write's positioned write and cut, the temp file's
 # chown, the platform and Linux's xattr calls the metadata copy branches on
-# (review 17, tests MEDIUM-1: never os's own, which every test shares), and
+# (never os's own, which every test shares), and
 # the full sync's fcntl.
 _replace = os.replace
 _pwrite = os.pwrite
@@ -1978,11 +1968,11 @@ _FULLFSYNC = getattr(fcntl, "F_FULLFSYNC", None) if fcntl is not None else None
 
 # The fixed temp file's ending: ".settings.json.nebula-tmp" beside the
 # settings file, ".settings-backup-<hash>.json.nebula-tmp" in the copy folder
-# (temp_path_for; review 17 of PR #203, settings MEDIUM-1).
+# (temp_path_for; PR #203).
 TEMP_SUFFIX_FIXED = ".nebula-tmp"
-# Round 17's temp names (the marker, the process id, then mkstemp's 8
-# characters), swept at start where one was left (review 16, settings LOW-1:
-# the sweep removes only these, never a file the person named like one).
+# The temp names an earlier version made (the marker, the process id, then mkstemp's 8
+# characters), swept at start where one was left (the sweep removes only these, never a file the
+# person named like one).
 TEMP_PREFIX = ".settings-nebula-"
 TEMP_SUFFIX = ".tmp"
 _TEMP_NAME = re.compile(r"\.settings-nebula-(\d+)-[a-z0-9_]{8}\.tmp")
@@ -1998,14 +1988,14 @@ STALE_TEMP_SECONDS = 60.0
 def sweep_stale_temp_files(now: float | None = None) -> list[Path]:
     """Remove temp files a save left beside settings.json, in Nebula's own
     folder or in the copy folder when it was cut short (a kill, a power
-    cut): each is a full copy of the settings, keys included (review 15,
-    settings-keychain LOW-2). Run at startup, holding the save's lock
-    (review 17 of PR #203, settings MEDIUM-1): every save holds it too, so
+    cut): each is a full copy of the settings, keys included. Run at startup, holding
+    the save's lock
+    (PR #203): every save holds it too, so
     any temp file found then is left by a save that never finished. Only
     Nebula's own names (temp_path_for, _TEMP_NAME), only regular files with
-    one name that this user owns (review 16, settings LOW-1); where the
+    one name that this user owns; where the
     lock can't be held, only ones older than STALE_TEMP_SECONDS. A copy
-    round 17 kept in the state folder itself moves into the copy folder,
+    an earlier version kept in the state folder itself moves into the copy folder,
     out of agents' reach. Never raises."""
     try:
         path: Path | None = settings_file()
@@ -2033,7 +2023,7 @@ def _sweep(path: Path | None, now: float | None, *, locked: bool) -> list[Path]:
             continue
     # Each save's temp lives in a private folder (TEMP_FOLDER), swept by
     # descriptor (_sweep_private) and only for this settings file's own temp
-    # names and its copy's, never another file's (round 23c of PR #203).
+    # names and its copy's, never another file's (PR #203).
     clocks: dict[Path, float] = {}
     if path is not None:
         for parent, base in dict.fromkeys([(path.parent, path.name), (settings_copy_folder(), backup_path(path).name)]):
@@ -2090,7 +2080,7 @@ def _sweep(path: Path | None, now: float | None, *, locked: bool) -> list[Path]:
 
 def _swept_unique_name(entry: Path, path: Path | None) -> bool:
     """Whether ``entry`` is a save's own temp name (new_temp_path_for) for
-    this settings file or for its copy, and no other file's (round 23c)."""
+    this settings file or for its copy, and no other file's."""
     if path is None:
         return False
     return (unique_temp_pid(entry.name, path.name) is not None
@@ -2100,7 +2090,7 @@ def _swept_unique_name(entry: Path, path: Path | None) -> bool:
 def _sweep_private(parent: Path, base: str, now: float | None, *, locked: bool) -> list[Path]:
     """The temp files of the file called ``base`` in the private folder in
     ``parent``, listed, judged and removed through the folder's open
-    descriptor (round 23c of PR #203): the folder is only read when it is
+    descriptor (PR #203): the folder is only read when it is
     this user's own private folder, never through a symlink, and only names
     of ``base``'s own temp files are touched (a.json's sweep leaves b.json's
     in-flight temp alone). With the save's lock every one is a leftover;
@@ -2178,7 +2168,7 @@ def _sweep_judging(dir_fd: int, *, locked: bool, clock: Callable[[], float]) -> 
 
 
 def _writer_pid(name: str) -> int | None:
-    """The process id a temp name carries (a save's own, or round 17's)."""
+    """The process id a temp name carries (a save's own, or 's)."""
     match = re.fullmatch(r"\..+\.nebula-tmp-(\d+)-[0-9a-f]{16}", name) or _TEMP_NAME.fullmatch(name)
     return int(match.group(1)) if match else None
 
@@ -2501,7 +2491,7 @@ _HF_TOKEN_CHARACTERS = re.compile(r"[\x21-\x7e]+")
 
 def _key_text(key: Any) -> str:
     """The key as every surface reads it (node_route.key_text: trimmed of
-    spaces, line breaks and invisible marks; review 7 of PR #203, NIT-4)."""
+    spaces, line breaks and invisible marks; PR #203)."""
     from services import node_route
 
     return node_route.key_text(key)

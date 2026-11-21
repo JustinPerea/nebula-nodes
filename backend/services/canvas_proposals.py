@@ -149,9 +149,9 @@ class ProposalSpec:
 
 def clean_note(raw: Any, *, limit: int = MAX_NOTE, label: str = "note") -> str:
     try:
-        # A proposal's note stays one line with its spaces collapsed: GM r19's
-        # "spaces inside show as typed" is for notes and replies (PR #200 fix
-        # round 12), not this summary line.
+        # A proposal's note stays one line with its spaces collapsed: the design's
+        # "spaces inside show as typed" is for notes and replies (PR #200), not this
+        # summary line.
         return " ".join(clean_text(raw, limit=limit, label=label).split())
     except PinError as exc:
         raise ProposalError(422, exc.detail) from exc
@@ -260,7 +260,7 @@ _NAME_KEYS = ("name", "label", "title")
 
 def _node_field_error(index: int, raw: Mapping[str, Any]) -> str | None:
     """A node field parse_spec doesn't take, in one line saying where it goes
-    (E1 and E2 sent "x": 0, which was dropped without a word)."""
+    (a node sent with "x": 0 was once dropped without a word)."""
     unknown = sorted(str(key) for key in raw if key not in _NODE_KEYS)
     if not unknown:
         return None
@@ -486,10 +486,10 @@ def cost_for(
 ) -> dict[str, Any]:
     """`free` for local utility nodes, else the node's cost class
     (model_pricing.cost_class) with the provider: `paid`, `plan` for a run
-    on the person's Krea plan (GM, PR #203 r19 item 1), `mayCost` or `free`
+    on the person's Krea plan (design, PR #203), `mayCost` or `free`
     for a key-billing route. ``cost_class`` is the class the run's estimate
     gave this node (model_pricing.estimate_run ``classes``), which also
-    knows its price: a sourced $0 is `free` (r18 item 1).
+    knows its price: a sourced $0 is `free`.
 
     A cinema scene is a utility node that calls its base image model once per
     shot, so it is paid, by that model's provider. A utility node whose
@@ -503,8 +503,8 @@ def cost_for(
     route doesn't offer, ``fixes`` lists route_unavailable's one-click
     param edits ([{param, value}], value None = clear).
 
-    ``api_keys`` is required, the person's keys as set now (GM, PR #203 r15
-    item 1): who bills a route-table node, and whether a ``mayBillWithKey``
+    ``api_keys`` is required, the person's keys as set now (design, PR #203): who bills
+    a route-table node, and whether a ``mayBillWithKey``
     route is "free" or "may cost", depend on them, so no surface prices one
     without them (tests/test_cost_for_keys_ratchet.py reads every caller).
 
@@ -513,13 +513,13 @@ def cost_for(
     is paid by the provider of the route select_route picks with ``api_keys``
     and the input ports ``wired`` into it (a Krea-only input keeps the run on
     Krea): the route that actually runs, as the estimate beside it prices it
-    (GM - Design, round 15, item 3; review 14, L-I)."""
+    (design)."""
     from services import model_pricing, node_readiness, node_route
 
     if definition and node_route.has_routes(definition):
         # The params as the router reads them, with the wired inputs (as the
         # estimate beside it reads them): a wire can block the Krea plan
-        # route or unblock it (review 10 of PR #203, LOW-3).
+        # route or unblock it (PR #203).
         params = node_route.with_wired_blockers(definition, params, wired or ())
         route = node_route.select_route(definition, params, api_keys)
         if route.kind == node_route.UNSET:
@@ -532,14 +532,14 @@ def cost_for(
         routed = str(route.provider or "") or None
         # A route that is free unless the person's own key is set, and
         # then may bill their account (RouteSpec mayBillWithKey: Idol on
-        # its Space): never "paid" (GM, PR #203 r11 item 2, r12).
+        # its Space): never "paid" (design, PR #203).
         billing = model_pricing.cost_class(definition, params, api_keys)
         if billing in (model_pricing.MAY_COST, model_pricing.FREE):
             # Named by who it runs on and may bill: a Space's host (the one
-            # cost class and its account, node_route; review 8, LOW-3).
+            # cost class and its account, node_route).
             host = node_route.key_billing_account(definition, params, api_keys) or "provider"
             # Where it runs, as an id ("huggingface"): the CLI's tag for it
-            # (GM, PR #203 r24 item 1). `provider` stays the route's maker.
+            # (design, PR #203). `provider` stays the route's maker.
             runs_on = node_route.key_billing_host(definition, params, api_keys) or routed
             return {"kind": billing, "provider": routed, "label": node_route.key_billing_label(billing, host),
                     "name": str(definition.get("displayName") or definition.get("id") or ""), "account": host,
@@ -576,7 +576,7 @@ def cost_for(
 
 
 # The ghost card's tag for a run on the Krea plan, by the chip's words ("1 on
-# Krea plan"; GM, PR #203 r19 item 1): never "paid", never "billed".
+# Krea plan"; design, PR #203): never "paid", never "billed".
 PLAN_LABEL = "on Krea plan"
 
 
@@ -586,7 +586,7 @@ def _ghost_cost(node: Any, definition: Mapping[str, Any], definitions: Mapping[s
     """A ghost card's cost tag, in its cost class: the run entry's class
     when the proposal runs it (the estimate's, which knows a sourced $0 is
     free), else the class its own price gives it (model_pricing.estimate_run),
-    so the tag and the run entry never disagree (review 10 of PR #203, NIT-3).
+    so the tag and the run entry never disagree (PR #203).
     Key-billing classes are read with the keys set now, in cost_for."""
     from services import model_pricing
 
@@ -620,8 +620,8 @@ def _class_entry(cls: str, definition: Mapping[str, Any] | None, provider: str |
 
 def _paid_label(definition: Mapping[str, Any] | None, provider: str | None) -> str:
     """"paid · <provider>", or, for a run that leaves the gateway its name
-    says, the route built as the confirm dialog builds it (GM - Design, round
-    16 (b), verbatim: "Grok Imagine 2.0 via xAI"): "paid · Grok Imagine 2.0
+    says, the route built as the confirm dialog builds it (design, verbatim:
+    "Grok Imagine 2.0 via xAI"): "paid · Grok Imagine 2.0
     via xAI". node_route.name_on_route is frontend nameOnRoute's twin."""
     from services import node_route
 
@@ -637,7 +637,7 @@ def live_cost(proposal: "Proposal", definitions: Mapping[str, Mapping[str, Any]]
     """The proposal's run cost with each key-billing node's class read from
     the keys set now (node_route.key_billing through cost_for): a token
     added after the proposal makes Idol "may cost", one removed makes it
-    "free" (GM, PR #203 r15 item 2; review 7, NIT-5). Prices and paid runs
+    "free" (design, PR #203). Prices and paid runs
     are as proposed: no key-billing node is paid or priced."""
     cost = copy.deepcopy(proposal.cost)
     entries = cost.get("nodes")
@@ -670,7 +670,7 @@ def class_counts(entries: Iterable[Mapping[str, Any]]) -> tuple[int, int, list[M
     from its own `kind`. A kind this backend doesn't name (CLASS_ENTRIES)
     counts as paid, as propose_change's description tells an agent to read
     it ("paid with no listed price"), never as free: free runs are only
-    those whose kind is "free" (review 11 of PR #203, NIT-4). The spend gate
+    those whose kind is "free" (PR #203). The spend gate
     never reads a kind: it reads the one cost class (model_pricing.cost_class,
     agent_spend.may_bill_nodes), which is always one of the four."""
     rows = list(entries)
@@ -707,10 +707,10 @@ def summarize_cost(
     proposal was made."""
     # Runs that may bill the person's own account (a mayBillWithKey route
     # with their key set: Idol with an HF token), counted apart from paid
-    # (GM, PR #203 r11 item 2: "2 paid · 1 may cost"), with their names for
+    # (design, PR #203: "2 paid · 1 may cost"), with their names for
     # the bar's own clause ("Runs 2 paid models and Idol"). Runs on the
-    # person's Krea plan, counted apart from paid too (GM, PR #203 r19 item
-    # 1: "2 paid · 1 on Krea plan"). class_counts reads an unknown kind.
+    # person's Krea plan, counted apart from paid too (design, PR #203:
+    # "2 paid · 1 on Krea plan"). class_counts reads an unknown kind.
     paid, plan, may_cost, free = class_counts(entries)
     providers = sorted({str(entry["provider"]) for entry in entries if entry.get("kind") == "paid" and entry.get("provider")})
     summary_estimate = None
@@ -743,7 +743,7 @@ def summarize_cost(
     }
 
 
-# -- the plan line (GM - Design, 2026-11-01, the proposal card redesign) ------
+# -- the plan line (design, 2026-11-01, the proposal card redesign) ------
 # One line under the agent's note saying what Accept changes and costs, with
 # node names, never ids: "Changes and runs “Hero shot” · Krea 2 on your Krea
 # plan · no list price". The view carries it as `plan`, so the card, the CLI
@@ -787,9 +787,9 @@ _QUOTES = "“”\"'‘’"
 
 
 def _plan_name(name: Any) -> str | None:
-    """A node's name for the line, without quotes of its own (review 1 N1:
-    “Hero” never reads ““Hero””). Only quotes that wrap it, at both ends: an
-    apostrophe the name ends in stays ("Artists'", review 3 NIT-3). None
+    """A node's name for the line, without quotes of its own:
+    “Hero” never reads ““Hero””. Only quotes that wrap it, at both ends: an
+    apostrophe the name ends in stays ("Artists'"). None
     when it has none."""
     text = str(name).strip() if isinstance(name, str) else ""
     while len(text) >= 2 and text[0] in _QUOTES and text[-1] in _QUOTES:
@@ -804,7 +804,7 @@ def model_label(definition: Mapping[str, Any] | None, params: Mapping[str, Any] 
                 models: Mapping[tuple[str, str], Any] | None = None) -> str:
     """The model a node runs, as the card, the plan line, get_proposal, MCP
     and the CLI name it: the canvas title ("Krea 2"), or for a universal node
-    the model it is set to, by its catalog name (GM - Design, PR #216 r4-r5:
+    the model it is set to, by its catalog name (design, PR #216:
     "Claude Sonnet 4.5 on your OpenRouter key", "“Second look” · GPT-4o",
     never "OpenRouter"). ``models`` is _look_up_models' data; without it the
     pickers' cache, else the model id."""
@@ -824,11 +824,11 @@ def _and_list(words: list[str]) -> str:
 
 
 def _group_words(keys: list[str], names: Mapping[str, str | None], said: set[str]) -> list[str]:
-    """One group's nodes (GM - Design, PR #216 r3), as list items: up to
+    """One group's nodes (design, PR #216), as list items: up to
     PLAN_NAMES by name, from one more a count. Nodes are told apart by id,
     never by name: two in the group with one name read "2 “Image” nodes", and
     a name an earlier group already said, on another node, reads "another
-    “Image”" (GM r4: also after that group's count of them)."""
+    “Image”" (design: also after that group's count of them)."""
     if len(keys) > PLAN_NAMES:
         return [_plural(len(keys), "node")]
     counts: dict[str | None, int] = {}
@@ -843,7 +843,7 @@ def _group_words(keys: list[str], names: Mapping[str, str | None], said: set[str
         else:
             words.append(f"“{name}”" if count == 1 else f"{count} “{name}” nodes")
     if unnamed:
-        # Every node the view names has a name; this is the last resort (review 1 L3:
+        # Every node the view names has a name; this is the last resort:
         # one without never turns the others into a count).
         words.append(_plural(unnamed, "more node") if words else _plural(unnamed, "node"))
     return words
@@ -854,7 +854,7 @@ def _group_names(keys: list[str], names: Mapping[str, str | None], said: set[str
 
 
 def _spoke(keys: list[str], names: Mapping[str, str | None], said: set[str]) -> None:
-    """The names a group said aloud join `said` (review 2 L2): a group that
+    """The names a group said aloud join `said`: a group that
     counted its nodes ("4 nodes") said none, so a later "another" has
     nothing to point back to."""
     if len(keys) <= PLAN_NAMES:
@@ -862,8 +862,8 @@ def _spoke(keys: list[str], names: Mapping[str, str | None], said: set[str]) -> 
 
 
 def _runs_of(group: list[str], running: list[str], names: Mapping[str, str | None]) -> str:
-    """Which of a group's nodes it runs, after its verb (GM - Design, PR #216
-    r4): "both", "all 3", or, when only some run, those by name ("“A”"); "1
+    """Which of a group's nodes it runs, after its verb (design, PR #216): "both", "all
+    3", or, when only some run, those by name ("“A”"); "1
     of them" when a name doesn't tell them apart."""
     if len(running) == len(group):
         return "both" if len(group) == 2 else f"all {len(group)}"
@@ -905,8 +905,8 @@ def _runs_nothing(view: Mapping[str, Any]) -> bool:
 
 
 def plan_groups(view: Mapping[str, Any]) -> list[str]:
-    """What Accept does, one group per kind of change (GM - Design, PR #216
-    r3-r4): the nodes it adds, then the nodes it changes, each followed by
+    """What Accept does, one group per kind of change (design, PR #216): the nodes it
+    adds, then the nodes it changes, each followed by
     which of them it runs, then the other nodes it runs, then the wires a
     model change removes.
 
@@ -1020,8 +1020,8 @@ def plan_line(view: Mapping[str, Any]) -> str:
     one paid run its model and who pays ("Krea 2 on your Krea plan"), for
     more the count ("3 paid runs"), for free runs "free"; then the run
     chip's price ("~$0.03", "Up to $0.43", "$0.07 + unpriced") or "no list
-    price". The chip's "Up to" covers a paid run that may be skipped (GM -
-    Design, PR #216 r3). With no run it says nothing runs until the person
+    price". The chip's "Up to" covers a paid run that may be skipped (design, PR #216).
+    With no run it says nothing runs until the person
     chooses; a run that waits on agents' placeholders says so, as before."""
     from services import money
 
@@ -1036,14 +1036,14 @@ def plan_line(view: Mapping[str, Any]) -> str:
     if not run:
         segments.append(NOTHING_RUNS)
     elif _runs_nothing(view):
-        # Its whole run waits on agents' placeholders, which it skips (GM -
-        # Design, round 4), counting the placeholders themselves (review 4, M2).
+        # Its whole run waits on agents' placeholders, which it skips (design), counting the
+        # placeholders themselves.
         count = int(pending.get("placeholders") or pending.get("count") or 0)
         agents = [str(agent) for agent in pending.get("agents") or []]
         who = f"{in_sentence(agents[0])} finishes" if len(agents) == 1 and agents[0] else "agents finish"
         segments.append(f"runs nothing until {who} {_plural(count, 'node')}")
     else:
-        # Runs by cost class (GM, PR #203 r11 item 2, r19 item 1): paid ones,
+        # Runs by cost class (design, PR #203): paid ones,
         # ones on the person's Krea plan, and ones that may bill their own
         # account (Idol with a Hugging Face token) are each said, never
         # "free". A node's own name leads a may-cost clause only beside other
@@ -1099,7 +1099,7 @@ READY_NODES_MCP = agent_words.WORDS[agent_words.MCP]["find"]
 READY_NODES_CLI = agent_words.WORDS[agent_words.CLI]["find"]
 
 # How each surface's agent withdraws a proposal ({id} is the proposal's id).
-# A proposal that can't run here is kept with its warning (Justin, Q109: "Keep
+# A proposal that can't run here is kept with its warning (Justin: "Keep
 # it with the warning, and tell the agent to withdraw it before proposing
 # something else"), so the warning and the reminder name the exact call.
 WITHDRAW_HTTP = "DELETE /api/canvas/proposals/{id}"
@@ -1283,7 +1283,7 @@ class Proposal:
     id_map: dict[str, str] | None = None
     run_node_ids: list[str] | None = None
     closed_at: float | None = None
-    # Its Update on the project's list ({id, projectId}; Justin's Q112 a), or
+    # Its Update on the project's list ({id, projectId}; Justin's), or
     # None when no project was open. main posts it and settles it.
     update: dict[str, str] | None = None
     # The node deletes that closed it, or deleted another node it needs while
@@ -1297,7 +1297,7 @@ class Proposal:
     dropped_by: dict[str, str] = field(default_factory=dict)
     # The canvas revision it was made on (main._canvas_revision). Accept is
     # refused once it moved: a clear or an import landed since, so node ids
-    # may name other nodes (round 21 of PR #195, review 20 L-3).
+    # may name other nodes (PR #195).
     canvas_revision: str | None = None
     dropped_reason: str | None = None
     # Which node it read under each id (main.node_removals.lineage, set when
@@ -1311,14 +1311,14 @@ class Proposal:
     # {sourceName, targetName, targetLabel} (main writes them when it is made).
     wires: list[dict[str, str]] = field(default_factory=list)
     # The wires Accept removes: a model change drops the ones on ports the new
-    # model doesn't have, as the picker does for the person (GM - Design,
-    # PR #216 r3). Each is {source, sourceHandle, target, targetHandle,
+    # model doesn't have, as the picker does for the person (design, PR #216).
+    # Each is {source, sourceHandle, target, targetHandle,
     # sourceName, targetName, targetLabel}; Accept refuses when the live
     # graph would drop any others.
     removed_edges: list[dict[str, str]] = field(default_factory=list)
     # The proposing request's raw presence session (agent_presence.
     # presence_session; None for the agent's plain cursor), so the person's
-    # tabs show "Accepted" on that session's cursor (PR #211 r4). Person
+    # tabs show "Accepted" on that session's cursor (PR #211). Person
     # side only: never in view(), brief(), REST, the journal or logs.
     presence_session: str | None = field(default=None, repr=False)
 
@@ -1329,7 +1329,7 @@ class Proposal:
     @property
     def touched(self) -> set[str]:
         """The existing nodes the card names: those it references, and the far
-        end of each connection Accept removes (review 3 LOW-2: a rename of the
+        end of each connection Accept removes (a rename of the
         photo connected to a swapped node follows on the card too)."""
         ends = {str(edge.get(key)) for edge in self.removed_edges for key in ("source", "target") if edge.get(key)}
         return set(self.existing) | ends
@@ -1445,7 +1445,7 @@ class ProposalBook:
 
     def open_list(self) -> list[Proposal]:
         # A snapshot first: the asset Update's share fields are read on a notes
-        # worker thread while the loop may add or close an ask (PR #204 round 3).
+        # worker thread while the loop may add or close an ask (PR #204).
         return [p for p in list(self._items.values()) if p.is_open]
 
     def open_unrunnable(self, proposal: Proposal) -> list[Proposal]:
@@ -1588,11 +1588,11 @@ class ProposalBook:
              live: Mapping[str, str] | None = None) -> dict[str, Any]:
         """What agents and the canvas read. ``api_keys``: the person's keys as
         set now. The ghost cards' costs and the run's key-billing classes are
-        read with them (GM, PR #203 r15 items 1 and 2), so a token added or
+        read with them (design, PR #203), so a token added or
         removed after the proposal changes "free" and "may cost" in every
         listing. ``live`` maps the existing nodes it touches to their names on
-        the canvas now: names follow a rename while the proposal is open (GM -
-        Design, PR #216 r4 4: ids are what's applied; the agent's note stays
+        the canvas now: names follow a rename while the proposal is open (design, PR
+        #216: ids are what's applied; the agent's note stays
         as written)."""
         from services import node_route
 
@@ -1616,7 +1616,7 @@ class ProposalBook:
                 "ref": node.ref,
                 "definitionId": node.definition_id,
                 # The name the proposal gives it (accepting applies it), else
-                # its canvas title (review 18 M-D).
+                # its canvas title.
                 "name": names.get(node.ref) or node_route.node_name(definition, None, node.definition_id),
                 **({"model": model} if names.get(node.ref) else {}),
                 "category": str(definition.get("category") or ""),
@@ -1638,7 +1638,7 @@ class ProposalBook:
                 # The card's words: the node's name and model, never its id.
                 **({"title": row["title"]} if row.get("title") else {}),
                 **({"model": row["model"]} if row.get("model") else {}),
-                # The same model set again, its ports read again (GM - Design, PR #216 r4 8).
+                # The same model set again, its ports read again (design, PR #216).
                 **({"inputsUpdated": dict(row["inputsUpdated"])} if row.get("inputsUpdated") else {}),
                 "changes": {
                     key: {
@@ -1649,12 +1649,12 @@ class ProposalBook:
                 },
             })
         # Each node it touches by its canvas name, by id or ref: the plan line's
-        # and the panel's words (review 1 L3: a run-only node keeps its name).
+        # and the panel's words (a run-only node keeps its name).
         node_names: dict[str, str] = {
             node_id: str(existing_row(node_id)["title"]) for node_id, row in sorted(proposal.existing.items())
             if isinstance(row, Mapping) and existing_row(node_id).get("title")}
         node_names.update({node["ref"]: node["name"] for node in nodes if node.get("name")})
-        # The far end of a connection Accept removes, by its name now (review 3 LOW-2).
+        # The far end of a connection Accept removes, by its name now.
         node_names.update({node_id: name for node_id, name in sorted(live.items()) if node_id not in node_names})
         new_ports = {node["ref"]: {port["id"]: port["label"] for port in node["ports"]["inputs"]} for node in nodes}
         edges: list[dict[str, Any]] = []
@@ -1662,7 +1662,7 @@ class ProposalBook:
             words = proposal.wires[index] if index < len(proposal.wires) else {}
             edges.append({
                 **edge.as_dict(),
-                # “Prompt” → “Second take” · Prompt (GM - Design, PR #216 r3).
+                # “Prompt” → “Second take” · Prompt (design, PR #216).
                 "sourceName": live.get(edge.source) or words.get("sourceName") or node_names.get(edge.source) or edge.source,
                 "targetName": live.get(edge.target) or words.get("targetName") or node_names.get(edge.target) or edge.target,
                 "targetLabel": (words.get("targetLabel") or new_ports.get(edge.target, {}).get(edge.target_handle)
@@ -1693,7 +1693,7 @@ class ProposalBook:
             "update": dict(proposal.update) if proposal.update else None,
             **({"wait": copy.deepcopy(proposal.wait)} if proposal.wait else {}),
         }
-        # One count for the card, the Update and MCP (GM - Design, PR #216 r3).
+        # One count for the card, the Update and MCP (design, PR #216).
         view["changeCount"] = change_count(spec, removed=len(proposal.removed_edges))
         view["plan"] = plan_line(view)
         return view
@@ -1782,7 +1782,7 @@ def _ports_for(ref: str, definition: Mapping[str, Any], edges: Iterable[Proposed
     }
 
 
-# -- the Update each proposal posts (Justin's Q112 a, 2026-10-21) --------------
+# -- the Update each proposal posts (Justin's, 2026-10-21) --------------
 #
 # "a) Yes, every one: "Claude Code proposes 3 changes on the canvas", with
 # Review taking you to the canvas and its bar. It settles like the others
@@ -1790,8 +1790,8 @@ def _ports_for(ref: str, definition: Mapping[str, Any], edges: Iterable[Proposed
 # the project's Updates when the proposal opens and settles it when it ends.
 
 def change_count(spec: ProposalSpec, *, removed: int = 0) -> int:
-    """What the Update, the card and MCP count as a change (GM - Design, PR
-    #216 r2-r3: one unit, the operation): each new node, each new wire, each
+    """What the Update, the card and MCP count as a change (design, PR
+    #216: one unit, the operation): each new node, each new wire, each
     existing node whose params change and each wire Accept removes (the
     panel's groups and connection lines). A run changes nothing on the
     canvas, and a name belongs to its new node."""
@@ -1801,7 +1801,7 @@ def change_count(spec: ProposalSpec, *, removed: int = 0) -> int:
 def update_text(proposal: Proposal) -> str:
     """The Update's line, from a fixed template: never the agent's note
     (that is the bar's), as an asset proposal's never is. A run the daily
-    total holds says so (GM - Design, 2026-10-31): "Wants to run
+    total holds says so (design, 2026-10-31): "Wants to run
     “Writer” and “Editor”. This would pass the $5 daily total, which has
     $0.20 left.", its nodes by the shared name-list helper. The line never
     starts with the agent's name (design): the Update's header has it."""

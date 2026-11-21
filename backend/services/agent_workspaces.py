@@ -192,13 +192,13 @@ class AgentWorkspaceContext:
                     path = scope.get("path") or ""
                     if path == channel_listeners.CHANNEL_PATH or path.startswith(person_thread.AGENT_THREAD_PREFIX):
                         # A channel listener's token (registering, its inbox,
-                        # accepted and held): GM r81's line, with its code.
+                        # accepted and held): the design's line, with its code.
                         await JSONResponse({"detail": channel_listeners.BAD_TOKEN_LINE}, status_code=401,
                                            headers={"X-Nebula-Code": channel_listeners.BAD_TOKEN_CODE})(
                             scope, receive, send)
                         return
                     if path == person_thread.REPLIES_PATH:
-                        # A reply's (J1): what to do, with its code.
+                        # A reply's: what to do, with its code.
                         await JSONResponse({"detail": person_thread.REPLY_BAD_TOKEN_LINE}, status_code=401,
                                            headers={"X-Nebula-Code": person_thread.REPLY_BAD_TOKEN_CODE})(
                             scope, receive, send)

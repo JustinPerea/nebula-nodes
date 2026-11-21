@@ -86,8 +86,8 @@ def _load(path: Path) -> dict[str, Any]:
     try:
         data = json.loads(path.read_text(encoding="utf-8") or "{}")
     except ValueError as exc:
-        # GM r51 Q6: the parser's words on their own line, after the sentence the person acts on.
-        # GM r60 1: no comma splice.
+        # Design: the parser's words on their own line, after the sentence the person acts on.
+        # Design: no comma splice.
         raise MergeError(f"{path} isn’t valid JSON. Fix it by hand. Nebula won’t overwrite it.\n"
                          f"The parser said {exc}.") from exc
     if not isinstance(data, dict):
@@ -203,7 +203,7 @@ def _token(args: Any) -> tuple[str | None, str | None]:
     if not sys.stdin.isatty():
         line = sys.stdin.readline().strip()
         return line or None, None
-    # GM r59: the prompt ends in a space, not a colon.
+    # Design: the prompt ends in a space, not a colon.
     prompt = "Paste the token from Settings > Connect your agent. It stays hidden as you paste. "
     return getpass.getpass(prompt).strip() or None, None
 
@@ -247,7 +247,7 @@ def _limit(payload: dict[str, Any] | None) -> float | None:
 
 
 def _print_setup(setup: dict[str, Any]) -> None:
-    # Round 18p (GM r60): no colon introduces a path or a command, so the label and the place are
+    # Design: no colon introduces a path or a command, so the label and the place are
     # two comment lines over the snippet.
     print(f"# {setup['label']}")
     print(f"# {setup['where']}")
@@ -336,7 +336,7 @@ def _entry_token(entry: Any) -> str | None:
 def _backup_note(backup: Path | None, redacted: str | None) -> str:
     if backup is None:
         return ""
-    # GM r60 9: no colon before the path.
+    # Design: no colon before the path.
     note = f" Nebula saved a backup at {backup}."
     return note + " The old Nebula token is blanked out in it." if redacted else note
 
@@ -362,10 +362,10 @@ CLAUDE_DEV_CHANNELS_TITLE = "WARNING: Loading development channels"
 CLAUDE_DEV_CHANNELS_CONFIRM = "I am using this for local development"
 
 
-# Round 5 (D2): each launch gives the session its own id, evaluated by the
+# Each launch gives the session its own id, evaluated by the
 # shell every time the command runs (never a value printed once), shared by
 # the listener (the MCP server) and Claude's own shell (the `nebula` CLI):
-# one session, one cursor, one listener. POSIX tools only (review 4: uuidgen
+# one session, one cursor, one listener. POSIX tools only (uuidgen
 # isn't on every Linux, and without it every launch was the bare "cc-"):
 # the shell's clock and its own process id, so two terminals, or two
 # launches from one, never share a session (macOS, Linux and WSL; Windows
@@ -382,10 +382,10 @@ def launch_command(path: Path, token_file: str | None = None) -> str:
     and runs are Claude's from the calls it serves). With a token file, the
     command sets NEBULA_APP_TOKEN_FILE to its path (never the token) for the
     session, so the `nebula` CLI in Claude's own shell reads the same token
-    as the listener (J2, Justin 2026-11-04: `nebula reply` then answers the
+    as the listener (Justin 2026-11-04: `nebula reply` then answers the
     person's message as the session that took it). It always sets
     NEBULA_AGENT_SESSION to a new id at each launch (SESSION_ASSIGNMENT), so
-    that shell is the listener's own session too (round 5, D2)."""
+    that shell is the listener's own session too."""
     command = (f"claude --mcp-config {shlex.quote(str(path))} --dangerously-load-development-channels "
                f'server:{LISTEN_NAME} --disallowedTools "mcp__nebula__*"')
     command = f"{SESSION_ASSIGNMENT} {command}"
@@ -465,7 +465,7 @@ def run_connect_channel(args: Any, *, home: Path | None = None, backend_dir: Pat
                 token, token_file = _read_app_token_file(again), again
             except TokenSourceError as exc:
                 # Revoked since (Nebula deleted the file): the saved nebula
-                # server may name the new one (review 2, parity LOW-2).
+                # server may name the new one.
                 stale = exc
         saved = saved_claude_code_token_file(home) if token is None and not print_only else None
         if saved and saved != again:
@@ -569,7 +569,7 @@ def run_connect(args: Any, *, home: Path | None = None, ask: Callable[[str], str
         print(f"error: {exc}", file=sys.stderr)
         return 1
     if token is None and not print_only:
-        # GM r60 11: no colon and no serial comma.
+        # Design: no colon and no serial comma.
         picks = [f"Pick {client.label}"] + ([f"name it {args.name}"] if args.name else []) \
             + ([f"set a daily limit of ${format(args.daily_usd, 'g')}"] if args.daily_usd else [])
         pick = picks[0] if len(picks) == 1 else ", ".join(picks[:-1]) + " and " + picks[-1]
@@ -596,7 +596,7 @@ def run_connect(args: Any, *, home: Path | None = None, ask: Callable[[str], str
         print(f"warning: couldn’t reach Nebula at {where} to check the token.", file=sys.stderr)
     app_name = (status or {}).get("agent") or args.name or client.label
     if status and args.name and args.name != app_name:
-        # GM r60 12: names the person reads in curly quotes, never repr.
+        # Design: names the person reads in curly quotes, never repr.
         print(f"note: this token belongs to “{app_name}”, not “{args.name}”. The canvas will show “{app_name}”.",
               file=sys.stderr)
     daily = _limit(status) if status else args.daily_usd
@@ -752,7 +752,7 @@ def run_disconnect(args: Any, *, home: Path | None = None, ask: Callable[[str], 
         print(revoke)
         return 0
     if argv:
-        # GM r59/r60 19: a sentence, then the command on the next line.
+        # Design: a sentence, then the command on the next line.
         print("Stop the OpenClaw Gateway, then run this command." if client.id == "openclaw" else "Run this command.")
         print(" ".join(argv))
     else:

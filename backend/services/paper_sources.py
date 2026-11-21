@@ -128,7 +128,7 @@ class PaperSources:
             return {**result, "changed": changed and not result.get("superseded", False)}
         except (PaperError, OSError, ValueError, Image.DecompressionBombError) as exc:
             error = exc if isinstance(exc, PaperError) else PaperError("Paper export could not be validated; last good snapshot retained")
-            # lastError for agents, word for word; lastErrorPerson for the card (round 3e).
+            # lastError for agents, word for word; lastErrorPerson for the card.
             record.update(state=error.state, lastError=str(error), lastErrorPerson=paper_person_line(error))
             retained = self._commit(record)
             if retained.get("superseded"):

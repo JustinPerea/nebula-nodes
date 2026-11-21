@@ -37,7 +37,7 @@ CLI_OFFLINE_NOTE = offline_read_only("run `nebula graph`")
 
 def connect_failure(base_url: str, exc: NebulaAPIError) -> str:
     """The CLI's line for a connect error; for a Nebula it never reached, plus
-    what that means for the person's canvas (round 14 of PR #114)."""
+    what that means for the person's canvas (PR #114)."""
     message = f"cannot connect to Nebula backend at {base_url} — is the server running?"
     return f"{message} {CLI_OFFLINE_NOTE}" if never_reached(exc) else message
 
@@ -63,11 +63,11 @@ class NebulaClient:
         agent_name = os.environ.get("NEBULA_AGENT_NAME")
         if agent_name:
             headers.setdefault("X-Nebula-Agent", agent_name)
-        # One agent session's scene reads are its own (fix round 9, M-2):
+        # One agent session's scene reads are its own:
         # set NEBULA_AGENT_SESSION when several sessions share a name.
         # Sent as given, valid or not: the scene-read keys stay exactly as
-        # before. For the cursor, a value the backend ignores counts as unset
-        # (review 2, NIT-1), so under Claude Code the session's own cursor
+        # before. For the cursor, a value the backend ignores counts as unset,
+        # so under Claude Code the session's own cursor
         # still applies through the cursor-only header.
         session = os.environ.get("NEBULA_AGENT_SESSION")
         if session:
@@ -97,13 +97,13 @@ class NebulaClient:
             payload = exc.payload if isinstance(exc.payload, dict) else {}
             if payload.get("code") in AGENT_REFUSAL_CODES:
                 # The canvas waits to be saved as a project and the list is at
-                # its limit (review 5 of PR #199, M-3), it is too big to keep
-                # aside (review 7, L-3), or the person's tab keeps edits after
-                # a restore (GM r16): the code, for scripts.
+                # its limit (PR #199), it is too big to keep
+                # aside, or the person's tab keeps edits after
+                # a restore: the code, for scripts.
                 message = f"{message} ({payload['code']})"
             elif exc.status == 413 and payload.get("limit") in ("projects", "storage"):
                 # The project list's limit, whole, as MCP's new_project says it
-                # (mcp_server._limit_said_whole; review 13 of PR #199, LOW-3):
+                # (mcp_server._limit_said_whole; PR #199):
                 # which limit and how many projects it holds.
                 fields = {key: payload[key] for key in ("limit", "projectLimit", "projectCount", "deletes", "scope", "code") if key in payload}
                 message = f"{message} (413, {json.dumps(fields)})"
@@ -332,7 +332,7 @@ class NebulaClient:
         headers = {"X-Nebula-Agent": agent_name} if agent_name else None
         return self._request("DELETE", f"/api/canvas/questions/{quote(set_id, safe='')}", headers=headers)
 
-    # -- the Agents panel (Q125 item 2) --
+    # -- the Agents panel --
     def set_status(self, body: dict[str, Any], agent_name: str | None = None) -> dict[str, Any]:
         """POST your status line ({text, nodeId?}; empty text clears it)."""
         headers = {"X-Nebula-Agent": agent_name} if agent_name else None

@@ -87,8 +87,8 @@ def _held_node(hold: dict[str, Any], open_id: Any) -> str:
 
 
 def open_hold_note(hold: dict[str, Any], open_id: Any = None) -> str:
-    """The agents' sentence for GET /api/projects ``openHold`` (PR #199
-    round 22, review 20 agents-docs LOW-5): which state holds, which node
+    """The agents' sentence for GET /api/projects ``openHold`` (PR #199): which state
+    holds, which node
     and project, and what clears it, built from the hold's fields.
     ``open_id``: the listing's activeProjectId."""
     state = hold.get("state")
@@ -147,14 +147,14 @@ def list_projects(api: NebulaAPI, *, headers: dict[str, str] | None = None) -> d
         reply["catalogRestore"] = listing["catalogRestore"]
     # The live canvas isn't a project and couldn't be filed as its own: the
     # list is at a limit, so opening or making a project is refused until
-    # the person frees room (PR #199, review 2 L4).
+    # the person frees room (PR #199).
     # With its `note` (what frees room for which limit) and `projectLimit`.
     if isinstance(listing.get("canvasNotFiled"), dict):
         reply["canvasNotFiled"] = listing["canvasNotFiled"]
     # A waiting canvas was saved as its own project (the person sees a toast).
     if isinstance(listing.get("canvasSaved"), dict):
         reply["canvasSaved"] = listing["canvasSaved"]
-    # A held canvas couldn't be read or saved and may be lost (L-1).
+    # A held canvas couldn't be read or saved and may be lost.
     if isinstance(listing.get("canvasHeldUnreadable"), dict):
         reply["canvasHeldUnreadable"] = listing["canvasHeldUnreadable"]
     # The list's project limit (a create past it is refused; a restore from
@@ -200,7 +200,7 @@ def get_project(api: NebulaAPI, project_id: str, *, headers: dict[str, str] | No
 
 
 def project_size(api: NebulaAPI, project_id: str = "current", *, headers: dict[str, str] | None = None) -> dict[str, Any]:
-    """GET /api/projects/{id}/size (Q118): the project's size as a save
+    """GET /api/projects/{id}/size: the project's size as a save
     measures it, the save limit, whether the person's canvas has paused
     saving it, and what is large, largest first, with node ids. Read-only."""
     target = project_ref(api, project_id, headers=headers)

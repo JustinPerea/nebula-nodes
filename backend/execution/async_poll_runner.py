@@ -128,8 +128,8 @@ async def poll_until_terminal(
                 error_msg = poll_data.get("error", poll_data.get("failure", f"Job failed with status: {status}"))
                 raise as_job_failure(RuntimeError(f"Async job failed: {error_msg}"))
 
-        # The provider accepted the job and may still finish and bill it (GM,
-        # error copy round 3d); a config that names no provider keeps the
+        # The provider accepted the job and may still finish and bill it (design); a config that
+        # names no provider keeps the
         # classifier's timeout line.
         if config.provider:
             raise with_person_line(RuntimeError(

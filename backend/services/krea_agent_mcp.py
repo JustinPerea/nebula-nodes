@@ -42,9 +42,9 @@ NEBULA_MCP_TOOLS = (
     "start_here", "get_selected_nodes", "look_at_canvas", "resolve_pin", "post_note", "list_notes", "point_at",
     "wait_for_canvas_change",
     "propose_change", "get_proposal", "withdraw_proposal",
-    # Questions for the person (Q125 item 1); only the person answers, in Nebula.
+    # Questions for the person; only the person answers, in Nebula.
     "ask_person", "get_answers", "withdraw_questions",
-    # The Agents panel (Q125 item 2): your status line, and who else is working.
+    # The Agents panel: your status line, and who else is working.
     "set_status", "list_agents",
     "find_nodes", "describe_node", "edit_canvas", "remove_from_canvas", "undo_canvas_edit", "upload_file",
     "run_nodes", "get_run", "cancel_run", "view_output", "get_spend_limits",
@@ -54,17 +54,17 @@ NEBULA_MCP_TOOLS = (
     "moodboard_list", "moodboard_get", "moodboard_create", "moodboard_add", "moodboard_update",
     "moodboard_edit", "moodboard_analyze", "moodboard_delete", "moodboard_move", "character_move", "character_list", "character_get",
     "style_list", "style_get", "style_create", "style_update", "style_delete",
-    # Outside the graph (U16): project covers and asset proposals.
+    # Outside the graph: project covers and asset proposals.
     "list_project_covers", "set_project_cover", "propose_asset_change",
-    # Commons reads that needed raw HTTP (Q63 b, U13); curation goes through propose_asset_change.
+    # Commons reads that needed raw HTTP; curation goes through propose_asset_change.
     "commons_collections", "commons_status", "commons_borrowings", "commons_fidelity", "commons_concentration",
-    # MCP parity U10 and U14 (2026-10-20): universal-node catalogs, Krea discovery.
+    # MCP parity (2026-10-20): universal-node catalogs, Krea discovery.
     "model_catalog", "model_schema", "krea_discovery_tools", "krea_discover",
-    # Projects without opening them, settings and providers (U3, U6).
+    # Projects without opening them, settings and providers.
     "rename_project", "get_project", "get_settings", "provider_status",
-    # A project's size and what takes it, read-only (Q118).
+    # A project's size and what takes it, read-only.
     "project_size",
-    # A graph file or bundle opened as Load graph does (Q123 a).
+    # A graph file or bundle opened as Load graph does.
     "load_graph_file",
     # Whether the person's canvas can reach this session through the Nebula channel.
     "channel_status",

@@ -46,13 +46,13 @@ class PortContractIssue:
     # "retyped": the wire was valid under the port's type before RETYPED_PORTS
     # changed it. A saved project keeps such an edge; a run refuses it.
     kind: str = ""
-    # The person's line (error copy round 3e, ValidationErrorDetail.person):
+    # The person's line (ValidationErrorDetail.person):
     # the input by its label, no node, edge or handle ids. None for states
     # only an agent or a damaged saved graph reaches (a duplicate id, a wire
     # to a node that isn't there, an unknown node type).
     person: str | None = None
     # Which of the shared kinds (DROPPED_CONNECTION_KINDS) the issue is, for
-    # a connection Save as a project leaves out (PR #199 round 17): missing
+    # a connection Save as a project leaves out (PR #199): missing
     # (a node absent), port (a port absent, or a node whose definition is
     # gone), type, limit, duplicate. "" for an id problem, which recover
     # refuses before this check.
@@ -85,7 +85,7 @@ PORT_TYPE_HINTS: dict[tuple[str, str], str] = {
         "Krea 2's Moodboard input takes a Nebula moodboard or the Krea Moodboard node's Moodboard output; "
         "put a Krea moodboard id in the node's Moodboard ID setting instead."),
 }
-# The same, for the card (error copy round 3e): it replaces the general
+# The same, for the card: it replaces the general
 # wrong-kind line.
 PORT_TYPE_PERSON_HINTS: dict[tuple[str, str], str] = {
     ("krea-2-generate", "moodboard"): (
@@ -93,21 +93,21 @@ PORT_TYPE_PERSON_HINTS: dict[tuple[str, str], str] = {
         "remove the connection."),
 }
 
-# The card's lines for a wire the run can't use (error copy round 3e).
+# The card's lines for a wire the run can't use.
 STALE_INPUT_LINE = "A connection into this node no longer matches its inputs. Remove it, then connect it again."
 STALE_OUTPUT_LINE = "A connection from this node no longer matches its outputs. Remove it, then connect it again."
 
 
 def _input_name(port: Mapping[str, Any] | None, port_id: str) -> str:
     """The input's label exactly as the node shows it, for a line that names it
-    in quotes (error copy round 3g, GM: "anything a person reads as a label on
+    in quotes (design: "anything a person reads as a label on
     the node goes in quotes, field or port"). An unlabeled port reads "Input"."""
     return str((port or {}).get("label") or "").strip() or "Input"
 
 
 def _wrong_kind_line(port: Mapping[str, Any] | None, port_id: str) -> str:
-    # GM's example, round 3g: "The wire into “Prompt” brings something it can't take."
-    # Connection, never wire (GM - Design, 2026-10-25).
+    # The design's example: "The wire into “Prompt” brings something it can't take."
+    # Connection, never wire (design, 2026-10-25).
     return (f"The connection into “{_input_name(port, port_id)}” brings something it can't take. "
             "Remove that connection, then connect a matching output.")
 
@@ -124,8 +124,7 @@ _REPLICATE_PARAMS_HINT = (". The model's other inputs are params of the same nam
                           "set them with params instead of a connection")
 
 
-# The rule the tab shares (PR #199 round 17, review 15 kept-wires-ui LOW-3,
-# GM r23 2): data/port_rules.json, the same bytes as the frontend's
+# The rule the tab shares (PR #199, design): data/port_rules.json, the same bytes as the frontend's
 # src/lib/portRules.json (scripts/generate-port-rules.py writes both; a test
 # on each side pins them equal), so the tab's checks and this route can't
 # differ. The only table: nothing here lists types or pairs again.
@@ -228,7 +227,7 @@ def input_takes_one(
     params: Mapping[str, Any] | None,
     definitions: Mapping[str, Mapping[str, Any]],
 ) -> bool:
-    """Whether this input takes a single connection (fix round 10, N-1: an
+    """Whether this input takes a single connection (an
     ``onlyIfFree`` connect is refused only there; an input that takes several
     is held to its own maxConnections, as any connect is)."""
     port = _declared_port(definition_id, port_id, port_key="inputPorts", definitions=definitions, params=params).definition

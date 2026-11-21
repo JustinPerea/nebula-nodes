@@ -1,4 +1,4 @@
-"""A project's size, the one way Nebula measures it (Q118).
+"""A project's size, the one way Nebula measures it.
 
 "Project size" is exactly the bytes the save check counts
 (main._stage_project_snapshot): the snapshot as ``json.dumps(snapshot,
@@ -125,7 +125,7 @@ def megabytes(size: int, limit: int) -> str:
 def listed_count(rows: list[dict[str, Any]]) -> int:
     """How many of the rows (largest first) are listed: those of 0.1 MiB and
     up, at most TOP_ROWS; the rest go in "smaller" (frontend lib/projectSize.ts
-    listedRowCount; GM - Design, #182: "Rows under 0.1 MB: don't show them.")."""
+    listedRowCount; design, PR #182: "Rows under 0.1 MB: don't show them.")."""
     count = 0
     while count < len(rows) and count < TOP_ROWS and rows[count]["bytes"] * 10 >= MIB:
         count += 1
@@ -146,7 +146,7 @@ def over_by(size: int, limit: int) -> str:
 
 
 def limit_text(limit: int) -> str:
-    """The limit as GM writes it: "16 MB"."""
+    """The limit as the design writes it: "16 MB"."""
     whole = limit / MIB
     return f"{whole:g} MB" if whole >= 1 else f"{limit:,} bytes"
 
@@ -159,7 +159,7 @@ _CONTROL = re.compile(r"[\x00-\x1f]")
 
 def project_name_for_file(file_name: str | None) -> str:
     """The canvas's projectNameForFile (frontend/src/lib/projectSize.ts): the
-    name a graph file over the save limit opens as (Q120), so an agent's load
+    name a graph file over the save limit opens as, so an agent's load
     names the new project as the person's Load graph would. The file's name
     without .nebula.zip, .nebula, .json or .zip, control characters as
     spaces, at most 120 code points, or "Untitled project" when nothing is

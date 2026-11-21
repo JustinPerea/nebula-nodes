@@ -82,7 +82,7 @@ log_safe = refusal_copy.log_safe
 
 
 def log_refusal(message: str, *args: Any) -> None:
-    """Where the specific text the person didn't read goes (GM: "Log
+    """Where the specific text the person didn't read goes (design: "Log
     str(exc)"). At WARNING: the backend configures no logging, so this
     logger inherits the root's WARNING and an INFO line would be dropped."""
     logger.warning(message, *(log_safe(str(arg)) for arg in args))
@@ -93,7 +93,7 @@ def _log_commons(route: str | None, specific: str) -> None:
 
 
 def refuse(actor: actors_mod.Actor | None, status: int, specific: str, person: str, route: str) -> HTTPException:
-    """A refusal said twice (GM - Design, error-copy round 2: "People get the
+    """A refusal said twice (design: "People get the
     written line and agents keep the specific detail"), chosen by the one
     shared helper (services/refusal_copy.py) from the actor: an agent gets the
     specific text it gets today, to fix its call; the person gets `person`,
@@ -103,12 +103,12 @@ def refuse(actor: actors_mod.Actor | None, status: int, specific: str, person: s
 
 
 def gone(actor: actors_mod.Actor | None, specific: str, thing: str, things: str, route: str) -> HTTPException:
-    """A 404 (GM, error-copy round 3): "That {thing} isn't there anymore.
+    """A 404 (design): "That {thing} isn't there anymore.
     Reload to get the latest {things}." for the person; agents keep `specific`."""
     return refuse(actor, 404, specific, refusal_copy.gone(thing, things), route)
 
 
-# GM's 404 pattern (error-copy round 3) for the person's Commons screens.
+# The design's 404 pattern for the person's Commons screens.
 FOLDER_GONE = "That folder isn't linked anymore. Reload to get the latest folders."
 MEMBERSHIP_GONE = "That reference isn't in this collection anymore. Reload to get the latest references."
 
@@ -579,7 +579,7 @@ def patch_region(region_id: str, body: RegionPatch, actor=Depends(human_dep), st
 def reanalyze(asset_id: str, actor=Depends(human_dep), store=Depends(store_dep)) -> dict:
     if store.get_asset(asset_id) is None:
         raise gone(None, "asset not found", "reference", "references", "assets")
-    # A too-transparent reference isn't requeued: the answer is its state (GM r6 on #208).
+    # A too-transparent reference isn't requeued: the answer is its state (design, PR #208).
     return records.reanalyze(store, asset_id, actor=actor.id)
 
 
@@ -593,7 +593,7 @@ def reanalyze_stale(body: StaleIn, actor=Depends(human_dep), store=Depends(store
                                   collection_id=body.collection_id)
     # As the detail's Re-analyze: a too-transparent reference with an older
     # ok analysis stays as it is, since a new prompt can't change that
-    # (review 4 N1 on #208). "queued" counts only what was requeued.
+    # (PR #208). "queued" counts only what was requeued.
     return {"queued": sum(1 for asset_id in ids if records.reanalyze(store, asset_id, actor=actor.id)["queued"])}
 
 
@@ -829,7 +829,7 @@ class EvaluationLabelsIn(EvaluationRevisionIn):
 
 def _evaluation_refused(exc: Exception, route: str) -> HTTPException:
     """Labeling is the person's only (human_dep). A written EvaluationError is
-    the line; a technical one says its `person` line; an OSError says GM's
+    the line; a technical one says its `person` line; an OSError says the design's
     pattern line for an unreadable folder. Raw text goes to the log."""
     if isinstance(exc, evaluation.EvaluationError) and not exc.person:
         return HTTPException(status_code=409, detail=str(exc))

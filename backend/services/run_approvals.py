@@ -114,7 +114,7 @@ def fingerprint(
     proposal's new nodes get different ids each time it is staged, so the
     pre-accept comparison names them by their refs). Outputs, positions and
     labels are left out: they don't change what a run does. A placeholder
-    does (Q125 item 3): the run skips it and what needs it, so its owner is
+    does: the run skips it and what needs it, so its owner is
     in the digest and a placeholder turned normal since (its owner's
     ``pending: false``, the idle rule) changes what the run would start and
     spend: the proposal's Accept and the approved run both refuse it.

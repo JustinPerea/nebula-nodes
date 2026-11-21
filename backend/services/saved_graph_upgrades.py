@@ -43,7 +43,7 @@ backend only stores records, so it keeps the stamp as sent.
 
 A browser tab whose canvas loaded before an upgrade can't be upgraded in
 place: its values may have been set in that tab, and its bundle has the old
-rules. It is treated as stale instead (round 2, item 3):
+rules. It is treated as stale instead:
 
 - the bundle sends ``X-Nebula-Params-Version`` on every request; a request
   with a lower or higher version, or with none when it carries the canvas's

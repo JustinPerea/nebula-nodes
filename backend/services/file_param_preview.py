@@ -1,4 +1,4 @@
-"""A file param's preview and name follow the file (GM r46 Q2 on #222).
+"""A file param's preview and name follow the file (design, PR #222).
 
 The canvas shows a file param through two private params it writes with
 the file: ``_previewUrl`` (the image drawn under the control) and, for
@@ -28,7 +28,7 @@ PREVIEW_PARAM = "_previewUrl"
 
 # Inputs whose Inspector draws no image under the file control (video, audio
 # and document files): a `_previewUrl` written for them would only be read
-# by a mask source's fallback (#226 review 4, NIT-2), so their preview is
+# by a mask source's fallback (PR #226), so their preview is
 # left as the write sent it. The name still follows.
 NO_PREVIEW_DEFINITIONS = frozenset({"video-input", "audio-input", "document-input"})
 

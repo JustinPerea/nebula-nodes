@@ -10,7 +10,7 @@ from commons.ids import new_id
 from commons.measure import phash_distance
 from commons.person_copy import Refused
 
-# Written for the person (GM - Design, error-copy round 2); agents and the log keep the message.
+# Written for the person (design); agents and the log keep the message.
 OUTSIDE_IMAGE = "That region is outside the image. Draw it again."
 REGION_GONE = "That region isn't on this reference anymore. Reload to get the latest version."
 
@@ -186,7 +186,7 @@ def requeue(store, asset_id: str, *, actor: str) -> None:
 def reanalyze(store, asset_id: str, *, actor: str) -> dict:
     """Re-analyze one asset (the detail's Re-analyze), unless it is too
     transparent to analyze: then it stays as it is and the answer is that
-    state, its kind and its line (GM r6 on #208: re-analyzing can't change a
+    state, its kind and its line (design, PR #208: re-analyzing can't change a
     property of the image). The state always belongs to the asset's current
     file: an asset's bytes never change (content-addressed by sha256; no
     route rewrites blob_key), and a different file is a different asset with

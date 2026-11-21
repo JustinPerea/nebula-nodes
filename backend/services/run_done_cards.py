@@ -1,9 +1,9 @@
-"""Agents' runs: the mark on the node they run, and the done card after (Q125 item 3).
+"""Agents' runs: the mark on the node they run, and the done card after.
 
-Justin, 2026-10-24, merge-oks Q125, item 3: "The agent's mark stays on its
+Justin, 2026-10-24: "The agent's mark stays on its
 node with a status line ("Running FLUX.2 [pro] · 0:41") ... A finished run
 posts a card with a thumbnail and Show on canvas, without the agent having to
-remember to." GM - Design's rulings, 2026-10-25, are built verbatim here.
+remember to." the design's rulings, 2026-10-25, are built verbatim here.
 
 ``AgentRunBook`` keeps, per run an identified agent started (any route: MCP
 run_nodes and `nebula run` through /api/graph/run, or an agent's own
@@ -17,7 +17,7 @@ Every change to what an agent is running is an ``agentRun`` socket event
 the roster read (GET /api/canvas/agents) carries each agent's ``running``
 nodes for a tab that loads mid-run.
 
-``done_text`` is GM's copy for the card; ``thumbnail_for`` picks its picture.
+``done_text`` is the design's copy for the card; ``thumbnail_for`` picks its picture.
 """
 from __future__ import annotations
 
@@ -32,8 +32,8 @@ _THUMB_KINDS = {"image": "image", "video": "video"}
 
 
 def possessive(name: str) -> str:
-    """GM's pattern ("Codex’s run of ..."): ’s after any name, one ending in s too
-    (curly, app-wide: PR #203 r41 item 3)."""
+    """The design's pattern ("Codex’s run of ..."): ’s after any name, one ending in s too
+    (curly, app-wide: PR #203)."""
     return f"{name}’s"
 
 
@@ -43,15 +43,15 @@ def _quoted(labels: Mapping[str, str], node_id: str) -> str:
 
 # A node that stopped at its call because an agent's run may not make it
 # (execution/run_origin.ProposalNeeded). The only such stop is Idol's Hugging
-# Face call with the person's token set (Justin decided, 2026-10-31). GM, PR
-# #203 r40 items 2 and 7, verbatim: "Claude Code finished 1 of 3 nodes.
+# Face call with the person's token set (Justin decided, 2026-10-31). Design, PR #203, verbatim:
+# "Claude Code finished 1 of 3 nodes.
 # “Idol” is waiting for you to run it because it could bill your Hugging Face
 # account." (no comma before "because"); beside a failure, "Claude Code
 # finished 1 of 4 nodes. “Idol” is waiting for you to run it, and “Writer”
 # failed."; from 4 nodes, counts: "… 4 nodes are waiting for you to run them,
 # and 2 failed." The Agent log gets it whole.
 WAITING_BECAUSE = "because it could bill your Hugging Face account."
-# Names up to this many nodes; from one more, counts (GM r40 item 2).
+# Names up to this many nodes; from one more, counts (design).
 MAX_NAMED = 3
 
 
@@ -60,7 +60,7 @@ def _and_list(items: list[str]) -> str:
 
 
 def _waiting(labels: Mapping[str, str], waiting: list[str], failed: list[str]) -> str:
-    """What stopped and what failed, after the run's count (GM r40)."""
+    """What stopped and what failed, after the run's count (design)."""
     named = len(waiting) + len(failed) <= MAX_NAMED
     if named:
         who = _and_list([_quoted(labels, node_id) for node_id in waiting])
@@ -86,7 +86,7 @@ def waiting_text(labels: Mapping[str, str], waiting: list[str]) -> str:
 def done_text(agent_name: str, labels: Mapping[str, str], planned: list[str], *,
               succeeded: Iterable[str], failed: Iterable[str], stopped: Iterable[str] = (),
               named: bool = True) -> tuple[str, str]:
-    """(the card's line, its outcome: success | partial | failure). GM - Design,
+    """(the card's line, its outcome: success | partial | failure). Design,
     2026-10-25, verbatim:
 
     - Success: Codex finished “Hero shots”. / Codex finished 3 nodes.
@@ -94,15 +94,15 @@ def done_text(agent_name: str, labels: Mapping[str, str], planned: list[str], *,
       one failed: Codex finished 2 of 5 nodes. 3 failed.
     - Failure: Codex’s run of “Hero shots” failed. / Codex’s run of 3 nodes failed.
 
-    Nodes in ``stopped`` wait for the person (GM r40): "Claude Code finished
+    Nodes in ``stopped`` wait for the person (design): "Claude Code finished
     1 of 3 nodes. “Idol” is waiting for you to run it because it could bill
     your Hugging Face account."; with a failure beside it, "… “Idol” is
     waiting for you to run it, and “Writer” failed."; from 4 nodes, counts.
-    With nothing done (a draft for GM): "Codex’s run didn’t finish. “Idol” is
+    With nothing done (a draft for design): "Codex’s run didn’t finish. “Idol” is
     waiting …" for one node, "Codex’s run of 3 nodes didn’t finish. …"."
 
     ``named=False`` is the line for a surface that already shows the agent's
-    name (the Updates card's header, the Agent log row's): design r211, "the
+    name (the Updates card's header, the Agent log row's): design, "the
     line doesn't repeat it": "Finished “Hero shots”.", "Finished 2 of 3
     nodes. “Upscale” failed.", "Run of 3 nodes failed.", "Run didn’t finish.
     …". A surface with no header says the named form."""

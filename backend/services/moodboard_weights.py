@@ -1,4 +1,4 @@
-"""A board's weights in the form each node needs (Q21 b, plan section 5.7.4).
+"""A board's weights in the form each node needs (plan section 5.7.4).
 
 Justin, 2026-10-20: "They should normalize for however any nodes need the
 information." One pure helper, so no adapter does its own maths:
@@ -9,7 +9,7 @@ information." One pure helper, so no adapter does its own maths:
   over the images actually sent, so it is worked out after every cut.
 - ``sum-to-one``: shares, for a weight list made once (Recraft's
   ``image_weights``, PR24).
-- ``none``: the raw ``S * w_i``, the pre-Q21 behaviour, for test fixtures only.
+- ``none``: the raw ``S * w_i``, the earlier behaviour, for test fixtures only.
 - ``rank`` carries no numbers (order and legend words only), so it has no
   strengths to give; ``weight_view`` gives its ``rel``.
 

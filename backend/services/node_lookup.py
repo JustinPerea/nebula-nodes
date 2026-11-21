@@ -102,10 +102,10 @@ def write_hint(text: str, definitions: Definitions) -> str:
     return f": did you mean {_either(close)}?" if close else ""
 
 
-# GM #198 r23 answer 3: an id-shaped value stays bare; anything else (a
+# Design, PR #198: an id-shaped value stays bare; anything else (a
 # space, a character no node id has) is in “…” so it reads where it ends.
 _ID_SHAPED = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:/@+-]*")
-# GM #198 r23 answer 3, verbatim: no value at all has its own line.
+# Design, PR #198, verbatim: no value at all has its own line.
 NO_DEFINITION = "No node definition was given."
 
 

@@ -1,9 +1,9 @@
-"""Who reads a refusal, and the words they get (GM - Design, error-copy rounds 2 and 3).
+"""Who reads a refusal, and the words they get (design).
 
-GM: "People get the written line and agents keep the specific detail. Keep it
+Design: "People get the written line and agents keep the specific detail. Keep it
 that way." A refusal is said twice: `specific`, the text an agent (MCP, the
 CLI, a script) fixes its call with and the log keeps; and `person`, a line
-written to GM's patterns for the person's UI. This is the one place that
+written to the design's patterns for the person's UI. This is the one place that
 decides which one a reply carries, for main.py, routes/commons.py and every
 other router:
 
@@ -36,13 +36,13 @@ BY_REQUEST: Any = object()
 
 
 def gone(thing: str, things: str) -> str:
-    """GM's 404 line (round 3): "That {thing} isn't there anymore. Reload to
+    """The design's 404 line: "That {thing} isn't there anymore. Reload to
     get the latest {things}.", with the thing named the way the UI names it."""
     return f"That {thing} isn’t there anymore. Reload to get the latest {things}."
 
 
 def gone_from_trash(thing: str) -> str:
-    """GM's 404 pattern for something no longer in Recently deleted."""
+    """The design's 404 pattern for something no longer in Recently deleted."""
     return f"That {thing} isn’t in Recently deleted anymore. Reload to get the latest list."
 
 

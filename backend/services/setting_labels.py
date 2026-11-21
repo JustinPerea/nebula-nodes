@@ -11,8 +11,8 @@ import re
 
 
 def setting_label(key: str) -> str:
-    """A raw provider key as a person reads it (GM, PR #198 r1 item 7, then
-    the 2026-11 copy sweep item 17): split into words and set in sentence
+    """A raw provider key as a person reads it (PR #198, then
+    the 2026-11 copy sweep): split into words and set in sentence
     case. Snake case, camelCase and PascalCase all split, and an acronym stays
     in capitals: "guidance_scale" gives "Guidance scale", "filePath" gives
     "File path", "numInferenceSteps" gives "Num inference steps", "imageURL"

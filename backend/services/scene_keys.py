@@ -1,5 +1,4 @@
-"""Conditional Cinema scene writes (PR #198 fix rounds 8 and 9, H2; GM r9
-decision 2, r12 answer 4).
+"""Conditional Cinema scene writes (PR #198).
 
 A scene's ``sceneKey`` names its authoring: everything but the shots'
 runtime (``output``, ``variations``, ``selectedVariation``, which runs write
@@ -20,12 +19,12 @@ another's unasked:
   write whose scene is the one Nebula has is never refused (nothing would
   change). A refusal is not a read: the CLI prints only the detail, so its
   agent never saw the answer's scene, and a blind resend of the old copy
-  must be refused again (fix round 9, L-1).
-- A reader is a session, not a name (fix round 9, M-2): a verified agent
+  must be refused again.
+- A reader is a session, not a name: a verified agent
   token's chat session (or the token itself), else the name plus the
   ``X-Nebula-Agent-Session`` the MCP server sends, else the name alone.
-  A write is checked against its own channel's read first (fix round 11,
-  review 10 L-1): a session's own read, or for a writer with no session
+  A write is checked against its own channel's read first: a session's own read, or for
+  a writer with no session
   (the CLI, a plain PUT) the name's session-less read. Only a channel that
   never read falls back, to the newest read by any session of that name
   (kept apart, under ``newest:<name>``), and a session then to the name's
@@ -35,16 +34,16 @@ another's unasked:
   ``main._agent_readers`` gives the keys a read is kept under and the keys
   a write is checked against, in order.
 
-Who deleted a scene node is kept too (``note_delete``, fix round 12): a
+Who deleted a scene node is kept too (``note_delete``): a
 save of it that comes after is answered 404 ``node_gone`` with
-``deletedBy``, so the person's line names who deleted it (GM r20 answer 3).
+``deletedBy``, so the person's line names who deleted it (design).
 
 Reads and writers are kept per canvas (``scope``: the live graph, its
 project and canvas epoch), so a node id another canvas uses never matches;
-nothing is forgotten on a project switch (fix round 9, M-1: reopening a
+nothing is forgotten on a project switch (reopening a
 project finds its readers' reads where they were). Both are bounded.
 
-Each scene also has a ``sceneRev`` (fix round 9, H-1): a number that grows
+Each scene also has a ``sceneRev``: a number that grows
 every time Nebula is seen holding a different authoring for that node
 (across restarts too: it starts from the clock). A canvas that has seen
 revision R treats any scene below R as older than what it knows, so a sync
@@ -72,8 +71,8 @@ MAX_DELETERS = 1024
 _reads: "OrderedDict[tuple[str, str, str], str]" = OrderedDict()
 # (scope, node id) -> who last changed its scene's authoring ({"kind", "name"}).
 _writers: "OrderedDict[tuple[str, str], dict[str, Any]]" = OrderedDict()
-# (scope, node id) -> who last deleted that Cinema scene node (PR #198 fix
-# round 12, GM r20 answer 3): a save that comes after says who.
+# (scope, node id) -> who last deleted that Cinema scene node (PR #198, design): a save that comes
+# after says who.
 _deleters: "OrderedDict[tuple[str, str], dict[str, Any]]" = OrderedDict()
 # node id -> (scope, key, revision) Nebula last showed for it.
 _revisions: dict[str, tuple[str, str, int]] = {}

@@ -6,7 +6,7 @@ an emoji ZWJ sequence (a family), an emoji and its variation selector or
 skin tone, a flag's two regional indicators, a Hangul syllable's jamo,
 an Indic conjunct (क्ष: a consonant, a virama and the consonant after it).
 ``safe_cut`` moves a cut back to the start of that character instead
-(review 7, L5: "the hard cut must never split a character"). It covers the
+("the hard cut must never split a character"). It covers the
 grapheme rules that matter for one line of agent text; it is not a full
 UAX #29 segmenter (no third-party package for one line).
 """
@@ -48,7 +48,7 @@ def safe_cut(text: str, end: int) -> int:
             continue
         # An Indic conjunct (क्ष: a consonant, a virama, the consonant after
         # it) is one character: a cut after its virama backs off to its start
-        # (review 8, nit; UAX #29 GB9c, read through the virama's combining class).
+        # (UAX #29 GB9c, read through the virama's combining class).
         if unicodedata.combining(text[end - 1]) == 9 and unicodedata.category(text[end]) == "Lo":
             end -= 1
             continue
@@ -65,8 +65,8 @@ def safe_cut(text: str, end: int) -> int:
 
 # -- an item's name, as it is put into text another reader reads -------------------------
 
-# Terminal escape sequences, each dropped whole (PR #200 review 7 N-3 and
-# review 8 NIT-3), so no "Pq#0;2;0;0;0" or "[31m" is left behind: CSI (7- and
+# Terminal escape sequences, each dropped whole (PR #200), so no "Pq#0;2;0;0;0" or "[31m" is left
+# behind: CSI (7- and
 # 8-bit), then the string sequences OSC, DCS, APC, PM and SOS
 # (ESC ] P _ ^ X, or 8-bit 0x9d 0x90 0x9f 0x9e 0x98), each with its payload up
 # to its end: ST (ESC \ or 0x9c) or BEL, even past an inner ESC. One left

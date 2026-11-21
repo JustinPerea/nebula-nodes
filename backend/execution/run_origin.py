@@ -32,11 +32,11 @@ class RunOrigin:
     ask: str | None = None
     # The run's node names as the canvas shows them (main._run_names: the
     # person's label when renamed, else the type's name), for what a stop
-    # tells agents (GM, PR #203 r39 item 1). None: the stop names the type.
+    # tells agents (design, PR #203). None: the stop names the type.
     names: Callable[[str], str] | None = None
     # A canvas tab that isn't connected as the person started it (no agent
     # marker, but no person token either): an agent's run for the gate,
-    # unchanged; only the card's words differ (GM, PR #203 r40 item 5).
+    # unchanged; only the card's words differ (design, PR #203).
     tab: bool = False
 
     def node_name(self, node_id: str) -> str | None:

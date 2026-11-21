@@ -1,8 +1,8 @@
 """What each agent is working on, and the roster of agents around now.
 
-Q125 item 2 (Justin, 2026-10-24: "Yes, all four, in that order"): the Agents
-panel, Needs you / Working. Built from what Nebula already tracks, plus one
-new thing kept here: a status line per agent.
+The Agents panel (Justin, 2026-10-24: "Yes, all four, in that order"), Needs you /
+Working. Built from what Nebula already tracks, plus one new thing kept here: a
+status line per agent.
 
 - An identified agent sets one line of text about what it is doing,
   optionally on a node (``set_status``, ``nebula status``, ``POST
@@ -46,7 +46,7 @@ from services.text_cut import safe_cut
 STATUS_IDLE_SECONDS = 600.0
 MAX_STATUS_CHARS = MAX_SAY_CHARS
 # A cut at a word keeps at least this many of the 140 characters; a status
-# whose last space comes earlier is cut hard (review 7, L5, coordinator's decision).
+# whose last space comes earlier is cut hard.
 MIN_WORD_CUT_CHARS = 100
 
 
@@ -57,11 +57,11 @@ class StatusError(ValueError):
 def clean_status_text(raw: Any) -> str:
     """One line, like a cursor's ``say``: whitespace collapsed, at most
     MAX_STATUS_CHARS. A longer one is cut and ends in "…", so the pill that
-    shows it whole (GM - Design, round 6: "let it wrap until the whole status
+    shows it whole (design: "let it wrap until the whole status
     shows") never ends as if that were all of it. The cut lands after the
-    last whole word that fits (GM, round 7: it reads "then…", not
+    last whole word that fits (design: it reads "then…", not
     "then checki…"), but only when that keeps at least MIN_WORD_CUT_CHARS
-    (review 7, L5: "Reading https://…" must not become "Reading…");
+    ("Reading https://…" must not become "Reading…");
     otherwise it is cut hard, and a hard cut never splits a character
     (text_cut.safe_cut: an accent, an emoji sequence, a flag)."""
     if not isinstance(raw, str):
@@ -216,7 +216,7 @@ def build_roster(*, project_id: str | None, now: float, cursors: Iterable[Mappin
     ``cursors`` are agent_presence.active() rows (each with its projectId);
     ``statuses`` and ``waiting`` are already the open project's. ``pending``
     is the open canvas's placeholders by agent (pending_nodes.by_agent) and
-    ``running`` each agent's nodes running now in its runs (Q125 item 3):
+    ``running`` each agent's nodes running now in its runs:
     every entry lists both, and an agent with only placeholders is listed."""
     entries: dict[str, dict[str, Any]] = {}
 
@@ -247,7 +247,7 @@ def build_roster(*, project_id: str | None, now: float, cursors: Iterable[Mappin
             entry["cursor"]["surface"] = {"target": dict(target), "anchorNames": cursor.get("anchorNames")}
         did = cursor.get("did")
         if isinstance(did, Mapping) and did.get("verb"):
-            # The action's own time: a gesture since then kept it (GM's review).
+            # The action's own time: a gesture since then kept it (design).
             did_ago = did.get("secondsAgo")
             entry["lastAction"] = {"verb": did["verb"], "nodeId": did.get("nodeId"), "label": did.get("label"),
                                    "secondsAgo": float(did_ago) if isinstance(did_ago, (int, float)) else seconds_ago}

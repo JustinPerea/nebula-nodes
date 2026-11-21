@@ -96,14 +96,14 @@ READER_VERSION = 1
 BATCH_SIZE = 6
 LABELS = "ABCDEF"
 MAX_PARALLEL = 2
-IMAGE_EDGE = 1024  # Q13
+IMAGE_EDGE = 1024  # the longest edge, in pixels, an image is shrunk to
 JPEG_QUALITY = 85
 # Google's inline request limit is 20 MB including prompts and JSON
 # (services/vision_llm.py keeps the same headroom).
 MAX_BASE64_CHARS = 16 * 1024 * 1024
-MIN_FIT = 0.5          # Q17
+MIN_FIT = 0.5          # a look counts only at this fit or better
 MAX_NEW_LOOKS = 8
-HYBRID_MIN = 3         # Q10
+HYBRID_MIN = 3         # images that share a pair of looks before a hybrid is suggested
 LINE_LIMIT = 200
 THOUGHT_MERGE_SECONDS = 0.25
 FRAME_NAME_LIMIT = 60
@@ -297,7 +297,7 @@ def reader_key(identity: Mapping[str, Any]) -> str:
 
 def asks_for_thoughts(entry: Mapping[str, Any]) -> bool:
     """Only a model whose summaries are confirmed (``true``) is asked for them;
-    ``false`` and ``"unconfirmed"`` send no ``includeThoughts`` (Q29 c falls
+    ``false`` and ``"unconfirmed"`` send no ``includeThoughts`` (falls
     back to b)."""
     return entry.get("thoughtSummaries") is True
 
@@ -414,7 +414,7 @@ def _path_is_clear(path: Path) -> bool:
     from services.moodboard_analysis import file_version
 
     # Keyed like the stored stamp, so a same-size rewrite with its mtime put
-    # back, or a replace by rename, is read again (review 4 L3).
+    # back, or a replace by rename, is read again.
     return _file_is_clear(str(path), *file_version(stat))
 
 
@@ -796,7 +796,7 @@ def estimate(board: Mapping[str, Any], entry: Mapping[str, Any], *, image_ids: S
 
 
 def spend_check(entry: Mapping[str, Any], est: Mapping[str, Any]) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-    """What ``agent_spend.decide`` takes for a read (Q11): one item, the
+    """What ``agent_spend.decide`` takes for a read: one item, the
     chat node the person sees in Settings (``gemini-chat`` with this model),
     priced by a one-off entry built from the estimate. An unpriced read gets
     no entry, so any USD limit refuses it, as for an unpriced node."""
@@ -1056,7 +1056,7 @@ class ReadingSource(abc.ABC):
     - ``identity``: ``{kind: "reader", id, name, color, model?, provider,
       source: "model" | "agent"}``.
     - ``priced``: "Nebula pays". True for Argon even with no list price, so
-      the unpriced-read refusal still applies (Q16); false only for an agent,
+      the unpriced-read refusal still applies; false only for an agent,
       which reads on its own plan. The estimate and the spend gate run only
       when it is true (``read_estimate``, ``gate_items``).
     - ``streams``: whether items arrive one by one; ``thoughts``: whether it
@@ -1156,7 +1156,7 @@ class GeminiSource(ReadingSource):
     ``api_key`` may be left out for an estimate; reading then raises
     ``NoReaderKeyError``. ``today`` picks the price row the spend is counted at."""
 
-    priced = True  # Nebula pays, with a list price or not (Q16)
+    priced = True  # Nebula pays, with a list price or not
 
     def __init__(self, entry: Mapping[str, Any], api_key: str | None = None, *, level: str | None = None,
                  client: httpx.AsyncClient | None = None, clock: Callable[[], float] = time.monotonic,

@@ -80,14 +80,14 @@ ACTIONS: dict[str, dict[str, Any]] = {
     "history.restore": {"labels": ("Restore",), "keys": {"boardId": str, "historyIds": list}},
     "proposal.accept": {"labels": ("Accept",), "keys": {"proposalId": str}},
     "proposal.reject": {"labels": ("Reject",), "keys": {"proposalId": str}},
-    # A proposal's Update (Q92 a, Q112 a): takes the person to where they decide
+    # A proposal's Update: takes the person to where they decide
     # it (``target`` is the proposal's kind: project, moodboard, commons, or
     # canvas for a canvas proposal, whose ``targetId`` is its project).
     "proposal.review": {"labels": ("Review",), "keys": {"proposalId": str, "target": str, "targetId": str}},
-    # A question set's Update (Q125 item 1): opens the answer form in the
+    # A question set's Update: opens the answer form in the
     # Updates corner. Only the person's canvas answers (services/agent_questions.py).
     "question.answer": {"labels": ("Answer",), "keys": {"questionId": str}},
-    # A reply that landed in another project's thread (GM r100.3): opens that
+    # A reply that landed in another project's thread (design): opens that
     # project and its thread in the Agent log.
     "thread.open": {"labels": ("Open",), "keys": {"projectId": str, "replyId": str}},
 }
@@ -402,7 +402,7 @@ def note_view(note: Mapping[str, Any], board: Mapping[str, Any] | None = None) -
     view = copy.deepcopy(dict(note))
     raw = str(note.get("text") or "")
     if note.get("about") == "question" and note.get("resolvedAt"):
-        # GM - Design: a closed set's line is past tense. resolve_questions
+        # Design: a closed set's line is past tense. resolve_questions
         # stores it; this covers an Update closed before that rule.
         raw = closed_update_text(raw)
     view["text"] = render_text(raw, board)
@@ -812,13 +812,13 @@ class AgentNotes:
         return {"note": note_view(note), "unread": unread, "projectId": project_id, "removed": removed}
 
 
-    # -- a reply saved in another project's thread (GM r100.3, r112.1) ------------
+    # -- a reply saved in another project's thread (design) ------------
     def post_replied(self, *, author: Mapping[str, Any], project_id: str, reply_id: str,
                      text_for: Callable[[int], str]) -> dict[str, Any]:
         """The Update a reply posts on the open project's list when it went to
         ``project_id``'s thread (``source: "nebula"``, attributed to the
         replying agent, an Open action that opens that thread at the reply).
-        GM r112.1: one per agent and project while it is unread. A later
+        Design: one per agent and project while it is unread. A later
         reply updates it in place (same id, the latest time, moved to the
         top) and counts: ``text_for(count)``. Once read, the next reply
         starts a new one. The agent's own rate limit applies (6 a minute on
@@ -856,7 +856,7 @@ class AgentNotes:
         return {"note": note_view(note), "unread": unread, "projectId": project, "removed": removed,
                 "updated": updated}
 
-    # -- a proposal's Update (Justin's Q92 a, Q112 a) -----------------------------
+    # -- a proposal's Update (Justin's) -----------------------------
     def post_proposal(self, *, author: Mapping[str, Any], text: str,
                       proposal: Mapping[str, Any], project_id: str | None = None,
                       share: Callable[[], Mapping[str, Any]] | None = None) -> dict[str, Any]:
@@ -870,10 +870,9 @@ class AgentNotes:
         same project, board or reference leaves the list (the socket's
         ``removed``), so a re-proposal replaces it instead of stacking. A
         canvas proposal's replaces only the same agent's canvas Updates it
-        withdrew itself (``_same_ask``); every other one stays (Q112 a:
-        "every one").
+        withdrew itself (``_same_ask``); every other one stays ("every one").
 
-        ``share`` (PR #204 round 4): what a shared asset Update stands for,
+        ``share`` (PR #204): what a shared asset Update stands for,
         read inside the write as ``retarget_proposal`` does, so an ask closed
         while this one posts isn't counted."""
         clean_author = _clean_author(author)
@@ -899,7 +898,7 @@ class AgentNotes:
         project_id, (unread, removed) = self._write_project(mutate, project_id=project_id, keep_open=True)
         return {"note": note_view(note), "unread": unread, "projectId": project_id, "removed": removed}
 
-    # -- a question set's Update (Q125 item 1) ------------------------------------
+    # -- a question set's Update ------------------------------------
     def post_questions(self, *, author: Mapping[str, Any], text: str, questions: Mapping[str, Any],
                        refs: list[str] | None = None, project_id: str | None = None,
                        save_set: Callable[[dict[str, Any], str, str], bool] | None = None) -> dict[str, Any]:
@@ -947,17 +946,17 @@ class AgentNotes:
         and a restart all read the same words."""
         return self._resolve(project_id, note_id, outcome=outcome, by=by, retext=closed_update_text)
 
-    # -- a run's done card (Q125 item 3) ---------------------------------------------
+    # -- a run's done card ---------------------------------------------
     def post_run_done(self, *, author: Mapping[str, Any], text: str, run: Mapping[str, Any],
                       project_id: str | None = None) -> dict[str, Any]:
-        """The card a finished agent run posts on its project's list (GM -
-        Design, 2026-10-25): written by Nebula (``source: "nebula"``) for the
+        """The card a finished agent run posts on its project's list (design,
+        2026-10-25): written by Nebula (``source: "nebula"``) for the
         agent that started the run, ``about: "run"``, ``refs`` the run's last
         node (Show on canvas flies there; the node itself shows any error),
         and ``run``: {id, nodeIds, lastNodeId, outcome, thumbnail?}. The
         thumbnail is a link to an output Nebula already keeps, never a copy.
 
-        Flood guard (GM): a new card for the same node and the same agent
+        Flood guard (design): a new card for the same node and the same agent
         replaces the older one, so an agent iterating on one node leaves one
         card, not twenty. It skips the agent's rate limit, as a proposal's
         Update does: Nebula writes it, once per run."""
@@ -1000,11 +999,11 @@ class AgentNotes:
         """The agent's other proposal on the same target is still open: the
         Update now reviews that one, and its ref says that one's ``detail``
         (``proposal_detail``) and, given ``text``, its words say that one's
-        too (PR #202 review 1 LOW-1: the count and the words come from the
+        too (PR #202: the count and the words come from the
         same proposal). None when the update has left the list, or already
         reviews that proposal with those words (nothing to say again).
 
-        ``share`` (PR #204 round 3): what a shared asset Update stands for
+        ``share`` (PR #204): what a shared asset Update stands for
         (``asks``, ``firstSince``), read inside the write so a count taken
         before another follow closed an ask never lands after it."""
         def mutate(notes: list[dict[str, Any]]) -> dict[str, Any] | None:
@@ -1013,7 +1012,7 @@ class AgentNotes:
                 return None
             ref = _retargeted_ref(note.get("proposal"), proposal_id, _with_share(detail, share))
             words = clean_note_text(text) if text is not None else note.get("text")
-            # PR #202 review 5 NIT-1: already on that proposal, as it is (another
+            # PR #202: already on that proposal, as it is (another
             # follow moved it there first): no write, so no second "changed".
             if note.get("proposal") == ref and note.get("text") == words:
                 return None
@@ -1032,13 +1031,13 @@ class AgentNotes:
                         detail: Mapping[str, Any] | None = None, text: str | None = None,
                         closed: Callable[[str], bool] | None = None,
                         share: Callable[[], Mapping[str, Any]] | None = None) -> dict[str, Any] | None:
-        """The undo of a node delete reopened the proposal (GM, 2026-10-23):
+        """The undo of a node delete reopened the proposal (design, 2026-10-23):
         its Update reviews it again. The outcome line goes and Review is back;
         it stays read (the person's own undo brought it back). None when the
         update has left the list or still reviews another open proposal.
-        Given ``text``, its words are the reopened proposal's (LOW-1).
+        Given ``text``, its words are the reopened proposal's.
 
-        PR #202 review 2 LOW-C: the undo can land while the closed proposal's
+        PR #202: the undo can land while the closed proposal's
         own resolve is still being written. An Update not resolved yet whose
         ref points at a proposal that has closed (``closed(id)``) is taken
         over too, and that resolve then finds the ref moved and leaves it
@@ -1074,13 +1073,13 @@ class AgentNotes:
         longer fits): the Update says how in one short line (``outcome``) and
         is read, so no stale Review stays. None when it has left the list,
         or (given ``proposal_id``) when it no longer reviews that proposal:
-        an undo reopened another in the meantime (PR #202 review 2 LOW-C).
+        an undo reopened another in the meantime (PR #202).
 
         Given ``closed``, it is asked again inside the write, as
         ``reopen_proposal`` asks it: an undo can reopen the very proposal
         this resolve is for between the caller's check and this write, and
-        its reopen then found the Update not yet resolved and left it
-        (review 5 LOW-1). A proposal open again keeps its Update."""
+        its reopen then found the Update not yet resolved and left it. A proposal open
+        again keeps its Update."""
         return self._resolve(project_id, note_id, outcome=outcome, by=by, proposal_id=proposal_id, closed=closed)
 
     def _resolve(self, project_id: str, note_id: str, *, outcome: str, by: Mapping[str, Any],
@@ -1113,8 +1112,8 @@ class AgentNotes:
         return {"projectId": project_id, "note": note_view(note), "unread": unread}
 
 
-# What an asset proposal's Update says of its change beyond the target (GM,
-# PR #200 follow-up 2; services/asset_proposals.update_detail): a cover's kind,
+# What an asset proposal's Update says of its change beyond the target (design,
+# PR #200; services/asset_proposals.update_detail): a cover's kind,
 # a Commons ask's edit count. One exact word for a tab that sees only the
 # Update; never an image, an asset or a value.
 PROPOSAL_COVER_KINDS = ("automatic", "image")
@@ -1123,14 +1122,14 @@ MAX_PROPOSAL_CHANGES = 999
 MAX_PROPOSAL_SINCE = 2**53 - 1
 
 
-# A question set's ref (GM, 2026-10-29, the held needs-you count): how many
+# A question set's ref (design, 2026-10-29, the held needs-you count): how many
 # questions it asks, which its Update's line already says, and when it was
 # asked (ms, the set view's createdAt). A tab not connected as the person holds
 # no set views, so its Agents panel counts and orders from these. The bound is
-# the set's own (PR #204 review 1 NIT-2: one constant, not a copy).
+# the set's own (PR #204: one constant, not a copy).
 MAX_REF_QUESTIONS = MAX_QUESTIONS
-# An asset Update one agent's open asks on one target share (PR #204 review 1
-# MEDIUM-1, GM 2026-10-30): ``asks``, how many of them it stands for, and
+# An asset Update one agent's open asks on one target share (design, PR #204,
+# 2026-10-30): ``asks``, how many of them it stands for, and
 # ``firstSince``, the oldest one's createdAt (ms). A held tab counts and orders
 # from these, so nothing moves on the promote. At most the agent's open cap.
 MAX_SHARED_ASKS = MAX_OPEN_PER_AGENT
@@ -1183,7 +1182,7 @@ SHARE_KEYS = ("asks", "firstSince")
 
 def for_reader(payload: Any, *, sees_share: bool, agent_id: str | None) -> Any:
     """``payload`` (a note, a listing ``{notes}``, or a socket message with ``note``/``notes``) as
-    this reader may see it (PR #204 round 4, a product decision): a shared asset
+    this reader may see it (PR #204, a product decision): a shared asset
     Update's ``asks`` and ``firstSince`` go to the person's tabs (``sees_share``) and to the agent
     that made the asks (``agent_id`` is the note's author id); every other reader gets the Update
     as before they existed. Copies only what it changes; the stored note is never touched."""
@@ -1230,8 +1229,8 @@ def _retargeted_ref(old: Any, proposal_id: str, detail: Mapping[str, Any] | None
 def _same_ask(note: Mapping[str, Any], new: Mapping[str, Any]) -> bool:
     """Whether ``new`` replaces ``note`` on the list. An asset proposal's:
     the same agent's Update about the same target. A canvas proposal's is its
-    own ask (Q112 a, "every one"), so it replaces only the same agent's
-    canvas Updates that the agent withdrew itself: Q109's "withdraw it
+    own ask ("every one"), so it replaces only the same agent's
+    canvas Updates that the agent withdrew itself: the "withdraw it
     first, then propose again" is a revision, and without this a
     propose/withdraw loop stacks one read Update per cycle, which the cap
     then makes push the person's older Updates out. Open ones, and those the

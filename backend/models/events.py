@@ -116,19 +116,19 @@ class ErrorEvent(RunScopedEvent):
     # agent proposes the run instead. Additive.
     proposal_needed: bool = False
     # The person's line for this failure, when the handler wrote one
-    # (execution/person_line.py, error copy round 3c): what the canvas card
+    # (execution/person_line.py): what the canvas card
     # shows, with no ids or record names. `error` keeps the specific text
     # word for word for agents, the run record and MCP. Additive: None means
     # the card shows its fallback, with `error` behind "Details".
     person: str | None = None
     # The exception text in `error` carries the provider's own words, so the
-    # card keeps it behind "Details" beside `person` (error copy round 3d,
-    # GM: "Raw provider text stays behind Details in every case."): the
+    # card keeps it behind "Details" beside `person` (design:
+    # "Raw provider text stays behind Details in every case."): the
     # status table's lines, an empty answer's, and a handler's
     # with_provider_line. False: a `person` in Nebula's own words, with no
     # Details (the specific text is for agents).
     provider_text: bool = False
-    # The provider the run called, from the route it took (round 3f): the
+    # The provider the run called, from the route it took: the
     # card's general line says "Details shows what {Provider} said." when a
     # failure has no line of its own. Additive and card-only: never read from
     # the error's text, None for a node that calls no provider or a failure
@@ -140,12 +140,12 @@ class ValidationErrorDetail(BaseModel):
     node_id: str
     port_id: str
     message: str
-    # The person's line for this check (error copy round 3e), as ErrorEvent's
+    # The person's line for this check, as ErrorEvent's
     # `person`: what the canvas card shows, naming a field by its label, an
     # input in words and a key by its provider, never a key, id or env-var
     # name. `message` keeps the specific text word for word for agents (run
     # results, look_at_canvas, the run record). Additive: None is a check
-    # only an agent or a damaged saved graph reaches; the card shows GM's
+    # only an agent or a damaged saved graph reaches; the card shows the design's
     # general line with `message` behind "Details".
     person: str | None = None
     # This check is a missing key (or a Krea sign-in): the stop is something for
@@ -164,7 +164,7 @@ class ValidationErrorDetail(BaseModel):
     # A stop that is only a missing key: the key as a need, with its
     # determiner ("your fal.ai API key", "a key for one of its 4 providers";
     # person_line.needs_key), so a node's inputs and its key say one line
-    # (GM, PR #203 r38 item 1, r40 item 1). Set where the check is made.
+    # (design, PR #203). Set where the check is made.
     _key: str | None = PrivateAttr(default=None)
 
     def marked(self, stop: str, need: str | None = None) -> "ValidationErrorDetail":
