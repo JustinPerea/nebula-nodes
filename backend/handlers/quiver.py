@@ -154,7 +154,7 @@ def _wrap_provider_error(exc: QuiverError) -> ValueError:
     Quiver server error (502)".
     """
     # The status Quiver's API answered goes with the new exception, so the
-    # card's table reads it from the call (round 3d, part 2), not the text.
+    # card's table reads it from the call (PR #172), not the text.
     status = exc.status_code
     if isinstance(exc, QuiverAuthError):
         # Names the env var for agents; the card asks for the key in Settings.

@@ -34,16 +34,16 @@ from execution.person_line import as_job_failure, with_api_status, with_call_fac
 
 logger = logging.getLogger(__name__)
 
-# What the person reads on the node when a run fails (error copy round 3c,
-# GM - Design): "the person reads these on the node, so their lines
-# shouldn't carry ids or record names. ... If a fact helps the person act,
-# put it in words, like "the node's Resume Operation ID field"." Each raise
-# keeps its specific text, word for word, for agents, the run record and MCP;
-# the line rides beside it (execution/person_line.py), and the card shows it
-# under "Couldn't run the node.". GM: "People never see the word "start";
-# they ran a World Labs job." Round 3f (GM's rule 5, "whatever round wrote
-# it"): a field is named as the node shows it, in quotes, “Resume Operation
-# ID”, not "the node's Resume Operation ID field".
+# What the person reads on the node when a run fails (design, PR #170): "the
+# person reads these on the node, so their lines shouldn't carry ids or record
+# names. ... If a fact helps the person act, put it in words, like "the node's
+# Resume Operation ID field"." Each raise keeps its specific text, word for
+# word, for agents, the run record and MCP; the line rides beside it
+# (execution/person_line.py), and the card shows it under "Couldn't run the
+# node.". The design rule: "People never see the word "start"; they ran a
+# World Labs job." Later (design, PR #173), whatever the earlier text says: a
+# field is named as the node shows it, in quotes, “Resume Operation ID”, not
+# "the node's Resume Operation ID field".
 #
 # The node's recovery fields, by the labels the person sees on the node
 # (node_definitions.json; pinned equal by tests/test_error_copy_round3c.py).
@@ -52,8 +52,8 @@ RECOVERY_FIELD_LABELS = {
     ("worldlabs-environment", "existing_world_id"): "Existing World ID",
     ("worldlabs-world-export", "resume_operation_id"): "Resume Export Operation ID",
 }
-# The status bar's button, by its round 13 label (GM; curly apostrophe, GM r33
-# on PR #199). The frontend's UNLOCK_LABEL is the same text.
+# The status bar's button, by its label (design; curly apostrophe, PR #199).
+# The frontend's UNLOCK_LABEL is the same text.
 UNLOCK_BUTTON = "“I’ve checked Marble”"
 PERSON_LINES = {
     # The answer to the paid request never came (or can't prove World Labs
@@ -73,10 +73,10 @@ PERSON_LINES = {
     "export_needs_world": (
         "This node exports worlds made by a World Labs Environment node. Connect one, then run it again."
     ),
-    # The node's own fields and inputs, by the labels the person sees (review
-    # of round 3c: each check a person can reach from the Inspector or the
-    # wiring has a line; enum checks only an agent or an old graph can reach
-    # keep the general line with the text behind Details).
+    # The node's own fields and inputs, by the labels the person sees (PR #170:
+    # each check a person can reach from the Inspector or the wiring has a
+    # line; enum checks only an agent or an old graph can reach keep the
+    # general line with the text behind Details).
     "bad_seed": "Set “Seed” to a whole number from 0 to 4294967295, or clear it for a random seed.",
     "long_name": "“World Name” is too long. Keep it to 64 characters or fewer.",
     "bad_tags": "“Tags” takes up to 10 tags of 32 characters each, separated by commas.",

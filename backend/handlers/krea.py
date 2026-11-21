@@ -78,8 +78,8 @@ def _clean_str(value: Any) -> str:
     return str(value or "").strip()
 
 
-# GM's Krea lines (error copy round 3d). They use the connection names the
-# node shows, in quotes, and the lines that run before anything is sent end
+# The Krea lines (design, PR #172). They use the connection names the node
+# shows, in quotes, and the lines that run before anything is sent end
 # "Nothing was sent to Krea." ({fields}: each label in quotes, joined with
 # "and".)
 NOTHING_SENT_TO_KREA = "Nothing was sent to Krea."
@@ -92,8 +92,7 @@ KREA_CONNECTION_DEFINITION = "krea-job-history"
 def connection_name(mode: str) -> str:
     """A Krea connection, quoted, as the node's “Krea connection” field names
     it: its option's label before " · " ("API key · API balance" is “API
-    key”), so a line can't quote a connection the node no longer shows
-    (review 13 of PR #203, MEDIUM-1)."""
+    key”), so a line can't quote a connection the node no longer shows (PR #203)."""
     return f"“{connection_label(mode)}”"
 
 
@@ -125,7 +124,7 @@ def _option_label(definition_id: str, key: str, value: str) -> str:
 
 
 def quoted_and(labels: list[str]) -> str:
-    """“A”, “A” and “B”, “A”, “B” and “C”: GM's {fields}."""
+    """“A”, “A” and “B”, “A”, “B” and “C”: the {fields} form (design)."""
     quoted = [label if label.startswith("“") else f"“{label}”" for label in labels]
     return quoted[0] if len(quoted) == 1 else f"{', '.join(quoted[:-1])} and {quoted[-1]}"
 
@@ -469,13 +468,13 @@ async def _collect_native_moodboard_style_references(
 ) -> list[dict[str, Any]]:
     """A Nebula board's images as Krea 2 style references.
 
-    Q21 b (Justin, 2026-10-20; plan section 5.7.4): the board images sent
-    share out the board's strength, ``S * w / sum(w)`` over the images that
-    go (after the slot cap and dedupe), at 4 decimals adding up to exactly
-    ``S``. ``wired`` (the person's own references, which took their slots
-    first) keep their strengths and are named in the run note. A board at
-    strength 0 sends nothing (Q32 a); the engine drops it before this runs,
-    text included (Q36 a, ``services/moodboard_brief.apply_to_generator``)."""
+    Justin, 2026-10-20 (PR #96): the board images sent share out the
+    board's strength, ``S * w / sum(w)`` over the images that go (after the
+    slot cap and dedupe), at 4 decimals adding up to exactly ``S``.
+    ``wired`` (the person's own references, which took their slots first)
+    keep their strengths and are named in the run note. A board at
+    strength 0 sends nothing (PR #96); the engine drops it before this runs,
+    text included (PR #101, ``services/moodboard_brief.apply_to_generator``)."""
     if remaining_slots <= 0:
         return []
 
@@ -488,7 +487,7 @@ async def _collect_native_moodboard_style_references(
             break
         strength = _float_value(moodboard.get("strength"), 0.7, 0.0, 1.0)
         if strength <= 0:
-            # The engine has already dropped it (Q36 a); this guards a
+            # The engine has already dropped it (PR #101); this guards a
             # direct call.
             add_run_note(BOARD_STRENGTH_ZERO_NOTE)
             continue
@@ -976,7 +975,7 @@ async def _account_style_train(node, name, model, image_values, emit) -> dict[st
     fields = [_label("krea-style-train", key) for key in keys]
     if training_type == "Default":
         unsupported.append("Type: Default")
-        # GM: write "Type: Default" as “Type” set to Default.
+        # Written as “Type” set to Default, not "Type: Default" (design).
         fields.append(f"“{_label('krea-style-train', 'training_type')}” set to "
                       f"{_option_label('krea-style-train', 'training_type', 'Default')}")
     if unsupported:

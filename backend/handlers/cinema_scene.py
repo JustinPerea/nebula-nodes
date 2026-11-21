@@ -13,7 +13,7 @@ Self-contained handler that, per shot, runs the Soul Cinema stack:
    (overridePrompt / overrideRefs / strengthOverride), reference views, and seed.
    The effective consistency strength is injected into the base params ONLY for
    a base model that exposes a real IP-adherence knob (``strength_param_for``);
-   v1 reference-edit bases have none, so it is carried but not applied (spec §4.4).
+   v1 reference-edit bases have none, so it is carried but not applied.
    Optional typed CameraRig inputs append labeled prompt guidance. ReferenceSet
    inputs append ordered role references with a legend of the actual image
    indexes. Combined references must fit the selected adapter's verified limit;
@@ -529,8 +529,8 @@ async def handle_cinema_scene(
             # flux-kontext) there is NO such knob, so the strength is carried in
             # the bundle but deliberately NOT injected — fabricating a param the
             # model ignores would be a silent no-op. See cinema.identity
-            # MODEL_STRENGTH_PARAM and spec §4.4. Only fires when a bundle is
-            # present (expanded["strength"] is None on the no-character path).
+            # MODEL_STRENGTH_PARAM. Only fires when a bundle is present
+            # (expanded["strength"] is None on the no-character path).
             if expanded["strength"] is not None:
                 strength_key = strength_param_for(base_model)
                 if strength_key is not None:
@@ -569,10 +569,10 @@ async def handle_cinema_scene(
         except Exception as exc:  # per-shot isolation — never abort the scene
             # `error` is the text agents read, word for word. The other fields
             # are how the Cinema panel reads the failure, the way a node card
-            # reads its run error (error copy round 3c-2, lib/nodeErrorCopy.ts).
+            # reads its run error (PR #170, lib/nodeErrorCopy.ts).
             category, friendly, _retryable = classify_error(str(exc), job_failure=is_job_failure(exc))
-            # The base node's own line, else GM's line for the provider's
-            # answer, naming the provider the base called (round 3d).
+            # The base node's own line, else the provider status line for the
+            # provider's answer (design, PR #172), naming the provider the base called.
             card = card_line(exc, base_model, base_node.params if base_node is not None else {}, api_keys)
             fields = {"errorCategory": category, "errorFriendly": friendly,
                       "errorPerson": card.person, "errorProviderText": card.provider_text,
