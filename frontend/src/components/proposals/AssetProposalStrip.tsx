@@ -50,8 +50,8 @@ function CoverChange({ view }: { view: AssetProposalView }) {
   const cover = view.change.cover;
   if (!cover) return null;
   const by = cover.fromBy;
-  // A pin whose image left the project no longer counts (Q90 a): the backend
-  // sends `from: null` then, so this never says "You pinned" over a missing image.
+  // A pin whose image left the project no longer counts: the backend sends
+  // `from: null` then, so this never says "You pinned" over a missing image.
   const caption = !cover.from ? 'Automatic now' : by?.kind === 'person' ? 'You pinned' : `${by?.name ?? 'An agent'} set`;
   const lost = cover.lostPin ? (cover.lostPin.by?.kind === 'person' ? 'The image you pinned'
     : `The image ${cover.lostPin.by?.name ?? 'an agent'} set`) : null;
@@ -191,14 +191,15 @@ function ProposalCard({ entry, now, names, inPlace }: { entry: AssetProposalEntr
   const said = headline(view);
   const words = labels(view);
   const busy = Boolean(pending || closing);
-  // GM r33 item 1 (review 18 LOW-2): held like the canvas's proposal bar while
-  // this tab isn't connected as the person (both routes are person-only:
-  // main._decidable_asset_proposal, require_person), with the same titles;
-  // the server's promote clears it and its demote brings it back.
-  // GM, #204 r5 item 2: one state, held or not answered yet since load (useTabHeld), with the
-  // first 150 ms before the socket's first answer in its own look (as ProposalBar).
-  // PR #204 round 10 (GM r15): through the one lock (components/PersonLock): aria-disabled, no
-  // tooltip, one line under both buttons.
+  // Design: held like the canvas's proposal bar while this tab isn't connected
+  // as the person (both routes are person-only: main._decidable_asset_proposal,
+  // require_person), with the same titles; the server's promote clears it and
+  // its demote brings it back.
+  // Design, PR #204: one state, held or not answered yet since load
+  // (useTabHeld), with the first 150 ms before the socket's first answer in
+  // its own look (as ProposalBar).
+  // Design, PR #204: through the one lock (components/PersonLock):
+  // aria-disabled, no tooltip, one line under both buttons.
   const gate = usePersonLock('review this');
   const gateHeld = gate.locked;
   return (
@@ -227,20 +228,20 @@ function ProposalCard({ entry, now, names, inPlace }: { entry: AssetProposalEntr
   );
 }
 
-/** GM r34 (fix round 23, review 19 NIT-4): a proposal this tab knows only from
- * its Update while it isn't connected as the person. The real card's header,
- * one line, no thumbnails and no buttons. The dot and the name keep the
- * agent's identity colour (GM r35: who asks, not a status); the card itself
- * is neutral: no status edge, no accent fill. */
+/** Design: a proposal this tab knows only from its Update while it isn't
+ * connected as the person. The real card's header, one line, no thumbnails
+ * and no buttons. The dot and the name keep the agent's identity colour
+ * (design: who asks, not a status); the card itself is neutral: no status
+ * edge, no accent fill. */
 function HeldCard({ held, onLeaveFocused }: { held: HeldProposal; onLeaveFocused: (proposalId: string) => void }) {
   const card = useRef<HTMLDivElement>(null);
   const { proposalId } = held;
-  // PR #204 round 14 (GM r23 3): offline comes first; the held line waits until Nebula is back.
+  // Design, PR #204: offline comes first; the held line waits until Nebula is back.
   const { offline } = useCanvasLock();
-  // Review 20 NIT-4: Review focuses the placeholder, and the promote swaps it
-  // for the real card, another element. Say so while this one still holds
-  // focus (a layout cleanup runs before React removes the node), so the strip
-  // can hand focus to the real card instead of letting it drop to the page.
+  // Review focuses the placeholder, and the promote swaps it for the real
+  // card, another element. Say so while this one still holds focus (a layout
+  // cleanup runs before React removes the node), so the strip can hand focus
+  // to the real card instead of letting it drop to the page.
   useLayoutEffect(() => {
     const element = card.current;
     return () => {
@@ -271,16 +272,16 @@ export function AssetProposalStrip({ kind, targetId, names = NO_NAMES }: { kind:
   names?: ProposalNames }) {
   const entries = useAssetProposalsStore(useShallow((state) => proposalsFor(state, kind, targetId)));
   const held = useHeldProposals(kind, targetId);
-  // A real card that comes in where its placeholder was takes its place
-  // without springing in (GM r34: "no extra motion").
-  // (Derived state, set during render: the real card's first render already knows.)
+  // A real card that comes in where its placeholder was takes its place without
+  // springing in (design: "no extra motion"). (Derived state, set during render:
+  // the real card's first render already knows.)
   const [wasHeld, setWasHeld] = useState<ReadonlySet<string>>(() => new Set());
   if (held.some((item) => !wasHeld.has(item.proposalId))) setWasHeld(new Set([...wasHeld, ...held.map((item) => item.proposalId)]));
   const [now, setNow] = useState(() => Date.now());
   const showing = entries.length > 0 || held.length > 0;
   const root = useRef<HTMLDivElement>(null);
-  // Review 20 NIT-4: the placeholder that had focus when it left; its real
-  // card takes focus in the same commit, unless focus has gone elsewhere.
+  // The placeholder that had focus when it left; its real card takes focus
+  // in the same commit, unless focus has gone elsewhere.
   const focusLeft = useRef<string | null>(null);
   const [onLeaveFocused] = useState(() => (proposalId: string) => { focusLeft.current = proposalId; });
   useLayoutEffect(() => {
@@ -295,8 +296,8 @@ export function AssetProposalStrip({ kind, targetId, names = NO_NAMES }: { kind:
   });
   const asked = useAssetProposalsStore((state) => state.review?.kind === kind && state.review.targetId === targetId);
   const ringTimer = useRef<number | null>(null);
-  // Review on this proposal's Update (Q92 a): come into view and take focus,
-  // with a ring that springs in and settles (asset-proposals.css).
+  // Review on this proposal's Update: come into view and take focus, with a
+  // ring that springs in and settles (asset-proposals.css).
   useEffect(() => {
     const element = root.current;
     if (!asked || !showing || !element) return;

@@ -1,8 +1,7 @@
-// PR #200 fix round 22, GM r33 item 1 (review 18 LOW-2): the asset proposal
-// strip's Accept and Reject are held exactly like the canvas's proposal bar
-// while the person gate holds, with the same titles, clear on the server's
-// promote and come back on its demote. A refusal by the gate stops saying so
-// once the tab is promoted.
+// Design, PR #200: the asset proposal strip's Accept and Reject are held
+// exactly like the canvas's proposal bar while the person gate holds, with
+// the same titles, clear on the server's promote and come back on its
+// demote. A refusal by the gate stops saying so once the tab is promoted.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { blocked, lockLine } from '../../../tests/helpers/personLock';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
@@ -18,15 +17,15 @@ const { useAssetProposalsStore } = await import('../../store/assetProposalsStore
 const { coverProposal } = await import('../../test/assetProposalFixtures');
 const session = await import('../../lib/personSession');
 
-const ACCEPT = 'You can review this when this tab is connected as you.'; // one line for both (GM r17 item 2)
-const REJECT = 'You can review this when this tab is connected as you.'; // one line for both (GM r17 item 2)
+const ACCEPT = 'You can review this when this tab is connected as you.'; // one line for both (design)
+const REJECT = 'You can review this when this tab is connected as you.'; // one line for both (design)
 const accept = () => screen.getByRole('button', { name: 'Use this cover' }) as HTMLButtonElement;
 const reject = () => screen.getByRole('button', { name: 'Keep mine' }) as HTMLButtonElement;
 
 beforeEach(() => { useAssetProposalsStore.getState().clear(); net.accept.mockReset(); net.reject.mockReset(); });
 afterEach(() => { cleanup(); session.resetPersonSessionForTests(); });
 
-describe('GM r33 item 1: the asset strip holds with the person gate', () => {
+describe('Design: the asset strip holds with the person gate', () => {
   it('held: both disabled with the bar\'s titles, nothing sent; promoted: live; demoted: held again', async () => {
     useAssetProposalsStore.getState().open(coverProposal(), 'k1');
     render(<AssetProposalStrip kind="project" targetId="dusk" />);

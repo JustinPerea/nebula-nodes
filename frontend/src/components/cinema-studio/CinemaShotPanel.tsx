@@ -105,20 +105,20 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
   const shotRunning = Boolean(shotRun) || status === 'running';
   const shotBlocked = shotRunning || overlappingGraph || admissionBlocked || Boolean(referenceIssue);
   const sharedInputsBlocked = admissionBlocked && !shotRunning && !overlappingGraph && !referenceIssue;
-  // GM, PR #205 r1: the lock pattern, "You can generate this shot when …".
+  // Design, PR #205: the lock pattern, "You can generate this shot when …".
   const sharedInputsMessage = lockLine(RUN_LOCK_VERBS.generateShot, isImportingGraph ? 'import' : 'otherRun');
-  // GM bug 3 (fix round 1 of PR #200): Generate shot and Generate N say the
-  // same reason, and one line under their row says it too.
+  // Design, PR #200: Generate shot and Generate N say the same reason, and
+  // one line under their row says it too.
   const blockedReason = referenceIssue ?? (sharedInputsBlocked ? sharedInputsMessage : undefined);
   // That line shows under the row (one of the two below), so the Generate
-  // buttons point at it instead of repeating it as a tooltip (GM PR #205 r1).
+  // buttons point at it instead of repeating it as a tooltip (design, PR #205).
   const reasonShown = { id: reasonId, text: blockedReason };
   const shotStopping = shotRun?.status === 'cancelling';
-  // GM PR #205 r18: what the shot is, never what it isn't. While the shot is
-  // blocked (a lock line under the actions, or a run that holds it) it isn't
-  // ready, so no "Ready to generate"; the true state comes back when the
-  // lock clears. Generating…, Generated and Generation failed are the shot's
-  // own state and always show.
+  // Design, PR #205: what the shot is, never what it isn't. While the shot
+  // is blocked (a lock line under the actions, or a run that holds it) it
+  // isn't ready, so no "Ready to generate"; the true state comes back when
+  // the lock clears. Generating…, Generated and Generation failed are the
+  // shot's own state and always show.
   const statusLine = status === 'done' ? 'Generated' : status === 'running' ? 'Generating…'
     : status === 'error' ? 'Generation failed' : shotBlocked ? null : 'Ready to generate';
   const handleGenerateShot = () => {
@@ -151,9 +151,9 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
               {status === 'running' ? 'Generating…' : 'No preview yet'}
             </div>
           )}
-          {/* A failed shot reads like the node card (error copy round 3c-2):
-              `error` is the text agents read; errorRaw is the full text
-              behind Details when the run cut it. */}
+          {/* A failed shot reads like the node card (error copy): `error` is
+              the text agents read; errorRaw is the full text behind Details
+              when the run cut it. */}
           {shot.output?.status === 'error' && shot.output.error && (
             <NodeError className="cinema-shot-panel__error model-node__error" raw={shot.output.errorRaw ?? shot.output.error}
               category={shot.output.errorCategory} friendly={shot.output.errorFriendly}
@@ -203,8 +203,8 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
           placeholder="Describe this shot…"
           // Offline (or following an agent's switch) the prompt can't save
           // (the store refuses the edit), so it is read-only. Offline it has
-          // no tooltip: the banner says why (GM, PR #200 r2); following, GM's
-          // wait line (#195 round 23).
+          // no tooltip: the banner says why (design, PR #200); following, the
+          // wait line (design, PR #195).
           readOnly={readOnly}
           {...lock.mark}
           title={lock.act({ kept: 'scene' }).title}
@@ -233,8 +233,8 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
             </button>
           )}
         </div>
-        {/* GM PR #205 r18: the stepper only sets the count (nothing runs), so a
-            blocked shot leaves it live; its own limits, offline and following
+        {/* Design, PR #205: the stepper only sets the count (nothing runs), so
+            a blocked shot leaves it live; its own limits, offline and following
             still hold (lock.act). */}
         <div className="cinema-shot-panel__variations-control">
           <span className="cinema-shot-panel__variations-label">Variations</span>
@@ -259,7 +259,7 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
               +
             </button>
           </div>
-          {/* GM PR #205 r18: Generate N says it is refused as Generate shot
+          {/* Design, PR #205: Generate N says it is refused as Generate shot
               does (aria-disabled, the same line), in the one disabled look. */}
           <button
             type="button"
@@ -285,8 +285,8 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
             {...(readOnly && motionHandoff?.status !== 'ready' ? lock.mark : {})}
             title={readOnly && motionHandoff?.status !== 'ready'
               ? lockedAction(lock, { kept: 'scene' }, { verb: OFFLINE_VERBS.sendToMotion }).title
-              // GM PR #205 r4 item 5: an import holds it with its line.
-              // GM PR #205 r5 item 3: "View video node" says its own verb.
+              // Design, PR #205: an import holds it with its line, and "View video
+              // node" says its own verb.
               : isImportingGraph && motionHandoff?.status !== 'pending'
                 ? lockLine(motionHandoff?.status === 'ready' ? RUN_LOCK_VERBS.viewVideoNode : RUN_LOCK_VERBS.sendToMotion, 'import')
                 : undefined}
@@ -309,7 +309,7 @@ export function CinemaShotPanel({ cinemaNodeId, scene, shot, onChangeShot }: Cin
         </div>
         <section className="cinema-shot-panel__advanced" aria-label="Shot references">
           {/* Every control below writes the scene or uploads, so one fieldset
-              locks them offline (GM - Design, PR #198 round 5). */}
+              locks them offline (design, PR #198). */}
           <fieldset className="cinema-offline-lock" disabled={readOnly} {...lock.mark}
             title={lockedAction(lock, { kept: 'live' }).title}>
           <h3 className="cinema-shot-panel__label">Composition references</h3>

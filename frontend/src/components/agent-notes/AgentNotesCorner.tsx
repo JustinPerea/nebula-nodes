@@ -46,10 +46,10 @@ import { reportPersonRequired } from '../../lib/personSession';
 import { useAgentQuestionsStore } from '../../store/agentQuestionsStore';
 import { UPDATES_OPEN_EVENT } from '../../lib/personThread';
 
-/** The answer form (Q125 item 1): its own chunk, loaded once a question is open. */
+/** The answer form: its own chunk, loaded once a question is open. */
 const loadQuestionsForm = () => import('./AgentQuestionsForm');
 const AgentQuestionsForm = lazy(() => loadQuestionsForm().then((module) => ({ default: module.AgentQuestionsForm })));
-/** The Agents panel (Q125 item 2): its own chunk, loaded when the corner mounts. */
+/** The Agents panel: its own chunk, loaded when the corner mounts. */
 const loadAgentRoster = () => import('./AgentRoster');
 const AgentRoster = lazy(() => loadAgentRoster().then((module) => ({ default: module.AgentRoster })));
 
@@ -68,12 +68,13 @@ function useNeedsYouCount(projectId: string | null, enabled: boolean): number {
     questions: answerableQuestions(sets),
     canvasProposals: openViews(canvasProposals),
     assetProposals: openViews(assetProposals),
-    // GM, 2026-10-29: what this tab knows only from Updates counts too, so a promote changes nothing here.
+    // Design, 2026-10-29: what this tab knows only from Updates counts too, so
+    // a promote changes nothing here.
     held: heldAsks(notes ?? [], holdsAskIn(sets, canvasProposals, assetProposals)),
   }) : 0), [enabled, projectId, sets, canvasProposals, assetProposals, notes]);
 }
 
-/** The chip's name (GM's review of PR #193): the unread count, then how many agents need the person. */
+/** The chip's name (design, PR #193): the unread count, then how many agents need the person. */
 function chipLabel(unread: number, needsYou: number): string {
   if (needsYou > 0) {
     return `Updates, ${unread} unread, ${needsYou} ${needsYou === 1 ? 'agent needs you' : 'agents need you'}`;
@@ -81,7 +82,8 @@ function chipLabel(unread: number, needsYou: number): string {
   return unread > 0 ? `Updates, ${unread} unread` : 'Updates';
 }
 
-/** A card stays about 4 s (GM's v5.2 holds 2.6 to 3.8 s), longer while hovered or focused. */
+/** A card stays about 4 s (design, mockup v5.2: 2.6 to 3.8 s), longer while
+ * hovered or focused. */
 const CARD_HOLD_MS = 4000;
 const HOLD_TICK_MS = 250;
 /**
@@ -116,10 +118,10 @@ const BELOW = [
 ].join(', ');
 /** What the list and the questions form stop above: BELOW less the notice
  * stack. The person opened them, so they draw over the proposal bar (layer
- * 46 against its 9) and keep their room (GM, PR #203 r10 and r13 item 2:
- * nothing opened stops at the bar's top edge). The notices in the stack
- * still draw over them (their own layer). The arrival card, which the person
- * didn't open, still stops above the stack. */
+ * 46 against its 9) and keep their room (design, PR #203: nothing opened
+ * stops at the bar's top edge). The notices in the stack still draw over
+ * them (their own layer). The arrival card, which the person didn't open,
+ * still stops above the stack. */
 const BELOW_OPENED = BELOW.split(', ').filter((selector) => selector !== '.notice-region__stack').join(', ');
 /** Never squeeze the list shorter than this; it scrolls inside. */
 const MIN_ROOM = 160;
@@ -236,7 +238,7 @@ function setDropLine(top: number | null) {
  * starts below the chip, layouts.css). A chip pushed onto the header pill
  * drops below the pill's row, and the card and list follow it. The card and
  * the list stop above what sits below them in the same columns. The answer
- * form (Q125 item 1) is a popover over the list: same place, same width.
+ * form is a popover over the list: same place, same width.
  */
 function placeCorner(chip: HTMLElement | null, card: HTMLElement | null, list: HTMLElement | null,
   form: HTMLElement | null = null) {
@@ -250,17 +252,17 @@ function placeCorner(chip: HTMLElement | null, card: HTMLElement | null, list: H
   const tokenHeight = parseFloat(rootStyle.getPropertyValue('--agent-notes-chip-h')) || 40;
   const size = { height: chip.offsetHeight || tokenHeight, width: chip.offsetWidth };
   reserveChipWidth(size.width);
-  // Off the canvas (Q107 a) a screen's header keeps a slot for the chip, so it
-  // never sits over that screen's own controls: the chip centres on it, and
-  // the card and the list drop below the header.
+  // Off the canvas a screen's header keeps a slot for the chip, so it never
+  // sits over that screen's own controls: the chip centres on it, and the card
+  // and the list drop below the header.
   const reserved = headerSlot();
   if (reserved) {
     const { slot, header } = reserved;
     // Where the page scrolls its header away (Projects), the chip leaves with
-    // it, as the header's Settings does (GM on #199's shots, fix round 3 of
-    // PR #200): pinned to the top right it sat on "New project" once the page
-    // scrolled. Reserving a band for it would cost every scrolled screen its
-    // top 64 px; scrolling back up brings it back with the header.
+    // it, as the header's Settings does (design, PR #199's shots; fixed in PR #200):
+    // pinned to the top right it sat on "New project" once the page scrolled.
+    // Reserving a band for it would cost every scrolled screen its top 64 px;
+    // scrolling back up brings it back with the header.
     const top = Math.round(slot.top + (slot.height - size.height) / 2);
     const right = Math.round(viewport.width - slot.right);
     chip.style.setProperty('--an-right', `${right}px`);
@@ -365,7 +367,7 @@ function chipAuthors(notes: AgentNote[]): { agent: AgentNoteAuthor; reader: Agen
   return { agent, reader };
 }
 
-/** One list the corner shows: the open project's, and in Moodboard Studio the open board's (Q113 c). */
+/** One list the corner shows: the open project's, and in Moodboard Studio the open board's. */
 export interface AgentNotesCornerSection extends AgentNotesListSection {
   surface: AgentNotesSurface;
   /** The store key (`canvas:<projectId>`, `board:<boardId>`). */
@@ -434,13 +436,13 @@ function mergeNewestFirst(lists: AgentNote[][]): AgentNote[] {
  * mounts it in its own top-right spot (`AppAgentNotes`, which also mounts it
  * on every other screen, over that screen's header slot); it keeps left of
  * the chat panel when the chat's rect reaches it. In Moodboard Studio it
- * shows the open board's Updates above the project's (Q113 c): one chip,
- * one count, and opening the list reads both.
+ * shows the open board's Updates above the project's: one chip, one count,
+ * and opening the list reads both.
  */
 export function AgentNotesCorner({ sections, agents = null }: {
   sections: AgentNotesCornerSection[];
-  /** The Agents panel at the top of the list (Q125 item 2): the open
-   *  project's agents, and the adapter its rows act through. */
+  /** The Agents panel at the top of the list: the open project's
+   * agents, and the adapter its rows act through. */
   agents?: { projectId: string | null; adapter: AgentNotesAdapter } | null;
 }) {
   const markRead = useAgentNotesStore((s) => s.markRead);
@@ -470,7 +472,7 @@ export function AgentNotesCorner({ sections, agents = null }: {
   const listRef = useRef<HTMLDivElement | null>(null);
   const cardRef = useRef<HTMLDivElement | null>(null);
   const formRef = useRef<HTMLDivElement | null>(null);
-  /** The question set whose form is open (Q125 item 1), over the list. */
+  /** The question set whose form is open, over the list. */
   const formId = useAgentQuestionsStore((s) => s.formId);
   const anyOpenQuestion = useAgentQuestionsStore((s) => Object.values(s.sets).some((e) => e.answerKey && e.view.status === 'open'));
   // The lists as last rendered, for the socket's and the timers' callbacks.
@@ -765,7 +767,8 @@ export function AgentNotesCorner({ sections, agents = null }: {
   function fail(failure: unknown) {
     const line = failureMessage(failure, "Couldn’t update the note.");
     useAgentNotesStore.setState({ error: line });
-    // GM, #204 r3: refused only because this tab isn't connected as you: gone on the promote.
+    // Design, PR #204: refused only because this tab isn't connected as you: gone
+    // on the promote.
     clearLineOnPromote(failure, () => useAgentNotesStore.getState().error, line, // clears-on-promote: notes.corner
       () => useAgentNotesStore.setState({ error: null }));
     if (!openRef.current) openListRef.current();
@@ -809,10 +812,10 @@ export function AgentNotesCorner({ sections, agents = null }: {
   const formNoteRef = useRef<string | null>(null);
 
   /**
-   * Answer (Q125 item 1): the form, as a popover over the list. From a
-   * dropped card the list opens under it, so Escape leaves the person on the
-   * Update they came from. Only a tab the socket gave the set's key to can
-   * answer (the person's canvas); any other says so.
+   * Answer: the form, as a popover over the list. From a dropped card the
+   * list opens under it, so Escape leaves the person on the Update they came
+   * from. Only a tab the socket gave the set's key to can answer (the
+   * person's canvas); any other says so.
    */
   function answer(note: AgentNote, action: AgentNoteAction) {
     const setId = typeof action.op.questionId === 'string' ? action.op.questionId : '';
@@ -948,11 +951,12 @@ export function AgentNotesCorner({ sections, agents = null }: {
   const authors = chipAuthors(notes);
   const unreadKinds = new Set(notes.filter(isUnread).map((n) => n.author.kind));
   // The ring is the unread signal itself: on at any unread count, 1 included,
-  // while the list is closed (GM review of PR #157, round 2: it used to show
-  // only while a card was up, so a lone unread was left to a white figure).
+  // while the list is closed (design, PR #157: it used to show only while a
+  // card was up, so a lone unread was left to a white figure).
   const ringed = count > 0;
   const rootStyle = springCssVars() as CSSProperties;
-  // GM: "A waiting question blocks an agent, so 'Updates 0' mustn't hide it."
+  // Design: "A waiting question blocks an agent, so 'Updates 0'
+  // mustn't hide it."
   const needsYou = useNeedsYouCount(agents?.projectId ?? null, agents !== null);
 
   return (
@@ -1061,9 +1065,9 @@ function nodeRect(lookup: ReactFlowState['nodeLookup'], id: string): FlowBoxRect
 }
 
 /**
- * The adapter for every screen (Q107 a): Show moves the canvas's view on a
- * spring and outlines the nodes; from another screen it goes to the canvas
- * first and shows once the canvas has mounted and placed its camera.
+ * The adapter for every screen: Show moves the canvas's view on a spring
+ * and outlines the nodes; from another screen it goes to the canvas first
+ * and shows once the canvas has mounted and placed its camera.
  */
 function useAppAdapter(keptWith: string): AgentNotesAdapter {
   const store = useStoreApi<Node<NodeData>>();
@@ -1095,7 +1099,7 @@ function useAppAdapter(keptWith: string): AgentNotesAdapter {
       reveal(refs.map((id) => nodeRect(state.nodeLookup, id)).filter((r): r is FlowBoxRect => r !== null));
     }
 
-    /** A canvas proposal's Review (Q112 a): its ghosts and the nodes it touches, in view. */
+    /** A canvas proposal's Review: its ghosts and the nodes it touches, in view. */
     function frameProposal(entry: ProposalEntry) {
       const state = store.getState();
       const rects: FlowBoxRect[] = ghostBoxes(entry.view, useCanvasProposalsStore.getState().drag[entry.view.id])
@@ -1161,19 +1165,19 @@ function useAppAdapter(keptWith: string): AgentNotesAdapter {
         return reviewAssetProposal(op);
       },
       runAction: async (_note, action) => {
-        // A canvas proposal's Update (Q112 a): the canvas, with it in the bar.
+        // A canvas proposal's Update: the canvas, with it in the bar.
         if (action.op.kind === 'proposal.review' && action.op.target === 'canvas') {
           return reviewCanvasProposal(action.op, frameProposal);
         }
-        // An asset proposal's Update (Q92 a): go where the person decides it.
+        // An asset proposal's Update: go where the person decides it.
         if (action.op.kind === 'proposal.review') return reviewAssetProposal(action.op);
-        // A reply saved in another project's thread (GM r100.3): open that thread.
+        // A reply saved in another project's thread: open that thread.
         if (action.op.kind === 'thread.open') return openThreadIn(action.op.projectId, action.op.replyId);
-        // GM r9 3: no Update decides a proposal from its row any more (an old Accept or
+        // No Update decides a proposal from its row any more (an old Accept or
         // Reject is read as Review, lib/agentNotes); anything else can't run here.
         throw writtenLine(`“${action.label}” can’t run from here.`);
       },
-      // GM r108 c: Open on a reply's Update names whose reply and where.
+      // Design: Open on a reply's Update names whose reply and where.
       actionLabel: (note, action) => {
         if (action.op.kind !== 'thread.open') return undefined;
         const id = action.op.projectId;
@@ -1193,11 +1197,11 @@ function useAppAdapter(keptWith: string): AgentNotesAdapter {
 }
 
 /**
- * The board open in Moodboard Studio (Q113 c): its updates name images, drawn
- * with their numbers now; Show selects and frames their cards in the Board
- * view (the Studio answers `requestShow`). The board's edit actions (a run's
- * undo, Restore, a suggestion's Make frame / Not now, a board proposal's
- * Accept / Reject) have no route on main yet, so they say so and run nothing.
+ * The board open in Moodboard Studio: its updates name images, drawn with
+ * their numbers now; Show selects and frames their cards in the Board view
+ * (the Studio answers `requestShow`). The board's edit actions (a run's undo,
+ * Restore, a suggestion's Make frame / Not now, a board proposal's Accept /
+ * Reject) have no route on main yet, so they say so and run nothing.
  */
 function useBoardAdapter(boardId: string | null, imageIds: readonly string[]): AgentNotesAdapter {
   const order = imageIds.join('\n');
@@ -1229,16 +1233,16 @@ function useBoardAdapter(boardId: string | null, imageIds: readonly string[]): A
 const NO_IMAGES: string[] = [];
 
 /**
- * The Updates corner on every screen (Justin's Q107 a, 2026-10-21: "Show it
- * on every screen, with the open project's Updates"). App mounts one for
- * all screens, so the open list, the card and the count carry across a
- * screen switch. The list is the open project's (the canvas surface, kept
- * with the project). Hidden while no project is open: a first start on
- * Projects with no project yet has no list to show. On the canvas it holds
- * its own top-right corner (PR9a); elsewhere it sits over the slot that
- * screen's header keeps for it.
+ * The Updates corner on every screen (Justin 2026-10-21: "Show it on
+ * every screen, with the open project's Updates"). App mounts one for all
+ * screens, so the open list, the card and the count carry across a screen
+ * switch. The list is the open project's (the canvas surface, kept with the
+ * project). Hidden while no project is open: a first start on Projects with
+ * no project yet has no list to show. On the canvas it holds its own
+ * top-right corner (PR #124); elsewhere it sits over the slot that screen's
+ * header keeps for it.
  *
- * In Moodboard Studio on a saved board (Justin's Q113 c, 2026-10-21: "Two
+ * In Moodboard Studio on a saved board (Justin 2026-10-21: "Two
  * sections in one list: "This moodboard" first, then the project. One chip with
  * one count (both added), opening it reads both, and an empty board section
  * is hidden.") the board's own Updates come first. Only there: every other
@@ -1313,7 +1317,7 @@ export function AppAgentNotes() {
     return result;
   }, [boardShown, boardId, boardList, boardAdapter, projectShown, projectId, list, adapter]);
 
-  // The Agents panel (Q125 item 2): the open project's agents, wherever the corner shows it.
+  // The Agents panel: the open project's agents, wherever the corner shows it.
   const agents = useMemo(() => (projectShown ? { projectId, adapter } : null), [projectShown, projectId, adapter]);
 
   if (!shown) return null;

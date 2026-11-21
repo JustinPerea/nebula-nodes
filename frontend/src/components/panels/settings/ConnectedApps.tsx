@@ -178,10 +178,10 @@ export function ConnectedApps({ view, counted = false, unknown = false, loadErro
   const [armed, setArmed] = useState<string | null>(null);
   const [recoloring, setRecoloring] = useState<string | null>(null);
   const labelOf = (id: string | null | undefined) => clients.find((client) => client.id === id)?.label;
-  // GM r14 (5): the server refuses a new agent token from a tab that isn't connected as the person
-  // (create_agent_app: require_person). So Connect locks in place with its own line under it, and
-  // (PR #204 round 10, GM r15 and r17) a listed app's limit, colour and Revoke lock as a group
-  // with one line under the heading. Both through the one lock (components/PersonLock).
+  // Design, PR #204: the server refuses a new agent token from a tab that isn't connected as the
+  // person (create_agent_app: require_person). So Connect locks in place with its own line under
+  // it, and a listed app's limit, colour and Revoke lock as a group with one line under the
+  // heading. Both through the one lock (components/PersonLock).
   const connectLock = usePersonLock('connect an agent');
   const rowLock = usePersonLock('change connected agents');
   const tabHeld = connectLock.locked;
@@ -197,7 +197,7 @@ export function ConnectedApps({ view, counted = false, unknown = false, loadErro
     } catch (exc) {
       const line = failureMessage(exc, "Couldn’t update the connected apps.");
       setError(line);
-      clearSetterOnPromote(exc, setError, line, null); // clears-on-promote: settings.apps (GM, #204 r3)
+      clearSetterOnPromote(exc, setError, line, null); // clears-on-promote: settings.apps (design, PR #204)
     } finally {
       setBusy(false);
     }

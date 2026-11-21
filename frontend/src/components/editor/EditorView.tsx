@@ -54,7 +54,7 @@ export function EditorView() {
   useEffect(() => {
     function handleKey(e: KeyboardEvent) {
       // Nothing acts behind a modal dialog: M, I, O, B, Delete, Escape…
-      // wherever focus is (review 8, L-d).
+      // wherever focus is.
       if (e.defaultPrevented || keyBlockedByModal()) return;
       // Bail out of all bindings if the user is typing in a form field.
       const target = e.target as HTMLElement | null;

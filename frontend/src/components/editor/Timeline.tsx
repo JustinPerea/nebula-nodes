@@ -15,10 +15,10 @@ interface Props {
 
 /** The trim editor's timeline. With the transport row above it, it is the
  * screen's bottom bar (`data-bottom-bar`): EditorView publishes their top
- * edge, so the app's notices never sit over it (GM - Design, round 4: "A
- * notice should never sit over a timeline being edited, even one that shares
- * its column."; round 4b: the transport publishes too, so notices sit above
- * it, over the preview's bottom edge). */
+ * edge, so the app's notices never sit over it (design: "A notice should
+ * never sit over a timeline being edited, even one that shares its
+ * column."; the transport publishes too, so notices sit above it, over the
+ * preview's bottom edge). */
 export function Timeline({ editNode, sourceUrl, ref }: Props) {
   const params = (editNode.data as { params?: Record<string, unknown> }).params ?? {};
   const clips: EditClip[] = (params.clips as EditClip[]) ?? [];

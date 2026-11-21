@@ -21,7 +21,7 @@ import { useMaskPainterDialog } from './maskPainterDialog';
  * dialog appears at once and fills in. If the chunk cannot load, the same
  * shell says so, with Try again next to Close (DeferredBoundary). The next
  * Paint Mask mounts it afresh, which fetches again too. Both are on
- * document.body (ModalPortal, review 9 M-2): rendered inside the Inspector
+ * document.body (ModalPortal): when it was rendered inside the Inspector
  * popover, whose backdrop-filter under Slava restraint makes it the
  * containing block of a position:fixed overlay, the painter was the
  * popover's 260x300 box, with the canvas usable beside it.
@@ -50,8 +50,8 @@ export function MaskPainterModal(props: ComponentProps<typeof DeferredMaskPainte
       chunk={DeferredMaskPainterModal}
       failed={({ retry, retrying }) => (
         <MaskPainterShell onClose={props.onClose} busy={retrying}>
-          {/* GM's WRAP rule (round 3b): Try again is beside it and loads it again.
-              Round 3f: the server is on this computer, not "your connection". */}
+          {/* WRAP rule (design): Try again is beside it and loads it again.
+              The server is on this computer, not "your connection". */}
           <div className="mask-painter__empty" role="alert">{becauseLine({ heading: "Couldn’t load the mask painter.", reason: CONNECTION_LOST_COPY }, 'button')}</div>
           <div className="mask-painter__toolbar">
             <div className="mask-painter__spacer" />

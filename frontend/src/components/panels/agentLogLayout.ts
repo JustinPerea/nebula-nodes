@@ -117,14 +117,14 @@ export function samePosition(a: Position, b: Position) {
     && a.offsetY === b.offsetY;
 }
 
-// -- the person's height (GM - Design r61 answer 1) ---------------------------
+// -- the person's height ---------------------------------
 
 /** Where the person's height is kept, as the log's drag position is. */
 export const HEIGHT_STORAGE_KEY = 'nebula:agentLog:h';
-/** One arrow key moves the resize handle this far (GM r70: 24 px). */
+/** One arrow key moves the resize handle this far (24 px). */
 export const RESIZE_KEY_STEP = 24;
-/** The handle's name (GM r70) and tooltip (GM r73's words: the keys sit in
- * the same two sentences as the pointer). */
+/** The handle's name and tooltip (design: the keys sit in the same two
+ * sentences as the pointer). */
 export const RESIZE_HANDLE_LABEL = 'Resize the Agent log';
 export const RESIZE_HANDLE_TITLE = 'Drag or use the arrow keys to resize. Double-click or press Enter to fit the content.';
 

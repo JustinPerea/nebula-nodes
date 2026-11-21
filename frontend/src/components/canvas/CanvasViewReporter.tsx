@@ -18,9 +18,9 @@ export function CanvasViewReporter() {
   const transform = useStore((s) => s.transform);
   const width = useStore((s) => s.width);
   const height = useStore((s) => s.height);
-  // Round 16 (L1): zoom and pan while offline are local view state; nothing
-  // is sent then, and the view in hand goes out once Nebula answers again,
-  // so agents read the canvas the person is looking at.
+  // Zoom and pan while offline are local view state; nothing is sent then,
+  // and the view in hand goes out once Nebula answers again, so agents read
+  // the canvas the person is looking at.
   const offline = useBackendOffline();
   const lastSent = useRef(0);
   const inFlight = useRef<AbortController | null>(null);

@@ -1,13 +1,13 @@
 import { useLayoutEffect, useSyncExternalStore } from 'react';
 
 /**
- * PR #204 round 14 (review 11 lock-look-ui NIT-1, GM r17 item 1: one line per group): the Settings
- * groups whose lock line is on screen whenever their lock shows it, by the lock's verb, with the
- * line's id. A group registers while it would render its line (ProvidersTab: while any provider
- * row is listed), whether or not the tab is locked right now. A control of the same group
- * elsewhere in the panel (the key-added Undo) reads it while rendering: on a demote both locks
- * flip in the same render, so Undo knows there is a group line before anything is committed and
- * never puts a second copy in the notice's live region. Nothing here reads the page.
+ * PR #204 (design: one line per group): the Settings groups whose lock line is on
+ * screen whenever their lock shows it, by the lock's verb, with the line's id. A group registers
+ * while it would render its line (ProvidersTab: while any provider row is listed), whether or not
+ * the tab is locked right now. A control of the same group elsewhere in the panel (the key-added
+ * Undo) reads it while rendering: on a demote both locks flip in the same render, so Undo knows
+ * there is a group line before anything is committed and never puts a second copy in the notice's
+ * live region. Nothing here reads the page.
  */
 const lines = new Map<string, string[]>();
 const listeners = new Set<() => void>();

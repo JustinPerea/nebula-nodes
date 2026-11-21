@@ -60,10 +60,10 @@ const TAB_SURFACE: Record<Tab, string | undefined> = {
  * or Create with a Style); the selected item's buttons do the same, and
  * "Add to canvas" (or dragging the item) puts a Character or Moodboard node
  * on the canvas through the existing add*Node paths + drag MIMEs. "Move"
- * files a Character or Moodboard under Global or the open project
- * (contract 07, 1.10). Styles have no Studio, so their Delete is here: it
- * moves the Style to Recently deleted with an Undo toast, and Recently
- * deleted lists under the Styles, as in the Studios (Q53 a, 2026-10-20).
+ * files a Character or Moodboard under Global or the open project (contract
+ * 07, 1.10). Styles have no Studio, so their Delete is here: it moves the
+ * Style to Recently deleted with an Undo toast, and Recently deleted lists
+ * under the Styles, as in the Studios (2026-10-20).
  */
 export function AssetsPanel() {
   const togglePanel = useUIStore((s) => s.togglePanel);
@@ -437,7 +437,7 @@ function AssetItem({
   onOpen: () => void;
   openLabel: string;
   onAdd?: () => void;
-  /** Its add's line while the canvas is kept (GM r22, 4). */
+  /** Its add's line while the canvas is kept. */
   keptAdd?: KeptAction;
   onDragStart?: (e: ReactDragEvent<HTMLButtonElement>) => void;
   /** The Move menu (Characters and Moodboards). */
@@ -447,9 +447,8 @@ function AssetItem({
   deleteBusy?: boolean;
 }) {
   const label = name || 'Untitled';
-  // Round 23 (review 22, L-3): Add to canvas and dragging onto it add a node,
-  // so they take the canvas lock. Open, Move and Delete act on the asset
-  // library, not the canvas.
+  // Add to canvas and dragging onto it add a node, so they take the canvas
+  // lock. Open, Move and Delete act on the asset library, not the canvas.
   const lock = useCanvasLock();
   const stored = localOnly ? storedImageView(thumbnail) : null;
   const src = stored ? stored.src : thumbnail ? backendAssetUrlSync(thumbnail) : null;

@@ -34,14 +34,14 @@ export function OutputRenderer({
   outputs: Record<string, PortValue>;
   state: NodeState;
   error?: string;
-  /** The node's run error readings (error copy round 3c): the card's lines, not the raw text. */
+  /** The node's run error readings (error copy): the card's lines, not the raw text. */
   errorCategory?: string;
   errorFriendly?: string;
   errorPerson?: string;
   errorProviderText?: boolean;
-  /** The provider the run called (round 3f): GM's general line names it. */
+  /** The provider the run called: the general line (design) names it. */
   errorProvider?: string;
-  /** Nebula refused the run before it started: the card's heading (round 17). */
+  /** Nebula refused the run before it started: the card's heading. */
   errorNotStarted?: boolean;
   /** The stop is a missing key: something to do, drawn neutral as on the canvas card. */
   errorMissingKey?: boolean;
@@ -71,7 +71,7 @@ export function OutputRenderer({
   }
   if (state === 'error') {
     // The same lines as the canvas card (lib/nodeErrorCopy.ts): the person's
-    // line or GM's, the raw provider text only behind Details.
+    // line or the general line (design), the raw provider text only behind Details.
     return <NodeError className="create-output create-output--error" raw={error ?? 'Generation failed'}
       category={errorCategory} friendly={errorFriendly} person={errorPerson} providerText={errorProviderText}
       provider={errorProvider} notStarted={errorNotStarted} missingKey={errorMissingKey} />;

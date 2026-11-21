@@ -36,16 +36,16 @@ export function RemotionEditorToolbar({ remotionNodeId }: RemotionEditorToolbarP
   const renderJob = useRenderJob();
   // Every add, a layer's order and delete, and REC save into the project (the
   // store's edit gates and its autosave), and Export renders on the backend:
-  // all are off while Nebula is offline (GM, PR #198 r2). REC can still be
+  // all are off while Nebula is offline (design, PR #198). REC can still be
   // turned off. Read from the canvas lock, the one source for offline.
   const lock = useCanvasLock();
   const offline = lock.offline;
   const addTrackItemWithCanvasMirror = useGraphStore((s) => s.addTrackItemWithCanvasMirror);
   const deleteTrackItem = useGraphStore((s) => s.deleteTrackItem);
   const reorderTrackItem = useGraphStore((s) => s.reorderTrackItem);
-  // Round 23 (review 22, L-3): adding, ordering and deleting layers edit the
-  // canvas's Remotion node, so they take the canvas lock. REC (a drag mode)
-  // and Export (a file) stay enabled while following.
+  // Adding, ordering and deleting layers edit the canvas's Remotion node, so
+  // they take the canvas lock. REC (a drag mode) and Export (a file) stay
+  // enabled while following.
   const selectedTrackItemId = useUIStore((s) => s.selectedTrackItemId);
   const setSelectedTrackItem = useUIStore((s) => s.setSelectedTrackItem);
   const isKeyframeRecording = useUIStore((s) => s.isKeyframeRecording);

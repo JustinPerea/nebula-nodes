@@ -6,7 +6,7 @@ import { TRY_AGAIN } from '../../lib/sceneSaveCopy';
 import { useHeldLook } from '../../hooks/useHeldLook';
 
 /**
- * GM r28: a scene's stop line is a state, never lost. The lines sit in
+ * Design: a scene's stop line is a state, never lost. The lines sit in
  * their own slot above the event slot (lib/noticeSlots.ts 'scene-stop'),
  * one per cause, naming their scenes with the shared rule (up to 3 by name,
  * from 4 a count); no event pushes them out. [Try again] retries every
@@ -14,19 +14,18 @@ import { useHeldLook } from '../../hooks/useHeldLook';
  * and a scene whose stop clears leaves it, so the line shrinks or goes.
  * While a try is on its way the line stays, its [Try again] disabled
  * (aria-disabled, so focus stays on it; design), so a second press can't
- * queue another; GM r30: the line is aria-busy, the button greys after a
- * moment (useHeldLook) and has no reason tooltip.
- * No hold and no × on any of them (GM r29 #5, r32 answer 3): the line goes
- * when the stop does. GM r32: the run-lock line ("Your changes to “Opening”
- * are kept. Nebula will save them when the run finishes.") is one too, with
- * no [Try again] (it clears when the run ends), and so is the "other" line,
- * with [Try again]. A scene whose clash
- * waits is asked by its prompt instead, and the scene whose "Unsaved"
- * popover is open is left out while it is (its line is there).
+ * queue another; the line is aria-busy, the button greys after a moment
+ * (useHeldLook) and has no reason tooltip (design). No hold and no × on any
+ * of them (design): the line goes when the stop does. The run-lock line
+ * ("Your changes to “Opening” are kept. Nebula will save them when the run
+ * finishes.") is one too, with no [Try again] (it clears when the run ends),
+ * and so is the "other" line, with [Try again]. A scene whose clash waits is
+ * asked by its prompt instead, and the scene whose "Unsaved" popover is open
+ * is left out while it is (its line is there).
  *
- * Focus (review 18 LOW-1, GM r29): a line that had focus and comes back
- * under another cause gives focus to its [Try again]; one that goes for good
- * hands it on by the notice stack's × rule (useStopLineFocus).
+ * Focus (design): a line that had focus and comes back under another cause
+ * gives focus to its [Try again]; one that goes for good hands it on by the
+ * notice stack's × rule (useStopLineFocus).
  */
 export function SceneStopLines() {
   const nodes = useGraphStore((state) => state.nodes);
@@ -54,7 +53,7 @@ export function SceneStopLines() {
 
 type Line = ReturnType<typeof sceneStopLines>[number];
 
-/** One stop line. GM r29 call 2, r30: while its try is on its way it is
+/** One stop line. Design: while its try is on its way it is
  * aria-busy and its [Try again] is held (aria-disabled at once, grey after
  * a moment, the label as it is); a press then does nothing. */
 function StopLine({ line, track, buttonRef, act, onRetry }: { line: Line; track: ReturnType<ReturnType<typeof useStopLineFocus>['track']>;
@@ -76,7 +75,7 @@ function StopLine({ line, track, buttonRef, act, onRetry }: { line: Line; track:
 }
 
 /**
- * Review 18 LOW-1 (GM r29 approved): where focus goes when the stop line it
+ * Design: where focus goes when the stop line it
  * was in leaves the page. Only when focus went with the line (it is on the
  * body or gone), never from where the person moved meanwhile.
  * - The line's scenes are in a line again (a try that came back under
@@ -87,7 +86,7 @@ function StopLine({ line, track, buttonRef, act, onRetry }: { line: Line; track:
  *   its [Try again], so a second Enter can't act); with no stop line left,
  *   the next notice below in the region, else the one above, onto its ×,
  *   else the notice itself when it takes focus (the clash prompt); else the
- *   canvas. A plain focus(): the ring follows the input (GM r17).
+ *   canvas. A plain focus(): the ring follows the input (design).
  */
 function useStopLineFocus(lines: Line[]) {
   const focused = useRef<{ key: string; nodeIds: string[] } | null>(null);

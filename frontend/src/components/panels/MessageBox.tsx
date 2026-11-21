@@ -108,7 +108,7 @@ function previewWords(row: ThreadRow, nodeName: (id: string) => string): { label
     case 'proposal': return { label: name, text: 'proposed a change' };
     case 'note': return { label: name, text: 'left a note in Updates' };
     case 'pin': return { label: 'You', text: `left a note ${pinWhere(row, nodeName)}` };
-    // GM r94: the collapsed log reads "Claude Code replied to your note".
+    // Design: the collapsed log reads "Claude Code replied to your note".
     case 'pinReply': return { label: name, text: 'replied to your note' };
   }
 }
@@ -122,27 +122,27 @@ function useNodeName(): (id: string) => string {
   return (id: string) => cardTitle(nodes, id);
 }
 
-/** GM r73 item 2: the person's typed answers, derived in this tab from the
- * question sets it holds (never a thread row: lib/personThreadBox answerRows). */
+/** Design: the person's typed answers, derived in this tab from the question sets
+ * it holds (never a thread row: lib/personThreadBox answerRows). */
 function useAnswerRows(rows: readonly ThreadRow[]): AnswerRow[] {
   const sets = useAgentQuestionsStore((s) => s.sets);
   return useMemo(() => answerRows(rows, sets), [rows, sets]);
 }
 
 /**
- * GM r73 item 3: words cut at a word boundary to their element's one line
+ * Design: words cut at a word boundary to their element's one line
  * (cutAtWord, the one cut the "Answering “…”" chip and "You answered “…”."
  * share). The element is a flex item that may shrink (min-width 0, overflow
- * hidden): with every word in it, its box is as wide as the line lets it be.
- * Each candidate's words are then written into its text node and measured
- * with a Range (fractional px: whole-px scroll widths round a fitting cut
- * out), and the text put back before the paint. The ellipsis renders after
- * the element, not in it (cutParts): Chrome lays out "s…" 0.42 px narrower
- * than it paints, so inside the element its own CSS ellipsis would take the
- * last letter; the room is the element's with every word in it plus that
- * ellipsis, if one shows. Measured again when `container` changes size
- * (the observer's first call too). Where nothing lays out (no widths), the
- * words show whole.
+ * hidden): with every word in it, its box is as wide as the line lets it
+ * be. Each candidate's words are then written into its text node and
+ * measured with a Range (fractional px: whole-px scroll widths round a
+ * fitting cut out), and the text put back before the paint. The ellipsis
+ * renders after the element, not in it (cutParts): Chrome lays out "s…"
+ * 0.42 px narrower than it paints, so inside the element its own CSS
+ * ellipsis would take the last letter; the room is the element's with every
+ * word in it plus that ellipsis, if one shows. Measured again when
+ * `container` changes size (the observer's first call too). Where nothing
+ * lays out (no widths), the words show whole.
  */
 function useWordCut(ref: RefObject<HTMLSpanElement | null>, text: string, container: string, inside?: string): string {
   const [shown, setShown] = useState(() => oneLine(text));
@@ -201,7 +201,7 @@ export function MessagePreview() {
   const answers = useAnswerRows(rows);
   const latest = rows[rows.length - 1];
   const latestAnswer = answers[answers.length - 1];
-  // A typed answer after the last row is the latest thing (r73).
+  // A typed answer after the last row is the latest thing.
   const answerLast = latestAnswer && (!latest || latestAnswer.at >= latest.at) ? latestAnswer : null;
   if (pending || answerLast) {
     return (
@@ -238,7 +238,7 @@ function useNow(until: number | null): number {
   return now;
 }
 
-/** A message's state line (r50's table) under its recipient's cursor label (r61). */
+/** A message's state line under its recipient's cursor label. */
 function useMessageStatus(row: ThreadRow | null, rows: readonly ThreadRow[]): StatusLine {
   const key = row?.to?.sessionKey ?? null;
   const activity = usePersonThreadStore((s) => (key ? s.activity[key] ?? null : null));
@@ -255,7 +255,7 @@ function useMessageStatus(row: ThreadRow | null, rows: readonly ThreadRow[]): St
 }
 
 function StatusView({ status, row, origin }: { status: StatusLine; row?: ThreadRow; origin?: RunOrigin }) {
-  // GM r117: a line swapped for another (sent → delivered, lapsed → dropped)
+  // Design: a line swapped for another (sent → delivered, lapsed → dropped)
   // changes the row's height on the box's layout spring, never a jump. The
   // wrapper holds the measured height and messageBox.css transitions it
   // (reduced motion jumps); the first measure sets it from auto, so a row
@@ -293,7 +293,7 @@ function MessageStatus({ row, rows }: { row: ThreadRow; rows: readonly ThreadRow
   return <StatusView status={useMessageStatus(row, rows)} row={row} />;
 }
 
-/** GM r79.3: the working line of a run a pin or an answer started (a
+/** Design: the working line of a run a pin or an answer started (a
  * message's is useMessageStatus's). Only working: Nebula never sees whether
  * a pin or an answer was taken, so there is no "Waiting". */
 function useOriginStatus(origin: RunOrigin | null): { status: StatusLine; who: RunOrigin | null } {
@@ -332,28 +332,29 @@ function QuestionRow({ row }: { row: ThreadRow }) {
   const answeringHere = usePersonThreadStore((s) => Boolean(row.questionId && s.answering?.setId === row.questionId));
   const questions = entry?.view.questions ?? row.questions ?? [];
   const open = entry?.view.status === 'open' && Boolean(entry.answerKey);
-  // GM r79.5: the set this tab holds, else the outcome kept with the row, so
+  // Design: the set this tab holds, else the outcome kept with the row, so
   // "You chose …" survives any reload.
   const closed = entry && entry.view.status !== 'open' ? entry.view : row.outcome;
-  // r61 answer 4: once answered, the row drops its buttons for a quiet line.
+  // Once answered, the row drops its buttons for a quiet line.
   const answered = closed?.status === 'answered' ? answeredLine(closed.answers ?? []) : null;
-  // GM r70: typed words on one line, cut inside their curly quotes.
+  // Design: typed words on one line, cut inside their curly quotes.
   const typed = closed?.status === 'answered' ? answeredQuote(closed.answers ?? []) : null;
-  // GM r79.5: not open and no answer known (withdrawn, dismissed, or an
+  // Design: not open and no answer known (withdrawn, dismissed, or an
   // outcome Nebula no longer has): no buttons, the neutral line.
   const shut = !open && !answered;
-  // One single-choice question: a click is the answer (r50's mock). Anything
-  // more keeps its picks until Send, as the Agents panel's form does.
+  // One single-choice question: a click is the answer. Anything more
+  // keeps its picks until Send, as the Agents panel's form does.
   const oneClick = questions.length === 1 && !questions[0].multiple && questions[0].options.length > 0;
-  // r61 answer 4: one question with no options is answered from the composer.
-  // A set that mixes one with others keeps the Agents panel's form.
+  // One question with no options is answered from the composer. A set that
+  // mixes one with others keeps the Agents panel's form.
   const fromComposer = questions.length === 1 && questions[0].options.length === 0;
   const needsForm = !fromComposer && questions.some((question) => question.options.length === 0);
   const setId = row.questionId ?? '';
-  // PR #204 round 10 (GM r15, r17): answering is the person's alone (POST /api/questions/.../answer:
-  // require_person), so the options and Send answers lock as one group, with one line under them,
-  // on a tab that isn't connected as the person. The answers that go from the composer or the
-  // Agents panel's form lock where they are.
+  // Design, PR #204: answering is the person's alone (POST
+  // /api/questions/.../answer: require_person), so the options and Send answers
+  // lock as one group, with one line under them, on a tab that isn't connected
+  // as the person. The answers that go from the composer or the Agents panel's
+  // form lock where they are.
   const sends = open && (oneClick || (!needsForm && !fromComposer));
   const lock = usePersonLock('answer this', sends);
   function pick(questionId: string, option: string) {
@@ -416,9 +417,9 @@ function QuestionRow({ row }: { row: ThreadRow }) {
   );
 }
 
-/** GM r70/r73: "You answered “…”." on one line, the words cut at a word inside
- * the quotes. GM r94: whole words that end in . ? or ! take no period after
- * the quote; cut words end in the ellipsis, so the period stays. */
+/** Design: "You answered “…”." on one line, the words cut at a word inside the
+ * quotes; whole words that end in . ? or ! take no period after the quote, and
+ * cut words end in the ellipsis, so the period stays. */
 function TypedAnswerLine({ before, words, after, afterCut }: { before: string; words: string; after: string; afterCut: string }) {
   const wordsRef = useRef<HTMLSpanElement | null>(null);
   const cut = cutParts(useWordCut(wordsRef, words, '.message-box__answered--typed', '“'), words);
@@ -429,7 +430,7 @@ function TypedAnswerLine({ before, words, after, afterCut }: { before: string; w
   );
 }
 
-/** GM r73 item 2: the person's typed answer as a You row (display only; see answerRows). */
+/** Design: the person's typed answer as a You row (display only; see answerRows). */
 function AnswerRowView({ answer }: { answer: AnswerRow }) {
   return (
     <div className="message-box__row message-box__row--you" data-answer="">
@@ -443,7 +444,7 @@ function RowView({ row, rows, nodeName, inRun }: {
   row: ThreadRow;
   rows: readonly ThreadRow[];
   nodeName: (id: string) => string;
-  /** The run's status leads its fold at the end of the thread (r61 A). */
+  /** The run's status leads its fold at the end of the thread. */
   inRun: boolean;
 }) {
   const proposalOpen = useCanvasProposalsStore((s) => Boolean(row.proposalId && s.proposals[row.proposalId]));
@@ -470,7 +471,7 @@ function RowView({ row, rows, nodeName, inRun }: {
       return (
         <div className="message-box__row message-box__row--ref" style={shade(row.agent, row.session)}>
           <div className="message-box__who"><span className="message-box__dot" aria-hidden="true" />{name} proposed a change</div>
-          {/* The card stays the only place to Accept or Reject (r50). */}
+          {/* The card stays the only place to Accept or Reject. */}
           <ShowButton disabled={!proposalOpen}
             onShow={() => { if (row.proposalId && proposalOpen) useCanvasProposalsStore.getState().focus(row.proposalId); }} />
         </div>
@@ -499,16 +500,16 @@ function RowView({ row, rows, nodeName, inRun }: {
 }
 
 /**
- * The actions between two rows, folded: "3 actions" (r50). r61 A: the run
- * going on now leads with its status ("› Claude is working · Cooler sky"),
- * which opens to that run's actions; when the reply lands it settles to
- * "› 1 action" above the reply, keeping its place and whether it was open.
+ * The actions between two rows, folded: "3 actions". The run going on now
+ * leads with its status ("› Claude is working · Cooler sky"), which opens
+ * to that run's actions; when the reply lands it settles to "› 1 action"
+ * above the reply, keeping its place and whether it was open.
  */
 function ActionsFold({ entries, status, origin }: { entries: AgentLogEntry[]; status?: StatusLine; origin?: RunOrigin }) {
   const [open, setOpen] = useState(false);
   const listId = useId();
   const lead = status && statusLeadsRun(status) ? status : null;
-  // GM r89.5: the chip's one line cut at a word by the shared cut, its closers kept ("on “Hero…”").
+  // Design: the chip's one line cut at a word by the shared cut, its closers kept ("on “Hero…”").
   const wordsRef = useRef<HTMLSpanElement | null>(null);
   const text = lead ? lead.text : actionsLabel(entries.length);
   const cut = cutParts(useWordCut(wordsRef, text, '.message-box__actions'), text);
@@ -518,7 +519,7 @@ function ActionsFold({ entries, status, origin }: { entries: AgentLogEntry[]; st
   }
   return (
     <div className="message-box__actions">
-      {/* GM r70: the same bordered chip working and settled; only its words
+      {/* Design: the same bordered chip working and settled; only its words
           and the breathing dot change, so settling never moves the row. */}
       <button type="button" className="message-box__fold"
         aria-expanded={open} aria-controls={listId}
@@ -568,7 +569,7 @@ export function MessageThread({ entries }: { entries: AgentLogEntry[] }) {
   const pinned = useRef(true);
   const [pill, setPill] = useState<{ id: string; label: string } | null>(null);
   // The size at the last scroll event: a scroll the reflow caused (a narrower
-  // window rewraps the rows) never unpins a thread read at the bottom (live-ux L2).
+  // window rewraps the rows) never unpins a thread read at the bottom.
   const size = useRef({ height: 0, client: 0 });
   const answers = useAnswerRows(rows);
   const sets = useAgentQuestionsStore((s) => s.sets);
@@ -576,14 +577,14 @@ export function MessageThread({ entries }: { entries: AgentLogEntry[] }) {
   const [firstIds] = useState(() => new Set([...rows.map((row) => row.id), ...answers.map((answer) => answer.id)]));
   // The tab's own send shows as its pending row until it settles.
   const shownRows = useMemo(() => rows.filter((row) => !(pending && row.clientId === pending.clientId)), [rows, pending]);
-  // GM r79.3: every deliberate wake (a message, a pin, an answer) gets the working fold.
+  // Design: every deliberate wake (a message, a pin, an answer) gets the working fold.
   const run = useMemo(() => runOrigin(shownRows, answers, sets), [shownRows, answers, sets]);
   const messageStatusLine = useMessageStatus(run?.kind === 'message' ? run.row : null, shownRows);
   const other = useOriginStatus(run);
   const runStatus = run?.kind === 'message' ? messageStatusLine : other.status;
   const runWho = run?.kind === 'message' ? run : other.who;
-  // r61 A: while the run's session works on it (or, for a message, it waits
-  // on it), its status leads the run's fold at the end, so the newest thing is last.
+  // While the run's session works on it (or, for a message, it waits on it), its
+  // status leads the run's fold at the end, so the newest thing is last.
   const leads = statusLeadsRun(runStatus);
   const items = useMemo(() => {
     const folded = foldActions(shownRows, entries.filter((entry) => entry.source === 'agent'), answers);
@@ -593,7 +594,7 @@ export function MessageThread({ entries }: { entries: AgentLogEntry[] }) {
   const lastAnswer = answers[answers.length - 1];
   const answerIsLast = Boolean(lastAnswer && (!lastRow || lastAnswer.at >= lastRow.at));
   const lastId = answerIsLast ? lastAnswer.id : lastRow?.id ?? '';
-  // GM r79.4: the pill only for agent rows addressed to the person (replies,
+  // Design: the pill only for agent rows addressed to the person (replies,
   // questions, proposals, Updates notes), naming the newest unseen; never
   // the person's own rows, their answers or a fold.
   const newest = useMemo(() => [...shownRows].reverse().find((row) => pillFor(row) !== null) ?? null, [shownRows]);
@@ -609,12 +610,12 @@ export function MessageThread({ entries }: { entries: AgentLogEntry[] }) {
     if (element) size.current = { height: element.scrollHeight, client: element.clientHeight };
   }, []);
 
-  // GM r100.2: the person's own send always brings the thread to their sent
-  // row (the newest, with any failure line under it), on the scroll spring
-  // (a jump under reduced motion), wherever they had scrolled. The pill
-  // stays for agent rows only. Pinned from the start, so the row's state
-  // line and a failure line growing under it stay in view.
-  // Declared before r50's jump below, so a send's commit springs and never jumps.
+  // Design: the person's own send always brings the thread to their sent row (the
+  // newest, with any failure line under it), on the scroll spring (a jump under
+  // reduced motion), wherever they had scrolled. The pill stays for agent rows
+  // only. Pinned from the start, so the row's state line and a failure line
+  // growing under it stay in view. Declared before the effect below that
+  // follows the bottom, so a send's commit springs and never jumps.
   const springing = useRef<(() => void) | null>(null);
   const sending = pending?.clientId ?? null;
   const [seenSending, setSeenSending] = useState(sending);
@@ -641,10 +642,10 @@ export function MessageThread({ entries }: { entries: AgentLogEntry[] }) {
   }, [sending]);
   useEffect(() => () => springing.current?.(), []);
 
-  // r50: new rows scroll into view only when the thread is already at the bottom.
+  // New rows scroll into view only when the thread is already at the bottom.
   useLayoutEffect(() => {
     const element = scroller.current;
-    // While the send's spring runs it reaches the bottom itself (r100.2).
+    // While the send's spring runs it reaches the bottom itself.
     if (element && atBottom && !springing.current) element.scrollTop = element.scrollHeight;
     if (element) size.current = { height: element.scrollHeight, client: element.clientHeight };
   }, [lastId, pending, atBottom]);
@@ -681,7 +682,7 @@ export function MessageThread({ entries }: { entries: AgentLogEntry[] }) {
     if (bottom) setPill(null);
   }
 
-  // GM r79.4: the pill jumps to the row it names.
+  // Design: the pill jumps to the row it names.
   function jumpTo(id: string) {
     const element = scroller.current;
     if (!element) return;
@@ -814,9 +815,9 @@ function listenerLabel(listeners: readonly ChannelListener[], listenerId: string
   return entry ? agentLabel(entry.agent, entry.session) : 'Claude';
 }
 
-/** r61 answer 4: "Answering “<the question on one line>”", with × Remove. */
+/** "Answering “<the question on one line>”", with × Remove. */
 function AnsweringChip({ answering }: { answering: AnsweringState }) {
-  // GM r73: cut at a word, the ellipsis inside the quotes (the shared cut).
+  // Design: cut at a word, the ellipsis inside the quotes (the shared cut).
   const quoteRef = useRef<HTMLSpanElement | null>(null);
   const cut = cutParts(useWordCut(quoteRef, answering.question, '.message-box__composer', '“'), answering.question);
   return (
@@ -877,11 +878,11 @@ export function MessageComposer({ expanded }: { expanded: boolean }) {
     }
   }), []);
 
-  // The chip goes, the draft stays. GM r79.6, r89.3: withdrawn, or answered or
-  // closed in another tab while the person typed, the composer names why, and
-  // the next Enter only says so (answerGone.held): the one after posts the
-  // words as a message. A set this tab no longer holds holds the same way,
-  // with a line true whatever the cause (GM r94.1, F13): typed answer text
+  // The chip goes, the draft stays. Design: withdrawn, or answered or
+  // closed in another tab while the person typed, the composer names why,
+  // and the next Enter only says so (answerGone.held): the one after posts
+  // the words as a message. A set this tab no longer holds holds the same
+  // way, with a line true whatever the cause: typed answer text
   // never goes out as a public message on one silent Enter. Answered or
   // closed from this tab: no line.
   useEffect(() => {
@@ -892,7 +893,7 @@ export function MessageComposer({ expanded }: { expanded: boolean }) {
     usePersonThreadStore.setState({ answerGone: { cause: goneCause ?? 'gone', label: askerLabel(answering.setId), held: true } });
   }, [answering, answerOpen, goneCause]);
 
-  // "Answer" on a question row brings the person here (r61 answer 4).
+  // "Answer" on a question row brings the person here.
   const answeringId = answeringNow?.questionId ?? null;
   useEffect(() => {
     if (!answeringId) return;
@@ -902,20 +903,21 @@ export function MessageComposer({ expanded }: { expanded: boolean }) {
   }, [answeringId]);
 
   const { offline } = useCanvasLock();
-  // PR #204 round 10 (GM r15, r17): sending a message (POST /api/canvas/thread/messages) and an
-  // answer (the question's answer route) are the person's alone. Typing stays live on a tab that
-  // isn't connected as the person; Send (and Try again) lock where they are, with the one line.
+  // Design, PR #204: sending a message (POST /api/canvas/thread/messages) and
+  // an answer (the question's answer route) are the person's alone. Typing
+  // stays live on a tab that isn't connected as the person; Send (and Try
+  // again) lock where they are, with the one line.
   const sendLock = usePersonLock('send messages', !answeringNow);
   const answerLock = usePersonLock('answer this', Boolean(answeringNow));
   const lock = answeringNow ? answerLock : sendLock;
   const ready = state.kind === 'ready';
   // An answer goes to the question, not to a listener: only offline locks it.
   const live = answeringNow ? !offline : ready;
-  // GM r89.4: one label for the field and the lock line, as the agent's rows name it.
+  // Design: one label for the field and the lock line, as the agent's rows name it.
   const agentName = availabilityLabel(state);
   const label = `Message ${agentName}`;
   const counter = counterLine(draft.length, max);
-  // r61 answer 3: the product by name, a session by its cursor label.
+  // The product by name, a session by its cursor label.
   const lockLine = answeringNow ? null
     : state.kind === 'notConnected' ? NOT_CONNECTED_LINE
       : state.kind === 'stopped' ? stoppedListeningLine(agentName) : null;
@@ -923,7 +925,7 @@ export function MessageComposer({ expanded }: { expanded: boolean }) {
     : failure.kind === 'server' ? SERVER_FAILED_LINE
       : failure.kind === 'stopped' ? listenerDroppedLine(listenerLabel(listeners, failure.to))
         : failure.line ?? SERVER_FAILED_LINE;
-  // GM r79.6, r89.3: neutral, until the words go or the draft is cleared.
+  // Design: neutral, until the words go or the draft is cleared.
   const goneText = !answeringNow && answerGone && draft.trim() ? answerGoneLine(answerGone) : null;
   const lineText = lockLine ?? failureText ?? goneText;
   // Offline: the app's own row says it (the house pattern), no line here.
@@ -933,7 +935,7 @@ export function MessageComposer({ expanded }: { expanded: boolean }) {
     ? live && !answerBusy && draft.trim().length > 0 && draft.length <= max
     : ready && !pending && draft.trim().length > 0 && draft.length <= MESSAGE_MAX;
 
-  // r50: "/" focuses the composer from anywhere on the canvas, unless a text field has focus.
+  // "/" focuses the composer from anywhere on the canvas, unless a text field has focus.
   useEffect(() => {
     const onKey = (event: globalThis.KeyboardEvent) => {
       if (event.key !== '/' || event.metaKey || event.ctrlKey || event.altKey || event.defaultPrevented) return;
@@ -957,9 +959,9 @@ export function MessageComposer({ expanded }: { expanded: boolean }) {
         ? { draft: '', contextIds: [], answering: null, answerGone: null } : { answering: null, answerGone: null }));
       return;
     }
-    // GM r79.6's race: the set closed first (withdrawn, or answered or closed
-    // in another tab) and nothing went out. The line names why; this Enter
-    // was the one that showed it, so the next one posts.
+    // A race: the set closed first (withdrawn, or answered or closed in
+    // another tab) and nothing went out. The line names why; this Enter was
+    // the one that showed it, so the next one posts.
     const status = useAgentQuestionsStore.getState().sets[target.setId]?.view.status;
     if (status === 'open') return; // still open: its failure shows on the question's row
     const cause = answerGoneCause(status) ?? 'gone';
@@ -975,7 +977,7 @@ export function MessageComposer({ expanded }: { expanded: boolean }) {
       return;
     }
     if (state.kind !== 'ready' || sendLock.locked) return;
-    // GM r89.3: the first Enter after the chip went only says why (the line,
+    // Design: the first Enter after the chip went only says why (the line,
     // spoken); the next posts the words as a message.
     if (goneText && answerGone?.held) {
       usePersonThreadStore.setState({ answerGone: { ...answerGone, held: false } });
@@ -1019,7 +1021,7 @@ export function MessageComposer({ expanded }: { expanded: boolean }) {
           </button>
         </div>
       )}
-      {/* r61 B: locked, its chrome dims as the locked opener's does (messageBox.css). */}
+      {/* Locked, its chrome dims as the locked opener's does (messageBox.css). */}
       <div className="message-box__field-row" data-locked={!live || undefined}>
         {!answeringNow && ready && state.listening.length >= 2 && <RecipientChip state={state} />}
         <AutoGrowTextarea

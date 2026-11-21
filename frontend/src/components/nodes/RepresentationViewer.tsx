@@ -370,7 +370,7 @@ function collectWorldAssets(value: WorldValueV2): AssetSummary {
 }
 
 /** A World v2 value with a splat the preview opens (Idol's object): read like
- * the World v1 card, field for field (GM, PR #203 r1): kind, name, who made
+ * the World v1 card, field for field (design, PR #203): kind, name, who made
  * it, Explore, and the splat's download as "Splat · PLY". The contract, axes,
  * session and MIME type stay off the card. */
 function worldV2SplatCard(value: WorldValueV2, splat: WorldSplatRepresentation, options: ViewerOptions): ReactNode {

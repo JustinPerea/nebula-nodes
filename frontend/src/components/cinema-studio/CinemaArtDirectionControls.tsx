@@ -9,8 +9,8 @@ interface ControlsProps<T> {
   labelPrefix: string;
 }
 
-/** Round 23 (review 22, L-3): each control edits the scene on the canvas,
- * so each takes the canvas lock (following, offline). */
+/** Each control edits the scene on the canvas, so each takes the canvas
+ * lock (following, offline). */
 export function CinemaPaletteControls({ value, onChange, labelPrefix }: ControlsProps<CinemaPalette>) {
   const id = useId();
   const lock = useCanvasLock();

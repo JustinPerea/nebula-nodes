@@ -19,12 +19,12 @@ const FULL_JSON_LIMIT = 20_000;
  *  "Read all" scrolls inside the card past 320 px). */
 const CARD_TEXT_LIMIT = 4_000;
 
-/** The output ports, per node, whose values are a board's own images (Q98):
- *  drawn only when they are Nebula's files (lib/storedImage.ts), since a run
- *  saved before board images were checked can hold an old board's link to
- *  another site. Other nodes' media are drawn as they come (a provider may
- *  return a remote URL). The `moodboard` bundle port guards its own images
- *  (MoodboardBundlePreview). */
+/** The output ports, per node, whose values are a board's own images: drawn
+ * only when they are Nebula's files (lib/storedImage.ts), since a run saved
+ * before board images were checked can hold an old board's link to another
+ * site. Other nodes' media are drawn as they come (a provider may return a
+ * remote URL). The `moodboard` bundle port guards its own images
+ * (MoodboardBundlePreview). */
 const BOARD_IMAGE_PORTS: Readonly<Record<string, readonly string[]>> = {
   'nebula-moodboard': ['representative_images'],
 };

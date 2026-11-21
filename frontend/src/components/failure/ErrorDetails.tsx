@@ -1,13 +1,13 @@
 /**
  * The collapsed "Details" toggle that holds raw text under a written failure
- * line (error copy round 3: Commons analysis; round 3c: a node's run error,
- * GM - Design: "put the raw provider text behind the same collapsed
- * "Details" toggle used for Commons analysis"). A native disclosure: it is
- * closed until the person opens it, Tab reaches its summary and Enter or
- * Space opens it, and a screen reader announces it as a collapsed group.
- * Keyed on the text, so a new failure always starts closed. The raw text
- * is plain text, never the line itself. `className` adds the surface's own
- * classes (a React Flow card passes nodrag/nowheel).
+ * line (error copy: Commons analysis, and a node's run error; design: "put the
+ * raw provider text behind the same collapsed "Details" toggle used for
+ * Commons analysis"). A native disclosure: it is closed until the person
+ * opens it, Tab reaches its summary and Enter or Space opens it, and a
+ * screen reader announces it as a collapsed group. Keyed on the text, so a
+ * new failure always starts closed. The raw text is plain text, never the
+ * line itself. `className` adds the surface's own classes (a React Flow card
+ * passes nodrag/nowheel).
  *
  * `nokey` keeps Space working: the canvas pans on Space, and React Flow's
  * key listener sits on the whole window and cancels Space on anything that

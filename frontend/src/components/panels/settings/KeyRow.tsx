@@ -43,15 +43,14 @@ function RemoveKeyButton({ label, removing, onConfirm, lock }: { label: string; 
 }
 
 /** `moved`: it changed section since the panel last drew (a key set or
- * removed elsewhere): it springs in where it lands (GM, PR #203 r19 item 6).
- * `lock`: the Providers tab's one lock (PR #204 round 10, GM r17 item 1): a key is PUT
+ * removed elsewhere): it springs in where it lands (design, PR #203).
+ * `lock`: the Providers tab's one lock (design, PR #204): a key is PUT
  * /api/settings and the Keychain's credentials/update, the person's alone; its line is the tab's. */
 export function KeyRow({ spec, configured, moved = false, lock }: { spec: ProviderKeySpec; configured: boolean; moved?: boolean; lock: PersonLock }) {
   const stored = useSettingsDraftStore((s) => (s.openRow?.id === spec.key ? s.openRow.mode : null));
-  // GM, PR #203 r21 item 2: a key removed elsewhere while its manage view is
-  // open turns the view into the edit view, in this render (never a manage
-  // view offering a key that isn't there beside "Add key": review 10, copy
-  // MEDIUM-2); the store follows below.
+  // Design, PR #203: a key removed elsewhere while its manage view is open
+  // turns the view into the edit view, in this render (never a manage view
+  // offering a key that isn't there beside "Add key"); the store follows below.
   const removedElsewhere = stored === 'manage' && !configured;
   const open = removedElsewhere ? 'edit' : stored;
   const draft = useSettingsDraftStore((s) => s.keyDrafts[spec.key] ?? '');
@@ -92,8 +91,8 @@ export function KeyRow({ spec, configured, moved = false, lock }: { spec: Provid
     // The edit view takes focus when it opens here. A manage view whose key
     // was removed elsewhere becomes it in place only in a row the person is
     // in (ProvidersTab holds that row where it stood), so focus goes to the
-    // field only if it was in the row (GM r21 item 2); any other row moves
-    // to its new section and mounts there already open, taking no focus.
+    // field only if it was in the row; any other row moves to its new
+    // section and mounts there already open, taking no focus.
     if (open === 'edit' && before !== 'edit') {
       document.getElementById(`settings-row-${spec.key}`)?.querySelector<HTMLElement>('[data-provider-key]')?.focus();
     }
@@ -162,8 +161,8 @@ export function KeyRow({ spec, configured, moved = false, lock }: { spec: Provid
         {open === 'manage' && (
           <div id={bodyId} className="settings-row__manage">
             <div className="settings-row__buttons">
-              {/* GM, PR #203 r16 item 5: the actions on the key, together on
-                  one row; the key's page is a reference, on its own line below. */}
+              {/* Design, PR #203: the actions on the key, together on one row; the
+                  key's page is a reference, on its own line below. */}
               <button ref={firstAction} type="button" className="settings__button" {...lock.control()}
                 onClick={lock.guard(() => setOpen('edit'))}>Replace {noun}</button>
               <RemoveKeyButton label={credentialName} removing={pending} lock={lock} onConfirm={() => {
@@ -176,8 +175,8 @@ export function KeyRow({ spec, configured, moved = false, lock }: { spec: Provid
               {/* "Saved" needs no more words; a check result explains itself. */}
               {state.status !== 'Saved' && <> {readiness.detail}</>}
             </p>
-            {/* Under "Saved key ending in …" (GM, PR #203 r16 item 5), with
-                the edit view's name for it (r19 item 5). */}
+            {/* Under "Saved key ending in …" (design, PR #203), with the
+                edit view's name for it. */}
             <p className="settings-hint settings-row__key-link">
               <a href={spec.url} target="_blank" rel="noopener noreferrer">
                 {spec.keyLink}<span aria-hidden="true"> ↗</span>
@@ -210,10 +209,10 @@ export function KeyRow({ spec, configured, moved = false, lock }: { spec: Provid
                   aria-label={`${revealed ? 'Hide' : 'Show'} ${credentialName}`}>{revealed ? 'Hide' : 'Show'}</button>
               </div>
             )}
-            {/* GM, PR #203 r11 item 1: how to make the key, its page, then the caveat. */}
+            {/* Design, PR #203: how to make the key, its page, then the caveat. */}
             {spec.instruction && <p className="settings-hint">{spec.instruction}</p>}
             {/* One name for the key's page in both views, shaped like Idol's
-                (GM, PR #203 r19 item 5): "Open OpenAI keys ↗". */}
+                (design, PR #203): "Open OpenAI keys ↗". */}
             <p className="settings-hint settings-row__key-link">
               <a href={spec.url} target="_blank" rel="noopener noreferrer">
                 {spec.keyLink}<span aria-hidden="true"> ↗</span>

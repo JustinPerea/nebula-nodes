@@ -73,7 +73,7 @@ export function AgentLog() {
 }
 
 /**
- * The Updates corner in the canvas's top right (PR9a). Like the Agent log it
+ * The Updates corner in the canvas's top right (PR #124). Like the Agent log it
  * shows at once, so it mounts straight away and appears when its chunk
  * lands; until then (or if the chunk fails, until it retries on focus or
  * reconnect) the store keeps counting, so the chip arrives with the count.

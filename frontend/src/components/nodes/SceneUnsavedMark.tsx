@@ -8,29 +8,27 @@ import { noteScenePopover, useGraphStore } from '../../store/graphStore';
 import '../../styles/canvasProposals.css';
 
 /**
- * A scene card's "Unsaved" mark (GM r9), its tooltip the line that said why.
- * Once the save stopped retrying by itself (GM r11 answer 3), the mark is a
- * button: a click opens a popover with that line and [Try again] (GM r12
- * item 1), so the retry stays at hand after the toast has gone or another
- * toast took the slot (GM r13 answer 3). The tooltip stays as it is.
- * A click on the mark opens the popover and does nothing else (GM r15
- * answer 3): no selection, no drag start. The node's own handlers (React
- * Flow selects on its click) never see the press; `nodrag` keeps the drag
- * off, and the popover, a portal still inside the card in React's tree,
- * stops its presses the same way. A press released off the mark does
- * nothing (review 10, N-1).
- * GM r22 Q1: while the popover is open, the toast with the same line and
- * [Try again] leaves (as on ×) and none comes back, even once it closes:
- * one line and one [Try again] on screen (graphStore noteScenePopover).
+ * A scene card's "Unsaved" mark, its tooltip the line that said why. Once
+ * the save stopped retrying by itself, the mark is a button: a click opens a
+ * popover with that line and [Try again], so the retry stays at hand after
+ * the toast has gone or another toast took the slot. The tooltip stays as it
+ * is. A click on the mark opens the popover and does nothing else: no
+ * selection, no drag start. The node's own handlers (React Flow selects on
+ * its click) never see the press; `nodrag` keeps the drag off, and the
+ * popover, a portal still inside the card in React's tree, stops its presses
+ * the same way. A press released off the mark does nothing.
+ * While the popover is open, the toast with the same line and [Try again]
+ * leaves (as on ×) and none comes back, even once it closes: one line and
+ * one [Try again] on screen (graphStore noteScenePopover).
  */
 const keepToItself = (event: SyntheticEvent) => event.stopPropagation();
 const OWN_PRESSES = { onPointerDown: keepToItself, onMouseDown: keepToItself, onDoubleClick: keepToItself } as const;
 
-/** Review 10, N-1: a press on the mark released off it is cancelled, as on
- * any button. The browser sends that click to the common ancestor (the node,
- * which React Flow would select), so the one click of that release is
- * stopped before anything sees it. Only that release's click: the guard
- * goes in the same task. */
+/** A press on the mark released off it is cancelled, as on any button.
+ * The browser sends that click to the common ancestor (the node, which
+ * React Flow would select), so the one click of that release is stopped
+ * before anything sees it. Only that release's click: the guard goes in
+ * the same task. */
 function cancelReleaseOffMark(mark: HTMLElement) {
   const onRelease = (up: PointerEvent) => {
     window.removeEventListener('pointercancel', onCancel, true);
@@ -44,7 +42,7 @@ function cancelReleaseOffMark(mark: HTMLElement) {
   window.addEventListener('pointercancel', onCancel, { capture: true, once: true });
 }
 /** Enter and Space press the mark's buttons; React Flow's node selects on
- * them too, and on Escape (review 11, L-3), so they stay here as well. */
+ * them too, and on Escape, so they stay here as well. */
 const keepActivationKeys = (event: ReactKeyboardEvent) => {
   if (event.key === 'Enter' || event.key === ' ' || event.key === 'Escape') event.stopPropagation();
 };
@@ -61,8 +59,8 @@ export function SceneUnsavedMark({ nodeId, line, stopped }: { nodeId: string; li
         {...OWN_PRESSES}
         onKeyDown={(event) => {
           keepActivationKeys(event);
-          // Review 11, L-3: Escape on the mark closes its popover, focus
-          // staying on the mark, and never selects the card.
+          // Escape on the mark closes its popover, focus staying on the
+          // mark, and never selects the card.
           if (event.key === 'Escape' && open) { event.preventDefault(); setOpen(false); }
         }}
         onPointerDown={(event) => { event.stopPropagation(); cancelReleaseOffMark(event.currentTarget); }}
@@ -84,7 +82,7 @@ function SceneUnsavedPopover({ nodeId, line, anchorRef, onClose }: {
   const lineId = useId();
   const dismiss = useCallback(() => onClose(false), [onClose]);
   const position = useAnchoredPopover(anchorRef, panelRef, dismiss, 'start', 320);
-  // GM r30: busy while the scene's [Try again] is on its way.
+  // Design: busy while the scene's [Try again] is on its way.
   const trying = useGraphStore((state) => nodeId in state.sceneTries);
 
   useEffect(() => {

@@ -50,27 +50,27 @@ const spentUsd = formatSpentUsd;
 function useOutsideSpend() {
   const [view, setView] = useState<OutsideSpend | null>(null);
   const [error, setError] = useState<string | null>(null);
-  // GM r17 item 6 (b): a held or demoted tab shows what a tab that never connected shows (the
-  // list is the person's to read). PR #204 round 11: and it doesn't ask, only to be refused: the
-  // list is read on a tab connected as the person, again after a held view ends.
+  // Design: a held or demoted tab shows what a tab that never connected shows (the list is the
+  // person's to read). PR #204: and it doesn't ask, only to be refused: the list is read on a
+  // tab connected as the person, again after a held view ends.
   const { held, ready, epoch, readsOnPromote } = usePersonView();
   const reload = useCallback(function readAgain() {
     getOutsideSpend()
       .then((next) => { setView(next); setError(null); })
       .catch((exc: unknown) => {
-        // GM r6 (2): what retries on the promote says why in the "because" form.
+        // Design: what retries on the promote says why in the "because" form.
         const line = isPersonRefusal(exc) ? notConnectedBecause('load the connected apps') : failureMessage(exc, "Couldn’t load the connected apps.");
         setError(line);
-        // GM, #204 r3 and r6: refused only because this tab isn't connected as you: on the
+        // Design, PR #204: refused only because this tab isn't connected as you: on the
         // promote the line goes and the read runs again, through retryOnPromote.
         clearSetterOnPromote(exc, setError, line, null); // clears-on-promote: settings.spend-load
-        // Round 13 (review 10 NIT-1): unless the held view settled, whose promote reads it anyway.
+        // Retried unless the held view settled, whose promote reads it anyway.
         retryOnPromote(exc, 'settings.spend-load', () => { if (!readsOnPromote.current) readAgain(); }); // clears-on-promote: settings.spend-load-retry
       });
   }, [readsOnPromote]);
   useReadAsPerson(reload, ready, epoch);
-  // Round 14 (GM r23 answer 3): offline comes first, so a not-connected line (the held view's,
-  // or a load refused as not the person) waits until Nebula is back; any other failure shows.
+  // Design: offline comes first, so a not-connected line (the held view's, or a load refused
+  // as not the person) waits until Nebula is back; any other failure shows.
   const shown = useOfflineFirstBecause(held ? notConnectedBecause('load the connected apps') : error);
   if (held) return { view: null, error: shown, reload, held };
   return { view, error: shown, reload, held };
@@ -118,8 +118,8 @@ export function AgentSpendSection() {
   const counted = blocked || holdOn(hold, now);
   const holdLine = blocked ? LEDGER_CANT_READ : ledgerHoldLine(hold, now);
   // While either is on, the view is read again every 30 s and when the window is shown again, so
-  // the line goes once the record reads (review of PR #242 round 2, L5). The last view stays until
-  // the new one arrives, so no row changes height or flickers.
+  // the line goes once the record reads (PR #242). The last view stays until the new one
+  // arrives, so no row changes height or flickers.
   const { reload } = outside;
   useEffect(() => {
     if (!counted) return undefined;
@@ -128,16 +128,16 @@ export function AgentSpendSection() {
     document.addEventListener('visibilitychange', onVisible);
     return () => { clearInterval(timer); document.removeEventListener('visibilitychange', onVisible); };
   }, [counted, reload]);
-  // Round 11 (review 9 MEDIUM-3, GM r19 2): a demote that takes away a focused app row moves
-  // focus to the section's line, not to the page.
+  // A demote that takes away a focused app row moves focus to the section's
+  // line, not to the page.
   const sectionRef = useRef<HTMLElement>(null);
-  // Round 18h (review 16 MEDIUM-1): a save disables the limits in place, which drops focus to the
-  // page in Chrome; it goes to the heading and back to the field once the save answers.
+  // A save disables the limits in place, which drops focus to the page in Chrome; it goes to the
+  // heading and back to the field once the save answers.
   const handoverChange = useMemo(() => ({ held: outside.held, pending }), [outside.held, pending]);
   const handover = useFocusHandover(handoverChange, () => sectionRef.current,
     () => document.getElementById('settings-agent-spend-heading'));
-  // PR #204 round 10 (GM r15, r17 item 1): every limit is PUT /api/settings, the person's alone,
-  // so they lock as a group, with one line under the heading.
+  // Design, PR #204: every limit is PUT /api/settings, the person's alone, so they lock as a
+  // group, with one line under the heading.
   const lock = usePersonLock('change limits');
 
   const paidModels = useMemo(() => {

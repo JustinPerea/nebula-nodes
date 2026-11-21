@@ -1,8 +1,8 @@
-/* The agents on the canvas's nodes (Q125 item 3, GM - Design 2026-10-25):
-   the mark above a node and the placeholder's dashed outline. Drawn in flow
-   coordinates inside React Flow's viewport (AgentNodeMarkLayer). Motion runs
-   on the tuned springs (lib/springs.ts, passed in as --spring-pop/--spring-soft);
-   reduced motion keeps only the opacity change. */
+/* The agents on the canvas's nodes (design, 2026-10-25): the mark above a node and
+   the placeholder's dashed outline. Drawn in flow coordinates inside React Flow's
+   viewport (AgentNodeMarkLayer). Motion runs on the tuned springs
+   (lib/springs.ts, passed in as --spring-pop/--spring-soft); reduced motion keeps
+   only the opacity change. */
 
 .agent-node-marks {
   position: absolute;
@@ -45,15 +45,17 @@
   font-family: var(--sr-ui, 'Inter', 'Helvetica Neue', Helvetica, Arial, sans-serif);
 }
 
-/* A fixed size on screen at every zoom (GM, 2026-10-25: "like the cursor
-   labels: always 22 px tall, never scaled with the canvas"): the layer sets
-   --anm-scale to 1/zoom and --anm-max to the node's on-screen width. The
-   counter-scale is the `scale` property, not `transform`, so the entrance
-   keyframes (which animate transform) never undo it while they run. */
+/* A fixed size on screen at every zoom (design, 2026-10-25: "like the
+   cursor labels: always 22 px tall, never scaled with the canvas"): the
+   layer sets --anm-scale to 1/zoom and --anm-max to the node's
+   on-screen width. The counter-scale is the `scale` property, not
+   `transform`, so the entrance keyframes (which animate transform)
+   never undo it while they run. */
 .agent-node-mark__row {
   position: absolute;
   left: 0;
-  bottom: calc(6px * var(--anm-scale, 1)); /* GM: a 6 px gap above the node's top edge, on screen */
+  /* Design: a 6 px gap above the node's top edge, on screen */
+  bottom: calc(6px * var(--anm-scale, 1));
   display: flex;
   align-items: center;
   gap: 4px;
@@ -154,8 +156,8 @@
 }
 
 /* Below 60% zoom: the dot alone, the same size on screen; the words on hover
-   or keyboard focus. The "+N" chip stays (GM: "never hide it ... so you can
-   still find agents from the overview"). */
+   or keyboard focus. The "+N" chip stays (design: "never hide it ... so you
+   can still find agents from the overview"). */
 .agent-node-mark[data-collapsed='true'] .agent-node-mark__row {
   max-width: none;
 }
@@ -184,12 +186,12 @@
   display: inline;
 }
 
-/* The node has keyboard focus (review 3, finding 8): its pill shows the whole
-   status, not cut at the node's width, so a sighted keyboard user can read
-   it; below 60% the dot shows its words as on its own focus. Past 480 px
-   the status wraps onto more lines (GM - Design, round 5: "keyboard users
-   have no other way to read the rest"); the row is anchored at its bottom,
-   so the pill grows up, away from the node. */
+/* The node has keyboard focus: its pill shows the whole status, not cut at
+   the node's width, so a sighted keyboard user can read it; below 60% the
+   dot shows its words as on its own focus. Past 480 px the status wraps onto
+   more lines (design: "keyboard users have no other way to read the rest");
+   the row is anchored at its bottom, so the pill grows up, away from the
+   node. */
 .agent-node-mark[data-focused='true'] .agent-node-mark__row {
   max-width: max(var(--anm-max), 480px);
   align-items: flex-end;

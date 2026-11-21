@@ -32,8 +32,8 @@ export function TimelineClip({ clip, sourceDuration, sourceFps, track, editNodeI
     return (e: React.PointerEvent) => {
       e.preventDefault();
       e.stopPropagation();
-      // Round 23 (review 22, L-3): a trim edits the clip on the canvas; while
-      // following or offline it never starts (the bar or banner pulses).
+      // A trim edits the clip on the canvas; while following or offline it
+      // never starts (the bar or banner pulses).
       if (refuseCanvasEdit()) return;
       const trackEl = (e.currentTarget as HTMLElement).closest('.editor-tl__track-body') as HTMLElement | null;
       if (!trackEl) return;

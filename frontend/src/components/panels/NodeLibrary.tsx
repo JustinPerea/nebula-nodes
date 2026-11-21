@@ -29,7 +29,7 @@ const PRIMARY_CATEGORIES: Partial<Record<NodeBrowseType, string>> = {
 };
 
 export function NodeLibrary() {
-  // Offline or following an agent's switch: one read-only state (GM round 22, A).
+  // Offline or following an agent's switch: one read-only state.
   const lock = useCanvasLock();
   const readOnly = lock.locked;
   const visible = useUIStore((s) => s.panels.library.visible);
@@ -225,11 +225,11 @@ export function NodeLibrary() {
   }
 
   function addNodeAtViewportCenter(definitionId: string) {
-    // Read-only offline (GM, round 14 of PR #114) and while following (fix
-    // round 4 of PR #200, review 4 LOW-4: the store gate refused it, the
-    // click itself didn't): the project bar or the banner pulses. While the
-    // canvas is kept after a restore (GM r19 on PR #199, 5) the node is the
-    // kept tab's own (the store's kept addNode), so only a tab-only refusal.
+    // Read-only offline (design, PR #114) and while following (PR #200: the
+    // store gate refused it, the click itself didn't): the project bar or
+    // the banner pulses. While the canvas is kept after a restore
+    // (design, PR #199) the node is the kept tab's own (the store's kept
+    // addNode), so only a tab-only refusal.
     if (refuseTabOnlyEdit()) return;
     const preferred = screenToFlowPosition({
       x: typeof window !== 'undefined' ? window.innerWidth / 2 : 640,
@@ -310,7 +310,7 @@ export function NodeLibrary() {
             </select>
           </label>}
           {!isHome && <p className="node-library__count" aria-live="polite">{countNoun(resultCount, 'node')} · {
-            // GM, round 16 of PR #114: offline the count line says why nothing adds.
+            // Design, PR #114: offline the count line says why nothing adds.
             lock.following ? waitToOpenTooltip(lock.following.projectName)
               : readOnly ? 'Adding is paused while offline' : 'Choose a node to add'}</p>}
         </div>
@@ -357,8 +357,8 @@ export function NodeLibrary() {
                 <button
                   type="button"
                   className={`panel__item${readOnly ? ' panel__item--read-only' : ''}`}
-                  // Offline (GM, round 14): the library still opens for
-                  // browsing, its items show as disabled and don't drag.
+                  // Offline: the library still opens for browsing, its items show
+                  // as disabled and don't drag.
                   aria-disabled={readOnly || undefined}
                   draggable={!readOnly}
                   tabIndex={isCollapsed ? -1 : 0}

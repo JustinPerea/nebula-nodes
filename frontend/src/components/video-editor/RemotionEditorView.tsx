@@ -33,9 +33,9 @@ export function RemotionEditorView() {
   );
 
   // The timeline tray is this screen's bottom bar: it publishes its top edge,
-  // so the app's notices sit 8 px above it (GM - Design, 2026-10-23, round 3:
-  // "Yes, the Remotion tray publishes its top edge, the same as the canvas bar
-  // and the composer."). Measured again when the tray comes or goes.
+  // so the app's notices sit 8 px above it (design, 2026-10-23: the Remotion
+  // tray publishes its top edge, the same as the canvas bar and the composer).
+  // Measured again when the tray comes or goes.
   const hasTray = Boolean(targetNodeId && node);
   useBottomBarClearance([timelineTrayRef], hasTray);
 
@@ -100,7 +100,7 @@ export function RemotionEditorView() {
   return (
     <div className="remotion-editor-view" data-current-frame={currentFrame}>
       <WorkspaceHeader title="Composition" onBack={exitRemotionEditor} className="remotion-editor-view__header" />
-      {/* Its own row, under the offline row (GM, PR #198 r3 a). */}
+      {/* Its own row, under the offline row (design, PR #198). */}
       <div className="remotion-editor-view__toolbar" role="toolbar" aria-label="Composition">
         <RemotionEditorToolbar remotionNodeId={targetNodeId} />
         <span className="remotion-editor-view__meta">

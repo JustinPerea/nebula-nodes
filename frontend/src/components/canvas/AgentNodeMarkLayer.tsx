@@ -9,10 +9,10 @@ import { nodeCardBox, nodeMarkBox, type NodeBox } from './nodeCardBox';
 import './agentNodeMarks.css';
 
 /**
- * The agents on the canvas's nodes (Q125 item 3; Justin, 2026-10-24: "The
- * agent stays on the node it's working on ... A node an agent is about to
- * fill shows as a placeholder in its colour"). GM - Design's rulings,
- * 2026-10-25, built verbatim:
+ * The agents on the canvas's nodes (Justin, 2026-10-24: "The agent stays
+ * on the node it's working on ... A node an agent is about to fill shows
+ * as a placeholder in its colour"). The design rules, 2026-10-25, built
+ * verbatim:
  *
  * - The mark: a pill just outside the node's top edge, left-aligned, 6 px
  *   gap, like a tab, so it never covers the header or the preview. The
@@ -22,14 +22,14 @@ import './agentNodeMarks.css';
  *   text in the tooltip. The node's outline doesn't change.
  * - Two or more agents: the most recent one's pill, then a "+1" chip;
  *   hovering or focusing the chip lists the others, one line each.
- * - A fixed size on screen at every zoom (GM, 2026-10-25: "like the cursor
- *   labels: always 22 px tall, never scaled with the canvas"), truncated at
- *   the node's on-screen width.
+ * - A fixed size on screen at every zoom (design, 2026-10-25: "like the
+ *   cursor labels: always 22 px tall, never scaled with the canvas"),
+ *   truncated at the node's on-screen width.
  * - Below 60% zoom: the dot alone, the same size on screen; name and status
  *   on hover (and on keyboard focus). The "+N" chip stays, so every agent
  *   on the node can still be found from the overview.
- * - The node's keyboard focus shows its pill's whole text at any zoom
- *   (review 3): the full-size pill is no tab stop of its own.
+ * - The node's keyboard focus shows its pill's whole text at any
+ *   zoom: the full-size pill is no tab stop of its own.
  * - Placeholders: a dashed outline in the owning agent's colour.
  *
  * Draws only what the socket and the roster read bring in, so it mounts at
@@ -84,11 +84,11 @@ function useClock(ticking: boolean): number {
  * The node that has keyboard focus now (React Flow's node, or a control in
  * it, reached from the keyboard), or null. At 60% zoom and up the pill takes
  * no focus (a tab stop on every node would be too many), so the node's own
- * keyboard focus shows the pill's whole text (review 3, finding 8). Keyboard
- * means a key was pressed since the last pointer press (review 4, L5), not
- * :focus-visible, which a text field clicked with the mouse matches too: a
- * pointer's focus changes nothing, typing in a field included. Below 60% the
- * pill's dot is a Tab stop, and its keyboard focus counts the same.
+ * keyboard focus shows the pill's whole text. Keyboard means a
+ * key was pressed since the last pointer press, not :focus-visible, which a
+ * text field clicked with the mouse matches too: a pointer's focus changes
+ * nothing, typing in a field included. Below 60% the pill's dot is a Tab
+ * stop, and its keyboard focus counts the same.
  */
 function useKeyboardFocusedNode(): string | null {
   const [focused, setFocused] = useState<string | null>(null);
@@ -100,8 +100,8 @@ function useKeyboardFocusedNode(): string | null {
       const target = event.target instanceof HTMLElement ? event.target : null;
       const node = target?.closest<HTMLElement>('.react-flow__node[data-id]');
       // Below 60% the dot is its own Tab stop: its keyboard focus shows the
-      // whole status too, wrapping past 480 px (round 8: a status keeps a
-      // long URL, with no space to wrap at, not 320 px and "…").
+      // whole status too, wrapping past 480 px (a status keeps a long URL,
+      // with no space to wrap at, not 320 px and "…").
       const dot = target?.closest('.agent-node-mark__pill')?.closest<HTMLElement>('.agent-node-mark[data-node]');
       const id = node?.dataset.id ?? dot?.dataset.node ?? null;
       setFocused(keyboard ? id : null);
@@ -133,8 +133,9 @@ function NodeMarkView({ nodeId, box, marks, zoom, focused }: {
   const [open, setOpen] = useState(false);
   const [first, ...rest] = marks;
   const collapsed = isLowZoom(zoom);
-  // GM, 2026-10-25: a fixed screen size at every zoom, like the cursor labels
-  // (counter-scaled by --anm-scale), truncated at the node's on-screen width.
+  // Design, 2026-10-25: a fixed screen size at every zoom, like the cursor
+  // labels (counter-scaled by --anm-scale), truncated at the node's
+  // on-screen width.
   const style = {
     transform: `translate(${box.x}px, ${box.y}px)`,
     '--anm-max': `${box.width * zoom}px`,

@@ -108,8 +108,8 @@ export function MaskPainterModal({ imageUrl, initialMask, onSave, onClose }: Mas
   );
 
   const onPointerDown = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
-    // Read-only while following or offline (review 3 LOW-3): no stroke. Kept
-    // in this tab (PR #199), a mask is this tab's own, as typing.
+    // Read-only while following or offline: no stroke. Kept in this tab
+    // (PR #199), a mask is this tab's own, as typing.
     if (refuseTabOnlyEdit()) return;
     const pt = canvasPoint(e);
     if (!pt) return;
@@ -120,9 +120,9 @@ export function MaskPainterModal({ imageUrl, initialMask, onSave, onClose }: Mas
     setHasStrokes(true);
   }, [canvasPoint, drawSegment]);
 
-  // A stroke under way ends the moment the lock starts (fix round 4 of PR
-  // #200, review 4 LOW-2): the next move paints nothing, before React has
-  // re-rendered with the lock, and the effect below ends it once it has.
+  // A stroke under way ends the moment the lock starts (PR #200): the
+  // next move paints nothing, before React has re-rendered with the lock,
+  // and the effect below ends it once it has.
   const endStroke = useCallback((e?: React.PointerEvent<HTMLCanvasElement>) => {
     drawingRef.current = false;
     lastPointRef.current = null;
@@ -223,9 +223,9 @@ export function MaskPainterModal({ imageUrl, initialMask, onSave, onClose }: Mas
         )}
 
         <div className="mask-painter__toolbar">
-          {/* Review 3 LOW-3: while following or offline the painter is
-              read-only, as the other editors: its tools and strokes lock (the
-              project bar or the offline row above the scrim says why). */}
+          {/* While following or offline the painter is read-only, as the
+              other editors: its tools and strokes lock (the project bar or
+              the offline row above the scrim says why). */}
           <button
             type="button"
             className={`mask-painter__tool ${tool === 'brush' ? 'mask-painter__tool--active' : ''}`}
@@ -267,7 +267,7 @@ export function MaskPainterModal({ imageUrl, initialMask, onSave, onClose }: Mas
             className="mask-painter__save"
             onClick={saveMask}
             // Saving writes the node's mask (updateNodeData): the canvas lock
-            // (fix round 2 of PR #200, review 2 L-5; GM's sweep list).
+            // (design, PR #200).
             {...lock.act({ disabled: !natural || !hasStrokes, offline: true, kept: 'live' })}
           >
             Save mask

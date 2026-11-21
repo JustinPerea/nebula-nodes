@@ -32,9 +32,9 @@ function swapIn<P extends NodeProps>(card: ReturnType<typeof deferredAtOnce<P>>)
  * until its card's chunk has settled, lib/cardHold.ts: a whole graph waits,
  * a node added later is a fallback card, lib/cardFallback.ts, until its card
  * arrives, so a card never draws empty), each inside its own boundary
- * (PR #198 review 3, L4: one card whose data is damaged shows a line on
- * its card and never takes the canvas down). One map, so tests render the
- * cards the canvas renders (tests/canvasRenderScope.test.tsx). */
+ * (PR #198: one card whose data is damaged shows a line on its card and
+ * never takes the canvas down). One map, so tests render the cards the
+ * canvas renders (tests/canvasRenderScope.test.tsx). */
 export const CANVAS_CARDS: NodeTypes = {
   'model-node': withCardSwap(ModelNode as ComponentType<NodeProps>),
   'dynamic-node': swapIn(deferredAtOnce(DeferredDynamicNode, 'DynamicNode')),

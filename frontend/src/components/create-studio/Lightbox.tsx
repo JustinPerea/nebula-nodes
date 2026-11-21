@@ -24,7 +24,7 @@ export function Lightbox({ items, index, onClose, onIndexChange }: LightboxProps
   const current = items[safeIndex];
   const visible = Boolean(current);
   const panelRef = useRef<HTMLDivElement>(null);
-  // Review 6 MEDIUM-3: the media and its counter stop above the notice band.
+  // The media and its counter stop above the notice band.
   const clearance = useNoticeClearance();
   usePanelFocus(visible, panelRef, onClose, { initialFocus: '.lightbox__close', trap: true });
   useEffect(() => {
@@ -48,7 +48,7 @@ export function Lightbox({ items, index, onClose, onIndexChange }: LightboxProps
     if (!visible) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.defaultPrevented || !panelRef.current?.contains(e.target as globalThis.Node)) return;
-      // A modal dialog over the lightbox owns the keys (review 8, L-d).
+      // A modal dialog over the lightbox owns the keys.
       if (keyBlockedByModal(panelRef.current)) return;
       // Keep the native video player's arrow-key controls intact.
       if (e.target instanceof HTMLVideoElement) return;

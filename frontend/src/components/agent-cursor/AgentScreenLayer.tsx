@@ -20,7 +20,7 @@ import '../../styles/agentCursorAnywhere.css';
  * surface beside the canvas, the Moodboard panel and Studio first. One fixed,
  * click-through box over the window, mounted once at the app root (lazy with
  * the cursor chunk, never in the entry), above the docks and below modals and
- * the notice region (GM - Design 5: z-index in agentCursorAnywhere.css).
+ * the notice region (z-index in agentCursorAnywhere.css).
  *
  * It runs the same view and column field as the canvas layer
  * (AgentCursorField.tsx) over a `CursorSpace` of the window
@@ -99,9 +99,9 @@ export function AgentScreenLayer({ canvasMounted, env }: {
   env?: ResolverEnv;
 }) {
   const everyone = useAgentPresenceStore((s) => s.agents);
-  // A cursor flying back to a canvas node is this layer's until it lands
-  // (GM r137): the canvas layer sits under the docks, so a cursor that left a
-  // dock would fly behind it. It is drawn here as a flight only (no say, no
+  // A cursor flying back to a canvas node is this layer's until it lands:
+  // the canvas layer sits under the docks, so a cursor that left a dock
+  // would fly behind it. It is drawn here as a flight only (no say, no
   // gesture: the canvas layer plays those at the landing).
   const handoff = useSyncExternalStore(subscribeHandoff, handoffVersion);
   useEffect(() => { cursorHandoff.retain(Object.keys(everyone)); }, [everyone]);
@@ -222,13 +222,13 @@ function ItemOutlines({ agents, space, landings }: { agents: Record<string, Agen
 }
 
 /**
- * The launcher dots (slice 8, GM - Design 2): a 6 px agent-colour dot on the
- * launcher a landed cursor is parked at (the board's row, the dock's tab, the
- * rail's "Open assets", a Studio's "Back to Canvas"); two agents give two
- * dots, from three one dot and "+N". Dimmed with the cursor at the idle, gone
- * when it leaves, is sent elsewhere or is pruned. Drawn here, not in the rail
- * (so it never re-renders on a presence event); `aria-hidden`, the Agents
- * panel lists every agent. Lib: lib/agentLauncherDots.ts.
+ * The launcher dots: a 6 px agent-colour dot on the launcher a landed cursor
+ * is parked at (the board's row, the dock's tab, the rail's "Open assets", a
+ * Studio's "Back to Canvas"); two agents give two dots, from three one dot
+ * and "+N". Dimmed with the cursor at the idle, gone when it leaves, is sent
+ * elsewhere or is pruned. Drawn here, not in the rail (so it never
+ * re-renders on a presence event); `aria-hidden`, the Agents panel lists
+ * every agent. Lib: lib/agentLauncherDots.ts.
  */
 /** The badge ring takes the launcher's own surface colour; none set, the stylesheet's default. */
 const ringStyle = (ring: string): CSSProperties => (ring ? { ['--agent-badge-ring' as string]: ring } : {});

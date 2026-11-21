@@ -82,7 +82,7 @@ function keyCell(row: ProviderRow, onSetup: (row: ProviderRow) => void): ReactNo
   if (row.keyState === 'signed-in') return <span className="provider-switcher__key">Signed in</span>;
   if (row.keyState === 'connected') {
     // A Space route's Hugging Face token is set (Idol's): the usual green
-    // dot and "Connected" (GM, PR #203 r1 and r4).
+    // dot and "Connected" (design, PR #203).
     return (
       <span className="provider-switcher__key provider-switcher__key--connected">
         <span className="provider-switcher__dot" aria-hidden="true" />Connected
@@ -93,7 +93,7 @@ function keyCell(row: ProviderRow, onSetup: (row: ProviderRow) => void): ReactNo
   return <span className="provider-switcher__key" aria-hidden="true" />;
 }
 
-/** "Add token →" / "Add key →" / "Sign in" (GM, PR #203 r30 item 3): the
+/** "Add token →" / "Add key →" / "Sign in" (design, PR #203): the
  * accessible name is the visible label (the arrow is decorative), and the
  * one add-key line ("Add your Replicate token in Settings.") is its
  * description (setupButtonWords). */
@@ -128,10 +128,10 @@ interface ProviderMenuProps {
  * one row is in the tab order (roving tabindex). */
 export function ProviderMenu({ state, onPick, onFix, inline = false, labelledBy, label, onClose }: ProviderMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
-  // Fix round 2 of PR #200 (review 2 L-5): a pick writes the node's params
-  // (updateNodeData, which the store refuses while following or offline), so
-  // every provider, fix and switch row takes the canvas lock: disabled,
-  // marked, the reason as its tooltip. The key cell only opens Settings.
+  // PR #200: a pick writes the node's params (updateNodeData, which the
+  // store refuses while following or offline), so every provider, fix and
+  // switch row takes the canvas lock: disabled, marked, the reason as its
+  // tooltip. The key cell only opens Settings.
   const lock = useCanvasLock();
   const checkedIndex = Math.max(0, state.rows.findIndex((row) => row.selected));
   // The row in the tab order when the menu is in place: the last one
@@ -192,8 +192,8 @@ export function ProviderMenu({ state, onPick, onFix, inline = false, labelledBy,
               {row.selected && <Check size={12} strokeWidth={2} />}
             </span>
             {/* The name is the row's visible text, one run in reading order
-                (GM, PR #203 r32 item 3): a space between its parts, which the
-                grid and the column don't render. */}
+                (design, PR #203): a space between its parts, which the grid
+                and the column don't render. */}
             <span className="provider-switcher__name">
               <span className="provider-switcher__label">{row.label}</span>
               {row.block && <>{' '}<span className="provider-switcher__block">{row.block}</span></>}
@@ -269,7 +269,7 @@ function ProviderPopoverTrigger({ state, variant, displayName, onPick, onFix }: 
       {/* The name is the visible text as one run ("Provider Auto · runs on
           fal.ai", "Auto · BFL"); what it doesn't show is the description: the
           node, the full provider name and, blocked, the reason itself, never
-          a "Can't run" prefix (GM, PR #203 r6 item 2; r32 item 3). */}
+          a "Can't run" prefix (design, PR #203). */}
       <button ref={triggerRef} type="button" className={className}
         aria-haspopup="menu" aria-expanded={open} aria-controls={open ? menuId : undefined}
         aria-describedby={hintId}
@@ -309,7 +309,7 @@ function ProviderPopover({ anchorRef, id, onClose, children }: {
 }) {
   const popoverRef = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState<{ left: number; top: number; above: boolean } | null>(null);
-  // Stops at the band (lib/bottomBar floatingBottomLimit): one notice while it is open (GM r13 2).
+  // Stops at the band (lib/bottomBar floatingBottomLimit): one notice while it is open.
   useCappedPopover();
 
   useLayoutEffect(() => {
@@ -348,7 +348,7 @@ function ProviderPopover({ anchorRef, id, onClose, children }: {
   return createPortal(
     <div ref={popoverRef} id={id}
       // nokey: portalled from inside the node card, its keys bubble (React) to
-      // React Flow's node, which would move or select it (review 9, M-1).
+      // React Flow's node, which would move or select it.
       className={`provider-switcher__popover nokey${position ? ' provider-switcher__popover--open' : ''}${position?.above ? ' provider-switcher__popover--above' : ''}`}
       style={position ? { left: position.left, top: position.top } : undefined}
       onClick={(event) => event.stopPropagation()}>

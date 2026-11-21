@@ -11,8 +11,8 @@ import {
 import { deferredAtOnce } from '../deferredAtOnce';
 // The agent cursors' socket feed subscribes at import; it stays in the
 // startup entry and holds presence that arrives before the cursor chunk, whose
-// store takes it on load (review 3 of PR #211, N3). (The proposals and pins
-// stores are imported eagerly by useFitCanvasView and ContextMenu;
+// store takes it on load (PR #211). (The proposals and pins stores are
+// imported eagerly by useFitCanvasView and ContextMenu;
 // tests/entrySplit.test.ts checks all three.)
 import '../../store/agentPresenceFeed';
 
@@ -33,7 +33,7 @@ export const PinComposer = deferredAtOnce(DeferredPinComposer, 'PinComposer');
 /** Lays out an agent edit's new nodes (draws nothing; picks up a waiting request when it lands). */
 export const ArrangeController = deferredAtOnce(DeferredArrangeController, 'ArrangeController');
 export const AgentCursorLayer = deferredAtOnce(DeferredAgentCursorLayer, 'AgentCursorLayer');
-/** Agents on the nodes: each one's mark, and the placeholders' outlines (Q125 item 3). */
+/** Agents on the nodes: each one's mark, and the placeholders' outlines. */
 export const AgentNodeMarks = deferredAtOnce(DeferredAgentNodeMarkLayer, 'AgentNodeMarks');
 /** The notice region's own notices (components/NoticeRegion.tsx mounts them on every screen but Projects). */
 export const RegionNotices = deferredAtOnce(DeferredRegionNotices, 'RegionNotices');

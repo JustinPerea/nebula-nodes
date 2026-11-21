@@ -12,7 +12,7 @@ const OTHER = 'other';
 const NONE = 'none';
 
 /**
- * Agent spending's first row (GM - Design, 2026-10-31): the daily total
+ * Agent spending's first row (design, 2026-10-31): the daily total
  * everything that isn't the person shares, the umbrella over the rows below.
  * $5 is preselected while the person hasn't picked one; "Other amount…"
  * opens an inline field ($ … / day) that saves on Enter or blur, and Escape
@@ -45,7 +45,7 @@ export function DailyTotalRow({ limits, spentUsd, counted = false, unknown = fal
   const refocus = useRef(false);
 
   // Back to the select once it is there and enabled: after Enter saves, it is
-  // disabled while the save is pending, and focus waits for it (review 1, L1).
+  // disabled while the save is pending, and focus waits for it.
   useEffect(() => {
     if (editing) input.current?.focus();
     else if (refocus.current && !disabled) {
@@ -86,9 +86,9 @@ export function DailyTotalRow({ limits, spentUsd, counted = false, unknown = fal
   const custom = limit !== null && !(DAILY_TOTAL_CHOICES as readonly number[]).includes(limit);
   // During the hold the line is "Counted as used up", or "Amount unknown" with no limit to count.
   const line = counted ? holdFigure(!unknown && limit !== null) : spentUsd === null ? null : dailyUsageLine(spentUsd, limit);
-  // The meter shows only with a limit and something spent (GM). During the hold it keeps its place
-  // but isn't shown (a full meter would read as real spending), so the row's height doesn't jump
-  // when the record reads again and the fill comes back with its own transition.
+  // The meter shows only with a limit and something spent (design). During the hold it keeps its
+  // place but isn't shown (a full meter would read as real spending), so the row's height doesn't
+  // jump when the record reads again and the fill comes back with its own transition.
   const meter = spentUsd !== null && dailyMeterShown(spentUsd, limit) ? limit : null;
 
   return (
@@ -102,7 +102,7 @@ export function DailyTotalRow({ limits, spentUsd, counted = false, unknown = fal
           runs don&rsquo;t.
         </span>
         {/* Its own line under the help, and the meter right under it, the
-            text column's width (GM - Design, 2026-10-31). */}
+            text column's width (design, 2026-10-31). */}
         {line && (
           <span className="settings-daily__usage settings-agent-spent" data-testid="settings-agent-daily-spent">{line}</span>
         )}

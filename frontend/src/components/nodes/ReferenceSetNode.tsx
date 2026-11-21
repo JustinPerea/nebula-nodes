@@ -56,7 +56,7 @@ function formatWeight(weight: number): string {
 }
 
 export function ReferenceSetNode({ id, data, selected }: NodeProps) {
-  const lock = useCanvasLock(); // offline or following (GM round 22, A)
+  const lock = useCanvasLock(); // offline or following
   const readOnly = lock.locked;
   const updateNodeData = useGraphStore((s) => s.updateNodeData);
   // Which role ports have a wire in, as text, so wires elsewhere on the

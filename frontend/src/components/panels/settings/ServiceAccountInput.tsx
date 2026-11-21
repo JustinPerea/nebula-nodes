@@ -44,7 +44,7 @@ export function ServiceAccountInput({ label, value, fileName, onChange, onSubmit
       {pasting ? (
         <textarea
           className="settings-sa__paste"
-          // The row's one name (GM, PR #203 r29 item 4); "JSON" stays in the
+          // The row's one name (design, PR #203); "JSON" stays in the
           // placeholder and the hint, never in the name.
           aria-label={label}
           aria-describedby={hintId}

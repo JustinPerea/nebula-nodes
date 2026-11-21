@@ -14,11 +14,11 @@ import { LineText } from './LineText';
 /** Persistent paid-provider safety status. Recovery-journal write warnings may
  * be dismissed; an ambiguous paid start remains until the user explicitly says
  * they checked Marble and the backend durably removes its fail-closed hold.
- * The person reads "World Labs run", never "paid start" (error copy round 3c). */
+ * The person reads "World Labs run", never "paid start" (error copy). */
 export function ProviderRecoveryStatus({ reopenLine = null }: {
   /** The person's held reopen, when the World Labs notice's press is what
-   * clears it (GM r32, 2; GM r33, 6 on PR #199): the box's second line, in
-   * the notice's own alert region, so it is announced once, when it appears.
+   * clears it (PR #199): the box's second line, in the notice's own alert
+   * region, so it is announced once, when it appears.
    * With nothing else to say (a `params` hold), the box holds only it. */
   reopenLine?: { line: string; onDismiss: () => void } | null;
 } = {}) {
@@ -36,17 +36,17 @@ export function ProviderRecoveryStatus({ reopenLine = null }: {
     (state) => state.acknowledgeUncertainWorldLabsRun,
   );
   const dismiss = useGraphStore((state) => state.dismissProviderRecoveryWarning);
-  // Offline is read-only (round 15 of PR #114): the unlock is disabled.
-  // Round 23 (review 22, L-3): and while following an agent's switch, since
-  // the store refuses both unlocks then too (EDIT_GATES); one lock for both.
+  // Offline is read-only (PR #114): the unlock is disabled. So is it while
+  // following an agent's switch, since the store refuses both unlocks then
+  // too (EDIT_GATES); one lock for both.
   const lock = useCanvasLock();
   const [unlocking, setUnlocking] = useState<string | null>(null);
   const [unlockError, setUnlockError] = useState<string | null>(null);
   const ambiguity = ambiguities[0];
   // Set once the line's box is in the page, so a box that arrives with it
-  // (the params-only box) is announced too (review 20 NIT-2).
+  // (the params-only box) is announced too.
   const reopenText = useAnnounced(reopenLine?.line);
-  // The selection toolbar moves below the box while it shows (GM r34 A5).
+  // The selection toolbar moves below the box while it shows.
   const stopWatch = useRef<(() => void) | null>(null);
   const boxRef = useCallback((box: HTMLDivElement | null) => {
     stopWatch.current?.();
@@ -74,7 +74,7 @@ export function ProviderRecoveryStatus({ reopenLine = null }: {
     try {
       await acknowledge(ambiguity.kind, ambiguity.nodeId);
     } catch (error) {
-      // Never an error's own message (round 3b): a request's line, else GM's general line.
+      // Never an error's own message: a request's line, else the general line (design).
       setUnlockError(failureMessage(error, UNLOCK_NODE_HEADING));
     } finally {
       setUnlocking(null);
@@ -89,7 +89,7 @@ export function ProviderRecoveryStatus({ reopenLine = null }: {
           : uncertainRunId ? WORLD_LABS_RUN_STATUS_UNKNOWN : 'Recovery ID not saved.'}</strong>
         {' '}{curlApostrophes(ambiguity?.message ?? warning ?? '')}
         {ambiguity && !ambiguity.durable && (
-          // GM, round 3f.
+          // The hold was not saved to disk, so the line says to keep Nebula running.
           <> Nebula couldn’t save the hold, so keep Nebula running until this run finishes.</>
         )}
         {ambiguities.length > 1 && (
@@ -103,7 +103,7 @@ export function ProviderRecoveryStatus({ reopenLine = null }: {
           className="provider-recovery-status__ack"
           onClick={() => void unlock()}
           {...lock.act({ disabled: unlocking === ambiguityKey, title: UNLOCK_TITLE, kept: 'unlock' })}
-          // GM, round 13 of PR #114: the node by its card title. No confirm.
+          // Design, PR #114: the node by its card title. No confirm.
           aria-label={unlockAriaLabel(heldTitle ?? recordNodeName([], ambiguity.nodeId, true))}
         >
           <ShieldCheck size={15} strokeWidth={1.8} aria-hidden="true" />
@@ -115,7 +115,7 @@ export function ProviderRecoveryStatus({ reopenLine = null }: {
           className="provider-recovery-status__ack"
           onClick={acknowledgeUncertainRun}
           {...lock.act({ title: UNLOCK_TITLE, kept: 'unlock' })}
-          // No node to name: GM's line (round 14 of PR #114).
+          // No node to name: the general line (design, PR #114).
           aria-label={UNLOCK_RUN_ARIA}
         >
           <ShieldCheck size={15} strokeWidth={1.8} aria-hidden="true" />

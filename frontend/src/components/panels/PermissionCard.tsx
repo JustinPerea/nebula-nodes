@@ -57,7 +57,7 @@ export function PermissionCard({ part, agentName, onDecision }: {
   onDecision: (requestId: string, decision: 'allow' | 'deny') => void;
 }) {
   const open = part.status === 'pending';
-  // Round 16 (L5): offline Allow once is disabled; Deny stays.
+  // Offline Allow once is disabled; Deny stays.
   const readOnly = useBackendOffline();
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -69,11 +69,12 @@ export function PermissionCard({ part, agentName, onDecision }: {
   const countdown = Number.isFinite(part.timeoutSeconds) ? countdownText(left) : null;
   const input = formatInput(part.input);
   const settled = part.status !== 'pending' && part.status !== 'sent';
-  // Review 5 MEDIUM-2 (GM r9 1): an agent's ask with a decision on it, like a question. While
-  // this tab isn't connected as the person, Allow once and Deny lock in place (aria-disabled,
-  // focusable, the 150 ms rule) and unlock on the promote. The agent's own timeout keeps
-  // running. GM r10 (1): GM's line shows on the card, on its own row under the buttons, so the
-  // buttons have no tooltip; they point at the line (aria-describedby).
+  // An agent's ask with a decision on it, like a question. While this tab
+  // isn't connected as the person, Allow once and Deny lock in place
+  // (aria-disabled, focusable, the 150 ms rule) and unlock on the promote. The
+  // agent's own timeout keeps running. The approved line shows on the card, on
+  // its own row under the buttons, so the buttons have no tooltip; they point
+  // at the line (aria-describedby).
   const lock = usePersonLock('answer this', open);
   const tabHeld = lock.locked;
   const lockProps = lock.control();

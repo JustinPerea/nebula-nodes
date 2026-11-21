@@ -7,22 +7,21 @@ import { canvasFocusTarget, nextNoticeTarget } from '../../lib/noticeFocus';
 import type { SceneClashNotice } from '../../store/graphStore';
 
 /**
- * GM r9 decision 2 (PR #198 review 6, H2): a Cinema scene changed somewhere
- * else on a field the person changed too. GM's line, with [Keep mine] and
- * [Use Codex's] ([Use theirs] with no agent). It stays until the person
- * chooses: meanwhile the card is marked "Unsaved" and every save sends the
- * other change for the fields that clash, so nothing is overwritten unasked.
- * One prompt per scene, in the region's own slot (lib/noticeSlots.ts).
- * GM r23 answer 2: a prompt asked again in place of a notice that had focus
- * (the delete toast's [Undo]) takes focus itself: it has no ×, and focus
+ * Design, PR #198: a Cinema scene changed somewhere else on a field the
+ * person changed too. The approved line, with [Keep mine] and [Use Codex's]
+ * ([Use theirs] with no agent). It stays until the person chooses: meanwhile
+ * the card is marked "Unsaved" and every save sends the other change for the
+ * fields that clash, so nothing is overwritten unasked. One prompt per scene,
+ * in the region's own slot (lib/noticeSlots.ts).
+ * Design: a prompt asked again in place of a notice that had focus (the
+ * delete toast's [Undo]) takes focus itself: it has no ×, and focus
  * never lands on [Keep mine].
- * GM r30: once answered, the prompt stays while the answer's save is on its
- * way (`sending`): aria-busy, both buttons held (aria-disabled at once,
- * grey after a moment, labels as they are, no reason tooltip), so a second
- * press sends nothing. It goes when that save is answered.
- * Focus (round 21, the coordinator's ruling on the drop flagged for
- * review): when an answered prompt goes with focus in it, focus never
- * drops to the page (useAnsweredFocus).
+ * Design: once answered, the prompt stays while the answer's save is on its
+ * way (`sending`): aria-busy, both buttons held (aria-disabled at once, grey
+ * after a moment, labels as they are, no reason tooltip), so a second press
+ * sends nothing. It goes when that save is answered.
+ * Focus: when an answered prompt goes with focus in it, focus never drops to
+ * the page (useAnsweredFocus).
  */
 export function SceneClashNotices() {
   const clashes = useGraphStore((state) => state.sceneClashes);
@@ -82,9 +81,9 @@ function ClashPrompt({ nodeId, clash, act, resolve, onAnswer, promptRef }: { nod
 interface Answered { nodeId: string; id: number; keyboard: boolean }
 
 /**
- * Where focus goes when an answered prompt leaves the region (round 21):
- * only when focus went with it (on the page, or gone), never from where the
- * person moved meanwhile.
+ * Where focus goes when an answered prompt leaves the region: only when
+ * focus went with it (on the page, or gone), never from where the person
+ * moved meanwhile.
  * - The answer's save failed: the stop line that took the prompt's place,
  *   onto its [Try again].
  * - Asked again: the new prompt itself (no ×; never Keep mine).

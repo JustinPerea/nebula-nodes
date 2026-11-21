@@ -49,14 +49,14 @@ export function ProvidersTab({ saved }: { saved: SettingsDraft }) {
   const [query, setQuery] = useState('');
   const health = useProviderReadinessStore();
   const krea = useKreaConnection();
-  // PR #204 round 10 (GM r15, r17 item 1): every key's Add, Replace, Save and Remove, and the
-  // Krea sign-in's, are the person's alone. Round 11 (GM r18 a): one lock for the group, its line
-  // directly under the first heading ("Connect a provider · 23"), every row described by it.
+  // Design, PR #204: every key's Add, Replace, Save and Remove, and the Krea sign-in's, are the
+  // person's alone. Design: one lock for the group, its line directly under the first heading
+  // ("Connect a provider · 23"), every row described by it.
   const keyLock = usePersonLock('change provider settings');
   const setupTarget = useUIStore((s) => s.settingsProviderTarget);
   const root = useRef<HTMLDivElement>(null);
-  // Offline (GM, round 16 of PR #114): the search stays usable; everything
-  // that edits sits in the disabled fieldset below it.
+  // Offline (design, PR #114): the search stays usable; everything that
+  // edits sits in the disabled fieldset below it.
   const offline = useBackendOffline();
   const handledTarget = useRef<typeof setupTarget>(null);
   const desktop = typeof window !== 'undefined' ? window.nebulaDesktop : undefined;
@@ -64,8 +64,8 @@ export function ProvidersTab({ saved }: { saved: SettingsDraft }) {
 
   const kreaStatus = krea.connection?.status;
   // One source for each row's section, the heading and the tab's badge
-  // (rowHelpers.connectedRows; review 11 of PR #203, copy NIT-2). A key is
-  // set as the agent gate and the run read it (directRoute isKeySet).
+  // (rowHelpers.connectedRows; PR #203). A key is set as the agent gate and
+  // the run read it (directRoute isKeySet).
   const rows = connectedRows({ apiKeys: saved.apiKeys, kreaStatus, health });
 
   const entries: Entry[] = [
@@ -85,11 +85,11 @@ export function ProvidersTab({ saved }: { saved: SettingsDraft }) {
       render: () => <NousRow key={NOUS_ROW} summary="Chat models with your Hermes sign-in" /> },
   ];
 
-  // GM, PR #203 r19 item 6: a change made elsewhere updates the panel in
-  // place, but never moves a row the person is in (focus inside it, or its
-  // edit view open): that row's status changes where it stands, and it moves
-  // once they leave it. `held` is the section each such row stays in, kept
-  // in the store so the tab badge counts the rows as shown (r21 item 3).
+  // Design, PR #203: a change made elsewhere updates the panel in place, but
+  // never moves a row the person is in (focus inside it, or its edit view
+  // open): that row's status changes where it stands, and it moves once they
+  // leave it. `held` is the section each such row stays in, kept in the
+  // store so the tab badge counts the rows as shown.
   const held = useSettingsDraftStore((s) => s.heldRows);
   const setHeld = useCallback((next: (current: Record<string, boolean>) => Record<string, boolean>) => {
     useSettingsDraftStore.setState((state) => {
@@ -101,20 +101,19 @@ export function ProvidersTab({ saved }: { saved: SettingsDraft }) {
   useEffect(() => () => useSettingsDraftStore.setState({ heldRows: {} }), []);
   const openRow = useSettingsDraftStore((s) => s.openRow);
   const placedRef = useRef<Record<string, boolean>>({});
-  // GM, PR #203 r21 item 4: a key set or removed elsewhere is said once,
-  // politely ("Replicate token saved."), when the read it asked for lands: the
-  // first read to land after the latest signal (Settings drops every older
-  // one), never a save of this tab's that lands first (review 11, copy
-  // MEDIUM-1). This tab's own write's echo never reaches here
-  // (store/settingsChangedSocket.ts).
+  // Design, PR #203: a key set or removed elsewhere is said once, politely
+  // ("Replicate token saved."), when the read it asked for lands: the first
+  // read to land after the latest signal (Settings drops every older one),
+  // never a save of this tab's that lands first. This tab's own write's echo
+  // never reaches here (store/settingsChangedSocket.ts).
   const toAnnounce = useRef(new Set<string>());
   const announceAfter = useRef<number | null>(null);
   const reads = useSettingsDraftStore((s) => s.reads);
   const [announcement, setAnnouncement] = useState('');
-  // Lines not said yet, kept until they are (review 12, LOW-4): another
-  // read, or the person's own save, landing within the two frames below
-  // adds to them and never cancels them, and a window in the background
-  // (no frames run there) says every change once it is shown again.
+  // Lines not said yet, kept until they are: another read, or the
+  // person's own save, landing within the two frames below adds to them
+  // and never cancels them, and a window in the background (no frames
+  // run there) says every change once it is shown again.
   const unsaid = useRef<string[]>([]);
   const frame = useRef<number | null>(null);
   const sayUnsaid = useCallback(() => {
@@ -154,10 +153,10 @@ export function ProvidersTab({ saved }: { saved: SettingsDraft }) {
     const heard = (event: Event) => {
       const detail = settingsSavedDetail(event);
       if (detail?.source === 'local') {
-        // The person's own save or removal moves its row at once. A held
-        // row it moves keeps keyboard focus: the row that lands takes it, as
-        // a row their own save moves always does (review 10 of PR #203,
-        // copy MEDIUM-1). The DOM is still the one they acted in here.
+        // The person's own save or removal moves its row at once. A held row
+        // it moves keeps keyboard focus: the row that lands takes it, as a
+        // row their own save moves always does (PR #203). The DOM is still the
+        // one they acted in here.
         const own = new Set(detail.keys ?? []);
         const { heldRows: current, saved: now } = useSettingsDraftStore.getState();
         const focused = typeof document !== 'undefined' ? document.activeElement : null;
@@ -165,7 +164,7 @@ export function ProvidersTab({ saved }: { saved: SettingsDraft }) {
           if (!Object.hasOwn(current, id)) continue;
           const row = root.current?.querySelector<HTMLElement>(`[data-row="${CSS.escape(id)}"]`);
           // Only when releasing it moves the row: a held row already shown
-          // where its key now puts it stays mounted (copy LOW-1).
+          // where its key now puts it stays mounted.
           if (row && focused && row.contains(focused)) focusRowIfItMoves(id, current[id], isKeySet(now?.apiKeys ?? {}, id));
         }
         if (own.size) {
@@ -203,9 +202,9 @@ export function ProvidersTab({ saved }: { saved: SettingsDraft }) {
   const connected = visible.filter((entry) => shownConnected(entry));
   const toAdd = visible.filter((entry) => !shownConnected(entry));
   const anyConnected = entries.some((entry) => entry.connected);
-  // Round 14 (review 11 NIT-1): the group's line renders under the first listed section's heading
-  // whenever the lock shows it, so it's registered while any row is listed, and the key-added
-  // Undo (SettingsNoticeBar) knows it's there before it renders.
+  // The group's line renders under the first listed section's heading whenever the lock shows it,
+  // so it's registered while any row is listed, and the key-added Undo (SettingsNoticeBar) knows
+  // it's there before it renders.
   useGroupLockLine('change provider settings', keyLock.id, visible.length > 0);
   // A row that changed section since the last placement springs in where
   // it lands (--settings-spring, as a row's body opens): the placement is
