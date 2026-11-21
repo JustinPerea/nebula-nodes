@@ -25,8 +25,8 @@ export function useLockPending(locked: boolean): boolean {
 
 
 /**
- * PR #204 (design): a view the person alone can read (the Commons)
- * shows, on a demoted tab, exactly what a tab that never connected shows. The switch keeps the
+ * PR #204 (design): a view the person alone can read (the Commons) shows, on a
+ * demoted tab, exactly what a tab that never connected shows. The switch keeps the
  * held rule: only a hold that lasts PERSON_HELD_SETTLE_MS switches, so a quick reconnect (a
  * backend restart) never flashes the view away and back. `epoch` counts the promotes that ended a
  * switch, so the view reads again.

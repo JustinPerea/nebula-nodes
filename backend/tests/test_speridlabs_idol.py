@@ -195,10 +195,10 @@ async def test_a_run_sends_the_schema_body_and_returns_a_world_v2_splat(monkeypa
 
 @pytest.mark.asyncio
 async def test_without_a_token_the_node_runs_anonymously_with_no_auth_header(monkeypatch, capsys):
-    """PR #203: the first live call ran with no token (every request
-    200, 27.6 s, a valid splat), so the route is keyless. A run without the
-    token goes out through the route with no token header at all, as the
-    live call did."""
+    """PR #203: the first live call ran with no token (every request 200,
+    27.6 s, a valid splat), so the route is keyless. A run without the token
+    goes out through the route with no token header at all, as the live call
+    did."""
     for keys in ({}, {"HF_TOKEN": ""}, {"HF_TOKEN": "  "}):
         hosts = idol_hosts(monkeypatch)
         world_of(await run_node(keys=keys))
@@ -451,8 +451,8 @@ def test_the_space_route_rules_are_validated():
 
 
 def test_a_keyless_route_cant_carry_a_missing_key_line():
-    """The keyless half: built from keyless_idol, so it
-    passes before and after idol.md's switch back."""
+    """The keyless half: built from keyless_idol, so it passes before and
+    after idol.md's switch back."""
     keyless = keyless_idol()
     keyless["routes"][0]["missingKeyLine"] = NEEDS_TOKEN
     assert any("missingKeyLine needs keys" in p for p in node_route.routes_problems(keyless))
@@ -1339,8 +1339,8 @@ def _streamed(body: bytes, *, step: int = 1024, headers: dict[str, str] | None =
 
 @pytest.mark.asyncio
 async def test_a_download_that_isnt_a_ply_is_cut_off_after_its_first_bytes(monkeypatch):
-    """The header is checked from the stream's first 64 KiB, not
-    after the whole file (up to 128 MiB) has come."""
+    """The header is checked from the stream's first 64 KiB, not after the
+    whole file (up to 128 MiB) has come."""
     served: list[int] = []
     body = b"<html>" + b"x" * (8 * 1024 * 1024)
     public_dns(monkeypatch)
@@ -1704,9 +1704,9 @@ def test_the_signed_in_duration_line_stays_in_code_unused():
 # -- keyless helpers, the hub rule, a download that won't decode ------------------
 
 def test_the_keyless_helpers_survive_the_switch_back(monkeypatch):
-    """idol.md says the keyless rules' tests pass before and
-    after the switch back (step 1 drops missingKeyLine). Here the registry is
-    already keyless, as after step 1, and both helpers still build it."""
+    """idol.md says the keyless rules' tests pass before and after the switch
+    back (step 1 drops missingKeyLine). Here the registry is already keyless,
+    as after step 1, and both helpers still build it."""
     from services.node_registry import NodeRegistry
     from tests import test_route_agent_surfaces as surfaces
 
@@ -1724,8 +1724,8 @@ def test_the_keyless_helpers_survive_the_switch_back(monkeypatch):
 
 
 @pytest.mark.parametrize("answer, missing", [
-    # huggingface_hub checks these two first, and neither is
-    # a missing repo, whatever the status or message with them.
+    # huggingface_hub checks these two first, and neither is a missing repo,
+    # whatever the status or message with them.
     (httpx.Response(401, headers={"x-error-code": "RevisionNotFound"}), False),
     (httpx.Response(404, headers={"x-error-code": "EntryNotFound",
                                   "x-error-message": "Access to this resource is disabled."}), False),

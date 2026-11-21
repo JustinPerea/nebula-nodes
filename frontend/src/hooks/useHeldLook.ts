@@ -9,7 +9,7 @@ export const HELD_LOOK_ATTR = 'data-held-look';
 
 /** Set for the hold's first HELD_LOOK_DELAY_MS: the shared disabled rule
  * (styles/disabled-buttons.css) passes over a button that has it, so it
- * keeps its own look meanwhile (design: one rule, no notice overrides). */
+ * keeps its own look meanwhile (one rule, no notice overrides). */
 export const HELD_PENDING_ATTR = 'data-held-pending';
 
 export interface HeldLookProps {

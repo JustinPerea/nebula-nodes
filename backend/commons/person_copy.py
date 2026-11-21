@@ -4,9 +4,9 @@ Design: "Raw backend exception text: fix it at the backend. Log str(exc) and sen
 written copy." And on the split: "People get the written line and agents keep
 the specific detail." So a refusal carries two texts: its message (str(exc)),
 specific and technical, for agents (they read `detail` to fix their call) and
-the log; and `person`, a line written to the error-copy patterns (design), for the person's UI.
-Messages already written for people (most of evaluation.EvaluationError's)
-need no `person`: they are the line.
+the log; and `person`, a line written to the error-copy patterns (design), for
+the person's UI. Messages already written for people (most of
+evaluation.EvaluationError's) need no `person`: they are the line.
 """
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from __future__ import annotations
 # Design: under a heading, "drop "That didn't work."".
 FALLBACK = "Try again, or reload the page if it keeps happening."  # the browser line, a sentinel: never sent, the frontend says the shell's line
 
-# Lines from the design, verbatim.
+# The approved lines, verbatim.
 BAD_FILTERS = "Those filters didn’t work. Clear them and try again."
 UNKNOWN_SETTING = "That setting isn’t available. Reload to get the latest settings."
 

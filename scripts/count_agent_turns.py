@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Count an agent's orientation turns in a `claude -p` stream-json transcript.
 
-Added in PR #125. An earlier headless run
-(docs/agent-runs/2026-10-20-cli-headless.md) spent 8 of its 16 turns working
-out how to use Nebula rather than doing the person's work. This script counts
-the same way that run did, so a before-and-after run compares with its 8 of 16.
+Added in PR #125. The headless run in
+docs/agent-runs/2026-10-20-cli-headless.md spent 8 of its 16 turns working out
+how to use Nebula rather than doing the person's work. This script counts turns
+the way that run's were counted, so a before-and-after run compares with its 8
+of 16.
 
 A turn is one model response: the `assistant` events of one message (Claude
 Code writes one event per content block, all with the same `message.id`).

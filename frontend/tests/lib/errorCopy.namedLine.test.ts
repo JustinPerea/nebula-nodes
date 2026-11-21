@@ -83,11 +83,11 @@ const HAND_BUILT: { file: string; text: string; why: string }[] = [
     why: "Agent log: the tail is the error's own message, for agents" },
   { file: 'lib/studioBoundary.ts', text: '`Couldn’t open ${label ? `“${label}”` : \'a node\'} in ${STUDIO_PLACE[studio]}, node ${nodeId}. ${errorText(error)}`',
     why: "Agent log: the tail is the error's own message, for agents" },
-  // The whole-save refusals (design; lib/sceneSaveCopy.ts): a heading over one of its own
+  // The whole-save refusals (design; lib/sceneSaveCopy.ts): a fixed heading over one of the
   // fixed suffixes, never a backend line (the backend's lines go through headedLine in
   // sceneRefusal).
-  // Design: the "other" stop line, a heading over the reason the
-  // single line already had (copyForAnswer's), merged for several scenes.
+  // Design: the "other" stop line, a fixed heading over the reason the single line already had
+  // (copyForAnswer's), merged for several scenes.
   { file: 'lib/sceneSaveCopy.ts', text: "`Nebula couldn’t save your changes to ${quotedNames(scenes, 'scenes')}. ${reason}`",
     why: "GM's heading over the line's own reason (GM r32 answer 2)" },
   { file: 'lib/reopenHoldLines.ts', text: "`Nebula couldn’t save its World Labs safeguards. ${reopen} after you ${desktop ? 'quit Nebula and open it again' : 'restart Nebula'}.`",
@@ -206,9 +206,9 @@ describe('ratchet: no new hand-built "heading reason" lines', () => {
     expect(handBuilt('const a = `Couldn’t save ${what} for “${node}”.${tail}`;')).toHaveLength(0);
   });
 
-  // It parses source files with the TypeScript parser
-  // (about 0.5 s alone, dominated by graphStore.ts) and once passed vitest's
-  // 5 s default under the full suite's parallel load: its own 30 s bound.
+  // It parses source files with the TypeScript parser (about 0.5 s alone,
+  // dominated by graphStore.ts) and once passed vitest's 5 s default under the
+  // full suite's parallel load: its own 30 s bound.
   // Every hit holds a failure word or a `heading` slot, so a file whose
   // text has neither is skipped unparsed (the same hits, a little faster).
   it('only the reviewed ones', { timeout: 30_000 }, () => {

@@ -1,4 +1,4 @@
-"""One order of precedence for what a board sends (design).
+"""One order of precedence for what a board sends.
 
 Justin's answers (2026-10-19):
 

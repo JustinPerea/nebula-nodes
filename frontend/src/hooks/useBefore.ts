@@ -26,7 +26,7 @@ export function useNowUntil(untilSeconds: number | null | undefined): number {
   if (seen !== untilSeconds) {
     // Read once per change of `untilSeconds` (the state update below makes the next render skip
     // this), so the result is the same however often React renders in between.
-    // eslint-disable-next-line react-hooks/purity -- the purity check (PR #242) asks for the clock at this render
+    // eslint-disable-next-line react-hooks/purity -- PR #242 reads the clock here on purpose
     current = Date.now();
     setSeen(untilSeconds);
     setNow(current);

@@ -189,9 +189,9 @@ def test_the_proposing_session_never_reaches_an_agent(sockets, person):
 # -- the guard ---------------------------------------------------------------------
 #
 # A cheap first line, read from main.py's source. conftest.py checks the same
-# rule in behaviour, in every test: a cursor event with a
-# target that reaches a ConnectionManager sender other than through
-# _broadcast_presence fails the test that sent it.
+# rule in behaviour, in every test: a cursor event with a target that reaches a
+# ConnectionManager sender other than through _broadcast_presence fails the
+# test that sent it.
 
 SENDERS = {"broadcast_raw", "broadcast_others", "broadcast_browser", "_broadcast_raw_quietly",
            "send_text", "send_direct", "send_json", "send_bytes", "send"}
@@ -346,8 +346,8 @@ def cursor_broadcasts_outside_the_helper(source: str) -> list[int]:
     return sorted(set(bad))
 
 
-# What only the person's canvas may get: a cursor event in
-# the person form, and the replay of the live cursors.
+# What only the person's canvas may get: a cursor event in the person form, and
+# the replay of the live cursors.
 PERSON_FUNCS = frozenset({"person_form", "_person_form", "_accepted_person_form", "replay"})
 
 
@@ -362,8 +362,8 @@ def _dotted(node: ast.AST) -> str | None:
 
 
 # Frames that carry a ``session`` key of another meaning and may go to any
-# socket: a literal ``type`` outside this set. The set is
-# what only the person's canvas may get.
+# socket: a literal ``type`` outside this set. The set is what only the
+# person's canvas may get.
 PERSON_ONLY_TYPES = frozenset({"agentPresence", "agentPresenceReplay"})
 
 
@@ -373,9 +373,9 @@ def person_only_sends(source: str) -> list[tuple[int, str]]:
     one), a name (or ``self.x``) bound to one, a copy of one, a function
     returning one, any dict with a ``"session"`` key, literal or ``dict()``,
     unless its ``type`` is a literal outside PERSON_ONLY_TYPES, a name given a
-    session after it was built (``e["session"] =``,
-    ``e.update(session=...)``, ``e |= {...}``, ``e.setdefault("session",
-    ...)``, ``e | {...}``), or a replay; read through ``a if c else b``,
+    session after it was built (``e["session"] =``, ``e.update(session=...)``,
+    ``e |= {...}``, ``e.setdefault("session", ...)``, ``e | {...}``), or a
+    replay; read through ``a if c else b``,
     lists, tuples and sets (looped over, indexed or spread),
     ``functools.partial(sender, ...)``, stored or called at once,
     ``getattr(manager, ...)``, and names standing for a sender. Given to a
@@ -574,8 +574,9 @@ def test_no_cursor_event_is_broadcast_outside_broadcast_presence():
     source = (Path(__file__).resolve().parents[1] / "main.py").read_text(encoding="utf-8")
     assert cursor_broadcasts_outside_the_helper(source) == []
     # The one target=None emitter left (the Agent log only) stays allowed. _say_agent_action was the
-    # other: it now sends every one of its events through _broadcast_presence, a board write's with
-    # its surface anchor and the rest with none (the person's copy is the event and its id).
+    # other: since PR #233 it sends every one of its events through _broadcast_presence, a board
+    # write's with its surface anchor and the rest with none (the person's copy is the event and
+    # its id).
     assert source.count("broadcast_raw(_point(") == 1
 
 
@@ -617,9 +618,9 @@ def test_the_replay_ages_the_last_actions_time_by_the_cursors_age():
 
 
 def test_past_the_agent_cap_the_replay_has_no_cursor_for_that_agent(monkeypatch):
-    """Documented: an agent past SESSION_AGENT_MEMORY gets the plain
-    cursor with no session (design: "until room frees"), and nothing is kept
-    for it, so a tab that connects now shows it only from its next event."""
+    """An agent past SESSION_AGENT_MEMORY gets the plain cursor with no session
+    (design: "until room frees"), and nothing is kept for it, so a tab that
+    connects now shows it only from its next event. This is the intended limit."""
     monkeypatch.setattr(presence_module, "SESSION_AGENT_MEMORY", 2)
     clock = Clock()
     presence = AgentPresence(clock)
@@ -642,9 +643,9 @@ CODEX = {"X-Nebula-Agent": "Codex"}
 
 
 def test_no_accepted_click_for_an_agent_past_the_agent_memory(sockets, monkeypatch):
-    """Design, PR #211: its cursor is the unnumbered one,
-    which can't be tied to the proposing session, so the person's tabs get no
-    click; agents still read the agent form."""
+    """Design, PR #211: its cursor is the unnumbered one, which can't be tied
+    to the proposing session, so the person's tabs get no click; agents still
+    read the agent form."""
     api = sockets
     monkeypatch.setattr(presence_module, "SESSION_AGENT_MEMORY", 1)
     node = api.graph.add_node("text-input", {"value": "hi"})
@@ -663,9 +664,9 @@ def test_no_accepted_click_for_an_agent_past_the_agent_memory(sockets, monkeypat
 
 
 def test_an_accepted_click_reads_liveness_and_the_slot_at_one_time():
-    """The live check and the slot it lands on are read with
-    one clock read, so a TTL running out between two reads can't bring a
-    cursor back for an ended session."""
+    """The live check and the slot it lands on are read with one clock read,
+    so a TTL running out between two reads can't bring a cursor back for an
+    ended session."""
     clock = Clock()
     presence = AgentPresence(clock)
     presence.person_form(presence.point(AGENT, target={"x": 1, "y": 1}), AGENT, session="a")
@@ -692,8 +693,8 @@ def test_an_accepted_click_reads_liveness_and_the_slot_at_one_time():
 
 
 def test_a_failed_accepted_person_form_sends_the_person_nothing(sockets, monkeypatch):
-    """On a failure the person's tabs get no click,
-    never the bare agent form (a tab would draw it as the plain cursor)."""
+    """On a failure the person's tabs get no click, never the bare agent form
+    (a tab would draw it as the plain cursor)."""
     api = sockets
     node = api.graph.add_node("text-input", {"value": "hi"})
     proposal_id = _propose(api, node, AGENT_B)
@@ -714,9 +715,9 @@ def test_a_failed_accepted_person_form_sends_the_person_nothing(sockets, monkeyp
 
 
 def test_the_runtime_guard_fails_a_cursor_event_sent_around_the_helper(sockets):
-    """conftest.py's check, run here by hand: a targeted
-    cursor event sent straight to broadcast_raw is recorded; one through
-    _broadcast_presence, and one with no target, are not."""
+    """conftest.py's check, run here by hand: a targeted cursor event sent
+    straight to broadcast_raw is recorded; one through _broadcast_presence,
+    and one with no target, are not."""
     import asyncio
 
     from tests.conftest import watch_cursor_routes

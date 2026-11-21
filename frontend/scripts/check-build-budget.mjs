@@ -60,9 +60,9 @@ if (entrySize > MAX_ENTRY_BYTES || entryGzipSize > MAX_ENTRY_GZIP_BYTES) {
 // measured cost: a canvas kept in the tab after a restore is only in that tab,
 // so what keeps it safe loads with the app (the kept unload guard and fallback
 // line, the kept edit steps in graphStore, keptWires' refusals, Projects home's
-// kept notice, the bottom bar's kept state). Measuring lazy splits of these
-// showed that a kept edit that waits for a chunk is refused for good when that
-// chunk can't load, which is when a canvas is kept, so they stay.
+// kept notice, the bottom bar's kept state). Lazy splits of these were
+// measured, but a kept edit that waits for a chunk is refused for good when
+// that chunk can't load, which is when a canvas is kept, so they stay.
 // The failure-lines PR (every failure line is one sentence, "Nebula couldn’t ‹do X› because ‹reason›.") cost
 // +7,545 raw / +2,445 gzip over main (1,860,086 / 487,696): 1,867,631 / 490,141, still 45 chunks. The limits are the
 // ones above plus that cost, rounded up to the next 1,000 raw and 100 gzip. The cost is the clause table design's

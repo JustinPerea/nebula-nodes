@@ -317,10 +317,11 @@ def _raises(path: Path) -> list[tuple[bool, str, ast.Call, ast.Call | None]]:
 
 
 # Raises in a run whose text has no person line: provider text and malformed
-# provider answers (the general line from the design, the raw text behind Details), timeouts
-# the classifier names, moderation (its own card), developer-only states, and
-# checks only an agent or an old saved graph can reach. The count may only go
-# down. A new raise in Nebula's own words gets a line instead.
+# provider answers (the general line, design, with the raw text behind
+# Details), timeouts the classifier names, moderation (its own card),
+# developer-only states, and checks only an agent or an old saved graph can
+# reach. The count may only go down. A new raise in Nebula's own words gets a
+# line instead.
 UNLINED_BASELINE: dict[str, int] = {
     "handlers/bfl.py": 8, "handlers/byteplus.py": 4, "handlers/cinema_scene.py": 6,
     "handlers/elevenlabs.py": 20, "handlers/fal_universal.py": 9, "handlers/gemini_omni.py": 8,
@@ -343,11 +344,11 @@ UNLINED_BASELINE: dict[str, int] = {
     "execution/stream_runner.py": 5, "execution/sync_runner.py": 4, "services/media_input.py": 3,
     "services/qc_common.py": 6, "services/qc_jev.py": 3, "services/typesafe_client.py": 23,
     "services/vision_llm.py": 8, "services/google_vertex.py": 2, "services/quiver_client.py": 9,
-    # Two entries count one more raise than before: handlers/replicate_model.py's
+    # Two entries were each raised by one later: handlers/replicate_model.py's
     # model_path and maker_routes_google.py's Vertex Veo model check read
     # Nebula's route table, never the person, so they are developer-only and
     # their person lines (which named the ids) went.
-    # These files were added to the guard later. ffmpeg: tool output, timeouts
+    # The files below were added to the guard later. ffmpeg: tool output, timeouts
     # and developer-only input checks. krea_account: a schema mismatch and
     # malformed job answers. nous_auth: its internal _CredentialRejected
     # checks and the public sign-in errors, which the handler

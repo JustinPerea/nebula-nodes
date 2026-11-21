@@ -4,7 +4,7 @@ import type { NodeData } from '../../src/types';
 import { formatConfirmUsd, placeholderRunConfirm, roundUpToCent } from '../../src/lib/placeholderRunConfirm';
 import type { RunCost, RunScopeSummary } from '../../src/lib/runScope';
 
-// The design rulings, verbatim.
+// The design ruling on the left line, verbatim, and the replay and $0.01 cases.
 
 const codex = { id: 'ext:codex', name: 'Codex', color: '#F2C14E', verified: true };
 

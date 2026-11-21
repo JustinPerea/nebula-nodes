@@ -6,7 +6,7 @@ import { summarizeRunScope, type RunCost, type RunScopeSummary } from '../../src
 import type { PricingTable } from '../../src/lib/pricing';
 
 // Justin, 2026-10-25: the person's direct run always asks first when a
-// placeholder it would run calls a paid model. Design copy, verbatim.
+// placeholder it would run calls a paid model. The approved copy, verbatim.
 
 const codex = { id: 'ext:codex', name: 'Codex', color: '#F2C14E', verified: true };
 const cursor = { id: 'self:cursor', name: 'Cursor', color: '#5B8DEF', verified: false };
@@ -42,8 +42,8 @@ describe('placeholderRunConfirm', () => {
     const model = confirmFor(nodes, [wire('p', 'i'), wire('i', 'o', 'images')], 'o')!;
     expect(model.heading).toBe('Run 2 nodes Codex is still setting up?');
     expect(model.intro).toBe("Codex hasn’t finished these, so their settings may not be final.");
-    // Design: every dollar in the total has a row; the
-    // run's own paid node is muted, with no agent.
+    // Design: every dollar in the total has a row; the run's own paid node is
+    // muted, with no agent.
     expect(model.rows).toEqual([{ nodeId: 'i', name: '“Hero still”', model: 'Nano Banana Pro · 3 Pro', modelKey: 'Nano Banana Pro · 3 Pro',
       setting: null, price: '$0.12', agent: codex },
     { nodeId: 'o', name: '“Final”', model: 'Nano Banana 2 · 3.1 Flash', modelKey: 'Nano Banana 2 · 3.1 Flash', setting: null, price: '$0.12', agent: null }]);

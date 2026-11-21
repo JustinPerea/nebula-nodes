@@ -1,8 +1,8 @@
 /**
- * PR #199, design copy, verbatim: a new project refused at the project
- * limit says "You have 501 projects and the limit is 500. You can make a
- * new one after you delete 2 projects." with the real numbers, and "after
- * you delete 1 project" for one. One shared line (lib/errorCopy
+ * PR #199, the approved copy, verbatim: a new project refused at the
+ * project limit says "You have 501 projects and the limit is 500. You can
+ * make a new one after you delete 2 projects." with the real numbers, and
+ * "after you delete 1 project" for one. One shared line (lib/errorCopy
  * overProjectLimitCopy) that every refusal of a new project reads from the
  * answer's numbers (`projectCount`, `projectLimit`, `deletes`), through the
  * real request client. The list may be past the limit after a restore, an

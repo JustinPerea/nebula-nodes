@@ -1,6 +1,6 @@
 /**
- * Justin, 2026-10-23: "Download your edits" plus "Continue without them".
- * The question it answered: "If the backend refuses it for good, for
+ * Justin, 2026-10-23, chose "Download your edits" plus "Continue without
+ * them". The question it answered: "If the backend refuses it for good, for
  * example because it's too large, the Projects screen can't load: every Try
  * again sends the same copy and gets the same refusal. The only way past is
  * reloading the page, which throws the edits away without saying so."

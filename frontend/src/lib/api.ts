@@ -61,8 +61,8 @@ export class ExecutionStartRejectedError extends RequestFailedError {
   }
 }
 
-/** A refused start, named by its call: the line for the status (design), or
- * the backend's written reason. */
+/** A refused start, named by its call: the status's fallback line
+ * (lib/errorCopy copyForStatus), or the backend's written reason. */
 /** Design, PR #114 (locked): a run start Nebula refused with 507 because a
  * run-safety store (the paid-start fence, the recovery journal, durable Stop
  * state) couldn't be saved, before any provider call; it lasts until Nebula
@@ -71,12 +71,12 @@ export class ExecutionStartRejectedError extends RequestFailedError {
  * RUN_SAFETY_STORAGE_CODE); the project store's 507 has its own line
  * (PROJECT_LIST_REASON), since a restart doesn't clear it. */
 export const RUN_SAFEGUARDS_REASON = 'It couldn’t save its run safeguards. Restart Nebula, then try again.';
-/** Design, PR #114 (storage case): a run start Nebula refused with 507
- * because it couldn't read or write its project list (the project store's
- * `code`), before any provider call. A restart doesn't clear it; a connected
- * drive with space does. The heading names the
- * node ("Couldn’t run “<node>”.") or the run ("Couldn’t start the run."). A
- * corrupt catalog file is a separate gap (with Justin), not this line. */
+/** Design, PR #114 (storage case): a run start Nebula refused with 507 because
+ * it couldn't read or write its project list (the project store's `code`),
+ * before any provider call. A restart doesn't clear it; a connected drive with
+ * space does. The heading names the node ("Couldn’t run “<node>”.") or the run
+ * ("Couldn’t start the run."). A corrupt catalog file is a separate gap (with
+ * Justin), not this line. */
 export const PROJECT_LIST_REASON = 'It can’t read its project list. Check that the drive Nebula saves to is connected and has space, then try again.';
 /** The backend's codes for a 507 (main.py RUN_SAFETY_STORAGE_CODE, PROJECT_STORE_STORAGE_CODE). */
 export const RUN_SAFETY_STORAGE_CODE = 'run_safeguards';
@@ -106,9 +106,9 @@ async function executionStartResponseError(heading: string, response: Response):
 
 /* Every call below names its action (design: "Couldn't {verb} {object}." then
  * the reason; "Never 'failed:', '(HTTP 503)' or status codes in the UI. Keep
- * them in the console."). apiRequest makes the words: the line (design) for no
- * answer, 408, 429 and 5xx; else the backend's written reason; else the line
- * (design) for the status. */
+ * them in the console."). apiRequest makes the words: the fixed no-answer line
+ * for no answer, 408, 429 and 5xx; else the backend's written reason; else the
+ * status's fallback line (lib/errorCopy copyForStatus). */
 
 export async function getExecutionStatus(runId: string): Promise<ExecutionStatusResult> {
   const response = await apiRequest("Couldn’t check the run.", `/api/executions/${encodeURIComponent(runId)}`, {
@@ -761,11 +761,11 @@ type MoodboardCreateInput = Omit<Moodboard, 'id' | 'version' | 'thumbnail' | 'cr
 type MoodboardUpdateInput = Partial<MoodboardCreateInput>;
 
 /* Board calls name their action (design: "Couldn’t save the board. <reason>"
- * replaces "Save failed: <reason>"), and apiRequest says the reason: the lines
- * (design) for no answer, 408, 429 and 5xx; else the backend's written reason;
- * else the line (design) for the status. A FastAPI field list
+ * replaces "Save failed: <reason>"), and apiRequest says the reason: the fixed
+ * no-answer lines for no answer, 408, 429 and 5xx; else the backend's written
+ * reason; else the status's fallback line. A FastAPI field list
  * ("images.0.url: field required") is not a reason the person can read: it
- * says the fallback line (design), and the list stays in the error's `detail` and
+ * says the 4xx fallback line, and the list stays in the error's `detail` and
  * the console. Never a status code. */
 export const SAVE_BOARD = "Couldn’t save the moodboard.";
 

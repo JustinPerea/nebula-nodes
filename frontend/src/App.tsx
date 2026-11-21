@@ -111,7 +111,7 @@ function ZoomManifestRecorder() {
 }
 
 /** A studio inside its boundary (PR #198): one that can't render shows the
- * line (design) and Back to canvas instead of blanking the app.
+ * contained line (design) and Back to canvas instead of blanking the app.
  * Keyed by screen and node, so opening another starts clean. */
 function StudioScreenBoundary({ screen, children }: { screen: StudioScreen; children: ReactNode }) {
   const nodeId = useUIStore((s) => (screen === 'cinema-editor' ? s.cinemaEditorNodeId
@@ -397,11 +397,11 @@ export default function App() {
       {/* Updates on every screen, with the open project's list; one mount, so
           the list, the card and the count carry across screens. */}
       {!isBrandShowcase && <AgentNotes />}
-      {/* The agent cursors on the surfaces beside the canvas: above the docks,
-          below modals and the notice region. */}
+      {/* The agent cursors on the surfaces beside the canvas (PR #233): above
+          the docks, below modals and the notice region. */}
       {!isHome && !isBrandShowcase && <AgentScreenLayer canvasMounted={isCanvas} />}
       {!isHome && !isBrandShowcase && !isCommons && <CommandPalette />}
-      {/* The app's one notice region, above every panel and Studio (Design,
+      {/* The app's one notice region, above every panel and Studio (design,
           2026-10-23): the canvas's notices with their Undo or Redo and the
           proposal bar, the written lines on the other screens, and every
           toast on every screen ("One region, one stack, and nothing else

@@ -17,9 +17,9 @@
  * is the one-line form, "<heading> <reason>", for alerts, toasts and status
  * text. Two-line surfaces render failureCopy() through FailureLines; a
  * surface with its own retry button takes the short reason (shortReason /
- * shortLine, per the WRAP rule from design). apiRequest (lib/apiRequest.ts) is the one way
- * to make such a call; answered failures are console.warn'ed once per call
- * site (warnFailure), lost connections aren't.
+ * shortLine, the WRAP rule; design). apiRequest (lib/apiRequest.ts) is the
+ * one way to make such a call; answered failures are console.warn'ed once per
+ * call site (warnFailure), lost connections aren't.
  */
 
 import { groupedCount } from './groupedCount';
@@ -42,10 +42,10 @@ export const CONNECTION_LOST_COPY = 'Nebula’s server isn’t answering. Make s
 /** An answer that says "not now": 408, 429 or any 5xx. */
 export const NO_RESPONSE_COPY = 'Nebula didn’t respond. Try again.';
 /** A refusal (any other 4xx) that came with no reason the person can read:
- * no `detail`, or FastAPI's list of field errors (design).
- * Also what a failure that isn't a request's says (copyForError). Design:
- * "Under any other heading (Projects, graph file, Commons…), drop
- * "That didn't work."". A node card says its own (lib/nodeErrorCopy.ts). */
+ * no `detail`, or FastAPI's list of field errors (design). Also what a
+ * failure that isn't a request's says (copyForError). Design: "Under any
+ * other heading (Projects, graph file, Commons…), drop "That didn't work."".
+ * A node card says its own (lib/nodeErrorCopy.ts). */
 /** The browser's and the desktop app's lines for a refusal with no reason: a tab reloads the page, the app has
  * View > Reload (Electron's default menu; a reload keeps the person-token bridge). Read through
  * refusedFallbackCopy() / isRefusedFallback(), the one place that picks by shell. */
@@ -83,19 +83,18 @@ export const PERSON_REQUIRED_CODE = 'person_required';
 /** Design, 2026-10-23, verbatim, for every refusal that says
  * PERSON_REQUIRED_CODE: "Use it for every person-only refusal, not just Krea
  * billing. The agents' text stays behind Details." Classified by the answer's
- * `code`, never its words. Design: "line 3 shouldn't depend on the
- * notice being there, since it can be dismissed", so it says the fix itself.
- * A browser tab's line; the desktop app says PERSON_REQUIRED_APP_COPY. */
+ * `code`, never its words. Design: "line 3 shouldn't depend on the notice
+ * being there, since it can be dismissed", so it says the fix itself. A
+ * browser tab's line; the desktop app says PERSON_REQUIRED_APP_COPY. */
 export const PERSON_REQUIRED_COPY = "This change needs your OK, and this tab isn’t connected as you. "
   + 'Open the link Nebula printed when it started, then try again.';
-/** Design, 2026-10-23, verbatim: line 3 in the desktop app. A
- * quit and reopen gives the app a fresh backend and a fresh person token. */
+/** Design, 2026-10-23, verbatim: line 3 in the desktop app. A quit and
+ * reopen gives the app a fresh backend and a fresh person token. */
 export const PERSON_REQUIRED_APP_COPY = "This change needs your OK, and this window isn’t connected as you. "
   + 'Quit Nebula and open it again, then try again.';
 
-/** Design, 2026-10-23, verbatim: line 3 in the app's two
- * developer setups (a debug port, the dev renderer), where the banner already
- * gives the real fix. */
+/** Design, 2026-10-23, verbatim: line 3 in the app's two developer setups (a
+ * debug port, the dev renderer), where the banner already gives the real fix. */
 /** The dev setups' ending: the line defers to the general notice for the fix (lib/notConnectedLine). */
 export const DEFERS_TO_NOTICE = 'The notice below says why.';
 export const PERSON_REQUIRED_DEV_COPY = "This change needs your OK, and this window isn’t connected as you. "
@@ -276,8 +275,8 @@ const NOT_ACCEPTED_BROWSER = `the server didn’t accept it. ${REFUSED_FALLBACK_
 const NOT_ACCEPTED_APP = `the server didn’t accept it. ${REFUSED_FALLBACK_APP}`;
 const notAcceptedAlone = (): string => (inDesktopShell() ? NOT_ACCEPTED_APP : NOT_ACCEPTED_BROWSER);
 /** The backend's answer when it runs without the Commons (backend commons/activation, routes/commons
- * activation_dep), and the page line for it (design). The Commons is on only when the backend starts
- * with NEBULA_COMMONS_ENABLED=1: no setting turns it on, so the line names none. */
+ * activation_dep), and the page line for it (design). The Commons is on only when the backend
+ * starts with NEBULA_COMMONS_ENABLED=1: no setting turns it on, so the line names none. */
 export const COMMONS_OFF_DETAIL = 'Commons is disabled';
 export const COMMONS_OFF_COPY = 'Commons is turned off for this Nebula.';
 
@@ -526,7 +525,7 @@ export function saysPersonRequired(line: string): boolean {
     || CHAT_PERSON_REQUIRED_LINES.some((own) => said.includes(foldApostrophes(own)));
 }
 
-/** Design, PR #114: the one line for "no answer" wherever PR #114 owns it
+/** Design, PR #114: the one line for "no answer" wherever that PR owns it
  * (Settings never loaded, Create's cluster), whole even beside Try again. */
 export const NEBULA_NOT_ANSWERING_COPY = 'Nebula isn’t answering. Make sure it’s running, then try again.';
 /** A plain browser tab that found no backend on its ports (design).
@@ -604,8 +603,8 @@ export interface FailureCopy {
 }
 
 /** How a line of its own opens: every form the backend's and the browser's
- * person lines use: "Couldn't …", "Can't …", "Cannot …",
- * "Nebula couldn't …", "Nebula can't …". Group 1 is the verb. */
+ * person lines use: "Couldn't …", "Can't …", "Cannot …", "Nebula couldn't …",
+ * "Nebula can't …". Group 1 is the verb. */
 const FAILURE_LEAD = new RegExp(`^(?:${NEBULA_COULDNT.source.slice(1)}|(?:Nebula (?:can['’]t|cannot)|Couldn['’]t|Can['’]t|Cannot) )(\\w+)`);
 
 /** A reason that is a line of its own: it says what failed itself
@@ -648,10 +647,9 @@ export function isGenericHeading(heading: string): boolean {
 }
 
 /**
- * Design, PR #198 ("A specific line replaces the generic one,
- * never both"). `heading` then `reason`, except that the
- * reason shows alone when it is a line of its own (isNamedLine) that says
- * the heading's failure itself:
+ * Design, PR #198 ("A specific line replaces the generic one, never both").
+ * `heading` then `reason`, except that the reason shows alone when it is a
+ * line of its own (isNamedLine) that says the heading's failure itself:
  * 1. The reason repeats the heading ("Couldn't stop the reply." over
  *    "Couldn't stop the reply. The agent isn't answering."; "Couldn't clear
  *    the canvas." over "Cannot clear the canvas while a run is active. …").
@@ -1022,9 +1020,9 @@ export class RequestFailedError extends Error {
   readonly detail: unknown;
   readonly heading: string;
   readonly reason: string;
-  /** The backend said its storage refusal was a full disk: an
-   * additive `storage: "full"` beside `detail`, read from the answer, never
-   * from its words. The one cause a person can fix (design). */
+  /** The backend said its storage refusal was a full disk: an additive
+   * `storage: "full"` beside `detail`, read from the answer, never from its
+   * words. The one cause a person can fix (design). */
   readonly storageFull: boolean;
   /** Which of the project store's limits a 413 hit (the backend's additive
    * `limit` beside `detail`): 'projects' (how many there may be) or
@@ -1184,10 +1182,10 @@ const GATEWAY_STATUSES = new Set([502, 503, 504]);
 
 /**
  * Whether Nebula's backend itself is unreachable, from the error's kind and
- * status, never its words: no answer at all
- * (isNoAnswer), or a gateway status with no reason of the backend's (the
- * backend's own 503 always carries a written `detail`). A refusal whose
- * reason says "network" is the backend answering.
+ * status, never its words: no answer at all (isNoAnswer), or a gateway status
+ * with no reason of the backend's (the backend's own 503 always carries a
+ * written `detail`). A refusal whose reason says "network" is the backend
+ * answering.
  */
 export function isBackendUnreachable(error: unknown, signal?: AbortSignal | null): boolean {
   if (isNoAnswer(error, signal)) return true;
@@ -1207,11 +1205,11 @@ function refusedCopy(status: number): string {
   return refusedFallbackCopy();
 }
 
-/** The line for an answer with `status`: the fixed line for no answer, 408, 429
- * and 5xx (whatever the body said); else the backend's reason, or the fallback line
- * for the status when it gave none. The action's own heading, where a screen
- * has one ("Couldn't save your labels."), stays above it: the heading names
- * what failed, the line gives the reason. */
+/** The line for an answer with `status`: the fixed line for no answer, 408,
+ * 429 and 5xx (whatever the body said); else the backend's reason, or the
+ * fallback line for the status when it gave none. The action's own heading,
+ * where a screen has one ("Couldn't save your labels."), stays above it: the
+ * heading names what failed, the line gives the reason. */
 export function copyForStatus(status: number, detail: unknown): string {
   const kind = failureKind(status);
   if (kind === 'connection') return CONNECTION_LOST_COPY;
@@ -1220,10 +1218,10 @@ export function copyForStatus(status: number, detail: unknown): string {
 }
 
 /** The line for an answer read by hand (a caller with no RequestFailedError):
- * classified by the answer's `code` first, so a person-only refusal says line 3
- * (personRequiredCopy) whatever its words, and otherwise as copyForStatus says, or the
- * caller's own `reason`. A person-only refusal is a 4xx: a 5xx or no answer keeps its own
- * line for those. */
+ * classified by the answer's `code` first, so a person-only refusal says line
+ * 3 (personRequiredCopy) whatever its words, and otherwise as copyForStatus
+ * says, or the caller's own `reason`. A person-only refusal is a 4xx: a 5xx or
+ * no answer keeps copyForStatus's line. */
 export function copyForAnswer(status: number, detail: unknown, code: string | null, reason?: string): string {
   // A person refusal says the person line; one written here already (the Commons' because form) keeps its words.
   if (code === PERSON_REQUIRED_CODE && failureKind(status) === 'refused') return reason !== undefined && saysPersonRequired(reason) ? reason : personRequiredCopy();
@@ -1265,8 +1263,8 @@ export async function readRefusal(response: Response): Promise<{ detail: unknown
   return { detail, code, sentAt, sentBeforePromote: isBeforePromote(sentAt) };
 }
 
-/** A read refusal as the error its line carries: the person gate's,
- * with this answer's own send-time stamp, or undefined for any other refusal. A line built
+/** A read refusal as the error its line carries: the person gate's, with this
+ * answer's own send-time stamp, or undefined for any other refusal. A line built
  * from the refusal's words hands this to notify, so it clears by its own stamp. */
 export function refusalError(read: { code: string | null; sentAt: number | null }): FailureNotice | undefined {
   return read.code === PERSON_REQUIRED_CODE ? new FailureNotice('', personRequiredCopy(), { code: PERSON_REQUIRED_CODE, sentAt: read.sentAt }) : undefined;
@@ -1505,10 +1503,10 @@ export function offlineDisabledReason(verb?: string): string {
   return reconnectsLine(verb);
 }
 
-/** Run history's replay verbs offline (PR #200). Rerun reads
- * "You can rerun it when Nebula reconnects." (design); Retry and Recover follow it
- * ("You can retry it …", "You can recover it …", approved by design). The same strings
- * as OFFLINE_VERBS (lib/useBackendOffline). */
+/** Run history's replay verbs offline (PR #200). Rerun reads "You can rerun
+ * it when Nebula reconnects." (design); Retry and Recover follow it in the
+ * approved copy ("You can retry it …", "You can recover it …"). The same
+ * strings as OFFLINE_VERBS (lib/useBackendOffline). */
 export const OFFLINE_RERUN = OFFLINE_VERBS.rerun;
 export const OFFLINE_RETRY = OFFLINE_VERBS.retry;
 export const OFFLINE_RECOVER = OFFLINE_VERBS.recover;

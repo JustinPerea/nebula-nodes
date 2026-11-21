@@ -82,8 +82,8 @@ def _field_labels() -> frozenset[str]:
 _LABELS = "|".join(sorted((re.escape(label) for label in _field_labels()), key=len, reverse=True))
 # Rule 5: a field named after a verb that sets it ("Set Duration to 10",
 # "Clear the node's Quality field", "doesn't offer Reasoning Effort Low") is
-# written as the node shows it, in quotes. The verbatim xAI edit-video line from
-# the design ("Pick it in the node's Model field") isn't one of these verbs.
+# written as the node shows it, in quotes. The approved xAI edit-video line
+# ("Pick it in the node's Model field") isn't one of these verbs.
 _BARE_LABEL = re.compile(r"\b(?:[Ss]et|[Cc]lear|offer|fewer|[Ll]ower|[Rr]aise|[Tt]urn (?:on|off)|[Ff]ill in)\s+"
                          r"(?:the\s+(?:node's\s+)?)?(?:" + _LABELS + r")\b"
                          # "the node's Tags field": a label by name, not in quotes. A port
@@ -186,7 +186,7 @@ def test_the_rules_check_catches_each_shape_and_lets_gms_lines_through() -> None
     assert "a field label not in quotes" not in rule_breaks("Set “Duration” to 10 or less.")
     assert "a field label not in quotes" not in rule_breaks(
         "xAI edits videos only on Grok Imagine. Pick it in the node’s Model field, or disconnect the video to edit.")
-    # The lines from the design pass.
+    # The approved lines pass.
     for line in (
         "Set “Item cap” to a whole number from 1 to 25.",
         "Connect a prompt to this node, then run it again.",
@@ -429,7 +429,7 @@ def test_the_id_guard_also_refuses_code_names() -> None:
         assert not forbidden_in_a_line(line), line
 
 
-# -- Specific lines (design) -------------------------------------------------------
+# -- specific lines (design) -------------------------------------------------------
 
 
 def _raised(fn, *args, **kwargs) -> BaseException:

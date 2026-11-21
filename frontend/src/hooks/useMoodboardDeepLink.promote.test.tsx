@@ -17,8 +17,8 @@ import { STUDIO_BOARD_KEY, useMoodboardDeepLink } from './useMoodboardDeepLink';
 import { useUIStore } from '../store/uiStore';
 import { useProjectStore } from '../store/projectStore';
 
-/** How this document was reached, as Navigation Timing says (design, PR #204: restore only on a
- * reload). */
+/** How this document was reached, as Navigation Timing says
+ * (design, PR #204: restore only on a reload). */
 function arrivedBy(type: string | null) {
   vi.spyOn(performance, 'getEntriesByType').mockImplementation(((kind: string) =>
     kind === 'navigation' && type ? [{ type } as unknown as PerformanceEntry] : []) as typeof performance.getEntriesByType);

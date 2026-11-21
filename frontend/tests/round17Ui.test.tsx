@@ -123,7 +123,8 @@ describe('on the home screen the offline banner sits under the top bar', () => {
 
   it('App passes the home placement on the home screen', () => {
     const app = readFileSync(join(__dirname, '../src/App.tsx'), 'utf8');
-    // Design, PR #198: every screen but the canvas and home is a studio (tests/pr198Fix1Ui.test.tsx).
+    // Design, PR #198: every screen but the canvas and home is a studio
+    // (tests/pr198Fix1Ui.test.tsx).
     // Design: its banner is the one that hides while the first-load line shows (tests/ConnectionBanner.firstLoad.test.tsx).
     expect(app).toMatch(/<ConnectionBanner placement=\{isHome \? 'home' : isCanvas \? 'workspace' : 'studio'\} \/>/);
   });

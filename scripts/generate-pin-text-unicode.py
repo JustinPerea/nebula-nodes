@@ -1,7 +1,7 @@
-"""Generates the Unicode data the pin-text strip and count read (PR #200,
-design). One run writes the same bytes to both sides, so the backend
-(services/canvas_pins.py) and the canvas (frontend lib/canvasPins.ts) read
-the same data:
+"""Generates the Unicode data the pin-text strip and count read
+(PR #200, design). One run writes the same bytes to both sides, so the
+backend (services/canvas_pins.py) and the canvas (frontend lib/canvasPins.ts)
+read the same data:
 
   backend/data/pin_text_unicode.json
   frontend/src/lib/pinTextUnicode.json

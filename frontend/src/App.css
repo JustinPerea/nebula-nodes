@@ -59,8 +59,8 @@ a {
   letter-spacing: 0.02em;
 }
 
-/* The offline banner (design, PR #114): below the project bar so it
-   covers nothing. The selection toolbar's line sits in between (canvas.css
+/* The offline banner (design, PR #114): below the project bar so it covers
+   nothing. The selection toolbar's line sits in between (canvas.css
    .selection-toolbar-panel: 92px down, 50px tall), and the 28px gap above it
    is shorter than the banner, so the banner sits under that line with the
    same 8px gap floating panels keep (lib/bottomBar.ts floatingTopLimit):
@@ -186,12 +186,11 @@ a {
   .backend-connection[data-pulse='spring'] { animation: backend-offline-flash 600ms steps(1, end) both; }
 }
 
-/* Offline is read-only (design): what would edit shows
-   not-allowed, nodes and handles don't drag, and every control that edits
-   renders disabled with the offline mark (lib/useBackendOffline.ts). The
-   cursor wins over a control's own disabled cursor (the selection toolbar's
-   is `default`); a control's own disabled dimming, where it has one, wins
-   over the 0.6 here. */
+/* Offline is read-only (design): what would edit shows not-allowed, nodes
+   and handles don't drag, and every control that edits renders disabled
+   with the offline mark (lib/useBackendOffline.ts). The cursor wins over a
+   control's own disabled cursor (the selection toolbar's is `default`); a
+   control's own disabled dimming, where it has one, wins over the 0.6 here. */
 .canvas--read-only .react-flow__node,
 .canvas--read-only .react-flow__handle {
   cursor: not-allowed;
@@ -207,8 +206,8 @@ a {
 /* Following an agent's switch is the same read-only state as offline
    (lib/canvasLock.ts), so it looks the same; and so do the controls disabled
    while the canvas is kept after a restore (design, PR #199), and Ask and
-   Note on a node with a tab-local id (design, lib/canvasLock
-   TAB_LOCAL_MARK: a stopgap the bulk-create PR deletes). */
+   Note on a node with a tab-local id (design; lib/canvasLock TAB_LOCAL_MARK:
+   a stopgap the bulk-create PR deletes). */
 [data-offline-disabled],
 [data-following-disabled],
 [data-kept-disabled],
@@ -249,8 +248,8 @@ button[data-offline-neutral]:hover {
   width: max-content;
   max-width: min(92vw, var(--notice-max-w, 560px));
   padding: 8px 10px 8px 12px;
-  /* Design, PR #200: neutral, never orange-red. The shared
-     notice colours the pin toast beside it uses (noticeRegion.css). */
+  /* Design, PR #200: neutral, never orange-red. The shared notice colours the
+     pin toast beside it uses (noticeRegion.css). */
   border: 1px solid var(--notice-neutral-edge, #333);
   border-radius: 6px;
   box-shadow: 0 4px 20px rgb(0 0 0 / 0.5);

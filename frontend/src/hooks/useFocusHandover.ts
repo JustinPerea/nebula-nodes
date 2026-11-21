@@ -190,8 +190,8 @@ export function useFocusHandover(change: unknown, root: () => HTMLElement | null
     const was = last.current;
     if (!was) return undefined;
     // A handed-over focus still on what it was handed to may move on (offline hid Add's line and
-    // focus went to the heading; back online, the line again; on the promote, the field). What
-    // the hook put focus on last, while it is still there.
+    // focus went to the heading; back online, the line again; on the promote, the field).
+    // handedNow: whether focus is still on what the hook put it on last.
     const handedNow = () => {
       const at = last.current;
       return at?.handed === true && document.activeElement === at.element;

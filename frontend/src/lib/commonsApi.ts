@@ -89,8 +89,8 @@ async function send(heading: string, path: string, init: RequestInit, sentAt?: n
 }
 
 /** One Commons request. `heading` names it the way the Commons does ("Couldn’t
- * save your labels."): a failure says "<heading> <reason>" (design),
- * and the leave popover shows the reason under its own heading. */
+ * save your labels."): a failure says "<heading> <reason>" (design), and the
+ * leave popover shows the reason under its own heading. */
 async function call<T>(heading: string, path: string, init: RequestInit = {}): Promise<T> {
   const sentAt = personPromotions();
   let response = await send(heading, path, init, sentAt);
@@ -118,14 +118,14 @@ async function call<T>(heading: string, path: string, init: RequestInit = {}): P
     throw sessionLost(heading, sentAt);
   }
   if (!response.ok) {
-    // Copy, never the status or a raw body (lib/errorCopy.ts): the line (design) for
-    // 408, 429 and 5xx, else the backend's written reason, else the line (design)
-    // for the status. `detail` keeps what it sent, for debugging and the
+    // Copy, never the status or a raw body (lib/errorCopy.ts): the fixed no-answer line for
+    // 408, 429 and 5xx, else the backend's written reason, else the status's fallback line.
+    // `detail` keeps what it sent, for debugging and the
     // console (once per call until it works again).
     const detail = await readDetail(response);
     warnFailure(heading, response.status, detail);
-    // The backend runs without the Commons (design). Whatever the call, the view turns to the
-    // off view (lib/commonsOff), and its words are the app's own, never the backend's.
+    // When the backend runs without the Commons, whatever the call, the view turns to the off
+    // view (lib/commonsOff), and its words are the app's own (design), never the backend's.
     if (response.status === 404 && detailText(detail) === COMMONS_OFF_DETAIL) {
       noteCommonsOff();
       throw new CommonsRequestError(COMMONS_OFF_COPY, response.status, { detail, heading });
@@ -174,8 +174,9 @@ export interface UploadResult {
 
 /** A refused file as the person reads it (design): "Couldn’t upload
  * {filename}." with the backend's line for its reason below it, the 4xx
- * fallback line (design) when it sent none. Never the raw `error`. The lines live in one
- * table, backend/commons/person_copy.py, as every Commons refusal's do. */
+ * fallback line (design) when it sent none. Never the raw `error`. The lines
+ * live in one table, backend/commons/person_copy.py, as every Commons
+ * refusal's do. */
 export function uploadFailureCopy(result: UploadResult): FailureCopy {
   return {
     heading: `Couldn’t upload ${result.filename ? quoted(result.filename) : 'that file'}.`,
