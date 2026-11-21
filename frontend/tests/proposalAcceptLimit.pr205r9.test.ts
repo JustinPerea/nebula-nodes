@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-// Review 8 of PR #205, limits MEDIUM-1: a refused Accept's answer names the
-// limit it hit (`limit.kind` beside `code: "proposal_too_complex"`). The
-// proposal client reads it from the answer, so the bar picks its line by it.
+// PR #205: a refused Accept's answer names the limit it hit (`limit.kind`
+// beside `code: "proposal_too_complex"`). The proposal client reads it from the
+// answer, so the bar picks its line by it.
 
 const apiFetch = vi.hoisted(() => vi.fn());
 vi.mock('../src/lib/backend', () => ({ apiFetch, rewriteBackendAssetUrls: (value: unknown) => value }));

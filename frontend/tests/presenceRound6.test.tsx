@@ -2,12 +2,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 
 /**
- * PR #204 round 6 (GM r6, r7; review 4):
- * - GM r6 check a: a held tab that opens the list with unread Updates gets the mark-read line
- *   and its retry on the promote, whether it is held fresh or demoted after reading some.
- * - GM r7 item 1: an open question form in a demoted tab keeps its draft; Send and Dismiss
- *   lock in place with the answer lock; the store refuses too; the promote unlocks them.
- * - Review 4: the header's total is the server's; its changes are announced politely.
+ * PR #204:
+ * - A held tab that opens the list with unread Updates sends no mark-read and shows no line, and
+ *   the promote reads once, whether it is held fresh or demoted after reading some (an earlier
+ *   version showed a mark-read line and retried it on the promote).
+ * - An open question form in a demoted tab keeps its draft; Send and Dismiss lock in place with
+ *   the answer lock; the store refuses too; the promote unlocks them.
+ * - The header's total is the server's; its changes are announced politely.
  */
 
 const flow = vi.hoisted(() => ({
@@ -82,9 +83,9 @@ const UPDATES = [COVER, QUESTION, CANVAS];
 const refused = (options: { sentBeforePromote?: boolean } = {}) => new RequestFailedError("Couldn’t mark the updates as read.", 403,
   { code: PERSON_REQUIRED_CODE, detail: 'Only the person can do this.', ...options });
 
-/** Round 13 (review 10 MEDIUM-1): a held tab sends no mark-read, so a refusal is one of a read
- * sent while connected and refused as the tab lost the person (a demote in flight): the gate's
- * answer holds the tab, as lib/backend does on a real 403. */
+/** A held tab sends no mark-read, so a refusal is one of a read sent while connected and refused as
+ * the tab lost the person (a demote in flight): the gate's answer holds the tab, as lib/backend
+ * does on a real 403. */
 const refusedInFlight = async () => { session.reportPersonRequired(); throw refused(); };
 
 function emit(event: unknown) {
@@ -104,7 +105,7 @@ const look = (button: HTMLElement) => ({
   locked: button.getAttribute('aria-disabled'),
   pending: button.hasAttribute('data-held-pending'),
   title: button.getAttribute('title'),
-  // GM r10 (1), round 8: the reason is a line under the buttons, which point at it.
+  // Design: the reason is a line under the buttons, which point at it.
   line: ((id) => (id ? document.getElementById(id)?.textContent ?? 'missing' : null))(button.getAttribute('aria-describedby')),
 });
 
@@ -133,9 +134,9 @@ afterEach(() => {
   session.resetPersonSessionForTests();
 });
 
-// Round 13 (review 10 MEDIUM-1): a held tab, fresh or demoted, sends no mark-read and shows no
-// line (the updates stay unread until it connects); one read per list goes on the promote.
-describe('GM r6 check a: the mark-read, held fresh or demoted (round 13: nothing sent, no line)', () => {
+// A held tab, fresh or demoted, sends no mark-read and shows no line (the updates stay unread
+// until it connects); one read per list goes on the promote.
+describe('the mark-read, held fresh or demoted: nothing sent, no line', () => {
   it('fresh held: opening the list with unread Updates sends nothing and says nothing; the promote reads once', async () => {
     render(<AppAgentNotes />);
     act(() => { session.reportPersonRequired(); });
@@ -148,7 +149,7 @@ describe('GM r6 check a: the mark-read, held fresh or demoted (round 13: nothing
     expect(pendingPromoteRetries()).toBe(0); // nothing was refused: the read waits (lib/personWork)
     act(() => { session.notePersonPromoted(); });
     await waitFor(() => expect(notesApi.markAgentNotesRead).toHaveBeenCalledTimes(1));
-    // Round 14 (review 11): waitFor passes at the first call; this proves no second one follows.
+    // waitFor passes at the first call; this proves no second one follows.
     await act(async () => { for (let i = 0; i < 10; i++) await Promise.resolve(); });
     expect(notesApi.markAgentNotesRead).toHaveBeenCalledTimes(1);
   });
@@ -182,7 +183,7 @@ const SET = { id: 'qs_2', status: 'open', agent: CLAUDE, note: null, projectId: 
   questions: [{ id: 'q1', text: 'Which crop?', options: ['Square', 'Wide'], multiple: false, allowText: true }] };
 const buttons = () => ({ send: screen.getByRole('button', { name: 'Send' }), dismiss: screen.getByRole('button', { name: 'Dismiss' }) });
 
-describe('GM r7 (1): a question form open when the tab is demoted', () => {
+describe('a question form open when the tab is demoted', () => {
   function openForm() {
     act(() => { session.notePersonPromoted(); });
     act(() => { useAgentQuestionsStore.getState().opened(SET as never, 'k_q'); });
@@ -250,10 +251,10 @@ describe('GM r7 (1): a question form open when the tab is demoted', () => {
   });
 });
 
-describe('review 4 NIT-3: the header\'s changes are read out politely', () => {
+describe('the header\'s changes are read out politely', () => {
   it('the count is a polite, atomic status, and the promote changes it once', async () => {
     notesApi.markAgentNotesRead.mockImplementationOnce(refusedInFlight);
-    notesApi.fetchAgentNotes.mockResolvedValue({ projectId: 'p1', notes: UPDATES, unread: 3 }); // round 14: no longer read again on the refusal (no line, nothing changed)
+    notesApi.fetchAgentNotes.mockResolvedValue({ projectId: 'p1', notes: UPDATES, unread: 3 }); // no longer read again on the refusal (no line, nothing changed)
     render(<AppAgentNotes />);
     sync();
     const list = openList();
@@ -271,7 +272,7 @@ describe('review 4 NIT-3: the header\'s changes are read out politely', () => {
   });
 });
 
-describe('round 8, review 6 LOW-6 (M20): an old Accept and Reject, now one Review, greys as Expired', () => {
+describe('an old Accept and Reject, now one Review, greys as Expired', () => {
   const OLD = update('u_old', CURSOR, 'proposal', { proposal: { id: 'p_old', kind: 'canvas', targetId: 'p1', since: T + 3_000 },
     actions: [{ label: 'Accept', op: { kind: 'proposal.accept', proposalId: 'p_old' } },
       { label: 'Reject', op: { kind: 'proposal.reject', proposalId: 'p_old' } }] });

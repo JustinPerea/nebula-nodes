@@ -5,7 +5,7 @@ import { CanvasTabs } from '../components/CanvasTabs';
 import { CreateView } from '../components/create-studio/CreateView';
 import { useUIStore } from '../store/uiStore';
 
-// #213 review 1 NIT-6: a studio title cut with an ellipsis gets its full text
+// PR #213: a studio title cut with an ellipsis gets its full text
 // as a tooltip; a whole one gets none.
 
 const widths = { scroll: 120, client: 200 };
@@ -51,7 +51,7 @@ describe('the studio title, cut in a narrow window', () => {
   });
 });
 
-describe('the web font loading (#213 round 3c)', () => {
+describe('the web font loading (PR #213)', () => {
   it('a title the font widens past its box gets its tooltip once the font has loaded, with no resize', async () => {
     const listeners: Array<() => void> = [];
     let loaded: () => void = () => {};
@@ -76,7 +76,7 @@ describe('the web font loading (#213 round 3c)', () => {
   });
 });
 
-describe('a screen-reader-only title gets no tooltip (#213 round 3c)', () => {
+describe('a screen-reader-only title gets no tooltip (PR #213)', () => {
   it('a header with navigation: its hidden title has none, even cut', () => {
     widths.client = 1; // a visually hidden box is 1 px wide: always "cut"
     render(<WorkspaceHeader title="Creator Studio" navigation={<nav aria-label="Workspace" />} updatesSlot={false} offlineRow={false} />);

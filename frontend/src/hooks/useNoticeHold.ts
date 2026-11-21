@@ -16,7 +16,7 @@ export interface HeldNotice {
  * this notice, by id, is still the one in the store when the hold ends, so a
  * newer notice is never dismissed by an older one's timer (pass a stable
  * function). Returns the handlers for the notice's box. `slot`: the region slot it shows in;
- * while it waits there behind a capped popover (GM r13 2, lib/noticeWaiting) it holds too, and
+ * while it waits there behind a capped popover (design, lib/noticeWaiting) it holds too, and
  * starts a full hold when it shows again.
  */
 export function useNoticeHold(notice: HeldNotice | null, isShown: (id: number) => boolean, dismiss: () => void, slot?: string) {

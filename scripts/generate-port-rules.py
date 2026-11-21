@@ -1,4 +1,4 @@
-"""Generates the port rules the tab and the server share (PR #199 round 17):
+"""Generates the port rules the tab and the server share (PR #199):
 which output types may feed which input types, and the kinds of connection
 Save as a project can leave out. One run writes the same bytes to both
 sides, so the tab's checks (frontend lib/portCompatibility.ts, lib/keptWires.ts)

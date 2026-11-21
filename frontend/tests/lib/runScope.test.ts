@@ -14,7 +14,7 @@ import type { RunCost } from '../../src/lib/runScope';
 
 /** A case's backend reason (model_pricing.estimate_run reasons, expected.reason
  * in pricing_cases.json) as the Run chip records it, so the Accept chip,
- * which reads the backend's, writes the same lines (GM, PR #203 r17 item 4). */
+ * which reads the backend's, writes the same lines (design, PR #203). */
 type SharedReason = { kind: string; keys?: string[]; plus?: string } | null;
 function sameReason(cost: RunCost, expected: SharedReason) {
   const got = cost.reasons?.find((entry) => entry.name === 'Node')?.reason;
@@ -60,7 +60,7 @@ describe('run scope', () => {
   });
 
   it('describes free and paid scopes in plain language', () => {
-    // GM, PR #203 r19 item 2: the Run chip's own tooltip under the count, no per-node breakdown.
+    // Design, PR #203: the Run chip's own tooltip under the count, no per-node breakdown.
     expect(describeRunScope({ total: 1, paid: [] })).toBe('Runs 1 node. No paid providers.');
     expect(describeRunScope({ total: 2, paid: ['Hero shot'] })).toBe('Runs 2 nodes.\n“Hero shot” calls a paid provider.');
     expect(describeRunScope({ total: 5, paid: ['a', 'b', 'c', 'd'] })).toBe('Runs 5 nodes.\n4 nodes call paid providers.');
@@ -123,16 +123,16 @@ describe('run cost', () => {
     expect(describeRunScope(summary)).toContain('“Writer” has no listed price.');
   });
 
-  it('decides "$0" by source: a run whose every provider call is a sourced $0 reads "$0", titled "This costs nothing to run.", and is never paid (GM, PR #203 r11 item 4, r18 item 1)', () => {
+  it('decides "$0" by source: a run whose every provider call is a sourced $0 reads "$0", titled "This costs nothing to run.", and is never paid (design, PR #203)', () => {
     const free: PricingTable = { ...pricing, nodes: { ...pricing.nodes, 'nano-banana': { currency: 'usd', per: 'image', rows: [{ match: {}, price: 0 }] } } };
     const summary = summarizeRunScope([priced('a', 'nano-banana')], [], { kind: 'graph' }, { pricing: free, apiKeys: {} });
     expect(summary.cost?.sourcedZero).toBe(true);
     expect(summary.paid).toEqual([]);
     expect(summary.free).toEqual(['Nano Banana']);
     expect(summary.cost?.lines).toEqual([]);
-    // No chip, as any free run (GM, PR #203 r20 item 1).
+    // No chip, as any free run (design, PR #203).
     expect(runChipLabel(summary)).toBeNull();
-    // GM, PR #203 r18 item 1: only "This costs nothing to run.", no paid lead.
+    // Design, PR #203: only "This costs nothing to run.", no paid lead.
     expect(runChipTitle(summary)).toBe('This costs nothing to run.');
     // A paid priced line beside it: not a sourced zero, and the free node isn't named.
     const mixed = summarizeRunScope([priced('a', 'nano-banana'), priced('b', 'veo-3')], [], { kind: 'graph' },
@@ -142,7 +142,7 @@ describe('run cost', () => {
     expect(runChipTitle(mixed)).not.toContain('Nano Banana');
   });
 
-  it('never counts Idol as paid: free without a token, "1 may cost" with one (GM, PR #203 r11 item 2, r12)', () => {
+  it('never counts Idol as paid: free without a token, "1 may cost" with one (design, PR #203)', () => {
     const shipped = (keys: Record<string, string>) => ({ pricing: shippedTable as unknown as PricingTable, apiKeys: keys });
     const idol = priced('i', 'speridlabs-idol', {}, 'Idol');
     const keyless = summarizeRunScope([idol], [], { kind: 'graph' }, shipped({}));
@@ -167,19 +167,18 @@ describe('run cost', () => {
       [], { kind: 'graph' }, { pricing, apiKeys: keys });
     expect(unpricedPair.paid).toEqual(['Writer', 'Editor']);
     expect(runChipLabel({ ...unpricedPair, cost: undefined })).toBe('2 paid · 1 may cost');
-    // Review 8 of PR #203, copy LOW-1, and GM r17 item 3: the paid nodes lead
-    // whether or not they have a list price, each reason on its own line,
-    // Idol's sentence last; before the price table loads, the lead alone.
+    // Design, PR #203: the paid nodes lead whether or not they have a list price, each reason
+    // on its own line, Idol's sentence last; before the price table loads, the lead alone.
     expect(runChipLabel(unpricedPair)).toBe('2 paid · 1 may cost');
-    // GM, PR #203 r20 item 2: line 1 and the reason line naming the same nodes are one.
+    // Design, PR #203: line 1 and the reason line naming the same nodes are one.
     // One line left, so Idol's sentence joins it, as in the priced shape below.
     expect(runChipTitle(unpricedPair)).toBe('“Writer” and “Editor” call paid providers that have no listed price. '
       + '“Idol” may use your Hugging Face credits');
     expect(runChipTitle({ ...unpricedPair, cost: undefined }))
       .toBe('“Writer” and “Editor” call paid providers. “Idol” may use your Hugging Face credits');
     const withPrice = summarizeRunScope([idol, priced('a', 'nano-banana')], [], { kind: 'graph' }, { pricing, apiKeys: keys });
-    // GM, PR #203 r14 item 4, by r20's rule ("+" joins money, "·" joins
-    // classes): "~$0.13 · 1 may cost", the tooltip in item 3's shape.
+    // Design, PR #203: "+" joins money, "·" joins classes: "~$0.13 · 1 may cost", the tooltip in
+    // the same shape as above (paid nodes lead, each reason on its own line).
     expect(runChipLabel(withPrice)).toBe('~$0.05 · 1 may cost');
     expect(runChipTitle(withPrice)).toBe(
       `“${withPrice.paid[0]}” calls a paid provider. Estimated cost $0.05. “Idol” may use your Hugging Face credits`);
@@ -216,7 +215,7 @@ describe('run cost', () => {
     expect(wired.cost?.high).toBe(1);
   });
 
-  it('lists Krea account runs on the plan, never paid and never unpriced (GM, PR #203 r19 item 1)', () => {
+  it('lists Krea account runs on the plan, never paid and never unpriced (design, PR #203)', () => {
     const summary = summarizeRunScope(
       [priced('k', 'krea-2-generate', { _kreaAuth: 'mcp' }, 'Krea shot')], [], { kind: 'graph' }, context,
     );
@@ -246,7 +245,7 @@ describe('run cost', () => {
     const summary = summarizeRunScope(graph, fanEdges, { kind: 'graph' }, context);
     expect(summary.cost?.low).toBeCloseTo(0.15 + 0.05);
     expect(summary.cost?.high).toBeCloseTo(0.15 + 0.2);
-    // The costly-run confirm keeps each node's runs; the Run button's text is the chip's (GM r19 item 2).
+    // The costly-run confirm keeps each node's runs; the Run button's text is the chip's (design).
     expect(runCostConfirmMessage(summary)).toContain('× 3 runs');
     expect(runCostConfirmMessage(summary)).toContain('× up to 4 runs');
     expect(describeRunScope(summary)).toBe(`Runs 4 nodes.\n${runChipTitle(summary)}`);
@@ -396,7 +395,7 @@ describe('run estimate for a route-table node (cases shared with the backend)', 
       if (testCase.expected.unavailable) {
         const definition = fixture.definitions.table;
         const routed = withWiredBlockers(definition, testCase.params, new Map(Object.entries(testCase.wiredCounts ?? {})));
-        // The node is titled 'Node', not the type's name: a rename, which the line quotes (GM, PR #203 r39 item 8).
+        // The node is titled 'Node', not the type's name: a rename, which the line quotes (design, PR #203).
         expect(cost!.unavailable!.Node).toBe(routeUnavailable(definition, routed, testCase.apiKeys, 'Node')!.message);
         expect(cost!.unpriced).toContain('Node');
         expect(describeRunScope({ total: 1, paid: ['Node'], cost })).toContain(runChipTitle({ total: 1, paid: ['Node'], cost })!);
@@ -501,7 +500,7 @@ describe('a run priced from its input file (cases shared with the backend)', () 
       { ...context, sizes: { '/out/a.png': { width: 1000, height: 1000 } } });
     expect(summary.cost!.sizeRefs).toEqual([]);
     expect(summary.cost!.lines).toEqual([{ name: 'Upscale', low: 0.004, high: 0.004, runs: [1, 1], nodeId: 'up' }]);
-    // GM, PR #198 r1: a chip never shows a sub-cent figure; the detail lines do.
+    // Design, PR #198: a chip never shows a sub-cent figure; the detail lines do.
     expect(runChipLabel(summary)).toBe('<$0.01');
   });
 
@@ -546,7 +545,7 @@ describe('a run priced from its input file (cases shared with the backend)', () 
     expect(text).toContain('“Upscale” is priced by its input size, which Nebula couldn’t read.');
   });
 
-  it('words an audio-priced node\u2019s reasons by the audio\u2019s length (GM r118)', () => {
+  it('words an audio-priced node\u2019s reasons by the audio\u2019s length (design)', () => {
     const voice = (params: Record<string, unknown>): Node<NodeData> => ({
       id: 'voice', position: { x: 0, y: 0 }, data: { definitionId: 'audio-input', label: 'Voice', params } as unknown as NodeData,
     });

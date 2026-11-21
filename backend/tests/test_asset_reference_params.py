@@ -1,10 +1,9 @@
 """The Moodboard and Character nodes name their saved asset in a public param.
 
-Gap 13 in the Good Machines design-canvas log: an agent couldn't point a
-Moodboard node at a board. The id lived in the internal ``_moodboardId``,
-which /api/graph/apply refused, and the public ``moodboard`` param was hidden
-and read only as an embedded dict. ``nebula set`` took the internal key,
-so apply and set disagreed on what an agent may write.
+An agent couldn't point a Moodboard node at a board. The id lived in the
+internal ``_moodboardId``, which /api/graph/apply refused, and the public
+``moodboard`` param was hidden and read only as an embedded dict. ``nebula set``
+took the internal key, so apply and set disagreed on what an agent may write.
 
 Now ``moodboard`` / ``character`` are the reference (services/agent_params.py),
 saved nodes move over (retired_nodes.migrate_params), and every agent path
@@ -332,7 +331,7 @@ def test_moodboard_changes_reach_the_canvas(api):
         {"type": "storedAssetChanged", "kind": "moodboard", "id": board["id"], "deleted": True},
     ]
     # A write also says the board's new version, so an open Studio can tell
-    # someone else's edit from the echo of its own (moodboard canvas PR3).
+    # someone else's edit from the echo of its own (PR #94).
     assert [m.get("version") for m in changed] == [None, 2, 3, None]
 
 

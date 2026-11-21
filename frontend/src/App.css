@@ -33,7 +33,7 @@ body,
 }
 
 /* The notice region is portalled to <body>, absolute (never fixed: a fixed element is a stacking
-   context, GM r7 of PR #203; styles/noticeRegion.css). Its containing block is the body, a
+   context; design, PR #203; styles/noticeRegion.css). Its containing block is the body, a
    full-window positioned box that clips and never scrolls (overflow: clip forbids even a
    programmatic scroll), so it is placed against the window exactly as a fixed one was, and
    an overflow at body level can't carry it off with a scrolled page.
@@ -59,8 +59,8 @@ a {
   letter-spacing: 0.02em;
 }
 
-/* The offline banner (GM, round 14 of PR #114): below the project bar so it
-   covers nothing. The selection toolbar's line sits in between (canvas.css
+/* The offline banner (design, PR #114): below the project bar so it covers
+   nothing. The selection toolbar's line sits in between (canvas.css
    .selection-toolbar-panel: 92px down, 50px tall), and the 28px gap above it
    is shorter than the banner, so the banner sits under that line with the
    same 8px gap floating panels keep (lib/bottomBar.ts floatingTopLimit):
@@ -73,7 +73,7 @@ a {
   position: fixed;
   z-index: 10000;
   /* Under the toolbar's line, which moves below the World Labs notice while
-     it shows (GM r34 A5): the notice's foot, 8px, the 50px toolbar, 8px. */
+     it shows (design): the notice's foot, 8px, the 50px toolbar, 8px. */
   top: max(150px, calc(var(--top-notice-bottom, 0px) + 66px));
   left: 50%;
   max-width: min(92vw, 560px);
@@ -90,14 +90,14 @@ a {
   pointer-events: none;
 }
 
-/* GM r17 (C): the home screen has one bar (72px, project-home.css) and no
+/* Design: the home screen has one bar (72px, project-home.css) and no
    selection toolbar: the banner sits right under it with the same 8px gap,
    above the welcome heading instead of over it. */
 .backend-connection[data-placement='home'] {
   top: 81px;
 }
 
-/* GM, PR #198 r2: on every screen but the canvas (Cinema, Character,
+/* Design, PR #198: on every screen but the canvas (Cinema, Character,
    Moodboard, Create, Remotion, the video editor, the Commons) the banner is
    a row of the screen's own layout right under its top header
    (StudioOfflineRow, the `offline` area of each studio's grid in
@@ -160,7 +160,7 @@ a {
   .studio-offline-row__pill[data-pulse='spring'] { animation: backend-offline-flash 600ms steps(1, end) both; }
 }
 
-/* A blocked edit nudges the banner once (GM, round 14): it springs from a
+/* A blocked edit nudges the banner once (design): it springs from a
    slightly larger scale back to rest, on an underdamped spring (zeta 0.5,
    2.4 Hz) sampled into linear(). */
 .backend-connection[data-pulse='spring'] {
@@ -186,12 +186,11 @@ a {
   .backend-connection[data-pulse='spring'] { animation: backend-offline-flash 600ms steps(1, end) both; }
 }
 
-/* Offline is read-only (GM, rounds 14 and 15): what would edit shows
-   not-allowed, nodes and handles don't drag, and every control that edits
-   renders disabled with the offline mark (lib/useBackendOffline.ts). The
-   cursor wins over a control's own disabled cursor (the selection toolbar's
-   is `default`); a control's own disabled dimming, where it has one, wins
-   over the 0.6 here. */
+/* Offline is read-only (design): what would edit shows not-allowed, nodes
+   and handles don't drag, and every control that edits renders disabled
+   with the offline mark (lib/useBackendOffline.ts). The cursor wins over a
+   control's own disabled cursor (the selection toolbar's is `default`); a
+   control's own disabled dimming, where it has one, wins over the 0.6 here. */
 .canvas--read-only .react-flow__node,
 .canvas--read-only .react-flow__handle {
   cursor: not-allowed;
@@ -204,11 +203,11 @@ a {
   cursor: not-allowed !important;
 }
 
-/* Round 22 (GM A): following an agent's switch is the same read-only state
-   as offline (lib/canvasLock.ts), so it looks the same; and so do the
-   controls disabled while the canvas is kept after a restore (GM r16 on
-   PR #199, 4), and Ask and Note on a node with a tab-local id (GM r26, 4,
-   lib/canvasLock TAB_LOCAL_MARK: a stopgap the bulk-create PR deletes). */
+/* Following an agent's switch is the same read-only state as offline
+   (lib/canvasLock.ts), so it looks the same; and so do the controls disabled
+   while the canvas is kept after a restore (design, PR #199), and Ask and
+   Note on a node with a tab-local id (design; lib/canvasLock TAB_LOCAL_MARK:
+   a stopgap the bulk-create PR deletes). */
 [data-offline-disabled],
 [data-following-disabled],
 [data-kept-disabled],
@@ -217,7 +216,7 @@ a {
 }
 
 /* A paid or saving action disabled offline (lib/useBackendOffline.ts
-   offlineAction; GM, PR #198 r2) loses its accent: the neutral control look,
+   offlineAction; design, PR #198) loses its accent: the neutral control look,
    never the orange of Generate or Export. Only buttons carry it; named so
    (the merge with PR #200): a bare attribute rule reads as every element to
    the ratchet's loose cascade (tests/helpers/cssCascade), which then saw no
@@ -249,8 +248,8 @@ button[data-offline-neutral]:hover {
   width: max-content;
   max-width: min(92vw, var(--notice-max-w, 560px));
   padding: 8px 10px 8px 12px;
-  /* GM r24 (PR #200 fix round 15): neutral, never orange-red. The shared
-     notice colours the pin toast beside it uses (noticeRegion.css). */
+  /* Design, PR #200: neutral, never orange-red. The shared notice colours the
+     pin toast beside it uses (noticeRegion.css). */
   border: 1px solid var(--notice-neutral-edge, #333);
   border-radius: 6px;
   box-shadow: 0 4px 20px rgb(0 0 0 / 0.5);
@@ -260,7 +259,7 @@ button[data-offline-neutral]:hover {
   font-size: 12px;
   line-height: 1.35;
   letter-spacing: 0.01em;
-  /* Its own surface in the notice region (GM r9 answer 2; noticeRegion.css). */
+  /* Its own surface in the notice region (design; noticeRegion.css). */
   animation: notice-surface-in 420ms var(--notice-spring) both;
 }
 
@@ -315,7 +314,7 @@ button[data-offline-neutral]:hover {
   flex: 1;
 }
 
-/* The held-reopen line is the notice's second line (GM r33, 6 on PR #199):
+/* The held-reopen line is the notice's second line (design, PR #199):
    the row wraps, and the line takes the box's full width under the notice's
    own text and button. */
 .provider-recovery-status:has(.provider-recovery-status__reopen) {

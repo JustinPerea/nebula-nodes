@@ -156,7 +156,7 @@ def test_latest_cli_changes_overlay_without_erasing_frontend_extras_or_history(w
 
 
 def test_only_the_persons_tab_saves_the_view(workspace, person):
-    """Gap 19: a tab that isn't connected as the person (an agent's browser)
+    """A tab that isn't connected as the person (an agent's browser)
     saves its edits but never the project's zoom and pan."""
     client, _, _, _ = workspace
     created = create(client)

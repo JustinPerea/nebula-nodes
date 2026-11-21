@@ -4,7 +4,7 @@ import type { NodeData } from '../../src/types';
 import { placeholderRunConfirm } from '../../src/lib/placeholderRunConfirm';
 import type { RunCost, RunScopeSummary } from '../../src/lib/runScope';
 
-// GM - Design's round-11 rulings (2026-10-26), verbatim, and review 10's row-naming inventory.
+// The design rulings (2026-10-26), verbatim, and how each row names the settings that pick its model.
 
 const codex = { id: 'ext:codex', name: 'Codex', color: '#F2C14E', verified: true };
 const claude = { id: 'ext:claude', name: 'Claude Code', color: '#8AB4F8', verified: true };
@@ -20,8 +20,8 @@ const summaryOf = (cost: Partial<RunCost>): RunScopeSummary => ({ total: 5, paid
 const unpriced = summaryOf({});
 const SAVED = 'after the run was saved. The replay uses the saved settings.';
 
-describe('GM round 11: the replay sentence names up to 3 changed nodes, then counts from 4', () => {
-  // r10-replay-three-saved: a dotted “Plate” over three muted rows; the sentence must say which three.
+describe('the replay sentence names up to 3 changed nodes, then counts from 4', () => {
+  // Replay, three saved: a dotted “Plate” over three muted rows; the sentence must say which three.
   const priced = summaryOf({ low: 0.4, high: 0.4, lines: [line('p', 'Plate', 0.1, 0.1), line('w', 'Wide', 0.1, 0.1),
     line('h', 'Hero still', 0.1, 0.1), line('g', 'Grade', 0.05, 0.05), line('o', 'Final', 0.05, 0.05)] });
   const five = [node('p', 'Plate'), node('w', 'Wide'), node('h', 'Hero still'), node('g', 'Grade'), node('o', 'Final')];
@@ -61,10 +61,9 @@ describe('GM round 11: the replay sentence names up to 3 changed nodes, then cou
     expect(all.savedLine).toBe(`Codex changed 4 nodes ${SAVED}`);
   });
 
-  // PR #200 fix round 1 (GM answer: "use canvas order on both
-  // placeholder-run lines") replaces item 1's row order: the names come in
-  // canvas order, whatever order the rows read.
-  it('item 1, as GM ruled on PR #200: the names come in canvas order, not the order the rows read', () => {
+  // PR #200 (design: "use canvas order on both placeholder-run lines") replaced the
+  // earlier row order: the names come in canvas order, whatever order the rows read.
+  it('as ruled on PR #200 (design): the names come in canvas order, not the order the rows read', () => {
     // “Grade” is still being set up (a dotted row), “Wide” was finished with changes (a muted row after it);
     // “Wide” comes first on the canvas, so it is named first.
     const nodes = [node('w', 'Wide'), node('g', 'Grade', codex), node('o', 'Final')];
@@ -82,7 +81,7 @@ describe('GM round 11: the replay sentence names up to 3 changed nodes, then cou
   });
 });
 
-describe('GM round 11, item 6: "the agents" in the heading and the left line', () => {
+describe('"the agents" in the heading and the left line (design)', () => {
   it('Run 3 nodes the agents are still setting up?', () => {
     const nodes = [node('a', 'A', codex), node('b', 'B', claude), node('c', 'C', codex), node('o', 'Final')];
     const model = placeholderRunConfirm(nodes, [wire('a', 'o'), wire('b', 'o'), wire('c', 'o')], 'o', unpriced)!;
@@ -110,37 +109,37 @@ describe('GM round 11, item 6: "the agents" in the heading and the left line', (
   });
 });
 
-describe('GM round 11, items 4 and 5: rows name the settings that choose which model or engine runs', () => {
+describe('rows name the settings that choose which model or engine runs (design)', () => {
   const krea = (definitionId: string, params: Record<string, unknown>) =>
     placeholderRunConfirm([node('k', 'Up', codex, definitionId, params)], [], 'k', unpriced)!.rows[0];
 
-  it('item 4: "Grain model" when grain is on (it picks a model that runs)', () => {
+  it('"Grain model" when grain is on (it picks a model that runs)', () => {
     expect(krea('krea-enhance-topaz-bloom-2-enhance', { grain: true, grain_model: 'gaussian' }).setting).toBe('Grain model: Gaussian');
     expect(krea('krea-enhance-topaz-wonder-35-enhance', { grain: true }).setting).toBe('Grain model: Silver');
   });
 
-  it('item 4: no grain model runs with grain off, so none is named', () => {
+  it('no grain model runs with grain off, so none is named', () => {
     expect(krea('krea-enhance-topaz-bloom-2-enhance', { grain_model: 'gaussian' }).setting).toBeNull();
     expect(krea('krea-enhance-topaz-wonder-35-enhance', { grain: false, grain_model: 'grey' }).setting).toBeNull();
   });
 
-  it('item 4: a grain model switch is a changed row', () => {
+  it('a grain model switch is a changed row', () => {
     const a = krea('krea-enhance-topaz-bloom-2-enhance', { grain: true, grain_model: 'silver' });
     const b = krea('krea-enhance-topaz-bloom-2-enhance', { grain: true, grain_model: 'grey' });
     expect(a.setting).not.toBe(b.setting);
   });
 
-  it('item 4: Flavor is a style setting on the same engine, never named', () => {
+  it('Flavor is a style setting on the same engine, never named', () => {
     expect(krea('krea-enhance-magnific-precise-enhance', { flavor: 'photo' }).setting).toBeNull();
   });
 
-  // Round 12 addendum (b) replaces "Model: default": Krea requires the model (review 11, L-1).
-  it('item 5: Topaz Standard with no model chosen reads "Model: not chosen" (round 12)', () => {
+  // A later ruling replaces "Model: default": Krea requires the model.
+  it('Topaz Standard with no model chosen reads "Model: not chosen"', () => {
     expect(krea('krea-enhance-topaz-standard-enhance', {}).setting).toBe('Model: not chosen');
     expect(krea('krea-enhance-topaz-standard-enhance', { model: '' }).setting).toBe('Model: not chosen');
   });
 
-  it('item 5: a later switch from the default still shows up', () => {
+  it('a later switch from the default still shows up', () => {
     expect(krea('krea-enhance-topaz-standard-enhance', { model: 'CGI' }).setting).toBe('Model: CGI');
   });
 
@@ -148,7 +147,7 @@ describe('GM round 11, items 4 and 5: rows name the settings that choose which m
     expect(krea('krea-style-train', {}).setting).toBe('Training model: FLUX Dev');
   });
 
-  it('items 2 and 3 unchanged: Topaz video card labels and the node app\'s "Version"', () => {
+  it('Topaz video card labels and the node app\'s "Version" are named as before', () => {
     expect(krea('krea-enhance-topaz-video-upscale', {}).setting)
       .toBe('Enhancement model: prob-4 · Frame interpolation model: apo-8');
     expect(krea('krea-node-app', { node_app_version_id: 'v_9' }).setting).toBe('Version: v_9');

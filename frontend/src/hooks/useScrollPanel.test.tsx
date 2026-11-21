@@ -4,8 +4,8 @@ import { useRef } from 'react';
 import { useScrollPanel } from './useScrollPanel';
 import { BoardSidePanel } from '../components/moodboard-studio/BoardSidePanel';
 
-// #213 round 3 (review 1 NIT-4, NIT-5): the Board view's side panel under the
-// board scrolls inside itself; beside it (970 px and up) it usually doesn't.
+// PR #213: the Board view's side panel under the board scrolls inside itself;
+// beside it (970 px and up) it usually doesn't.
 
 const box = { scrollHeight: 900, clientHeight: 300 };
 let resized: Array<() => void> = [];
@@ -89,7 +89,7 @@ describe('a panel that scrolls only at some sizes', () => {
   });
 });
 
-describe('the person\'s scroll is the intent (#213 round 3c)', () => {
+describe('the person\'s scroll is the intent (PR #213)', () => {
   it('120, then a short layout that reaches only 55: it sits at 55, and goes back to 120 when it can', () => {
     const { getByTestId } = render(<Panel />);
     const panel = getByTestId('panel');

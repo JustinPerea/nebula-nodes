@@ -24,7 +24,7 @@ export interface DeletedAsset {
 export function useAssetDelete(kind: 'moodboard' | 'character' | 'style') {
   const [lastDeleted, setLastDeleted] = useState<DeletedAsset | null>(null);
   const [busy, setBusy] = useState(false);
-  /** Failures as heading + reason, kept apart (error copy round 3b): a
+  /** Failures as heading + reason, kept apart (error copy): a
    * delete's shows in the Studio's notice; Undo's own shows in the toast,
    * beside the Undo that redoes it. The toast's Undo restores the asset
    * deleted last, so a later delete's failure must not sit beside it. */

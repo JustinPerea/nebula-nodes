@@ -1,8 +1,7 @@
 /**
- * What the person reads when a request to Nebula fails (error-copy, GM -
- * Design, 2026-10-22): "Never show raw error.message strings in UI." The
- * browser's "Failed to fetch" is a TypeError's message, not copy, and a
- * status code isn't either.
+ * What the person reads when a request to Nebula fails (design, 2026-10-22):
+ * "Never show raw error.message strings in UI." The browser's "Failed to
+ * fetch" is a TypeError's message, not copy, and a status code isn't either.
  *
  * The words are made where requests are made, not at each screen, so a new
  * screen can't leak a raw string: apiFetch (lib/backend.ts) turns a request
@@ -12,15 +11,15 @@
  * status, the raw `detail`) stays on the thrown error as `cause` / `detail`
  * for the console and debugging; only the line is meant to be rendered.
  *
- * Round 2 (GM, 2026-10-22): every request names its action. A request's
+ * Design, 2026-10-22: every request names its action. A request's
  * error carries `heading` ("Couldn't save the board."), `reason` (one of
  * these lines, or the backend's written reason) and `kind`; its `message`
  * is the one-line form, "<heading> <reason>", for alerts, toasts and status
  * text. Two-line surfaces render failureCopy() through FailureLines; a
  * surface with its own retry button takes the short reason (shortReason /
- * shortLine, GM's WRAP rule). apiRequest (lib/apiRequest.ts) is the one way
- * to make such a call; answered failures are console.warn'ed once per call
- * site (warnFailure), lost connections aren't.
+ * shortLine, the WRAP rule; design). apiRequest (lib/apiRequest.ts) is the
+ * one way to make such a call; answered failures are console.warn'ed once per
+ * call site (warnFailure), lost connections aren't.
  */
 
 import { groupedCount } from './groupedCount';
@@ -35,7 +34,7 @@ import { agentNameInSentence } from './personalAgentName';
 export const NEBULA_COULDNT = /^(?:Saved\. )?Nebula couldn['’]t /;
 
 /** No answer at all: the connection dropped, or the backend isn't there.
- * Round 3f (GM): ""Check your connection" sends people to their Wi-Fi, but
+ * Design: ""Check your connection" sends people to their Wi-Fi, but
  * the backend is on this computer." apiFetch only ever calls Nebula's own
  * server, so this is never a provider the backend couldn't reach (those come
  * back as the backend's answer, with the classifier's "network" line). */
@@ -43,10 +42,10 @@ export const CONNECTION_LOST_COPY = 'Nebula’s server isn’t answering. Make s
 /** An answer that says "not now": 408, 429 or any 5xx. */
 export const NO_RESPONSE_COPY = 'Nebula didn’t respond. Try again.';
 /** A refusal (any other 4xx) that came with no reason the person can read:
- * no `detail`, or FastAPI's list of field errors (GM, error-copy fallbacks).
- * Also what a failure that isn't a request's says (copyForError). Round 3f
- * (GM): "Under any other heading (Projects, graph file, Commons…), drop
- * "That didn't work."". A node card says its own (lib/nodeErrorCopy.ts). */
+ * no `detail`, or FastAPI's list of field errors (design). Also what a
+ * failure that isn't a request's says (copyForError). Design: "Under any
+ * other heading (Projects, graph file, Commons…), drop "That didn't work."".
+ * A node card says its own (lib/nodeErrorCopy.ts). */
 /** The browser's and the desktop app's lines for a refusal with no reason: a tab reloads the page, the app has
  * View > Reload (Electron's default menu; a reload keeps the person-token bridge). Read through
  * refusedFallbackCopy() / isRefusedFallback(), the one place that picks by shell. */
@@ -59,12 +58,12 @@ export function refusedFallbackCopy(desktop: boolean = inDesktopShell()): string
 export function isRefusedFallback(reason: string): boolean {
   return reason === REFUSED_FALLBACK_BROWSER || reason === REFUSED_FALLBACK_APP;
 }
-/** 401 or 403 with no reason (GM). */
+/** 401 or 403 with no reason (design). */
 export const ACCESS_LOST_COPY = 'You don’t have access to this anymore. Reload to sign in again.';
-/** 413 with no reason (GM). */
+/** 413 with no reason (design). */
 export const TOO_LARGE_COPY = "That’s too large to save.";
 
-/** GM r35 on PR #199, verbatim, for every refusal of a new project at the
+/** Design, PR #199, verbatim, for every refusal of a new project at the
  * project limit (the limit is for new projects: a restore, an Undo of a
  * delete and the person's save of kept edits may take the list past it):
  * "You have 501 projects and the limit is 500. You can make a new one after
@@ -81,41 +80,40 @@ export function overProjectLimitCopy(count: number, limit: number, deletes?: num
  * tab isn't connected as the person (no person token, or one from before
  * Nebula restarted), which reconnecting fixes (backend services/person_gate.py). */
 export const PERSON_REQUIRED_CODE = 'person_required';
-/** GM - Design, 2026-10-23 (Q116 a), verbatim, for every refusal that says
+/** Design, 2026-10-23, verbatim, for every refusal that says
  * PERSON_REQUIRED_CODE: "Use it for every person-only refusal, not just Krea
  * billing. The agents' text stays behind Details." Classified by the answer's
- * `code`, never its words. Round 2 (GM): "line 3 shouldn't depend on the
- * notice being there, since it can be dismissed", so it says the fix itself.
- * A browser tab's line; the desktop app says PERSON_REQUIRED_APP_COPY. */
+ * `code`, never its words. Design: "line 3 shouldn't depend on the notice
+ * being there, since it can be dismissed", so it says the fix itself. A
+ * browser tab's line; the desktop app says PERSON_REQUIRED_APP_COPY. */
 export const PERSON_REQUIRED_COPY = "This change needs your OK, and this tab isn’t connected as you. "
   + 'Open the link Nebula printed when it started, then try again.';
-/** GM - Design, 2026-10-23 (round 2), verbatim: line 3 in the desktop app. A
- * quit and reopen gives the app a fresh backend and a fresh person token. */
+/** Design, 2026-10-23, verbatim: line 3 in the desktop app. A quit and
+ * reopen gives the app a fresh backend and a fresh person token. */
 export const PERSON_REQUIRED_APP_COPY = "This change needs your OK, and this window isn’t connected as you. "
   + 'Quit Nebula and open it again, then try again.';
 
-/** GM - Design, 2026-10-23 (round 3), verbatim: line 3 in the app's two
- * developer setups (a debug port, the dev renderer), where the banner already
- * gives the real fix. */
+/** Design, 2026-10-23, verbatim: line 3 in the app's two developer setups (a
+ * debug port, the dev renderer), where the banner already gives the real fix. */
 /** The dev setups' ending: the line defers to the general notice for the fix (lib/notConnectedLine). */
 export const DEFERS_TO_NOTICE = 'The notice below says why.';
 export const PERSON_REQUIRED_DEV_COPY = "This change needs your OK, and this window isn’t connected as you. "
   + DEFERS_TO_NOTICE;
 
-/** PR #204 round 10 (GM r16 Q2): the one word every lock line uses for where this page runs:
+/** Design, PR #204: the one word every lock line uses for where this page runs:
  * "window" in the desktop app, "tab" in a browser. */
 export function lockPlace(desktop: boolean = inDesktopShell()): 'window' | 'tab' {
   return desktop ? 'window' : 'tab';
 }
 
-/** PR #204 round 10 (GM r15): a control whose route is the person's alone, while this tab isn't
+/** Design, PR #204: a control whose route is the person's alone, while this tab isn't
  * connected as them: "You can <verb> when this tab is connected as you." Every lock line comes
  * from here (components/PersonLock.tsx and the held cards), so the word is the same everywhere. */
 export function personLockLine(verb: string, desktop: boolean = inDesktopShell()): string {
   return `You can ${verb} when this ${lockPlace(desktop)} is connected as you.`;
 }
 
-/** GM r14 (5), PR #204 round 9: Settings' Connect (and Create token) while this tab isn't connected
+/** Design, PR #204: Settings' Connect (and Create token) while this tab isn't connected
  * as the person. The server refuses it (POST /api/agent/spend/apps: require_person). */
 export function connectAgentLockCopy(desktop: boolean = inDesktopShell()): string {
   return personLockLine('connect an agent', desktop);
@@ -160,7 +158,7 @@ export function chatPersonRequiredCopy(action: ChatPersonAction, desktop: boolea
  * general line, so the same rules read them (the general notice stands down, offline hides them, the promote clears them). */
 const CHAT_PERSON_REQUIRED_LINES: readonly string[] = Object.values(CHAT_PERSON_REQUIRED).flatMap((lines) => Object.values(lines));
 
-/** GM, PR #204 round 3 ruling item 3 (2026-10-30), verbatim for a tab: the line when
+/** Design, PR #204 (2026-10-30), verbatim for a tab: the line when
  * opening the Updates couldn't mark them read because this tab isn't the person's. No
  * "then try again": the promote retries it (lib/clearsOnPromote retryOnPromote). The
  * desktop app's two forms follow personSession's banners for a window. */
@@ -173,12 +171,13 @@ export const MARK_READ_REFUSED_DEV_COPY =
   'Nebula couldn’t mark the updates as read because this window isn’t connected as you. The notice below says why.';
 
 /**
- * GM, PR #204 r6 (2026-10-30), the rule for the shared line: "a 'not connected' refusal of
- * anything that retries on promote uses this 'because' form, with no 'then try again' and
- * no 'This change needs your OK'. Keep the r2 generic line only for one-shot actions that
- * can't retry." `what` is what Nebula was doing ("save the style", "load your work"). Every
- * caller registered with retryOnPromote words its line through this (the ratchet checks).
- * The desktop app's two forms follow personSession's banners for a window, as mark-read's.
+ * Design, PR #204 (2026-10-30), the rule for the shared line: a "not connected" refusal of
+ * anything that retries on promote uses this "because" form, with no "then try again" and
+ * no "This change needs your OK"; the generic line (personRequiredCopy) stays only for
+ * one-shot actions that can't retry. `what` is what Nebula was doing ("save the style",
+ * "load your work"). Every caller registered with retryOnPromote words its line through
+ * this (the ratchet checks). The desktop app's two forms follow personSession's banners
+ * for a window, as mark-read's.
  */
 export function notConnectedBecause(what: string, desktop: boolean = inDesktopShell(),
   reason: string = personUnavailableReason()): string {
@@ -188,7 +187,7 @@ export function notConnectedBecause(what: string, desktop: boolean = inDesktopSh
 }
 
 /**
- * GM r24 c (PR #204 round 15): a load Nebula answered with no reason (a 5xx, 408 or 429:
+ * Design, PR #204: a load Nebula answered with no reason (a 5xx, 408 or 429:
  * NO_RESPONSE_COPY's case), as one sentence with Nebula the subject, verbatim for the references:
  * "Nebula couldn’t load the references because the server didn’t respond. Try again." `what` is what
  * Nebula was doing, as notConnectedBecause's.
@@ -197,19 +196,19 @@ export function noResponseBecause(what: string): string {
   return `Nebula couldn’t ${what} because ${NO_RESPONSE_CLAUSE}`;
 }
 
-/** GM r31 (PR #204 round 18d): the server is the subject of every reason. 408 and a gateway's
+/** Design, PR #204: the server is the subject of every reason. 408 and a gateway's
  * 502-504: no answer in time. */
 const NO_RESPONSE_CLAUSE = 'the server didn’t respond. Try again.';
-/** GM r31: a rate limit (429) has its own line. */
+/** Design: a rate limit (429) has its own line. */
 const SERVER_BUSY_CLAUSE = 'the server is busy. Try again in a moment.';
 
 /**
- * PR #204 round 18b (GM r29 1) and 18c (GM r30, the wording batch): a load's failure, as the
- * clause after "because". A load that failed destroys nothing, so every reason says it in the
- * because form with Nebula the subject: "Nebula couldn’t load this reference because it isn’t
- * there anymore. Reload to get the latest references." "Try again." only where trying again can
- * help. No backend message ever shows to the person as it is: a reason not listed here says the
- * 4xx line (LOAD_NOT_ACCEPTED), and its raw text goes to the console.
+ * Design, PR #204: a load's failure, as the clause after "because". A load that failed
+ * destroys nothing, so every reason says it in the because form with Nebula the subject:
+ * "Nebula couldn’t load this reference because it isn’t there anymore. Reload to get the
+ * latest references." "Try again." only where trying again can help. No backend message
+ * ever shows to the person as it is: a reason not listed here says the 4xx line
+ * (LOAD_NOT_ACCEPTED), and its raw text goes to the console.
  */
 export interface ReasonClause {
   /** The clause after "because" on a surface that stands alone. */
@@ -219,7 +218,7 @@ export interface ReasonClause {
 }
 
 /**
- * The clause table, one row per reason Nebula words itself (design's rulings, error-copy round 5):
+ * The clause table, one row per reason Nebula words itself (design):
  * the reason as the backend or the browser wrote it (apostrophes read either way) and the words
  * that follow "Nebula couldn’t ‹do X› because". A row is data: changing its words is a one-line
  * edit here and its line in tests/becauseClause.test.ts. A reason that is no row falls to the
@@ -227,7 +226,7 @@ export interface ReasonClause {
  */
 const SESSION_ENDED = 'this tab’s session ended. Reload to sign in again.';
 export const REASON_CLAUSES: ReadonlyMap<string, ReasonClause> = new Map<string, ReasonClause>([
-  // The reference detail's 404 (backend refusal_copy.gone, GM error-copy round 3).
+  // The reference detail's 404 (backend refusal_copy.gone).
   [backendText("That reference isn’t there anymore. Reload to get the latest references."),
     { alone: 'it isn’t there anymore. Reload to get the latest references.' }],
   // A labeling image's position that isn't in the set (backend evaluation.REFERENCE_GONE).
@@ -237,7 +236,7 @@ export const REASON_CLAUSES: ReadonlyMap<string, ReasonClause> = new Map<string,
   [backendText("Those filters didn’t work. Clear them and try again."), { alone: 'those filters didn’t work. Clear them and try again.' }],
   // A reference's image or video the blob route can't find (backend routes/commons get_blob).
   [backendText('not found'), { alone: 'the file isn’t there anymore.' }],
-  // The UI session's 401s (backend commons/actors.py resolve_actor): design says "tab".
+  // The UI session's 401s (backend commons/actors.py resolve_actor): the word is "tab" (design).
   [backendText('invalid UI session token'), { alone: SESSION_ENDED }],
   [backendText('no UI session: open Nebula from the desktop app or use the dev link'), { alone: SESSION_ENDED }],
   // A route only the person's own tab may call (backend routes/commons human_dep): not the person-gate check.
@@ -261,22 +260,23 @@ const FOLDED_CLAUSES: ReadonlyMap<string, ReasonClause> = new Map(
 /** The load failures' view of the table (a load shows only these, never a backend sentence of its own). */
 export const LOAD_BECAUSE: ReadonlyMap<string, string> = new Map(
   [...REASON_CLAUSES].map(([reason, row]) => [reason, row.alone] as const));
-/** GM r30 3: a server error (500) isn't "didn't respond". GM r31: "the server", not "Nebula's server". */
+/** Design: a server error (500) isn't "didn't respond", and the words are "the server", not
+ * "Nebula's server". */
 const SERVER_ERROR_CLAUSE = 'the server hit an error. Try again.';
-/** GM r30: no answer at all (GM r31's wording). */
+/** Design: no answer at all. */
 const NOT_ANSWERING_CLAUSE = 'the server isn’t answering. Check that Nebula is running, then try again.';
 /** The same two reasons beside a button of their own (an action's line): the standing rule is
- * that a failure line shown with Try again ends in "Try again." (GM r23 on #208). */
+ * that a failure line shown with Try again ends in "Try again." (design, PR #208). */
 export const NOT_ANSWERING_RETRY_CLAUSE = 'the server isn’t answering. Try again.';
 const SERVER_BUSY_RETRY_CLAUSE = 'the server is busy. Try again.';
-/** GM r30: a 4xx with no readable reason, and any reason not listed above (GM r31's wording). */
+/** Design: a 4xx with no readable reason, and any reason not listed above. */
 export const LOAD_NOT_ACCEPTED = 'the server didn’t accept it. Try again.';
 const NOT_ACCEPTED_BROWSER = `the server didn’t accept it. ${REFUSED_FALLBACK_BROWSER}`;
 const NOT_ACCEPTED_APP = `the server didn’t accept it. ${REFUSED_FALLBACK_APP}`;
 const notAcceptedAlone = (): string => (inDesktopShell() ? NOT_ACCEPTED_APP : NOT_ACCEPTED_BROWSER);
 /** The backend's answer when it runs without the Commons (backend commons/activation, routes/commons
- * activation_dep), and GM r30's page line for it. The Commons is on only when the backend starts
- * with NEBULA_COMMONS_ENABLED=1: no setting turns it on, so the line names none. */
+ * activation_dep), and the page line for it (design). The Commons is on only when the backend
+ * starts with NEBULA_COMMONS_ENABLED=1: no setting turns it on, so the line names none. */
 export const COMMONS_OFF_DETAIL = 'Commons is disabled';
 export const COMMONS_OFF_COPY = 'Commons is turned off for this Nebula.';
 
@@ -290,9 +290,9 @@ export function loadFailedLine(what: string, error: unknown): string {
 }
 
 /**
- * An action's failure line, for a surface with a button that tries it again (copy sweep item 20,
- * GM: a failure line shown with a Try again button ends in "Try again.", in the because form, and
- * has no "Try again." when retrying cannot help). `what` is what Nebula was doing ("upload
+ * An action's failure line, for a surface with a button that tries it again (design: a failure
+ * line shown with a Try again button ends in "Try again.", in the because form, and has no
+ * "Try again." when retrying cannot help). `what` is what Nebula was doing ("upload
  * “photo.png”"). The reasons are the shared ones (a load's: LOAD_BECAUSE, the 4xx line, the
  * server's own answers), with the two page endings ("Check that Nebula is running, then try
  * again.", "Try again in a moment.") said as the button's own, "Try again.". A reason that names
@@ -318,7 +318,7 @@ function loadFailedClause(what: string, error: unknown, because: ReadonlyMap<str
   const detail = error instanceof RequestFailedError ? detailText(error.detail) : '';
   if (isCommonsOff(error)) return COMMONS_OFF_COPY;
   if (status !== null && failureKind(status) === 'no-response') {
-    // GM r31: 429 is busy; 408 and a gateway's 502-504 didn't respond; the server's own 5xx is an error.
+    // Design: 429 is busy; 408 and a gateway's 502-504 didn't respond; the server's own 5xx is an error.
     if (status === 429) return beside === 'button' ? SERVER_BUSY_RETRY_CLAUSE : SERVER_BUSY_CLAUSE;
     return status >= 500 && !GATEWAY_STATUSES.has(status) ? SERVER_ERROR_CLAUSE : NO_RESPONSE_CLAUSE;
   }
@@ -331,10 +331,10 @@ function loadFailedClause(what: string, error: unknown, because: ReadonlyMap<str
 }
 
 /**
- * PR #204 round 18j (GM r40), round 18k (GM r41, verbatim): closing the held-out batch failed.
- * Nothing was lost, so the line is neutral, in the because form with Nebula the subject, with
- * curly apostrophes, and never the server's own words (those go to the console). The 409s are
- * the close's own refusals (backend commons/evaluation close), read by their words.
+ * Design, PR #204, verbatim: closing the held-out batch failed. Nothing was lost, so the line
+ * is neutral, in the because form with Nebula the subject, with curly apostrophes, and never
+ * the server's own words (those go to the console). The 409s are the close's own refusals
+ * (backend commons/evaluation close), read by their words.
  */
 export const CLOSE_BECAUSE: ReadonlyMap<string, string> = new Map([
   // An agent grade was still running.
@@ -355,16 +355,16 @@ export const CLOSE_BECAUSE: ReadonlyMap<string, string> = new Map([
 ]);
 /** The 409 a grade still running gives (CLOSE_BECAUSE's first): the close waits for it. */
 export const CLOSE_GRADE_RUNNING = 'Nebula couldn’t close the batch because a grade is still running. Close the batch again when it finishes.';
-/** GM r43 Q1: the close's 30 s ran out and the batch, read again, isn't closed (GM's no-answer line). */
+/** Design: the close's 30 s ran out and the batch, read again, isn't closed (the no-answer line). */
 export const CLOSE_NO_RESPONSE = 'Nebula couldn’t close the batch because the server didn’t respond. Try again.';
-/** GM r41: the Commons turned off. */
+/** Design: the Commons turned off. */
 export const CLOSE_COMMONS_OFF = 'Commons is turned off because Nebula started without it. Restart Nebula with NEBULA_COMMONS_ENABLED=1 to close this batch.';
 
 /**
- * PR #204 round 18k (GM r41): a failed close's line, in either pane (CommonsCloseBatch). Empty
+ * Design, PR #204: a failed close's line, in either pane (CommonsCloseBatch). Empty
  * when the failure says nothing (offline: the offline row says it).
  * - 401, and any refusal because this tab isn't the person's (lib/commonsApi sessionLost), split
- *   on the tab's held state, not the status (round 18l, GM r42): a held tab (the person is signed
+ *   on the tab's held state, not the status (design): a held tab (the person is signed
  *   in, in another tab) "this tab isn’t connected as you. Open the link Nebula printed when it
  *   started."; otherwise "you’re signed out. Open the link Nebula printed when it started."
  * - 403: the close route's only 403s are an origin or a token problem (services/local_guard's
@@ -392,21 +392,20 @@ export function closeBatchFailedLine(error: unknown, held: boolean = personGateH
   const clause = status === 409 ? [...CLOSE_BECAUSE].find(([key]) => foldApostrophes(key) === foldApostrophes(detail))?.[1] : undefined;
   if (clause) return `${lead} ${clause}`;
   if (detail) console.warn(`[nebula] Couldn’t close the batch: the backend said "${detail}" (not shown).`);
-  // Round 18l (review 17 logic NIT-1): an exception from Nebula's own code (not a request's
-  // answer) keeps the request line, which still says what to do, and goes to the console as the
-  // bug it is; how the app words its own failures is the app-wide failure-copy PR's.
+  // An exception from Nebula's own code (not a request's answer) keeps the request line,
+  // which still says what to do, and goes to the console as the bug it is; how the app words
+  // its own failures is the app-wide failure-copy PR's.
   if (!(error instanceof RequestFailedError)) console.error('[nebula] Closing the batch failed in Nebula itself:', error);
   return `${lead} the server didn’t accept the request. Try again.`;
 }
 
-/** PR #204 round 18j (GM r40): a failure said in the because form (a load's or an action's), or
- * the Commons turned off (round 18k): it destroyed nothing, so its line is neutral
- * (CommonsErrorLine). */
+/** Design, PR #204: a failure said in the because form (a load's or an action's), or the
+ * Commons turned off: it destroyed nothing, so its line is neutral (CommonsErrorLine). */
 export function isBecauseFailure(text: string): boolean {
   return NEBULA_COULDNT.test(text) || /^(?:Commons is turned off|[^.!?]{1,60} stopped) because /.test(text);
 }
 
-/** GM r41: the close's line says to try again (the close button beside it is the retry), or
+/** Design: the close's line says to try again (the close button beside it is the retry), or
  * names another step (Reload, open the link, wait, restart), and then the close button is
  * aria-disabled with the line as its reason. */
 export function closeLineRetries(line: string): boolean {
@@ -420,7 +419,7 @@ export function isCommonsOff(error: unknown): boolean {
 }
 
 /**
- * PR #204 round 18d (GM r32 3): a load's cause alone, for a line that says its own next step
+ * Design, PR #204: a load's cause alone, for a line that says its own next step
  * ("Saved. Nebula couldn’t load the settings back because {cause}. Reload to see them."): the
  * shared clause's first sentence, without its period or its own "Try again". Null when the
  * failure says nothing; COMMONS_OFF_COPY for the Commons turned off.
@@ -431,22 +430,22 @@ export function loadFailedCause(what: string, error: unknown): string | null {
   return clause.replace(/\. .*$|\.$/, '');
 }
 
-/** PR #204 round 18d (GM r32 3), verbatim: a settings write landed, and reading it back failed for
+/** Design, PR #204, verbatim: a settings write landed, and reading it back failed for
  * `cause` (loadFailedCause). No "Try again": that would send the write again. */
 export function savedReadBackLine(cause: string): string {
   return `Saved. Nebula couldn’t load the settings back because ${cause}. Reload to see them.`;
 }
 
-/** PR #204 round 18 (GM r28 1), widened in round 18b (GM r29 1): a load's failure line, whatever
- * its reason. Only a load says "Nebula couldn’t load …" or "Nebula couldn’t check …" (an
- * action's line says "Couldn’t save …"), and a load that failed destroys nothing, so it is drawn
- * neutral, as a because line is (components/commons/CommonsErrorLine, styles/becauseLine.css). */
+/** Design, PR #204: a load's failure line, whatever its reason. Only a load says
+ * "Nebula couldn’t load …" or "Nebula couldn’t check …" (an action's line says
+ * "Couldn’t save …"), and a load that failed destroys nothing, so it is drawn neutral,
+ * as a because line is (components/commons/CommonsErrorLine, styles/becauseLine.css). */
 export function isLoadLine(text: string): boolean {
-  // Round 18d (GM r32 3): a read-back after a saved write is a load's line too (savedReadBackLine).
+  // A read-back after a saved write is a load's line too (savedReadBackLine).
   return new RegExp(`${NEBULA_COULDNT.source}(?:load|check) `).test(text) || text === COMMONS_OFF_COPY;
 }
 
-/** PR #204 round 18f (GM r35 4): the words before a load line's closing "Try again.", for the
+/** Design, PR #204: the words before a load line's closing "Try again.", for the
  * "Try again" button that ends it (components/commons/CommonsErrorLine), or null when the line
  * isn't a load's or doesn't end so ("…then try again." asks to check Nebula first; "Try again in
  * a moment." asks to wait). The button keeps the sentence: "… Try again." reads the same. */
@@ -458,14 +457,14 @@ export function retryStem(line: string): string | null {
 /**
  * Generate refused only because this tab isn't the person's. Generate is one-shot (it never
  * retries on the promote).
- * - The cluster itself refused: GM r10 (3), verbatim for a tab, the r2 general words after
- *   "Its nodes weren’t added to the canvas."
- * - The cluster added and only the start refused: GM r13 (1), verbatim for a tab, the because
+ * - The cluster itself refused: design, verbatim for a tab, then the general words
+ *   (personRequiredCopy) after "Its nodes weren’t added to the canvas."
+ * - The cluster added and only the start refused: design, verbatim for a tab, the because
  *   form. The nodes are on the canvas, so it never says try again (a second Generate would add
  *   them again): the person runs them from the canvas. The desktop app's forms follow
  *   notConnectedBecause's (a window's fix; the dev setups defer to the notice).
  */
-/** GM r12 (2), PR #204 round 9: every Generate line opens with this (curly apostrophe). */
+/** Design, PR #204: every Generate line opens with this (curly apostrophe). */
 export const GENERATE_HEADING = 'Nebula couldn’t start the generation.';
 export const CLUSTER_NOT_ADDED = 'Its nodes weren’t added to the canvas.';
 
@@ -481,7 +480,7 @@ export function generateRefusedCopy(clusterAdded: boolean, desktop: boolean = in
 const ADDED_LEAD = 'Nebula added the nodes to the canvas but couldn’t start the generation';
 
 /**
- * GM r16 Q3 (PR #204 round 10): Generate's nodes are on the canvas, so pressing Generate again
+ * Design, PR #204: Generate's nodes are on the canvas, so pressing Generate again
  * would add them twice. A fix that ends "try again" becomes "then run them from the canvas"; the
  * not-connected case (`always`) ends that way after its own fix too. One rule for both.
  */
@@ -498,7 +497,7 @@ export function thenRunFromCanvas(fix: string, always = false): string {
   return text;
 }
 
-/** GM r16 Q3: Generate's start failed for a reason other than this tab: the nodes are there. */
+/** Design: Generate's start failed for a reason other than this tab: the nodes are there. */
 export function generateStartFailedCopy(error: unknown): string {
   const { cause: reason } = failureCopy(error);
   return reason ? `${ADDED_LEAD}. ${thenRunFromCanvas(reason)}` : `${ADDED_LEAD}.`;
@@ -509,14 +508,14 @@ export function markReadRefusedCopy(desktop: boolean = inDesktopShell(),
   return notConnectedBecause('mark the updates as read', desktop, reason);
 }
 
-/** The "because" form's reason, whatever it was doing (GM r6; GM r13's "Nebula added … but
- * couldn’t … because"): a line of that shape. */
+/** The "because" form's reason, whatever it was doing (the "Nebula couldn’t … because" form, or
+ * Generate's "Nebula added … but couldn’t … because"): a line of that shape. */
 const NOT_CONNECTED_BECAUSE = new RegExp(`(?:${NEBULA_COULDNT.source}|^Nebula added .+ but couldn['’]t ).+ because this (?:tab|window) isn['’]t connected as you\\. `);
 
 const isPersonRequiredCopy = (line: string) =>
   line === PERSON_REQUIRED_COPY || line === PERSON_REQUIRED_APP_COPY || line === PERSON_REQUIRED_DEV_COPY;
 
-/** Whether a written line carries GM's person-required reason (any of the three
+/** Whether a written line carries the person-required reason (design; any of the three
  * forms, alone or after a heading): its only reason was this tab (lib/clearsOnPromote). */
 export function saysPersonRequired(line: string): boolean {
   // Either apostrophe: a line a straight backend sentence made and the same line curled match alike.
@@ -526,11 +525,10 @@ export function saysPersonRequired(line: string): boolean {
     || CHAT_PERSON_REQUIRED_LINES.some((own) => said.includes(foldApostrophes(own)));
 }
 
-/** GM - Design, round 16 of PR #114: the one line for "no answer" wherever
- * #114 owns it (Settings never loaded, Create's cluster), whole even beside
- * Try again. */
+/** Design, PR #114: the one line for "no answer" wherever that PR owns it
+ * (Settings never loaded, Create's cluster), whole even beside Try again. */
 export const NEBULA_NOT_ANSWERING_COPY = 'Nebula isn’t answering. Make sure it’s running, then try again.';
-/** A plain browser tab that found no backend on its ports (GM, round 2).
+/** A plain browser tab that found no backend on its ports (design).
  * The ports it tried stay on the error for the console. */
 export const BACKEND_NOT_RUNNING_COPY = 'Nebula’s backend isn’t running. Start it, then reload.';
 /** Design: the first load of the projects while Nebula's server can't be reached yet. It tries again by
@@ -547,7 +545,7 @@ export function openTimedOutLine(project: string): string {
   return `Nebula couldn’t open “${project}” because the server didn’t respond. Try again.`;
 }
 /**
- * GM r12 (2), PR #204 round 9: the Commons with no person session. The person's session is one
+ * Design, PR #204: the Commons with no person session. The person's session is one
  * per launch and never expires on its own (backend services/person_session.py; commons/actors.py
  * checks the Bearer against it). A request goes without it only because this tab (or window)
  * isn't connected as the person: it never had the link, or the backend restarted with a new
@@ -581,7 +579,7 @@ export function failureKind(status: number): FailureKind {
   return 'refused';
 }
 
-/** Whether sending the same request again could work (GM, commons-leave):
+/** Whether sending the same request again could work (design):
  * after no answer, a timeout, a rate limit or a server error; not after a
  * refusal the same request would get again (a conflict, a closed batch). */
 export function canTryAgain(status: number): boolean {
@@ -605,8 +603,8 @@ export interface FailureCopy {
 }
 
 /** How a line of its own opens: every form the backend's and the browser's
- * person lines use (review 5, N5): "Couldn't …", "Can't …", "Cannot …",
- * "Nebula couldn't …", "Nebula can't …". Group 1 is the verb. */
+ * person lines use: "Couldn't …", "Can't …", "Cannot …", "Nebula couldn't …",
+ * "Nebula can't …". Group 1 is the verb. */
 const FAILURE_LEAD = new RegExp(`^(?:${NEBULA_COULDNT.source.slice(1)}|(?:Nebula (?:can['’]t|cannot)|Couldn['’]t|Can['’]t|Cannot) )(\\w+)`);
 
 /** A reason that is a line of its own: it says what failed itself
@@ -649,10 +647,9 @@ export function isGenericHeading(heading: string): boolean {
 }
 
 /**
- * GM, PR #198 r5 item 3 and r7 ("A specific line replaces the generic one,
- * never both"); review 5, L4. `heading` then `reason`, except that the
- * reason shows alone when it is a line of its own (isNamedLine) that says
- * the heading's failure itself:
+ * Design, PR #198 ("A specific line replaces the generic one, never both").
+ * `heading` then `reason`, except that the reason shows alone when it is a
+ * line of its own (isNamedLine) that says the heading's failure itself:
  * 1. The reason repeats the heading ("Couldn't stop the reply." over
  *    "Couldn't stop the reply. The agent isn't answering."; "Couldn't clear
  *    the canvas." over "Cannot clear the canvas while a run is active. …").
@@ -698,7 +695,7 @@ function specifiesGeneric(heading: string, reason: string): boolean {
   return verb === 'save' && /“[^”]+”/.test(first);
 }
 
-/** The one-line form, for alerts, toasts, tooltips and status text (GM:
+/** The one-line form, for alerts, toasts, tooltips and status text (design:
  * "Couldn't {verb} {object}. {reason}" in one string; headedLine). */
 export function oneLine(copy: FailureCopy): string {
   return becauseLine({ heading: copy.heading, reason: copy.reason, status: copy.status }, 'alone');
@@ -718,7 +715,7 @@ export function foldApostrophes(text: string): string {
  * and closes (on the same line) before the end, a space or punctuation, with the run kept as written
  * (Couldn't open 'Bob's board' keeps 'Bob's board'). A ' that opens no run (a plural possessive such as
  * "users' notes", or an opening ' with no closing one on its line) protects nothing after it.
- * Design's limit: a file name, an id or code in a reason must never change.
+ * The design rule: a file name, an id or code in a reason must never change.
  */
 const PROTECTED_RUN = /(“[^”]*”|"[^"]*"|`[^`]*`|(?<![^\s([{])'(?=\S)[^\n]+?(?<=\S)'(?![^\s.,;:!?)\]}]))/;
 export function curlApostrophes(text: string): string {
@@ -1015,7 +1012,7 @@ export class ConnectionLostError extends TypeError {
  * (every request names its action); the reason is copy for the status
  * (copyForStatus) unless the caller wrote one; `status`, the raw `detail`
  * and `cause` stay for debugging and the console. A person-only refusal
- * (`code` PERSON_REQUIRED_CODE) always reads GM's line 3 (personRequiredCopy),
+ * (`code` PERSON_REQUIRED_CODE) always reads line 3 (personRequiredCopy),
  * whatever reason the caller passed: its `detail` is written for agents, and
  * failureDetails hands it to a Details toggle. */
 export class RequestFailedError extends Error {
@@ -1023,39 +1020,39 @@ export class RequestFailedError extends Error {
   readonly detail: unknown;
   readonly heading: string;
   readonly reason: string;
-  /** The backend said its storage refusal was a full disk (round 3f): an
-   * additive `storage: "full"` beside `detail`, read from the answer, never
-   * from its words. The one cause a person can fix (GM). */
+  /** The backend said its storage refusal was a full disk: an additive
+   * `storage: "full"` beside `detail`, read from the answer, never from its
+   * words. The one cause a person can fix (design). */
   readonly storageFull: boolean;
   /** Which of the project store's limits a 413 hit (the backend's additive
    * `limit` beside `detail`): 'projects' (how many there may be) or
    * 'storage' (how big the catalog may grow); null when it was the request
-   * itself that was too large. Read from the answer, never its words (Q116 a). */
+   * itself that was too large. Read from the answer, never its words. */
   readonly storageLimit: StorageLimit | null;
   /** The answer's structured reason beside `detail`, when it has one (the
    * person gate's `code`: 'person_required' when this tab isn't connected as
    * the person, which reconnecting fixes). Null otherwise. */
   readonly code: string | null;
-  /** A 413 for the project's own size (Q118: the backend's `limit: "size"`,
+  /** A 413 for the project's own size (the backend's `limit: "size"`,
    * with the `sizeBytes` it measured): the canvas pauses saving instead of
    * failing. storageLimit stays null for it, as for any too-large request. */
   readonly overSaveLimit: boolean;
   readonly sizeBytes: number | null;
   /** The refusal's own fix sentence beside `detail`, when it sends one (a
    * settings write's 409: "Fix “apiKeys” in ~/.nebula/settings.json, then
-   * try again."; PR #203 round 15, GM r29 item 6). Null otherwise. */
+   * try again."; PR #203, design). Null otherwise. */
   readonly fix: string | null;
   /** A refused new project at the project limit: its numbers (null for any other answer). */
   readonly projectCounts: ProjectCounts | null;
   /** The answer's additive `hold` beside `detail` (a project open's 409:
-   * Nebula's own verdict of what holds it, PR #199 review 19 item 1), raw;
+   * Nebula's own verdict of what holds it, PR #199), raw;
    * undefined when the answer had none. lib/reopenHold reads it. */
   readonly hold: unknown;
-  /** The promote count its request was sent under (review 4 LOW-1, round 6; null: unknown). */
+  /** The promote count its request was sent under (null: unknown). */
   readonly sentAt: number | null;
-  /** The request was sent before the server's latest promote of this tab (review 3 LOW-1),
-   * read against the promotes so far each time it is asked: its refusal is the old state's, so
-   * its line clears at once (lib/clearsOnPromote). */
+  /** The request was sent before the server's latest promote of this tab, read against
+   * the promotes so far each time it is asked: its refusal is the old state's, so its line
+   * clears at once (lib/clearsOnPromote). */
   get sentBeforePromote(): boolean {
     return isBeforePromote(this.sentAt);
   }
@@ -1092,7 +1089,7 @@ export type StorageLimit = 'projects' | 'storage';
 
 /** A refusal written in the browser, where no request was made (a check
  * the store makes before sending: a run still going, a record that's gone).
- * Its words are copy, so failureCopy shows them like a request's (round 3b). */
+ * Its words are copy, so failureCopy shows them like a request's. */
 export class FailureNotice extends Error {
   readonly heading: string;
   readonly reason: string;
@@ -1100,13 +1097,13 @@ export class FailureNotice extends Error {
    * puts no heading over it, whatever heading the catch passes. */
   readonly standalone: boolean;
   /** The refusal's `code` when the line came from one (`person_required`: clearsOnPromote
-   * reads it, so a line refused only for this tab goes on the promote; PR #204 round 4). */
+   * reads it, so a line refused only for this tab goes on the promote; PR #204). */
   readonly code: string | null;
   /** The promote count its request was sent under, as RequestFailedError's. */
   readonly sentAt: number | null;
-  /** The request was sent before the server's latest promote of this tab (review 3 LOW-1),
-   * read against the promotes so far each time it is asked: its refusal is the old state's, so
-   * its line clears at once (lib/clearsOnPromote). */
+  /** The request was sent before the server's latest promote of this tab, read against
+   * the promotes so far each time it is asked: its refusal is the old state's, so its line
+   * clears at once (lib/clearsOnPromote). */
   get sentBeforePromote(): boolean {
     return isBeforePromote(this.sentAt);
   }
@@ -1140,7 +1137,7 @@ function sentAtOf(options: { sentAt?: number | null; sentBeforePromote?: boolean
 /** A step written in the browser that says it all on its own ("The project
  * didn't open. Try again.", "This proposal is no longer waiting for you."):
  * thrown as this, a catch's failureMessage shows it word for word instead of
- * GM's general line, and never puts its own heading over it (round 3e). */
+ * the general line, and never puts its own heading over it. */
 export function writtenLine(line: string): FailureNotice {
   return new FailureNotice('', line, { standalone: true });
 }
@@ -1158,8 +1155,7 @@ const isAbort = (error: unknown) => error instanceof DOMException && error.name 
  * TypeError too (JSON.stringify of a BigInt, a property of undefined, a bad
  * argument to a DOM API). fetchUrl (lib/backend.ts, and so apiFetch) applies
  * it and throws a ConnectionLostError; the Response it hands out classifies
- * its own body reads the same way (typeerror2). Everything downstream asks
- * isNoAnswer (typeerror, 2026-10-24).
+ * its own body reads the same way. Everything downstream asks isNoAnswer.
  */
 export function isConnectionFailure(error: unknown, signal?: AbortSignal | null): boolean {
   if (signal?.aborted) return false;
@@ -1186,10 +1182,10 @@ const GATEWAY_STATUSES = new Set([502, 503, 504]);
 
 /**
  * Whether Nebula's backend itself is unreachable, from the error's kind and
- * status, never its words (typeerror2, 2026-10-24): no answer at all
- * (isNoAnswer), or a gateway status with no reason of the backend's (the
- * backend's own 503 always carries a written `detail`). A refusal whose
- * reason says "network" is the backend answering.
+ * status, never its words: no answer at all (isNoAnswer), or a gateway status
+ * with no reason of the backend's (the backend's own 503 always carries a
+ * written `detail`). A refusal whose reason says "network" is the backend
+ * answering.
  */
 export function isBackendUnreachable(error: unknown, signal?: AbortSignal | null): boolean {
   if (isNoAnswer(error, signal)) return true;
@@ -1202,18 +1198,18 @@ export function detailText(detail: unknown): string {
   return typeof detail === 'string' ? detail.trim() : '';
 }
 
-/** GM's line for a refusal that gave no reason, by its status. */
+/** The line for a refusal that gave no reason, by its status (design). */
 function refusedCopy(status: number): string {
   if (status === 401 || status === 403) return ACCESS_LOST_COPY;
   if (status === 413) return TOO_LARGE_COPY;
   return refusedFallbackCopy();
 }
 
-/** The line for an answer with `status`: GM's line for no answer, 408, 429
- * and 5xx (whatever the body said); else the backend's reason, or GM's line
- * for the status when it gave none. The action's own heading, where a screen
- * has one ("Couldn't save your labels."), stays above it: the heading names
- * what failed, the line gives the reason. */
+/** The line for an answer with `status`: the fixed line for no answer, 408,
+ * 429 and 5xx (whatever the body said); else the backend's reason, or the
+ * fallback line for the status when it gave none. The action's own heading,
+ * where a screen has one ("Couldn't save your labels."), stays above it: the
+ * heading names what failed, the line gives the reason. */
 export function copyForStatus(status: number, detail: unknown): string {
   const kind = failureKind(status);
   if (kind === 'connection') return CONNECTION_LOST_COPY;
@@ -1222,10 +1218,10 @@ export function copyForStatus(status: number, detail: unknown): string {
 }
 
 /** The line for an answer read by hand (a caller with no RequestFailedError):
- * classified by the answer's `code` first, so a person-only refusal says GM's
- * line 3 (personRequiredCopy) whatever its words (Q116 a), and otherwise as
- * copyForStatus says, or the caller's own `reason`. A person-only refusal
- * is a 4xx: a 5xx or no answer keeps GM's line for those. */
+ * classified by the answer's `code` first, so a person-only refusal says line
+ * 3 (personRequiredCopy) whatever its words, and otherwise as copyForStatus
+ * says, or the caller's own `reason`. A person-only refusal is a 4xx: a 5xx or
+ * no answer keeps copyForStatus's line. */
 export function copyForAnswer(status: number, detail: unknown, code: string | null, reason?: string): string {
   // A person refusal says the person line; one written here already (the Commons' because form) keeps its words.
   if (code === PERSON_REQUIRED_CODE && failureKind(status) === 'refused') return reason !== undefined && saysPersonRequired(reason) ? reason : personRequiredCopy();
@@ -1234,7 +1230,7 @@ export function copyForAnswer(status: number, detail: unknown, code: string | nu
 
 /** The text a surface keeps behind its collapsed Details toggle
  * (components/failure/ErrorDetails) under a line that replaced it: a
- * person-only refusal's own words, written for agents (GM, Q116 a: "The
+ * person-only refusal's own words, written for agents (design: "The
  * agents' text stays behind Details."). Null for anything else, and for a
  * refusal with no words of its own. */
 export function failureDetails(error: unknown): string | null {
@@ -1246,7 +1242,7 @@ export function failureDetails(error: unknown): string | null {
 
 /** The line for a thrown error that isn't a request's answer: the
  * connection line when a request got no answer (isNoAnswer: a
- * ConnectionLostError, never any TypeError), else GM's general line, never
+ * ConnectionLostError, never any TypeError), else the general line, never
  * the error's own message. */
 export function copyForError(error: unknown, signal?: AbortSignal | null): string {
   if (isOfflineRefusal(error)) return '';
@@ -1267,8 +1263,8 @@ export async function readRefusal(response: Response): Promise<{ detail: unknown
   return { detail, code, sentAt, sentBeforePromote: isBeforePromote(sentAt) };
 }
 
-/** A read refusal as the error its line carries (review 5 LOW-4, round 7): the person gate's,
- * with this answer's own send-time stamp, or undefined for any other refusal. A line built
+/** A read refusal as the error its line carries: the person gate's, with this
+ * answer's own send-time stamp, or undefined for any other refusal. A line built
  * from the refusal's words hands this to notify, so it clears by its own stamp. */
 export function refusalError(read: { code: string | null; sentAt: number | null }): FailureNotice | undefined {
   return read.code === PERSON_REQUIRED_CODE ? new FailureNotice('', personRequiredCopy(), { code: PERSON_REQUIRED_CODE, sentAt: read.sentAt }) : undefined;
@@ -1281,7 +1277,7 @@ interface FailureBody {
   overSaveLimit: boolean; sizeBytes: number | null; fix: string | null; hold?: unknown;
   /** A refused new project at the project limit, with its numbers: overProjectLimitCopy. */
   limitReason?: string;
-  /** The same refusal's numbers (GM r24, the kept save's own lines): how many projects there are, the limit, what to delete. */
+  /** The same refusal's numbers (design: the kept save's own lines): how many projects there are, the limit, what to delete. */
   projectCounts?: ProjectCounts;
 }
 /** The project limit's numbers from a 413 `limit: "projects"`: `deletes` is what the backend counted, else null. */
@@ -1343,7 +1339,7 @@ export function besideButton(line: string): string {
 }
 
 /** What `failure` says, as FailureLines shows it: '' when it says nothing (a write refused while offline: the banner
- *  is its reason, failureCopy). A surface never shows a line or an alert for '' (#210 round 6t, GM r113 1). `retry` is
+ *  is its reason, failureCopy). A surface never shows a line or an alert for '' (design, PR #210). `retry` is
  *  for a surface whose own Try again button shows with the line. */
 export function failureText(failure: FailureCopy | string | null | undefined, retry = false): string {
   if (!failure) return '';
@@ -1380,7 +1376,7 @@ export function failureMessage(error: unknown, heading: string): string {
 /** The one-line form under the caller's own heading, whatever heading the
  * error carried: for an action whose request names a smaller step (Import
  * CLI canvas reads the canvas: "Nebula couldn’t import the CLI canvas." over the
- * reason, not the read's own "Nebula couldn’t load the canvas."). Round 3e. */
+ * reason, not the read's own "Nebula couldn’t load the canvas."). */
 export function failureUnder(error: unknown, heading: string): string {
   if (isOfflineRefusal(error)) return '';
   const parts = partsOf(error) ?? { heading: '', reason: copyForError(error) };
@@ -1388,7 +1384,7 @@ export function failureUnder(error: unknown, heading: string): string {
   return becauseLine({ heading, reason: parts.reason, status }, 'alone');
 }
 
-// GM: "Never 'failed:', '(HTTP 503)' or status codes in the UI. Keep them in
+// Design: "Never 'failed:', '(HTTP 503)' or status codes in the UI. Keep them in
 // the console." An answered failure is logged where it is made, once per
 // call site (its heading) until that call succeeds again, so a poll against
 // a backend that is down doesn't warn on every tick. A lost connection isn't
@@ -1439,7 +1435,7 @@ export function countsInstead(count: number): boolean {
 }
 
 /**
- * A list of node names in a line (GM - Design, 2026-10-27, r6 of PR #198 and
+ * A list of node names in a line (design, 2026-10-27, PR #198 and
  * the follow-up to PR #195), shared by every line that names several nodes:
  * the failed-save lines (lib/savingCutOff), the multi-delete toasts
  * (lib/deleteCopy) and the "+ unpriced" tooltip.
@@ -1449,8 +1445,8 @@ export function countsInstead(count: number): boolean {
  * - The rule counts nodes, not groups: from 4 nodes in total, "4 nodes".
  * - No node ids: the Agent log keeps those.
  * Groups keep the order their first node came in; callers give names in
- * canvas order (GM, PR #200 answer 3: "2 “Text” nodes and “Brief”" is fine).
- * The one helper for this rule (PR #198 merged with #195 and #200): the
+ * canvas order (design, PR #200: "2 “Text” nodes and “Brief”" is fine).
+ * The one helper for this rule (PR #198 merged with PR #195 and PR #200): the
  * run-lock and multi-delete lines (lib/cinemaScene), the deleted notice, the
  * "+ unpriced" tooltip (lib/runScope), the no-answer and server-error delete
  * lines (lib/deleteCopy), and the placeholder dialog's moved-rows and replay
@@ -1464,7 +1460,7 @@ export function nodeNameList(names: string[]): string {
 }
 
 /**
- * Agents by name in a line, by nodeNameList's rule (GM, PR #202 r2: "names
+ * Agents by name in a line, by nodeNameList's rule (design, PR #202: "names
  * via the shared name-list helper, 4+ agents → a count"): up to 3 by name,
  * "Codex", "Codex and Claude Code", "Codex, Claude Code and Cursor"; from 4,
  * "4 agents". Each agent once. Unquoted: an agent's name is never quoted
@@ -1496,22 +1492,21 @@ export function namesSeveral(names: string[]): boolean {
 }
 
 /**
- * GM - Design, PR #200 answer 1 (2026-10-27), verbatim: the tooltip of a
+ * Design, PR #200 (2026-10-27), verbatim: the tooltip of a
  * control that is disabled because Nebula is offline. "You can <verb> when
  * Nebula reconnects." (e.g. "You can generate when Nebula reconnects."); no
- * verb, "This works again when Nebula reconnects.". The same line as PR
- * #198's offlineReason (lib/useBackendOffline): both now build it in one
- * place (reconnectsLine), so the two can't drift.
+ * verb, "This works again when Nebula reconnects.". The same line as PR #198's
+ * offlineReason (lib/useBackendOffline): both now build it in one place
+ * (reconnectsLine), so the two can't drift.
  */
 export function offlineDisabledReason(verb?: string): string {
   return reconnectsLine(verb);
 }
 
-/** Run history's replay verbs offline (fix round 3 of PR #200, review 3
- * LOW-1). Rerun is GM's (r4 answer 2: "You can rerun it when Nebula
- * reconnects."); Retry and Recover follow it ("You can retry it …", "You can
- * recover it …", approved in GM's round 3 answers). The same strings as
- * OFFLINE_VERBS (lib/useBackendOffline). */
+/** Run history's replay verbs offline (PR #200). Rerun reads "You can rerun
+ * it when Nebula reconnects." (design); Retry and Recover follow it in the
+ * approved copy ("You can retry it …", "You can recover it …"). The same
+ * strings as OFFLINE_VERBS (lib/useBackendOffline). */
 export const OFFLINE_RERUN = OFFLINE_VERBS.rerun;
 export const OFFLINE_RETRY = OFFLINE_VERBS.retry;
 export const OFFLINE_RECOVER = OFFLINE_VERBS.recover;

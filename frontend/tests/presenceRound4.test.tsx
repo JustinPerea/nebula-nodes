@@ -3,13 +3,13 @@ import { reasonOf } from './helpers/personLock';
 import { act, cleanup, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react';
 
 /**
- * PR #204 round 4 (GM's r3 rulings; review 2):
- * - item 1: the Updates header says "all read" only once the server read them; a read the
- *   gate refused for this tab is retried once, silently, on the promote.
- * - item 2: a held tab's Review and Answer stay where they are, locked, on every surface that
- *   offers them (the opened list and the arrival card), through the Agents panel's own rule.
- * - item 3: the stale line's wording.
- * - review 2 MEDIUM: the Krea row's line clears on the promote; a line with another reason stays.
+ * PR #204 (design):
+ * - The Updates header says "all read" only once the server read them; a read the gate refused
+ *   for this tab is retried once, silently, on the promote.
+ * - A held tab's Review and Answer stay where they are, locked, on every surface that offers
+ *   them (the opened list and the arrival card), through the Agents panel's own rule.
+ * - The stale line's wording (design).
+ * - The Krea row's line clears on the promote; a line with another reason stays.
  */
 
 const flow = vi.hoisted(() => ({
@@ -77,9 +77,9 @@ const GREY = 'var(--disabled-label, rgba(255, 255, 255, 0.55))';
 const refused = () => new RequestFailedError("Couldn’t mark the updates as read.", 403,
   { code: PERSON_REQUIRED_CODE, detail: 'Only the person can do this.' });
 
-/** Round 13 (review 10 MEDIUM-1): a held tab sends no mark-read, so a refusal is one of a read
- * sent while connected and refused as the tab lost the person (a demote in flight): the gate's
- * answer holds the tab, as lib/backend does on a real 403. */
+/** A held tab sends no mark-read, so a refusal is one of a read sent while connected and refused as
+ * the tab lost the person (a demote in flight): the gate's answer holds the tab, as lib/backend
+ * does on a real 403. */
 const refusedInFlight = async () => { reportPersonRequired(); throw refused(); };
 
 function update(id: string, author: typeof CODEX, about: 'proposal' | 'question', extra: Record<string, unknown>) {
@@ -152,7 +152,7 @@ afterEach(() => {
   notePersonPromoted();
 });
 
-describe('GM r3 item 2: Review and Answer locked in a held tab, wherever they are', () => {
+describe('Review and Answer locked in a held tab, wherever they are', () => {
   it('the opened list: each stays in place, aria-disabled and focusable, its lock reason its tooltip; nothing opens', async () => {
     render(<AppAgentNotes />);
     held();
@@ -210,7 +210,7 @@ describe('GM r3 item 2: Review and Answer locked in a held tab, wherever they ar
       expect(found).not.toBeNull();
       return found!;
     });
-    // PR #204 round 11 (GM r19 3): the arrival card's one line covers Answer and dismiss.
+    // Design, PR #204: the arrival card's one line covers Answer and dismiss.
     expect(look(card)).toEqual([['card', 'Answer', 'true', CARD_ANSWER_LOCK]]);
     fireEvent.click(asks(card)[0]);
     await act(async () => { await Promise.resolve(); });
@@ -247,12 +247,12 @@ describe('GM r3 item 2: Review and Answer locked in a held tab, wherever they ar
   });
 });
 
-// Round 14 (GM r23 item 5): a mark-read refused in flight is never the person's own press, so it
-// shows nothing (it used to show MARK_READ_REFUSED_COPY): the updates stay unread, the page's
-// because line says why, and the read waits for the promote (lib/personWork), not retryOnPromote.
+// A mark-read refused in flight is never the person's own press, so it shows nothing (it used to
+// show MARK_READ_REFUSED_COPY): the updates stay unread, the page's because line says why, and the
+// read waits for the promote (lib/personWork), not retryOnPromote.
 const flushReads = async () => { await act(async () => { for (let i = 0; i < 10; i++) await Promise.resolve(); }); };
 
-describe('GM r3 items 1 and 3, GM r23 item 5: a truthful header, a silent retry on the promote, no line', () => {
+describe('a truthful header, a silent retry on the promote, no line', () => {
   it('a read refused in flight leaves the header unread and shows no line', async () => {
     notesApi.markAgentNotesRead.mockImplementation(refusedInFlight);
     render(<AppAgentNotes />);
@@ -319,7 +319,7 @@ describe('GM r3 items 1 and 3, GM r23 item 5: a truthful header, a silent retry 
   });
 });
 
-describe('review 2 MEDIUM: the Krea row\'s line clears on the promote', () => {
+describe('the Krea row\'s line clears on the promote', () => {
   beforeEach(() => {
     krea.getKreaConnection.mockReset().mockResolvedValue({ status: 'disconnected' });
   });
@@ -345,7 +345,7 @@ describe('review 2 MEDIUM: the Krea row\'s line clears on the promote', () => {
   });
 });
 
-describe('PR #204 round 4: a tab says it is one; refs keep their bounds', () => {
+describe('PR #204: a tab says it is one; refs keep their bounds', () => {
   it('the Updates read carries X-Nebula-Tab and the socket ?tab=1', async () => {
     const { withTabClaim, TAB_HEADER } = await import('../src/lib/tabId');
     expect(TAB_HEADER).toBe('X-Nebula-Tab');
@@ -359,7 +359,7 @@ describe('PR #204 round 4: a tab says it is one; refs keep their bounds', () => 
     expect(wsSource).toContain('new WebSocket(withTabClaim(url))');
   });
 
-  it('a shared ref\'s firstSince below 0 is dropped (review 2 NIT)', () => {
+  it('a shared ref\'s firstSince below 0 is dropped', () => {
     const base = { ...COVER, proposal: { ...COVER.proposal, asks: 2, firstSince: T } };
     expect(sanitizeNotes([base])[0].proposal).toMatchObject({ asks: 2, firstSince: T });
     const [negative] = sanitizeNotes([{ ...base, proposal: { ...base.proposal, firstSince: -1 } }]);

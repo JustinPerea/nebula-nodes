@@ -11,12 +11,12 @@ export const EDITABLE_AREA = '.react-flow, .panel--inspector, .node-inspector-po
 const EDITING_KEY = /^(?:.|Backspace|Delete|Enter)$/u;
 
 /**
- * Round 20 (review 19, M1): while the tab follows an agent's switch the
- * canvas's fields show disabled (`nebula-following` on the body, styled in
- * styles/canvas-follow.css) and an attempt to type into one, paste into it
- * or drop on the canvas changes nothing and pulses the project bar
- * (refuseEditWhileFollowing). graphStore's edit gate is what guarantees it;
- * this only keeps the field from showing a keystroke the store refuses.
+ * While the tab follows an agent's switch the canvas's fields show disabled
+ * (`nebula-following` on the body, styled in styles/canvas-follow.css) and an
+ * attempt to type into one, paste into it or drop on the canvas changes
+ * nothing and pulses the project bar (refuseEditWhileFollowing). graphStore's
+ * edit gate is what guarantees it; this only keeps the field from showing a
+ * keystroke the store refuses.
  */
 export function useFollowingReadOnly(): void {
   const following = useFollowingSwitch();
@@ -35,9 +35,8 @@ export function useFollowingReadOnly(): void {
       const field = event.target instanceof Element && event.target.closest('input, textarea, select, [contenteditable="true"]');
       if (field) refuse(event);
     };
-    // Round 22 (GM A): a press on a control the follow disabled
-    // (lib/canvasLock's mark), or on a wire handle, pulses the bar, as
-    // offline pulses its banner (BackendConnectionStatus).
+    // Design: a press on a control the follow disabled (lib/canvasLock's mark), or on a wire
+    // handle, pulses the bar, as offline pulses its banner (BackendConnectionStatus).
     const pressed = (event: PointerEvent) => {
       const target = event.target instanceof Element ? event.target : null;
       if (target?.closest(`[${FOLLOWING_MARK}], .canvas--read-only .react-flow__handle`)) refuseEditWhileFollowing();

@@ -91,7 +91,7 @@ async def _resolve_version(owner: str, name: str, api_key: str) -> str:
         data = resp.json()
         version_id = data.get("latest_version", {}).get("id")
         if not version_id:
-            # The text names the model for agents; the card names the field (GM: no ids).
+            # The text names the model for agents; the card names the field (design: no ids).
             raise with_person_line(RuntimeError(f"No version found for {owner}/{name}"),
                                    "Replicate has no version of the model in “Model ID” to run. "
                                    "Check the model on Replicate, then run the node again.")

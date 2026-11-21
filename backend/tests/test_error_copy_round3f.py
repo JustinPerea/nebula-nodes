@@ -1,4 +1,4 @@
-"""Error copy: design's rules for every card line (design's message).
+"""Error copy: the rules for every card line (design).
 
 Design: "RULES FOR EVERY CARD LINE (the "shown again, word for word" list breaks
 these all over; each one can be applied mechanically)":
@@ -82,8 +82,8 @@ def _field_labels() -> frozenset[str]:
 _LABELS = "|".join(sorted((re.escape(label) for label in _field_labels()), key=len, reverse=True))
 # Rule 5: a field named after a verb that sets it ("Set Duration to 10",
 # "Clear the node's Quality field", "doesn't offer Reasoning Effort Low") is
-# written as the node shows it, in quotes. Design's verbatim xAI edit-video line
-# ("Pick it in the node's Model field") is design's own and isn't one of these verbs.
+# written as the node shows it, in quotes. The approved xAI edit-video line
+# ("Pick it in the node's Model field") isn't one of these verbs.
 _BARE_LABEL = re.compile(r"\b(?:[Ss]et|[Cc]lear|offer|fewer|[Ll]ower|[Rr]aise|[Tt]urn (?:on|off)|[Ff]ill in)\s+"
                          r"(?:the\s+(?:node's\s+)?)?(?:" + _LABELS + r")\b"
                          # "the node's Tags field": a label by name, not in quotes. A port
@@ -124,7 +124,7 @@ def port_breaks(line: str) -> bool:
 
 
 def rule_breaks(line: str, *, ends_in_a_sentence: bool | None = None) -> list[str]:
-    """What `line` breaks of design's mechanical rules ([] for none). ``{}`` stands
+    """What `line` breaks of the mechanical design rules ([] for none). ``{}`` stands
     for a value; ``ends_in_a_sentence`` says whether a line ending in one ends
     with a whole sentence (it_was, a shared sentence constant)."""
     broken = []
@@ -186,7 +186,7 @@ def test_the_rules_check_catches_each_shape_and_lets_gms_lines_through() -> None
     assert "a field label not in quotes" not in rule_breaks("Set “Duration” to 10 or less.")
     assert "a field label not in quotes" not in rule_breaks(
         "xAI edits videos only on Grok Imagine. Pick it in the node’s Model field, or disconnect the video to edit.")
-    # Design's own lines pass.
+    # The approved lines pass.
     for line in (
         "Set “Item cap” to a whole number from 1 to 25.",
         "Connect a prompt to this node, then run it again.",
@@ -429,7 +429,7 @@ def test_the_id_guard_also_refuses_code_names() -> None:
         assert not forbidden_in_a_line(line), line
 
 
-# -- Design's specific lines -------------------------------------------------------
+# -- specific lines (design) -------------------------------------------------------
 
 
 def _raised(fn, *args, **kwargs) -> BaseException:
@@ -555,7 +555,7 @@ def test_line_74_names_the_key_that_would_run_it() -> None:
     definition = definition_for("seedream-4-5")
     assert _blocked_key_line(definition, "BYTEPLUS_API_KEY", None) == (
         "These settings need your fal.ai API key. Add it in Settings, then run the node again.")
-    # Design's approved form for a node whose copy runs on any of several keys.
+    # The approved form for a node whose copy runs on any of several keys (design).
     several = {"id": "x", "envKeyName": ["BFL_API_KEY", "FAL_KEY", "REPLICATE_API_TOKEN", "KREA_API_TOKEN"],
                "directKeyName": "BFL_API_KEY"}
     assert _blocked_key_line(several, "BFL_API_KEY", None) == (
@@ -661,7 +661,7 @@ def test_rule_9_units_and_names() -> None:
         "MiniMax makes 1080p clips at 6 seconds only.")
 
 
-# -- the card knows who answered (design's general line under the heading) ---------
+# -- the card knows who answered (the general line under the heading, design) ---------
 
 
 @pytest.mark.asyncio
@@ -762,7 +762,7 @@ def test_a_proposals_missing_node_has_a_line_in_words(monkeypatch) -> None:
     # Agents keep find_nodes' words.
     assert "OPENAI_API_KEY" in row["missing"]
     # The name in curly quotes (design, PR #203).
-    # The card names the node in curly quotes (design on #216).
+    # The card names the node in curly quotes (design, PR #216).
     assert row["person"] == "“GPT Image 2” needs your OpenAI API key. Add it in Settings."
     assert not re.search(r"[A-Z]{2,}_[A-Z_]+|\(|\)|>", row["person"])
 
@@ -807,7 +807,7 @@ def test_the_recovery_warnings_say_couldnt() -> None:
     assert not any("so it could not save it durably" in text for text in strings)
 
 
-# -- review fixes (confirmed findings) ---------------------------------
+# -- field labels in quotes, and the Vertex AI and 512p wording --------
 
 
 def test_a_field_label_written_into_a_card_line_sits_in_quotes() -> None:
@@ -997,7 +997,7 @@ def test_review_rule_9_minimax_512p_is_lowercase_and_agents_keep_512P() -> None:
         "MiniMax renders 512p only from a start image, without an end image. Connect a start image or pick 768p. ")
 
 
-# -- the general line names a provider only when it answered (review finding 1) ---
+# -- the general line names a provider only when it answered -----------------------
 
 
 def test_review_a_failure_before_sending_names_no_provider() -> None:

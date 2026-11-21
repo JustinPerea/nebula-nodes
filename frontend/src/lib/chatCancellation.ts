@@ -21,10 +21,10 @@ export interface ChatCancellationNotice {
   tone?: 'error';
 }
 
-/** A failed Stop, GM's pattern (error-copy round 2): "Couldn't stop the
- * reply." then a written reason (the caller's), never "failed:" or raw text;
- * GM's general line when there is none. Through becauseLine (review 5, L4):
- * a reason that already says "Couldn't stop the reply. …" shows once. */
+/** A failed Stop (design): "Couldn't stop the reply." then a written reason
+ * (the caller's), never "failed:" or raw text; the general line (design) when
+ * there is none. Through becauseLine, a reason that already says "Couldn't
+ * stop the reply. …" shows once. */
 export function chatCancellationNotice(
   status: 'requested' | 'confirmed' | 'failed',
   reason?: string,
@@ -43,7 +43,7 @@ export function chatCancellationDisconnectNotice(
   return state === 'requested'
     ? chatCancellationNotice(
         'failed',
-        // GM, round 3: "People need to know it might still be spending."
+        // Design: "People need to know it might still be spending."
         'The connection dropped before Nebula confirmed the stop. The reply may still be running.',
       )
     : null;

@@ -273,7 +273,7 @@ describe('Assets panel Styles', () => {
   it('shows Recently deleted Styles for the scope it lists, and a refused delete says why', async () => {
     presets.fetchPresets.mockResolvedValue([style]);
     trash.fetchTrash.mockResolvedValue([{ kind: 'style', id: 's0', name: 'Old look', projectId: null,
-      deletedAt: '2026-10-20T12:00:00Z', deletedBy: { kind: 'agent', name: 'GM - Design' } }]);
+      deletedAt: '2026-10-20T12:00:00Z', deletedBy: { kind: 'agent', name: 'Studio Agent' } }]);
     // What deletePreset throws (error-copy): its heading and the backend's reason.
     presets.deletePreset.mockRejectedValueOnce(
       new RequestFailedError('Couldn’t delete the style.', 404, { detail: "Style 's1' not found" }));
@@ -282,7 +282,7 @@ describe('Assets panel Styles', () => {
     fireEvent.click(await screen.findByRole('button', { name: /Recently deleted/ }));
     expect(trash.fetchTrash).toHaveBeenCalledWith({ kind: 'style', scope: 'global' });
     expect(screen.getByText('Old look')).toBeTruthy();
-    expect(screen.getByText(/by GM - Design \(agent\)/)).toBeTruthy();
+    expect(screen.getByText(/by Studio Agent \(agent\)/)).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: /^Neon noir/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Delete Neon noir' }));

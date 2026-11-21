@@ -6,7 +6,7 @@ import { RequestFailedError, headedLine, isNamedLine, oneLine } from '../../src/
 import { deleteRefusalText } from '../../src/lib/worldLabsWaiting';
 
 /**
- * GM, PR #198 r5 item 3: "one line only, the backend's named line …. Never
+ * Design, PR #198: "one line only, the backend's named line …. Never
  * put the generic "Couldn’t delete the node." in front of it. Rule: when a
  * specific line exists, the generic one never shows as well."
  */
@@ -43,9 +43,9 @@ describe('the rule', () => {
 });
 
 /**
- * The ratchet (review 5, L4): every place that writes a heading and a reason
- * into one line goes through headedLine (oneLine, failureMessage, …), so the
- * rule holds there. It finds, across src/:
+ * The ratchet: every place that writes a heading and a reason into one line goes
+ * through headedLine (oneLine, failureMessage, …), so the rule holds there. It
+ * finds, across src/:
  * - a template literal where a failure sentence ("Couldn't …", "Can't …",
  *   "Cannot …", "Nebula couldn't …", "Nebula can't …", ending in ".") is
  *   followed by an interpolation, or `${heading} ${…}`;
@@ -70,11 +70,11 @@ const HAND_BUILT: { file: string; text: string; why: string }[] = [
     why: "GM's Generate refusal, nodes not added (PR #204 r8, GM r10 3; heading GM r12 2): two fixed sentences, then personRequiredCopy's fixed sentences" },
   { file: 'lib/settingsWrites.ts', text: "`Nebula couldn’t save ${it}, but your Keychain has it. ${fix ? curlApostrophes(fix) : 'Try again, or remove it.'}`",
     why: "GM's Keychain line (PR #203 r28 item 2, r29 item 6): the tail is GM's fixed sentence or the backend's fix sentence, never a named line" },
-  // GM r39 item 2's "Couldn’t …. You can …" run-lock lines are gone: PR #205 r1 answer 2 made
-  // the key-press refusals the lock line alone (lib/cinemaScene runLockedLine), no heading.
+  // The "Couldn’t …. You can …" run-lock lines are gone: PR #205 made the key-press
+  // refusals the lock line alone (lib/cinemaScene runLockedLine), no heading.
   { file: 'store/graphStore.ts', text: '`${heading} ${err.raw}`', why: "the Agent log's raw form (agents read the raw text)" },
-  // PR #195's lines, reviewed in the merge with #198: each tail is GM's own
-  // fixed "is opening" or "isn't answering" sentence, never a failure line.
+  // PR #195's lines, reviewed in the merge with PR #198: each tail is a fixed "is opening"
+  // or "isn't answering" sentence (design), never a failure line.
   { file: 'components/canvas/PinComposer.tsx', text: '`${headingText} ${targetNode}`',
     why: 'PR #200\'s note composer: an accessible name (the heading and the node id when two cards share a title), never a failure line' },
   { file: 'lib/studioBoundary.ts', text: '`Couldn’t open ${label ? `“${label}”` : \'a node\'}${where}, node ${nodeId}. ${what}`',
@@ -83,32 +83,33 @@ const HAND_BUILT: { file: string; text: string; why: string }[] = [
     why: "Agent log: the tail is the error's own message, for agents" },
   { file: 'lib/studioBoundary.ts', text: '`Couldn’t open ${label ? `“${label}”` : \'a node\'} in ${STUDIO_PLACE[studio]}, node ${nodeId}. ${errorText(error)}`',
     why: "Agent log: the tail is the error's own message, for agents" },
-  // Round 5's whole-save refusals (GM r7 item 1, lib/sceneSaveCopy.ts): GM's
-  // heading over one of GM's own fixed suffixes, never a backend line (the
-  // backend's lines go through headedLine in sceneRefusal).
-  // GM r32 answer 2: the "other" stop line, GM's heading over the reason the
-  // single line already had (copyForAnswer's), merged for several scenes.
+  // The whole-save refusals (design; lib/sceneSaveCopy.ts): a fixed heading over one of the
+  // fixed suffixes, never a backend line (the backend's lines go through headedLine in
+  // sceneRefusal).
+  // Design: the "other" stop line, a fixed heading over the reason the single line already had
+  // (copyForAnswer's), merged for several scenes.
   { file: 'lib/sceneSaveCopy.ts', text: "`Nebula couldn’t save your changes to ${quotedNames(scenes, 'scenes')}. ${reason}`",
     why: "GM's heading over the line's own reason (GM r32 answer 2)" },
   { file: 'lib/reopenHoldLines.ts', text: "`Nebula couldn’t save its World Labs safeguards. ${reopen} after you ${desktop ? 'quit Nebula and open it again' : 'restart Nebula'}.`",
     why: "GM's held-reopen line for the bootstrap state (PR #199, GM r32 1): the second sentence is GM's own lock line, never a reason" },
-  // PR #198 fix round 8 (GM r11 answer 3): the stopped-after-8 line. Round 19
-  // (GM r28 item 2): the state slot's merged line, with GM's subject-and-comma fix.
+  // PR #198: the stopped-after-8 line. Later, the state slot's merged line, with a
+  // subject-and-comma fix (design).
   { file: 'lib/sceneSaveCopy.ts', text: '`Nebula couldn’t save your changes to ${names}. ${KEPT_UNTIL_NEXT_CHANGE}`', why: "GM's own line over GM's fixed suffix (GM r28 item 2)" },
-  // GM r29 Q1 (round 20): the retrying line, the same form in the present tense.
+  // Design: the retrying line, the same form in the present tense.
   { file: 'lib/sceneSaveCopy.ts', text: '`Nebula couldn’t save your changes to ${names}. ${KEPT_AND_TRYING}`', why: "GM's own line over GM's fixed suffix (GM r29 Q1)" },
-  // PR #210 (review 10 NIT-5, round 6l): the board save lines are built around a constant opening.
+  // PR #210: the board save lines are built around a constant opening.
   { file: 'components/moodboard-studio/boardSaveLine.ts', text: '`${NOT_SAVED_OPENING}${line.cause}. ${line.step}`',
     why: "GM r16's board save lines: the cause and the step are GM's fixed pairs (SAVE_LINES), never a server line" },
-  // PR #210 round 6t (GM r113 2): a replayed save that failed on a board the person isn't on, named, under the Restore's confirmation.
+  // PR #210 (design): a replayed save that failed on a board the person isn't on,
+  // named, under the Restore's confirmation.
   { file: 'components/moodboard-studio/boardSaveLine.ts', text: '`Nebula couldn’t save your change to ${what} because ${line.cause}. ${line.step}`',
     why: "GM r113 2's exact line: the board's quoted name over one of GM r16's fixed cause and step pairs (SAVE_LINES), never a server line" },
   { file: 'components/moodboard-studio/boardSaveLine.ts',
     text: "`${LOST_ADD_OPENING}${what} because the moodboard hadn’t loaded. ${names.length > 1 ? 'Add them again.' : 'Add it again.'}`",
     why: "GM r16 7a's lost add line: the names are quoted file names, the tail one of two fixed steps" },
-  // Seen once constant openings were read (round 6l): two older lines, each a fixed heading over a fixed tail.
+  // Seen once constant openings were read: two older lines, each a fixed heading over a fixed tail.
     // The Agent log's raw save line: agents read the backend's own detail,
-    // with the status and code (GM #198 r12 answer 1, round 13).
+    // with the status and code (design, PR #198).
   { file: 'store/graphStore.ts', text: "`Couldn’t save “${label}”, node ${nodeId}: HTTP ${status}${code ? ` ${code}` : ''}. ${detail || 'No detail.'}`",
     why: "the Agent log's raw form (agents read the raw text, the status and the code)" },
 ];
@@ -138,7 +139,7 @@ function handBuilt(text: string): string[] {
   const failureSentence = new RegExp(`^${FAILURE}[^]*\\.\\s*$`);
   const isFailureLiteral = (node: ts.Node) => (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node))
     && new RegExp(`^${FAILURE}`).test(node.text);
-  // Review 10 NIT-5 (round 6l): a line built around a constant opening (`${NOT_SAVED_OPENING}${cause}. ${step}`)
+  // A line built around a constant opening (`${NOT_SAVED_OPENING}${cause}. ${step}`)
   // is read with the opening's text in place, so it is seen like a literal one: a string constant
   // declared at the file's top level, opening the template, stands for its text. (A constant later
   // in the line stays a slot: a fixed tail, such as `${RUN_LOCK_REASON}`, is what the reviewed entries name.)
@@ -193,7 +194,7 @@ describe('ratchet: no new hand-built "heading reason" lines', () => {
     expect(handBuilt("const a = \"Couldn’t save the moodboard. \" + reason;")).toHaveLength(1);
     expect(handBuilt("const a = [\"Couldn’t save the moodboard.\", reason].join(' ');")).toHaveLength(1);
     expect(handBuilt('const a = `Nebula can\'t read ${name}. ${tail}`;')).toHaveLength(1);
-    // A constant opening (review 10 NIT-5): seen as its text.
+    // A constant opening: seen as its text.
     expect(handBuilt('const OPENING = \'Nebula couldn’t save the moodboard because \';\nconst a = `${OPENING}${cause}. ${step}`;')).toHaveLength(1);
     expect(handBuilt('const OPENING = \'Nebula couldn’t add \';\nconst a = `${OPENING}${what} because it failed. ${tail}`;')).toHaveLength(1);
     expect(handBuilt('const OPENING = \'Kept \';\nconst a = `${OPENING}${what}. ${tail}`;')).toHaveLength(0);
@@ -205,9 +206,9 @@ describe('ratchet: no new hand-built "heading reason" lines', () => {
     expect(handBuilt('const a = `Couldn’t save ${what} for “${node}”.${tail}`;')).toHaveLength(0);
   });
 
-  // Review 23 NIT-2: it parses source files with the TypeScript parser
-  // (about 0.5 s alone, dominated by graphStore.ts) and once passed vitest's
-  // 5 s default under the full suite's parallel load: its own 30 s bound.
+  // It parses source files with the TypeScript parser (about 0.5 s alone,
+  // dominated by graphStore.ts) and once passed vitest's 5 s default under the
+  // full suite's parallel load: its own 30 s bound.
   // Every hit holds a failure word or a `heading` slot, so a file whose
   // text has neither is skipped unparsed (the same hits, a little faster).
   it('only the reviewed ones', { timeout: 30_000 }, () => {
@@ -232,9 +233,9 @@ describe('ratchet: no new hand-built "heading reason" lines', () => {
 });
 
 /**
- * #210 round 6m (GM r53 Q1): person copy uses the curly apostrophe (’), never
+ * PR #210 (design): person copy uses the curly apostrophe (’), never
  * the straight one ("Couldn't" slipped through on the Restore project line).
- * The house lines GM writes are curly; most older lines are straight still,
+ * The house lines are curly (design); most older lines are straight still,
  * so this is a ratchet: each source file's count of straight apostrophes in
  * person copy is pinned in `straightApostrophes.baseline.json` and may only
  * go down (lower the count when you fix one; a file not listed has none).
@@ -251,7 +252,7 @@ describe('ratchet: no new hand-built "heading reason" lines', () => {
  */
 const BASELINE_PATH = join(__dirname, 'straightApostrophes.baseline.json');
 const STRAIGHT_IN_WORD = /[A-Za-z]'[A-Za-z]/;
-/** A possessive or contraction right after an interpolation: `${name}'s` (review 11 NIT-2). */
+/** A possessive or contraction right after an interpolation: `${name}'s`. */
 const STRAIGHT_AFTER_SLOT = /^'[a-z]/;
 
 /** The person copy in `text` that holds a straight apostrophe inside a word, as the literal's text. */
@@ -298,13 +299,13 @@ function straightCounts(): Record<string, number> {
   return Object.fromEntries(Object.entries(counts).sort(([a], [b]) => a.localeCompare(b)));
 }
 
-describe('ratchet: no new straight apostrophe in person copy (GM r53)', () => {
+describe('ratchet: no new straight apostrophe in person copy (design)', () => {
   it('the scanner sees person copy, and skips code and comments', () => {
     expect(straightApostrophes("const a = \"Couldn't restore the project.\";")).toHaveLength(1);
     expect(straightApostrophes("const a = 'Nebula couldn\\'t restore it.';")).toHaveLength(1);
     expect(straightApostrophes('const a = `The board\'s ${name} is gone.`;')).toHaveLength(1);
     expect(straightApostrophes('const a = `${name} isn\'t answering.`;')).toHaveLength(1);
-    // Right after an interpolation (review 11 NIT-2): `${name}'s images`, and in the middle of a template.
+    // Right after an interpolation: `${name}'s images`, and in the middle of a template.
     expect(straightApostrophes('const a = `${name}\'s images`;')).toHaveLength(1);
     expect(straightApostrophes('const a = `${a} and ${name}\'s ${b}`;')).toHaveLength(1);
     expect(straightApostrophes('const a = `[data-id=\'${id}\']`;')).toHaveLength(0);
@@ -337,8 +338,8 @@ describe('ratchet: no new straight apostrophe in person copy (GM r53)', () => {
 });
 
 /**
- * #210 round 6o (GM r74): a title or aria-label never holds a colon ("“Coast”:
- * “Rivers”" slipped into the Restore project lines' titles; GM's form is
+ * PR #210 (design): a title or aria-label never holds a colon ("“Coast”:
+ * “Rivers”" slipped into the Restore project lines' titles; the form is
  * "“Rivers” and “Tide” in “Coast”"). Across src/components/moodboard-studio/,
  * read with the TypeScript parser, the text that can reach a title or an
  * aria-label is:
@@ -371,7 +372,7 @@ function colonsInLabels(text: string): string[] {
     else if (ts.isShorthandPropertyAssignment(node) && COLON_NAMES.has(node.name.text)) value = node.name;
     else if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) && node.expression.name.text === 'setAttribute'
       && node.arguments.length === 2 && ts.isStringLiteral(node.arguments[0]) && COLON_NAMES.has(node.arguments[0].text)) value = node.arguments[1];
-    // A DOM property set by assignment: `el.title = …`, `el.ariaLabel = …` (review 11 NIT-1).
+    // A DOM property set by assignment: `el.title = …`, `el.ariaLabel = …`.
     else if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken
       && ts.isPropertyAccessExpression(node.left) && COLON_NAMES.has(node.left.name.text)) value = node.right;
     // A variable named title or aria-label is read even when it is passed on some other way.
@@ -408,7 +409,7 @@ function colonsInLabels(text: string): string[] {
     if (ts.isCallExpression(node)) {
       // A chained call reads the call it chains on (`names.map(…).join()`).
       if (ts.isPropertyAccessExpression(node.expression) && ts.isCallExpression(node.expression.expression)) read(node.expression.expression);
-      // A callback passed inline is read too (review 11 NIT-1, live LOW-2: `names.map((name) => \`Board: ${name}\`)`):
+      // A callback passed inline is read too (`names.map((name) => \`Board: ${name}\`)`):
       // its expression body, or what its own returns give (a function nested inside it is its own).
       node.arguments.forEach((argument) => {
         if (!ts.isArrowFunction(argument) && !ts.isFunctionExpression(argument)) {
@@ -444,12 +445,12 @@ function moodboardStudioSources(): { name: string; text: string }[] {
   return sources(root).map((path) => ({ name: relative(root, path), text: readFileSync(path, 'utf8') }));
 }
 
-describe('ratchet: no colon in a title or aria-label in the Moodboard Studio (GM r74)', () => {
+describe('ratchet: no colon in a title or aria-label in the Moodboard Studio (design)', () => {
   it('the scanner sees each place a title or aria-label is written', () => {
     expect(colonsInLabels('const a = <div title="Board: Rivers" />;')).toEqual(['Board: Rivers']);
     expect(colonsInLabels('const a = <div aria-label={`${label}: pick`} />;')).toEqual([': pick']);
     expect(colonsInLabels('const a = <Card ariaLabel={on ? \'Shown: yes\' : \'Hidden\'} />;')).toEqual(['Shown: yes']);
-    // The colon round 6n wrote: an object property.
+    // The colon an earlier version wrote: an object property.
     expect(colonsInLabels('function f() { return { text, title: `${title}: ${kept.title}` }; }')).toEqual([': ']);
     expect(colonsInLabels("const a = { 'aria-label': 'Close: now' };")).toEqual(['Close: now']);
     expect(colonsInLabels("el.setAttribute('title', `${a}: ${b}`);")).toEqual([': ']);
@@ -470,9 +471,9 @@ describe('ratchet: no colon in a title or aria-label in the Moodboard Studio (GM
       .toEqual([]);
     expect(colonsInLabels("function b() { const label = 'x: y'; return <p title={label} />; }")).toEqual(['x: y']);
     expect(colonsInLabels("const line = { text: 'Note: this', title: 'Shown' };\nconst x = <p title={line.title} />;")).toEqual([]);
-    // GM r74's form passes.
+    // The accepted form passes.
     expect(colonsInLabels('function f() { return { text, title: `${kept.title} in ${title}` }; }')).toEqual([]);
-    // Review 11 NIT-1: an inline callback inside a title value, and the DOM property forms.
+    // An inline callback inside a title value, and the DOM property forms.
     expect(colonsInLabels('function f(names) { return { title: joinWithAnd(names.map((name) => `Board: “${name}”`)) }; }')).toEqual(['Board: “']);
     expect(colonsInLabels('const t = { title: names.map(function (name) { return `${name}: x`; }).join() };')).toEqual([': x']);
     expect(colonsInLabels("const t = { title: names.map((name) => { const f = () => 'a: b'; return name; }) };")).toEqual([]);
@@ -493,7 +494,7 @@ describe('ratchet: no colon in a title or aria-label in the Moodboard Studio (GM
 });
 
 /**
- * #210 round 6q (GM r95.5): a person line that counts boards says
+ * PR #210 (design): a person line that counts boards says
  * "moodboards" ("Restored “Coast”. Your changes to 4 moodboards are saved.",
  * "Delete all 4 moodboards for good?"), never "4 boards". Across src/ (not
  * tests), read with the TypeScript parser, the person copy (string literals,
@@ -549,14 +550,14 @@ function countedBoards(text: string): string[] {
   return hits;
 }
 
-describe('ratchet: a person line counts "moodboards", never "boards" (#210 round 6q, GM r95.5)', () => {
+describe('ratchet: a person line counts "moodboards", never "boards" (PR #210, design)', () => {
   it('the scanner sees each way a line could count boards', () => {
     expect(countedBoards('const a = `Restored ${what}. Your changes to ${n} boards are saved.`;')).toEqual([' boards are saved.']);
     expect(countedBoards("const a = 'Your changes to 4 boards are saved.';")).toEqual(['Your changes to 4 boards are saved.']);
     expect(countedBoards('const a = `${n} board${n === 1 ? \'\' : \'s\'}`;')).toEqual([' board']);
     expect(countedBoards('const a = <p>{count} boards</p>;')).toEqual([' boards']);
     expect(countedBoards("const NOUN = { many: 'boards' };")).toEqual(['boards']);
-    // The noun `namedBoards` took before round 6q (its default), planted back: found.
+    // The noun `namedBoards` used to take (its default), planted back: found.
     expect(countedBoards("function namedBoards(names, noun = 'boards') { return `${names.length} ${noun}`; }")).toEqual(['boards']);
     // Not a count: "moodboards", a board's own words, a comment, a pattern, a module.
     expect(countedBoards('const a = `Restored ${what}. Your changes to ${n} moodboards are saved.`;')).toEqual([]);

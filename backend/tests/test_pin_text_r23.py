@@ -1,14 +1,14 @@
-"""PR #200, design's rulings (and the lines).
+"""PR #200 (design): the rulings and the lines.
 
-1(a) E0100-E01EF stays only for a pair the Ideographic Variation Database
-     registers (vendored by scripts/generate-pin-text-unicode.py).
-1(b) Agent-facing output carries no variation selector (FE00-FE0F,
-     E0100-E01EF, 180B-180F) and a ZWJ only inside an RGI sequence: the pins
-     list for agents, `nebula pins` / `nebula look` / `nebula start`, MCP (it
-     reads the same HTTP routes), the events feed and its summaries, agent
-     start and the channel push. The person's canvas keeps registered
-     variants (their GET, the WebSocket, their create).
-2    The 100-open-notes 409 and the removed-node 404 carry a code each.
+- E0100-E01EF stays only for a pair the Ideographic Variation Database
+  registers (vendored by scripts/generate-pin-text-unicode.py).
+- Agent-facing output carries no variation selector (FE00-FE0F, E0100-E01EF,
+  180B-180F) and a ZWJ only inside an RGI sequence: the pins list for agents,
+  `nebula pins` / `nebula look` / `nebula start`, MCP (it reads the same HTTP
+  routes), the events feed and its summaries, agent start and the channel
+  push. The person's canvas keeps registered variants (their GET, the
+  WebSocket, their create).
+- The 100-open-notes 409 and the removed-node 404 carry a code each.
 """
 from __future__ import annotations
 
@@ -235,10 +235,10 @@ def _tags(spec: str) -> str:
 
 
 def test_gm_r26_the_channel_keeps_the_three_flags_and_drops_every_other_tag():
-    """Design, reverting an earlier change: a bare 🏴 is
-    another symbol, so the England, Scotland and Wales flags reach the channel
-    whole. Every other tag character goes, by the one shared rule
-    (canvas_pins.agent_line, as agent_text and the card's count), in either mode."""
+    """Reverting an earlier change (design): a bare 🏴 is another symbol, so the
+    England, Scotland and Wales flags reach the channel whole. Every other tag
+    character goes, by the one shared rule (canvas_pins.agent_line, as agent_text
+    and the card's count), in either mode."""
     from services.canvas_pins import agent_line
 
     for mode in (True, False):

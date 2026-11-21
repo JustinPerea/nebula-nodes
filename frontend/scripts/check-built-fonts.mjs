@@ -3,7 +3,7 @@
  *
  * Nebula used to load Inter and JetBrains Mono from Google Fonts, so Google saw
  * every start and offline the app fell back to system fonts. The fonts now live
- * in src/assets/fonts/ (Justin, Q103: "Ship them with the app, so it asks no
+ * in src/assets/fonts/ (Justin: "Ship them with the app, so it asks no
  * outside server when it opens"). check-build-budget.mjs runs this after every
  * build; it fails when:
  *

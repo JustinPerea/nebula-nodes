@@ -30,12 +30,12 @@ export function resetCommonsSessionForTests(): void {
   noteCommonsAnswered();
 }
 
-/** No person session to send: this tab isn't connected as the person (GM r12 (2), #204 round 9;
+/** No person session to send: this tab isn't connected as the person (design, PR #204;
  * lib/errorCopy commonsNotConnectedCopy). A person refusal, stamped with the promotes so far, so
  * it clears on the next one. */
 const sessionLost = (heading: string, sentAt?: number) => {
   const copy = commonsNotConnected(heading);
-  // Stamped with the promotes when the call started (round 9): a call sent before a promote and
+  // Stamped with the promotes when the call started: a call sent before a promote and
   // refused after it is the old state's answer, so its line clears at once (lib/clearsOnPromote).
   return new CommonsRequestError(copy.message, 401, { heading, code: copy.code, sentAt: sentAt ?? copy.sentAt });
 };
@@ -64,10 +64,10 @@ const lostConnection = (heading: string, cause: unknown) =>
 
 async function send(heading: string, path: string, init: RequestInit, sentAt?: number): Promise<Response> {
   // A held tab holds the Commons (lib/commonsHold), read from the session itself too, so a call
-  // any pane sends before the view renders is held from the hold's 150 ms on (round 11). Round 13
-  // (review 10 held-calls MEDIUM-2): any hold, promoted on this page or not: a tab reloaded after
-  // a backend restart keeps its old token (sessionStorage) and was never promoted here, and its
-  // calls would go out with that token, only to be refused. The token stays as it is.
+  // any pane sends before the view renders is held from the hold's 150 ms on. Any hold counts,
+  // promoted on this page or not: a tab reloaded after a backend restart keeps its old token
+  // (sessionStorage) and was never promoted here, and its calls would go out with that token,
+  // only to be refused. The token stays as it is.
   if (commonsCallsHeld() || personHeldSettled()) throw sessionLost(heading, sentAt);
   let token: string;
   try {
@@ -89,8 +89,8 @@ async function send(heading: string, path: string, init: RequestInit, sentAt?: n
 }
 
 /** One Commons request. `heading` names it the way the Commons does ("Couldn’t
- * save your labels."): a failure says "<heading> <reason>" (GM, error-copy
- * round 2), and the leave popover shows the reason under its own heading. */
+ * save your labels."): a failure says "<heading> <reason>" (design), and the
+ * leave popover shows the reason under its own heading. */
 async function call<T>(heading: string, path: string, init: RequestInit = {}): Promise<T> {
   const sentAt = personPromotions();
   let response = await send(heading, path, init, sentAt);
@@ -110,31 +110,31 @@ async function call<T>(heading: string, path: string, init: RequestInit = {}): P
     // person session) and an agent token's refusal keep it.
     session = null;
     const detail = await readDetail(response);
-    // Round 18f (GM r35 2, review 15 LOW-1): a refusal from a Commons route is the Commons
-    // answering (activation_dep runs first), so the off line gives way to this one.
+    // A refusal from a Commons route is the Commons answering (activation_dep runs first), so
+    // the off line gives way to this one.
     noteCommonsAnswered();
     if (detail === INVALID_PERSON_TOKEN_DETAIL) dropRefusedPersonToken(sentWith.get(response) ?? null);
     warnFailure(heading, 401, 'no person session');
     throw sessionLost(heading, sentAt);
   }
   if (!response.ok) {
-    // Copy, never the status or a raw body (lib/errorCopy.ts): GM's line for
-    // 408, 429 and 5xx, else the backend's written reason, else GM's line
-    // for the status. `detail` keeps what it sent, for debugging and the
+    // Copy, never the status or a raw body (lib/errorCopy.ts): the fixed no-answer line for
+    // 408, 429 and 5xx, else the backend's written reason, else the status's fallback line.
+    // `detail` keeps what it sent, for debugging and the
     // console (once per call until it works again).
     const detail = await readDetail(response);
     warnFailure(heading, response.status, detail);
-    // Round 18d (GM r32 1): the backend runs without the Commons. Whatever the call, the view
-    // turns to the off view (lib/commonsOff), and its words are GM's, never the backend's.
+    // When the backend runs without the Commons, whatever the call, the view turns to the off
+    // view (lib/commonsOff), and its words are the app's own (design), never the backend's.
     if (response.status === 404 && detailText(detail) === COMMONS_OFF_DETAIL) {
       noteCommonsOff();
       throw new CommonsRequestError(COMMONS_OFF_COPY, response.status, { detail, heading });
     }
     const failure = new CommonsRequestError(copyForStatus(response.status, detail), response.status, { detail, heading });
-    // Round 18f (GM r35 2, review 15 LOW-1): any other answer proves the Commons is on (every
-    // Commons route sits behind activation_dep), so the off line gives way to the real one: a
-    // 500's load line, say. Only a gateway's answer with no reason of the backend's says nothing
-    // about it (the dev proxy's 502 for a backend that isn't there), as no answer doesn't.
+    // Any other answer proves the Commons is on (every Commons route sits behind
+    // activation_dep), so the off line gives way to the real one: a 500's load line, say. Only a
+    // gateway's answer with no reason of the backend's says nothing about it (the dev proxy's
+    // 502 for a backend that isn't there), as no answer doesn't.
     if (!isBackendUnreachable(failure)) noteCommonsAnswered();
     throw failure;
   }
@@ -172,10 +172,11 @@ export interface UploadResult {
   person?: string;
 }
 
-/** A refused file as the person reads it (GM, round 2): "Couldn’t upload
- * {filename}." with the backend's line for its reason below it, GM's 4xx
- * fallback when it sent none. Never the raw `error`. The lines live in one
- * table, backend/commons/person_copy.py, as every Commons refusal's do. */
+/** A refused file as the person reads it (design): "Couldn’t upload
+ * {filename}." with the backend's line for its reason below it, the 4xx
+ * fallback line (design) when it sent none. Never the raw `error`. The lines
+ * live in one table, backend/commons/person_copy.py, as every Commons
+ * refusal's do. */
 export function uploadFailureCopy(result: UploadResult): FailureCopy {
   return {
     heading: `Couldn’t upload ${result.filename ? quoted(result.filename) : 'that file'}.`,
@@ -275,7 +276,7 @@ export const commonsEvaluationApi = {
   seal: (revision: number) => post<import('./commonsEvaluationTypes').EvaluationBatch>(
     "Couldn’t seal the labels.", '/evaluation/seal', { revision }),
   /** Ends the batch as assisted review, never blind ground truth; the server requires the acknowledgement. */
-  // Round 18l (GM r43 Q1): the close dialog gives up after 30 s (its `signal`), then reads the batch.
+  // The close dialog gives up after 30 s (its `signal`), then reads the batch.
   close: (revision: number, signal?: AbortSignal) => call<import('./commonsEvaluationTypes').EvaluationBatch>(
     "Couldn’t close the batch.", '/evaluation/close', { method: 'POST', body: JSON.stringify({ revision, acknowledge_not_blind: true }), signal }),
 };

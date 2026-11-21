@@ -51,7 +51,7 @@ _FIELD_LABELS = {"min_confidence": "Minimum Confidence"}
 
 def _fraction_line(name: str, high: str) -> str:
     label = _FIELD_LABELS.get(name)
-    field = f"“{label}”" if label else "the node's setting"  # GM's rule 5: the label in quotes
+    field = f"“{label}”" if label else "the node's setting"  # design: the label in quotes
     return f"Set {field} to a number from 0 to {high}."
 
 

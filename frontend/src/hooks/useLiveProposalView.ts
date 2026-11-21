@@ -7,8 +7,8 @@ import { useUIStore } from '../store/uiStore';
 /**
  * The proposal as the bar, the Accept chip and the ghost cards show it: each
  * key-billing node's class ("free" or "may cost") read from the keys set
- * now (canvasProposals liveKeyBilling; GM, PR #203 r15 items 1 and 2), so a
- * token added or removed after the agent proposed shows at once, both ways.
+ * now (canvasProposals liveKeyBilling; design, PR #203), so a token added or
+ * removed after the agent proposed shows at once, both ways.
  * A new node is read at the values Accept will write; a canvas node at its
  * params with the proposed changes applied (as useProposalNotReady reads it).
  */
