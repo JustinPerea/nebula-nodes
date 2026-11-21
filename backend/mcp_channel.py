@@ -504,7 +504,8 @@ class ChannelState:
         self._own_proposal_ids: dict[str, str] = {}
         # Runs this process started (run_nodes, and its accepted proposals'
         # runs). Only these are ever its own: get_run may refresh or drop
-        # one, never add one (an earlier version made the person's run "your run" once it read it).
+        # one, never add one (an earlier version made the person's run
+        # "your run" once it read it).
         self.own_runs: dict[str, None] = {}
         # Its own runs it follows to their end (a subset of own_runs).
         self.tracked_runs: set[str] = set()

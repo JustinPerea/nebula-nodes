@@ -931,8 +931,8 @@ class AgentPresence:
                 # An agent can't flood the canvas with cursors: the least
                 # recently seen session goes. That is an idle one (quiet for
                 # SESSION_IDLE_SECONDS) whenever any is idle, since idle means
-                # seen longest ago; no separate idle rule is needed (mutation testing found such a rule
-                # equivalent to none).
+                # seen longest ago; no separate idle rule is needed (mutation
+                # testing showed that removing such a rule changes nothing).
                 victim = min(slots.items(), key=lambda item: item[1].last_t)[0]
                 del slots[victim]
             taken = {live.ordinal for live in slots.values()}

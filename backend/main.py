@@ -1885,7 +1885,7 @@ def _agent_readers() -> tuple[tuple[str, ...], tuple[str, ...]] | None:
     against, in order. None for the person and anonymous callers.
 
     - A verified token: its chat session, or the token itself, for both; never
-    a name's reader.
+      a name's reader.
     - A name with the ``X-Nebula-Agent-Session`` the MCP server sends (one per
       process): read under its session and under the name's newest session
       read; a write checks its own session's read, else the newest session
@@ -26124,13 +26124,13 @@ async def pin_project_cover(project_id: str, body: dict[str, Any]) -> dict[str, 
 
     The person may always. Anyone else (an agent, a script) may while the
     person hasn't pinned one; a cover the person pinned changes only through
-    a proposal they accept on the Projects screen (``POST
-    /api/asset-proposals``, Justin's call, 2026-10-20). A pin whose image left the
-    project (its node deleted) no longer counts: the card is automatic, so
-    anyone may set it, and the person's next pin counts again. Who set the
-    pin is saved as ``coverBy``. The answer's ``previous`` ({"cover": url or
-    null}, the cover the card showed) put back through this route undoes the
-    change."""
+    a proposal they accept on the Projects screen
+    (``POST /api/asset-proposals``, Justin's call, 2026-10-20). A pin whose
+    image left the project (its node deleted) no longer counts: the card is
+    automatic, so anyone may set it, and the person's next pin counts again.
+    Who set the pin is saved as ``coverBy``. The answer's ``previous``
+    ({"cover": url or null}, the cover the card showed) put back through this
+    route undoes the change."""
     return await _set_project_cover(project_id, body.get("url"))
 
 
