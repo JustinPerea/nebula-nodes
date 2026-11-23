@@ -327,7 +327,7 @@ UNLINED_BASELINE: dict[str, int] = {
     "handlers/elevenlabs.py": 20, "handlers/fal_universal.py": 9, "handlers/gemini_omni.py": 8,
     "handlers/google_gemini.py": 9, "handlers/grok_video.py": 7, "handlers/higgsfield.py": 8,
     "handlers/ideogram.py": 12, "handlers/jev_box.py": 1, "handlers/jev_decide.py": 2, "handlers/krea.py": 18,
-    "handlers/krea_export.py": 9, "handlers/krea_gateway.py": 27, "handlers/krea_workspace.py": 19,
+    "handlers/krea_export.py": 9, "handlers/krea_gateway.py": 26, "handlers/krea_workspace.py": 19,
     "handlers/meshy.py": 26, "handlers/minimax.py": 6, "handlers/minimax_v2.py": 5,
     "handlers/openai_audio.py": 3, "handlers/openai_image.py": 1, "handlers/openai_image_edit.py": 2,
     "handlers/openai_image_v2.py": 2, "handlers/openrouter.py": 1, "handlers/openrouter_media.py": 14,

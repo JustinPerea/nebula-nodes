@@ -933,13 +933,13 @@ Nodes: 312 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 | **Execution** | async-poll |
 | **Inputs** | Prompt (Text)*, Images (Image ×n) |
 | **Outputs** | Image (Image) |
-| **Audited** | 2026-10-15 |
+| **Audited** | 2026-11-22 |
 
 **Routes** (Auto tries them in this order; `_provider` picks one)
 
 | Route | Provider | Keys | Endpoint | Notes |
 |---|---|---|---|---|
-| `krea` | Krea | KREA_API_TOKEN | `/generate/image/krea/krea-3` | maker; Krea plan: optional; Early access: Krea 3 on Krea's API is for beta workspaces |
+| `krea` | Krea | KREA_API_TOKEN | `/generate/image/krea/krea-3` | maker; Krea plan: optional |
 | `fal` | fal.ai | FAL_KEY | `krea/v3/text-to-image` | — |
 
 **Krea (`krea`) settings**
@@ -948,7 +948,7 @@ Nodes: 312 | Source: [`backend/data/node_definitions.json`](../backend/data/node
 |---|---|---|---|---|---|
 | Seed | `seed` | int | — | — | always |
 | Thinking mode | `thinking_mode` | enum | fast | `fast` Fast, `high` High | always |
-| Resolution | `resolution` | enum | 1K | `1K`, `2K` | always |
+| Resolution | `resolution` | enum | 1K | `1K`, `2K`, `4K` | always |
 | Aspect ratio | `aspect_ratio` | enum | — | `1:1`, `4:5`, `3:4`, `2:3`, `9:16`, `5:4`, `4:3`, `3:2`, `16:9`, `21:9` | always |
 | Regional edit | `regional_edit` | bool | false | — | always |
 

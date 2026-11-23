@@ -323,3 +323,14 @@ def test_unconfirmed_prices_are_marked_on_the_routes_whose_pages_dont_state_them
               if model_pricing.route_price_unconfirmed(PRICING["nodes"][node_id], REGISTRY[node_id], route_id)}
     assert marked == {("flux-3-image", "fal"), ("flux-3-image-klein-base", "fal"), ("flux-3-video", "fal"),
                       ("flux-video-upscale", "fal"), ("flux-video-upscale", "replicate"), ("krea-3", "fal")}
+
+
+def test_krea_3_4k_pricing_matches_2k_plus_4_cents():
+    definition = REGISTRY["krea-3"]
+    no_refs = model_pricing.estimate_routes(definition, {"resolution": "4K"}, [], PRICING)["krea"]
+    assert no_refs["low"] == pytest.approx(0.10) and no_refs["high"] == pytest.approx(0.10)
+    with_refs = model_pricing.estimate_routes(definition, {"resolution": "4K"}, ["images"], PRICING)["krea"]
+    assert with_refs["low"] == pytest.approx(0.10) and with_refs["high"] == pytest.approx(0.66)
+    high_thinking = model_pricing.estimate_routes(
+        definition, {"resolution": "4K", "thinking_mode": "high"}, ["images"], PRICING)["krea"]
+    assert high_thinking["low"] == pytest.approx(0.12) and high_thinking["high"] == pytest.approx(0.68)

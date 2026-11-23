@@ -146,12 +146,15 @@ describe('providerSwitchState', () => {
     expect(providerSwitchState(video, {}, context(keys, { wired: ten })).blocked).toBe(false);
   });
 
-  it("shows a route's note on its API row (Krea 3's early access), not on the plan row", () => {
-    const krea3 = (NODE_DEFINITIONS as Record<string, ModelNodeDefinition>)['krea-3'];
+  it("shows a route's note on its API row, not on the plan row", () => {
+    // Krea 3's early-access note was removed when Krea opened its API to every
+    // workspace (2026-11-22); a synthetic note on its plan-optional route stands in.
+    const base = (NODE_DEFINITIONS as Record<string, ModelNodeDefinition>)['krea-3'];
+    const krea3 = { ...base, routes: base.routes!.map((route) => (route.id === 'krea' ? { ...route, note: 'A route note' } : route)) };
     const state = providerSwitchState(krea3, {}, context({ KREA_API_TOKEN: KEY }));
     expect(state.rows.map((row) => [row.id, row.info])).toEqual([
       ['auto', undefined],
-      ['krea', "Early access: Krea 3 on Krea's API is for beta workspaces"],
+      ['krea', 'A route note'],
       ['krea:plan', undefined],
       ['fal', undefined],
     ]);

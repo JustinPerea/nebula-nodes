@@ -242,8 +242,8 @@ def test_folded_models_are_routes_of_their_nodes_not_nodes():
         assert route["provider"] == "krea" and route["endpoint"] == model["endpoint"]
     # Krea 3 came in by itself (--only), stamped with the spec it was read from.
     krea_3 = CATALOG["models"]["krea-image-krea-krea-3"]
-    assert krea_3["fetchedAt"] == "2026-10-15" and len(krea_3["openapiSha256"]) == 64
-    assert krea_3["displayName"] == "Krea 3 Beta" and "pricing" not in krea_3
+    assert krea_3["fetchedAt"] == "2026-11-22" and len(krea_3["openapiSha256"]) == 64
+    assert krea_3["displayName"] == "Krea 3" and "pricing" not in krea_3
 
 
 def _broken(node_id, change):

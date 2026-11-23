@@ -173,8 +173,7 @@ BytePlus) and the shared rule set that keeps a run on Krea are in
 
 Two kinds of node now reach Krea as one route of several, through a provider
 switcher (`_provider`, `docs/PROVIDER-ROUTES.md`): `krea-3` "Krea 3" (Krea is
-the maker; routes krea, then fal `krea/v3/text-to-image` / `krea/v3/edit`;
-Krea 3 on Krea's API is early access for beta workspaces) and the FLUX 3 video
+the maker; routes krea, then fal `krea/v3/text-to-image` / `krea/v3/edit`) and the FLUX 3 video
 nodes `flux-3-video`, `flux-video-edit` and `flux-video-upscale` (BFL is the
 maker; Krea is their last route). Krea's three synced FLUX nodes
 (`krea-video-black-forest-labs-flux-3-video`, `-flux-video-edit`,

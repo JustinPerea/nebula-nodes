@@ -56,7 +56,7 @@ export interface ProviderRow {
   priceTitle?: string;
   /** Why this route can't take the recipe as it is ("Doesn't take 1.5k"). */
   block: string | null;
-  /** The route's own note (RouteSpec.note, e.g. Krea 3's early access),
+  /** The route's own note (RouteSpec.note, e.g. a preview or access note),
    *  on its API row; a block note replaces it. */
   info?: string;
   selected: boolean;
