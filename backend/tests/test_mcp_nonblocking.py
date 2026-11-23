@@ -217,10 +217,10 @@ def test_a_cancelled_call_ends_cleanly(fake_nebula, monkeypatch, tool, args):
     result, held, made, alive = anyio.run(main)
     assert result == "Request cancelled"
     assert not held, f"the cancelled {tool} held its thread past the guard"
-    # The request already in flight when the cancel landed may finish;
-    # starting a new one is polling on past the cancel (to the 8 s deadline
-    # a dozen more would go out).
-    assert made <= 1, f"the cancelled {tool} made {made} requests after its cancel"
+    # The request in flight when the cancel landed was counted before it, and
+    # it may finish; any request after it is polling on past the cancel (to
+    # the 8 s deadline a dozen more would go out).
+    assert made == 0, f"the cancelled {tool} made {made} requests after its cancel"
     assert alive
 
 

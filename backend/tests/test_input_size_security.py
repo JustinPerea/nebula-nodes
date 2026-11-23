@@ -912,7 +912,14 @@ def test_the_packet_pass_stops_at_the_deadline(tmp_path, monkeypatch):
     clip.write_bytes(b"\x00")
     monkeypatch.setattr(input_sizes, "SIZE_PROBE_TIMEOUT_SECONDS", 0.5)
     calls = _fake_probe(monkeypatch, [_video_stream()], _packets(1_000_000), delay=0.01)
-    assert input_sizes._probe_video(clip) is None
+    # A pass that ignored the deadline would read for hours: run it on a daemon
+    # thread so that regression fails here instead of hanging the suite.
+    result: list = []
+    probe = threading.Thread(target=lambda: result.append(input_sizes._probe_video(clip)), daemon=True)
+    probe.start()
+    probe.join(30)
+    assert not probe.is_alive(), "the packet pass ran past its deadline"
+    assert result == [None]
     process = calls.processes[-1]
     # The pass stopped at the deadline, not at the stream's end: the probe's
     # timer killed ffprobe mid-read, and far fewer lines came through than the
