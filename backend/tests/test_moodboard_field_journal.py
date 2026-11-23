@@ -260,7 +260,7 @@ def _wait_until_waiting(journal, count: int = 1) -> None:
         time.sleep(0.01)
 
 
-def test_a_long_poll_on_board_events_wakes_within_a_second_of_a_field_change(client, root, journal, person):
+def test_a_long_poll_on_board_events_wakes_on_a_field_change(client, root, journal, person):
     write_board(root, fixture_board())
     result: dict = {}
 

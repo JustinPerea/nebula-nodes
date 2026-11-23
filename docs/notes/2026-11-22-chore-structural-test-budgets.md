@@ -59,10 +59,10 @@ Replaced wall-clock timing assertions in tests with structural checks that verif
 
 ### Additional site matching the same pattern: `backend/tests/test_moodboard_field_journal.py`
 
-- **`test_a_long_poll_on_board_events_wakes_within_a_second_of_a_field_change`** and **`test_mcp_wait_for_canvas_change_returns_on_the_persons_field_change`**:
+- **`test_a_long_poll_on_board_events_wakes_on_a_field_change`** and **`test_mcp_wait_for_canvas_change_returns_on_the_persons_field_change`**:
   - **What the old budgets guarded**: `result["at"] - written < 1.0` on a 20 s wait guarded that a board field write wakes the journal waiter rather than timing out.
   - **Replacement**: Both tests already wait for `journal.waiting >= 1` before writing and assert `not timedOut` and `events == ["board.fields"]`. Removed the redundant `< 1.0` wall-clock assertions.
 
 ## Sites left as is
 
-No requested site had to be left unfixed for lack of a product hook. In `frontend/tests/pr198Fix25Held.test.tsx`, tests 1 and 2 were already using fake timers on `origin/main` and needed no further change. Other wall-clock checks found across `backend/tests/` and `frontend/tests/` (performance bounds, relative speedups, and subprocess timeouts) were left untouched and catalogued in `REPORT.md`.
+No requested site had to be left unfixed for lack of a product hook. In `frontend/tests/pr198Fix25Held.test.tsx`, tests 1 and 2 were already using fake timers on `origin/main` and needed no further change. Other wall-clock checks found across `backend/tests/` and `frontend/tests/` (performance bounds, relative speedups, and subprocess timeouts) were left untouched. They are listed in a comment on the pull request that made this change.

@@ -55,6 +55,8 @@ class ScriptedApi:
 
     def request(self, method, path, **kwargs):
         self.calls += 1
+        # A loop that never reaches its exit fails here instead of hanging the run.
+        assert self.calls < 2000, "get_answers kept polling past any wait budget"
         step = self.script.pop(0) if len(self.script) > 1 else self.script[0]
         if isinstance(step, BaseException):
             raise step
@@ -72,6 +74,18 @@ def _script(monkeypatch, *steps) -> ScriptedApi:
     api = ScriptedApi(*steps)
     monkeypatch.setattr(mcp_server, "_api", lambda: api)
     return api
+
+
+def _no_backoff(monkeypatch) -> list[float]:
+    """Record any backoff sleep and fail on it, so a retry can't spin for the whole wait."""
+    sleeps: list[float] = []
+
+    def refuse(seconds: float) -> None:
+        sleeps.append(seconds)
+        raise AssertionError(f"get_answers backed off {seconds} s: it retried a first refused connect")
+
+    monkeypatch.setattr(mcp_server, "_sleep_unless_cancelled", refuse)
+    return sleeps
 
 
 # -- MCP get_answers -----------------------------------------------------------------
@@ -99,8 +113,7 @@ def test_a_real_http_answer_is_never_retried(fast, monkeypatch, refusal):
 def test_nebula_down_from_the_start_fails_at_once(fast, monkeypatch):
     # Not a restart: nothing answered this call yet (a wrong URL, Nebula not started).
     api = _script(monkeypatch, _down())
-    sleeps: list[float] = []
-    monkeypatch.setattr(mcp_server, "_sleep_unless_cancelled", sleeps.append)
+    sleeps = _no_backoff(monkeypatch)
     with pytest.raises(NebulaAPIError) as caught:
         mcp_server.get_answers("qs_0000aaaa", wait_seconds=10)
     assert caught.value.kind == "connect" and api.calls == 1
@@ -136,8 +149,7 @@ def test_a_first_poll_dropped_mid_request_rides_through(fast, monkeypatch, dropp
 ])
 def test_a_refused_first_connect_still_fails_at_once(fast, monkeypatch, refused):
     api = _script(monkeypatch, refused, ANSWERED)
-    sleeps: list[float] = []
-    monkeypatch.setattr(mcp_server, "_sleep_unless_cancelled", sleeps.append)
+    sleeps = _no_backoff(monkeypatch)
     with pytest.raises(NebulaAPIError):
         mcp_server.get_answers("qs_0000aaaa", wait_seconds=10)
     assert api.calls == 1
@@ -190,7 +202,6 @@ def test_a_real_refused_first_connect_fails_at_once(fast, monkeypatch):
         probe.bind(("127.0.0.1", 0))
         port = probe.getsockname()[1]
     monkeypatch.setattr(mcp_server, "_base_url", f"http://127.0.0.1:{port}")
-    sleeps: list[float] = []
     calls = 0
     real_call = mcp_server._canvas_call
 
@@ -200,7 +211,7 @@ def test_a_real_refused_first_connect_fails_at_once(fast, monkeypatch):
         return real_call(*args, **kwargs)
 
     monkeypatch.setattr(mcp_server, "_canvas_call", counted_call)
-    monkeypatch.setattr(mcp_server, "_sleep_unless_cancelled", sleeps.append)
+    sleeps = _no_backoff(monkeypatch)
     with pytest.raises(NebulaAPIError) as caught:
         mcp_server.get_answers("qs_0000aaaa", wait_seconds=10)
     assert caught.value.kind == "connect"

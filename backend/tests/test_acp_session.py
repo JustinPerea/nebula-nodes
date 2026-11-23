@@ -904,7 +904,10 @@ async def test_opening_a_gemini_agent_never_blocks_the_event_loop(env, tmp_path,
                 await open_task
     assert info.value.code == "personal_agent_needs_setup"
     assert "--help" in probed.read_text()  # the slow probe really ran
-    assert while_probing == 5, "the event loop could not run while the Gemini probe was in flight"
+    assert while_probing == 5
+    # The check that matters: the fake CLI was released by this test's coroutine while the
+    # probe was still running. A probe that blocked the event loop would have hit the script's
+    # own 10 s cap first and written timed_out.
     recorded = trace.read_text()
     assert "--help:released" in recorded and "timed_out" not in recorded, recorded
 
