@@ -234,6 +234,19 @@ async def test_each_routes_cheapest_run_sends_a_body_its_provider_takes(monkeypa
 
 
 @pytest.mark.asyncio
+async def test_an_agent_made_krea_3_node_sends_the_resolution_krea_requires(monkeypatch):
+    """The canvas saves every default on a new node; a node an agent made
+    (nebula apply) saves none. Krea requires resolution, or width and height,
+    on every Krea 3 request (its OpenAPI anyOf), so the run sends the
+    route's default resolution instead of nothing."""
+    hosts = hosts_for(monkeypatch, "krea", False)
+    await registry_handler("krea-3")(node("krea-3", _provider="krea"), ports(prompt=P), dict(KEYS))
+    sent = hosts.json("POST", re.escape("https://api.krea.ai/generate/image/krea/krea-3"))
+    assert sent.get("resolution") == "1K"
+    validate(CATALOG["krea-image-krea-krea-3"]["requestSchema"], sent)
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("model, sends", [("berry", True), ("jam", False)])
 async def test_krea_3_on_fal_sends_a_negative_prompt_only_where_it_shows(monkeypatch, model, sends):
     """Negative prompt shows only on Berry (visibleWhen {model: [berry]}; fal:

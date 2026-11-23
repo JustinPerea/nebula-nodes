@@ -1868,7 +1868,7 @@ def main():
     parser.add_argument("--only", metavar="ENDPOINT", action="append",
                         help="with --refresh or --openapi: refresh just this Krea endpoint's entry (repeat for "
                              "several), which keeps its own fetchedAt and openapiSha256; every other entry stays "
-                             "as pinned")
+                             "as pinned, the Krea 2 guide's too unless --refresh-guide is also given")
     args = parser.parse_args()
     if args.check and (args.refresh or args.openapi or args.refresh_guide):
         parser.error("--check is offline; refresh separately")
@@ -1887,7 +1887,9 @@ def main():
                 catalog = refresh_one(catalog, fresh, endpoint)
     else:
         catalog = json.loads(CATALOG.read_text())
-    if args.refresh or args.openapi or args.refresh_guide:
+    # --only keeps every other entry as pinned, the Krea 2 guide's included,
+    # unless --refresh-guide asks for it too.
+    if args.refresh_guide or ((args.refresh or args.openapi) and not args.only):
         if args.guide:
             guide = args.guide.read_text()
         else:
