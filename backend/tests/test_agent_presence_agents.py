@@ -84,8 +84,10 @@ def test_run_nodes_reports_skipped_placeholders(tools):
 
     ids = _chain(tools, headers=CODEX)
     free = tools.graph.add_node("text-input", {"value": "free"})
-    result = asyncio.run(mcp_server.run_nodes(wait_seconds=5))
+    result = asyncio.run(mcp_server.run_nodes(wait_seconds=mcp_server.MAX_RUN_WAIT))
     payload = json.loads(getattr(result[0], "text", result[0]))  # the run as agents read it
+    assert payload["status"] == "finished", payload
+    assert tools.ran == [[free]]
     assert set(payload["skipped"]) == set(ids.values())
     assert "Codex" in payload["skipped"][ids["+p"]]
     assert free in payload["outputs"]

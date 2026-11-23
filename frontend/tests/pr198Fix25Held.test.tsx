@@ -218,14 +218,21 @@ describe('the 150 ms rule, by the order of events', () => {
   it('a slow try that fails again: the grey goes the moment its answer lands, with the hold (nothing lingers on the live button)', async () => {
     const { h, button } = await stoppedLine();
     const release = h.hold();
+    fakeClock();
     const log = record();
     act(() => { fireEvent.click(button()!); });
-    await vi.waitFor(() => expect(button()?.hasAttribute('data-held-look')).toBe(true), { timeout: 3000, interval: 5 });
+    await step(HELD_LOOK_DELAY_MS);
+    expect(button()?.hasAttribute('data-held-look')).toBe(true);
+    await step(10);
     release();
-    await vi.waitFor(() => expect(button()?.hasAttribute('aria-disabled')).toBe(false), { timeout: 3000, interval: 5 });
-    await sleep(HELD_LOOK_DELAY_MS * 2);
+    await settleNoAdvance();
+    expect(button()?.hasAttribute('aria-disabled')).toBe(false);
+    await step(HELD_LOOK_DELAY_MS * 2);
     log.stop();
-    const live = log.events.find((event) => event.at > h.timing.answered && !event.held)!;
+    const greyIndex = log.events.findIndex((event) => event.grey);
+    expect(greyIndex).toBeGreaterThanOrEqual(0);
+    const live = log.events.slice(greyIndex + 1).find((event) => event.at >= h.timing.answered && !event.held)!;
+    expect(live).toBeDefined();
     expect([live.grey, live.pending]).toEqual([false, false]);
     expect(log.events.slice(log.events.indexOf(live)).every((event) => !event.held && !event.grey && !event.pending)).toBe(true);
   });

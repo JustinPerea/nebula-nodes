@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from pathlib import Path
 from unittest.mock import AsyncMock
 
@@ -330,7 +331,20 @@ async def test_cancelled_batch_cancels_active_handler_and_keeps_completed_items(
     task = asyncio.create_task(execute_graph(nodes, edges, {},
         {"nano-banana": image_handler(calls, wait_at=2, started=started, cancelled=cancelled)},
         emit, run_id="cancelled-iterator"))
-    await asyncio.wait_for(started.wait(), timeout=1)
+    waiting = asyncio.create_task(started.wait())
+    try:
+        await asyncio.wait({waiting, task}, return_when=asyncio.FIRST_COMPLETED, timeout=30)
+    finally:
+        waiting.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await waiting
+    if not started.is_set():
+        if task.done() and not task.cancelled() and task.exception() is not None:
+            raise task.exception()
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
+        pytest.fail(f"execute_graph did not reach item 2 (calls={calls!r}, task_done={task.done()})")
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
         await task
