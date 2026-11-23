@@ -344,6 +344,14 @@ def test_the_krea_2_guide_note_reads_as_a_markdown_admonition_too():
 @pytest.mark.parametrize("text", [
     K2_GUIDE_ADMONITION.replace("> [!NOTE]", "> [!WARNING]"),
     K2_GUIDE_ADMONITION.replace("Large).", "Large).\n> LoRA styles bill the style reference rate."),
+    # Only the note may be quoted: a quoted price row or separator, a second
+    # note, or a bare ">" outside the note is a change to re-read.
+    K2_GUIDE_ADMONITION.replace("| **Large** |", "> | **Large** |"),
+    K2_GUIDE_ADMONITION.replace("| - | - | - | - |", "> | - | - | - | - |"),
+    K2_GUIDE_ADMONITION.replace("## Endpoints", "> [!NOTE]\n> Combining moodboards **with** style references does "
+                                "not increase the price per generation — you pay the moodboard rate (\\$0.040 "
+                                "Medium / \\$0.070 Large).\n\n## Endpoints"),
+    K2_GUIDE_ADMONITION.replace("| - | - | - | - |", "| - | - | - | - |\n>"),
 ])
 def test_an_unknown_admonition_line_still_stops_the_refresh(text):
     with pytest.raises(ValueError, match="doesn't read"):

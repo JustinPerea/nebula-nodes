@@ -1549,13 +1549,28 @@ def parse_k2_guide(text, checked_on):
     prices, quoted, notes = {}, [], []
     row = re.compile(r"\| \*\*(?P<name>[A-Za-z][\w ]*)\*\* \| \$(?P<a>[0-9.]+) \| \$(?P<b>[0-9.]+) "
                      r"\| \$(?P<c>[0-9.]+) \|")
+    admonition = False  # inside a "> [!NOTE]" block
     for raw, line in zip(section, plain):
         # The note comes as a <Note> block, or as a Markdown admonition:
-        # "> [!NOTE]", a bare ">", then "> " before each line of its text.
-        if raw in ("<Note>", "</Note>", "> [!NOTE]", ">"):
+        # "> [!NOTE]", a bare ">", then "> " before its text. Only the note
+        # may be quoted: a quoted table row, or a second note, is unread.
+        if raw in ("<Note>", "</Note>"):
             continue
-        if raw.startswith("> "):
-            raw, line = raw[2:].strip(), line[2:].strip()
+        if raw == "> [!NOTE]" and not admonition and not notes:
+            admonition = True
+            continue
+        if raw.startswith(">"):
+            if not admonition:
+                raise ValueError(f"{K2_GUIDE_URL} Pricing has a line this script doesn't read: {raw!r}; re-read "
+                                 "the guide and update K2_* in scripts/sync-krea-catalog.py")
+            if raw == ">":
+                continue
+            raw, line = raw[1:].strip(), line[1:].strip()
+            if not K2_GUIDE_NOTE.fullmatch(line):
+                raise ValueError(f"{K2_GUIDE_URL} Pricing has a line this script doesn't read: {raw!r}; re-read "
+                                 "the guide and update K2_* in scripts/sync-krea-catalog.py")
+        else:
+            admonition = False
         cleaned = raw.replace("\\$", "$")
         if raw == K2_GUIDE_HEADER or re.fullmatch(r"\|(\s*:?-+:?\s*\|)+", raw):
             continue
