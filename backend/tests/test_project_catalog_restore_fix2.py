@@ -398,29 +398,31 @@ def test_a_loop_reader_never_restores_on_the_loop_or_waits_for_a_restore(app, mo
 
     async def scenario():
         loop_thread = threading.get_ident()
-        # Another holder of the lock for 1.5 s (a restore in another thread).
-        held, release = threading.Event(), threading.Event()
+        # The lock is held (a restore in another thread) until the test lets
+        # it go; released is set inside it, so a reader that waited for it
+        # always finds it set. release.wait's bound is the hang guard.
+        held, release, released = threading.Event(), threading.Event(), threading.Event()
 
         def holder():
             with store._locked():
                 held.set()
-                release.wait(5)
+                release.wait(30)
+                released.set()
 
         worker = threading.Thread(target=holder)
         worker.start()
         held.wait(5)
-        threading.Timer(1.5, release.set).start()
-        started = time.perf_counter()
         context = main_module._workspace_context()
-        waited = time.perf_counter() - started
+        waited_on_lock = released.is_set()
+        release.set()
         await asyncio.to_thread(worker.join)
         reading = getattr(main_module, "_catalog_reading", None)
         if reading is not None:
-            await asyncio.shield(reading[1])
-        return loop_thread, waited, context, main_module._workspace_context()
+            await asyncio.wait_for(asyncio.shield(reading[1]), 30)
+        return loop_thread, waited_on_lock, context, main_module._workspace_context()
 
-    loop_thread, waited, during, after = asyncio.run(scenario())
-    assert waited < 0.5, f"a loop reader waited {waited:.2f} s for the restore"
+    loop_thread, waited_on_lock, during, after = asyncio.run(scenario())
+    assert not waited_on_lock, "a loop reader waited for the lock the restore held"
     assert during["activeProjectId"] == before["activeProjectId"]
     assert threads and loop_thread not in threads
     assert after["workspaceRevision"] != before["workspaceRevision"]

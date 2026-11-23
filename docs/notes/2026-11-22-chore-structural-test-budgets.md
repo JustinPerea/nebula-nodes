@@ -66,3 +66,72 @@ Replaced wall-clock timing assertions in tests with structural checks that verif
 ## Sites left as is
 
 No requested site had to be left unfixed for lack of a product hook. In `frontend/tests/pr198Fix25Held.test.tsx`, tests 1 and 2 were already using fake timers on `origin/main` and needed no further change. Other wall-clock checks found across `backend/tests/` and `frontend/tests/` (performance bounds, relative speedups, and subprocess timeouts) were left untouched. They are listed in a comment on the pull request that made this change.
+
+---
+
+# chore/structural-test-budgets-2 (2026-11-22)
+
+Second batch of the same change: replaced wall-clock assertions that proved non-blocking, prompt, concurrent, or cancellation behavior with structural checks (event ordering, explicit gates, marker files, call counts, cancellation state, fake timers). No product code changed. The patterns below follow the first batch's: a health or look request that can only answer while a provable hold is in place, subprocesses that wait on each other's marker files, and hang guards labeled as hang guards rather than budgets.
+
+## Sites updated
+
+### 1. `backend/tests/test_mcp_nonblocking.py`
+
+- **`test_a_wait_in_flight_does_not_block_another_call`**:
+  - **What the old budget guarded**: `times["look"] < 1.5` guarded that an ordinary `look_at_canvas` answers while a 3 s `wait_for_canvas_change` is in flight — the wait does not run on the event loop and starve other calls.
+  - **Replacement**: Order instead of a bound, as `_assert_look_never_queued_behind_the_waits` already does for the many-waits case: the test asserts `times["wait0"] >= 2.9` (the wait genuinely stayed in flight long enough to order against) and `times["look"] < times["wait0"]` (the look answered before the wait ended — impossible if it ran on the same loop).
+- **`test_a_cancelled_call_ends_cleanly`** (parametrized over `wait_for_canvas_change`, `get_proposal`, `get_answers`, `describe_node`):
+  - **What the old budget guarded**: `freed < freed_within` (1.5 s) guarded that a cancelled call gives its worker-thread slot back promptly instead of polling on to the wait's own deadline, and that it ends cancelled (a normal return makes the SDK answer twice and take the whole server down).
+  - **Replacement**: `_FakeNebula` gained a server-level `gate`: every GET waits on `gate.wait(30)` when set, so the cancel notification provably lands while a request is in flight. The test counts `mcp_server._canvas_call` paths, asserts the cancelled answer is `"Request cancelled"`, asserts `_borrowed() == 1` (the worker still owns its slot while the gated request is held), then releases the gate and asserts the slot returns and `made <= 1` — the request already in flight may finish, but starting another would be polling past the cancel. The final `look_at_canvas` (`alive`) still proves the session survived. The 30 s monotonic loop is labeled a hang guard.
+
+### 2. `backend/tests/test_project_open_event_loop.py`
+
+- **The four ping tests** (`..._a_large_project_opens`, `..._is_reopened`, `..._a_stale_tab_is_recovered`, `..._a_graph_file_is_imported`):
+  - **What the old budgets guarded**: `latency < PING_LIMIT` guarded that `/api/health` answers while a whole-graph validation holds — the check runs off the event loop.
+  - **Replacement**: `slow_check` now carries `.started`, a `threading.Event` set while a slow check holds, and `.release`, which ends the hold. `_ping_during` raises the hold to 30 s (the hang guard), waits for `.started` in a worker thread, sends the ping, and only then sets `.release`. The check therefore holds until the ping has answered, so a ping that answers at all answered during the hold; there is no time window left. Other tests that use `slow_check` keep the 1.2 s hold. The tests assert `in_flight` (the open had not completed when the ping answered) and `during` (the check still held), plus the existing `not any(slow_check)` proof that validation ran off the loop. `PING_LIMIT` and `gc.collect()` are gone; the event wait's 30 s bound is a hang guard.
+- **`test_an_open_that_will_be_refused_does_not_wait_for_the_check`**:
+  - **What the old budget guarded**: `took < DELAY / 2` guarded that a refused open (stale revision, active run) does not wait out a whole-graph check it did not need.
+  - **Replacement**: Removed. `assert not slow_check` already proves the structural fact directly — no whole-graph check ran, so there was nothing for the refusal to wait on; the wall-clock bound added nothing.
+- **`test_the_unlocked_read_does_not_wait_for_the_catalog_lock`**:
+  - **What the old budget guarded**: `time.monotonic() - started < 1` guarded that `read_unlocked()` returns while another thread holds the catalog lock — the open's threaded check must not wait on the lock the loop takes.
+  - **Replacement**: The holder thread now sets `released` inside the lock before letting go (its `release.wait(30)` is a hang guard). The test asserts `not released.is_set()` when the read returns — a read that waited for the lock would always find `released` set. `holder.join(30)` bounds the cleanup.
+
+### 3. `backend/tests/test_project_catalog_restore_fix2.py`
+
+- **`test_a_loop_reader_never_restores_on_the_loop_or_waits_for_a_restore`**:
+  - **What the old budget guarded**: `waited < 0.5` guarded that `_workspace_context()` answers while another thread holds `store._locked()` (a 1.5 s Timer released it) — a loop reader must not block behind a restore's lock.
+  - **Replacement**: Same shape as the catalog-lock site above: the holder sets `released` inside the lock and waits on `release.wait(30)` (hang guard). The test reads `waited_on_lock = released.is_set()` right after `_workspace_context()` returns, then releases the holder, waits out the async catalog-reading task (`asyncio.wait_for(..., 30)`), and asserts `not waited_on_lock` plus the unchanged structural checks (old active project observed while restoration was pending, restore ran off the loop, workspace revision advanced).
+
+### 4. `backend/tests/test_gemini_cli_setup.py`
+
+- **`test_version_and_help_run_side_by_side`**:
+  - **What the old budget guarded**: `time.monotonic() - started < 1.8` with two `sleep 1` probes guarded that `--version` and `--help` run side by side, not in series.
+  - **Replacement**: A barrier in the fake `gemini` script: each invocation writes `started-<flag>` and exits only once the other's marker exists (its own 400 x 0.05 s bound fails a run that queued instead of overlapping). The test asserts `result.ran`, `acp_flag == "--acp"`, and that both `started-version` and `started-help` exist — neither subprocess could have answered before the other started.
+- **`test_a_probe_already_running_is_not_started_again`**:
+  - **What the old budget guarded**: `time.sleep(0.4)` hoped the first probe was running before the second look; `waited < 0.5` guarded that a second `g.probe` while one is in flight returns `checking` instead of starting another pair of subprocesses.
+  - **Replacement**: The fake script writes `started-<flag>` for each subprocess and holds on a `release` file (own bound covers a hang). The test polls for both markers — `time.monotonic() + 30` labeled a hang guard — so the second `g.probe` provably lands while the first is running, then asserts `not second.ran and second.checking`, `"still checking" in note`, and `sorted(count) == ["--help", "--version"]` (exactly one probe's two subprocesses, never a third). `first.join(timeout=60)` bounds the cleanup.
+
+### 5. `backend/tests/test_input_size_security.py`
+
+- **`test_quick_measures_off_the_event_loop`, `test_a_graph_run_measures_off_the_event_loop`, `test_a_proposal_estimate_measures_off_the_event_loop`**:
+  - **What the old budgets guarded**: `still_going and waited < 0.8` guarded that `/api/health` answers while an input measure's slow ffprobe holds — the measure runs off the event loop.
+  - **Replacement**: `_slow_store_clip`'s fake probe sets `running` while it holds and waits on `release` (30 s hang guard). `_while_slow` waits for `probe_running` in a worker thread before the health request, so the health check can only answer during the probe's hold. The tests assert `held and still_going` (the probe still held, the measured request still in flight, when health answered).
+- **`test_the_packet_pass_stops_at_the_deadline`**:
+  - **What the old budget guarded**: `time.monotonic() - started < 3` guarded that the packet pass stops at `SIZE_PROBE_TIMEOUT_SECONDS` (0.5 s) instead of reading the whole fake stream (~5M lines for a million packets); `killed` checked ffprobe died.
+  - **Replacement**: The fake's `delay=0.01` per line floors the read rate, so `process.read <= 75` is a deterministic bound on "stopped early" — the deadline plus slack — while `process.killed` keeps the enforcement check. A `read_after_deadline` counter was tried first and removed: a wall-clock deadline against timer-thread scheduling jittered the count by lines, the same flake this change removes.
+
+### 6. `frontend/tests/saveFixStep.pr205r9.test.ts`
+
+- **`a 10,000-node canvas with 50 snapshot steps: each node is measured once, within budget`**:
+  - **What the old budget guarded**: `expect(took).toBeLessThan(1_500)` guarded that the undo walk measures each node once per content version (memoized), not once per snapshot step — a per-step measure would take minutes.
+  - **Replacement**: Removed the timer; the check already in the test is the structural one: `measureShape.mock.calls.length === 1 + nodes.length + edges.length` (the root, each node, each connection, once). A measure-per-step regression makes it 50 calls a node — the comment now says so.
+
+### 7. `frontend/tests/Inspector.paletteLoadFail.test.tsx`
+
+- **`keeps Try again mounted and focused across a second failure, held 400 ms, and re-announces`**:
+  - **What the old budget guarded**: A real-timer lower bound (`>= ~400 ms` around `wait`s) guarded that Try again holds `aria-disabled` for `PALETTE_LINE_MIN_MS` after a retry starts, so the failure line can't be tapped through while a second extract runs.
+  - **Replacement**: The `pr198Fix25Held` fake-clock pattern (`vi.useFakeTimers` over `setTimeout`, `clearTimeout`, `performance`, `Date`; `step` / `settleNoAdvance` on `setImmediate`). The test asserts `aria-disabled` at `PALETTE_LINE_MIN_MS - 1` and its removal at exactly `PALETTE_LINE_MIN_MS` (`Date.now() - started === PALETTE_LINE_MIN_MS`), so the hold is proven against one controlled clock — no real-time window.
+
+## Sites left as is (second batch)
+
+No requested site needed product code. Out of scope per the task and untouched: performance and DoS bounds (`test_item_name_controls.py`, `test_agent_canvas_limits_r9.py`, the median in `test_canvas_pins.py`), the lower bounds in `test_mcp_nonblocking.py` (~line 200) and `test_mcp_channel.py` (~line 2491), `test_parent_watch.py` (~line 86), and `frontend/tests/agentPresenceFollowups.ratchet.test.ts`.

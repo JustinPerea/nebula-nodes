@@ -35,6 +35,11 @@ class _FakeNebula(BaseHTTPRequestHandler):
     """/api/canvas/events, a proposal and a question set hold for their `wait`, node "slow" for 1 s; the rest answer at once."""
 
     def do_GET(self) -> None:  # noqa: N802 (http.server's name)
+        # A test can hold every request open until it lets the gate go
+        # (the wait's own bound keeps a stuck gate from hanging the suite).
+        gate = getattr(self.server, "gate", None)
+        if gate is not None:
+            gate.wait(30)
         url = urlsplit(self.path)
         if url.path == "/api/canvas/events":
             time.sleep(float(parse_qs(url.query).get("wait", ["0"])[0]))
@@ -71,7 +76,7 @@ def fake_nebula(monkeypatch):
     monkeypatch.delenv("NEBULA_APP_TOKEN", raising=False)
     monkeypatch.setattr(mcp_server, "_base_url", f"http://127.0.0.1:{server.server_address[1]}")
     try:
-        yield
+        yield server
     finally:
         server.shutdown()
         server.server_close()
@@ -103,10 +108,11 @@ async def _wait_then_look(waits: int, wait_seconds: float) -> dict[str, float]:
 
 def test_a_wait_in_flight_does_not_block_another_call(fake_nebula):
     times = anyio.run(_wait_then_look, 1, 3.0)
-    # On a server that runs the wait on its event loop, look lands with the
-    # wait (about 3 s). Off the loop it is one local round trip.
-    assert times["look"] < 1.5, times
+    # Order, as _assert_look_never_queued_behind_the_waits: on a server that
+    # runs the wait on its event loop, look lands after the wait ends; off
+    # the loop it answers while the wait is still in flight.
     assert times["wait0"] >= 2.9, times
+    assert times["look"] < times["wait0"], times
 
 
 def test_long_polls_cannot_starve_other_calls(fake_nebula, monkeypatch):
@@ -144,24 +150,37 @@ def _borrowed() -> int:
     return mcp_server._CALL_LIMITER.borrowed_tokens + mcp_server._WAIT_LIMITER.borrowed_tokens
 
 
-@pytest.mark.parametrize("tool, args, freed_within", [
+@pytest.mark.parametrize("tool, args", [
     # The long-polls stop at their next poll.
-    ("wait_for_canvas_change", {"timeout_seconds": 8}, 1.5),
-    ("get_proposal", {"proposal_id": "p1", "wait_seconds": 8}, 1.5),
-    ("get_answers", {"question_id": "s1", "wait_seconds": 8}, 1.5),
-    # One request can't be interrupted; it ends when Nebula answers (1 s).
-    ("describe_node", {"definition_id": "slow"}, 1.5),
+    ("wait_for_canvas_change", {"timeout_seconds": 8}),
+    ("get_proposal", {"proposal_id": "p1", "wait_seconds": 8}),
+    ("get_answers", {"question_id": "s1", "wait_seconds": 8}),
+    # One request can't be interrupted; it ends when Nebula answers.
+    ("describe_node", {"definition_id": "slow"}),
 ])
-def test_a_cancelled_call_ends_cleanly(fake_nebula, monkeypatch, tool, args, freed_within):
+def test_a_cancelled_call_ends_cleanly(fake_nebula, monkeypatch, tool, args):
     # Claude Code sends notifications/cancelled when a call is interrupted; the
     # server answers "Request cancelled" at once. Then (1) the worker thread
-    # must give its slot back soon, not poll on to the wait's own deadline (up
-    # to 300 s), and (2) the call must end as cancelled: if it returns
-    # normally, the SDK responds a second time, asserts, and the whole server
-    # (every agent's tools) goes down.
+    # must give its slot back once its request in flight ends, not poll on to
+    # the wait's own deadline (up to 300 s), and (2) the call must end as
+    # cancelled: if it returns normally, the SDK responds a second time,
+    # asserts, and the whole server (every agent's tools) goes down.
     monkeypatch.setattr(mcp_server, "_POLL_SECONDS", 0.5)
+    calls: list[str] = []
+    real_call = mcp_server._canvas_call
 
-    async def main() -> tuple[str, float, bool]:
+    def counting(method, path, ctx, **kwargs):
+        calls.append(path)
+        return real_call(method, path, ctx, **kwargs)
+
+    monkeypatch.setattr(mcp_server, "_canvas_call", counting)
+    # Every Nebula request waits on the gate: the cancel lands while a
+    # request is provably in flight, and the test lets it go only once the
+    # cancelled answer has arrived (the gate's own bound covers a hang).
+    gate = threading.Event()
+    fake_nebula.gate = gate
+
+    async def main() -> tuple[str, int, int, bool]:
         outcome: dict[str, str] = {}
         async with create_connected_server_and_client_session(mcp_server.mcp._mcp_server) as session:
             async def call() -> None:
@@ -176,19 +195,32 @@ def test_a_cancelled_call_ends_cleanly(fake_nebula, monkeypatch, tool, args, fre
                 await anyio.sleep(0.3)
                 assert _borrowed() == 1
                 (request_id,) = session._response_streams  # the call in flight
+                at_cancel = len(calls)
                 await session.send_notification(types.ClientNotification(types.CancelledNotification(
                     params=types.CancelledNotificationParams(requestId=request_id))))
-                cancelled = time.monotonic()
-                while _borrowed() and time.monotonic() - cancelled < 5:
+                until = time.monotonic() + 30  # a hang guard, not a budget
+                while "result" not in outcome and time.monotonic() < until:
                     await anyio.sleep(0.05)
-                freed = time.monotonic() - cancelled
+                assert outcome.get("result") == "Request cancelled", outcome
+                # The cancelled answer is in, the request is still held by
+                # the gate, and the worker still holds its slot on it.
+                assert _borrowed() == 1
+                gate.set()
+                while _borrowed() and time.monotonic() < until:
+                    await anyio.sleep(0.05)
+                held = _borrowed()
+                made = len(calls) - at_cancel
             await anyio.sleep(0.2)
             alive = not (await session.call_tool("look_at_canvas", {})).isError
-        return outcome["result"], freed, alive
+        return outcome["result"], held, made, alive
 
-    result, freed, alive = anyio.run(main)
+    result, held, made, alive = anyio.run(main)
     assert result == "Request cancelled"
-    assert freed < freed_within, f"the cancelled {tool} held its thread {freed:.1f} s"
+    assert not held, f"the cancelled {tool} held its thread past the guard"
+    # The request in flight when the cancel landed was counted before it, and
+    # it may finish; any request after it is polling on past the cancel (to
+    # the 8 s deadline a dozen more would go out).
+    assert made == 0, f"the cancelled {tool} made {made} requests after its cancel"
     assert alive
 
 
