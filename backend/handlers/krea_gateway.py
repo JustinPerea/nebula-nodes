@@ -206,11 +206,11 @@ def _validate(body: dict, schema: dict) -> None:
                 if isinstance(branches, list) and branches and all(
                     isinstance(b, dict) and set(b) == {"required"} and isinstance(b["required"], list) and b["required"]
                     for b in branches) else None)
-        exc = ValueError(f"Invalid Krea {field}: " + (f"needs {', or '.join(sets)}" if sets else error.message))
         if sets:
-            labels = ", or ".join(s.replace("_", " ").capitalize() for s in sets)
-            raise with_person_line(exc, f"Krea needs {labels} set on this node. Set it, then run the node again.")
-        raise exc
+            needs = ", or ".join(sets)
+            raise with_person_line(ValueError(f"Invalid Krea {field}: needs {needs}"),
+                                   f"Krea needs {needs}. Set it on this node, then run the node again.")
+        raise ValueError(f"Invalid Krea {field}: {error.message}")
 
 
 async def _request_body(node: GraphNode, inputs: dict[str, PortValueDict], model: dict) -> dict:
@@ -361,9 +361,34 @@ async def handle_krea_catalog(
     api_key = _api_key(api_keys) if auth_mode == "api-token" else None
     wired = {port: value for port, value in inputs.items()
              if value.value is not None and value.value != "" and value.value != []}
+    _refuse_empty_required(node, inputs, wired, model)
     body = await _request_body(node, wired, model)
     body.update(_required_defaults(node, catalog_key, body, model["requestSchema"]))
     return await run_gateway(node, model, body, auth_mode, api_key, emit)
+
+
+def _refuse_empty_required(node: GraphNode, inputs: dict[str, PortValueDict], wired: dict[str, PortValueDict],
+                           model: dict) -> None:
+    """Stop a run whose required port is connected but empty (a Text node
+    with nothing typed). The engine checks only that the port is connected,
+    and an empty value is dropped from the request with the other unset
+    ones, so Krea's schema can't catch it where the field is optional there:
+    Krea 3's prompt can give way to a region note, which the node doesn't
+    offer."""
+    from execution.maker_routes import definition_for
+
+    try:
+        definition = definition_for(node.definition_id)
+    except ValueError:
+        return
+    fields = model.get("portFields") if isinstance(model.get("portFields"), dict) else {}
+    for port in definition.get("inputPorts") or []:
+        field = str(fields.get(port["id"], port["id"]))
+        if port.get("required") and field in inputs and field not in wired:
+            label = str(port.get("label") or port["id"])
+            fix = "Type it in the connected node" if port.get("dataType") == "Text" else "Connect another one"
+            raise with_person_line(ValueError(f"Krea {field} is empty"),
+                                   f"{label} is empty. {fix}, then run the node again.")
 
 
 def _required_defaults(node: GraphNode, catalog_key: str, body: dict, schema: dict) -> dict:

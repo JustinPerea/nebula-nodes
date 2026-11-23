@@ -82,7 +82,8 @@ UNPRICED_FIELD_NOTES = {
 K2_TIER = "k2BillingTier"
 K2_TIERS = ("text-to-image", "srefs", "moodboards")
 # The guide's Pricing section is re-read on every refresh (--refresh,
-# --openapi, --refresh-guide) and pinned in the catalog under K2_GUIDE_KEY.
+# --openapi, --refresh-guide; with --only, only when --refresh-guide or
+# --guide FILE asks) and pinned in the catalog under K2_GUIDE_KEY.
 # Its prices must equal the OpenAPI's, and a line in that section this script
 # doesn't parse (a new note, a new column) stops the refresh, so a change to
 # the guide alone gets a human re-read.

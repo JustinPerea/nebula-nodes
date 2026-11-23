@@ -291,10 +291,34 @@ def _template(node: ast.AST) -> str | None:
     return None
 
 
+def _bound_exceptions(tree: ast.AST) -> dict[ast.AST, dict[str, ast.Call]]:
+    """Per function, the names bound to an exception built right there
+    (``exc = ValueError(...)``). Without this, ``raise exc`` escapes the
+    count that ``raise ValueError(...)`` is held to."""
+    scopes: dict[ast.AST, dict[str, ast.Call]] = {}
+    for scope in ast.walk(tree):
+        if not isinstance(scope, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        bound: dict[str, ast.Call] = {}
+        for node in ast.walk(scope):
+            if (isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name)
+                    and isinstance(node.value, ast.Call)):
+                inner, _wrapper = _peel(node.value)
+                func = inner.func if isinstance(inner, ast.Call) else None
+                name = func.id if isinstance(func, ast.Name) else getattr(func, "attr", "")
+                if name.endswith(("Error", "Exception")):
+                    bound[node.targets[0].id] = node.value
+        for node in ast.walk(scope):
+            scopes[node] = bound  # walk reaches an inner function after its outer one, so the inner wins
+    return scopes
+
+
 def _raises(path: Path) -> list[tuple[bool, str, ast.Call, ast.Call | None]]:
     """(has a person line, text template, exception call, wrapper call) per literal raise."""
     found = []
-    for node in ast.walk(ast.parse(path.read_text())):
+    tree = ast.parse(path.read_text())
+    bound = _bound_exceptions(tree)
+    for node in ast.walk(tree):
         if isinstance(node, ast.Raise):
             exc = node.exc
         elif isinstance(node, ast.Return):
@@ -302,6 +326,9 @@ def _raises(path: Path) -> list[tuple[bool, str, ast.Call, ast.Call | None]]:
         else:
             continue
         exc, wrapper = _peel(exc)
+        if isinstance(exc, ast.Name) and isinstance(node, ast.Raise) and exc.id in bound.get(node, {}):
+            exc, built_with = _peel(bound[node][exc.id])
+            wrapper = wrapper or built_with
         if not isinstance(exc, ast.Call) or not exc.args:
             continue
         name = exc.func.id if isinstance(exc.func, ast.Name) else getattr(exc.func, "attr", "")
@@ -327,8 +354,8 @@ UNLINED_BASELINE: dict[str, int] = {
     "handlers/elevenlabs.py": 20, "handlers/fal_universal.py": 9, "handlers/gemini_omni.py": 8,
     "handlers/google_gemini.py": 9, "handlers/grok_video.py": 7, "handlers/higgsfield.py": 8,
     "handlers/ideogram.py": 12, "handlers/jev_box.py": 1, "handlers/jev_decide.py": 2, "handlers/krea.py": 18,
-    "handlers/krea_export.py": 9, "handlers/krea_gateway.py": 26, "handlers/krea_workspace.py": 19,
-    "handlers/meshy.py": 26, "handlers/minimax.py": 6, "handlers/minimax_v2.py": 5,
+    "handlers/krea_export.py": 9, "handlers/krea_gateway.py": 27, "handlers/krea_workspace.py": 19,
+    "handlers/meshy.py": 26, "handlers/minimax.py": 7, "handlers/minimax_v2.py": 5,
     "handlers/openai_audio.py": 3, "handlers/openai_image.py": 1, "handlers/openai_image_edit.py": 2,
     "handlers/openai_image_v2.py": 2, "handlers/openrouter.py": 1, "handlers/openrouter_media.py": 14,
     "handlers/qc_base.py": 1, "handlers/quiver.py": 6, "handlers/remotion_node.py": 5,
@@ -341,7 +368,7 @@ UNLINED_BASELINE: dict[str, int] = {
     "execution/maker_routes_google.py": 2, "execution/maker_routes_ideogram_runway.py": 3,
     "execution/maker_routes_minimax_meshy.py": 5, "execution/maker_routes_openai.py": 3,
     "execution/maker_routes_xai.py": 1, "execution/poll_retry.py": 1, "execution/route_clients.py": 4,
-    "execution/stream_runner.py": 5, "execution/sync_runner.py": 4, "services/media_input.py": 3,
+    "execution/stream_runner.py": 7, "execution/sync_runner.py": 4, "services/media_input.py": 3,
     "services/qc_common.py": 6, "services/qc_jev.py": 3, "services/typesafe_client.py": 23,
     "services/vision_llm.py": 8, "services/google_vertex.py": 2, "services/quiver_client.py": 9,
     # Two entries were each raised by one later: handlers/replicate_model.py's
@@ -359,14 +386,15 @@ UNLINED_BASELINE: dict[str, int] = {
     "services/krea_mcp_generation.py": 17,
     # This pass lowered fourteen, mostly paid jobs Nebula stopped waiting on
     # (the slow-job line, design) and Krea's lines 1-10.
-    # minimax.py was lowered by one later: its missing task id now reads
-    # MiniMax's own code (a refused key or no balance gets the table's line),
-    # and the exception is built before the raise, so the guard can't read
-    # its text; tests/test_error_copy_round3d.py pins it.
-    # This pass lowered stream_runner.py by one: the image stream's
-    # "ended without a final image event" is built before its raise, so the
-    # card can give a fal.ai job still running the slow-job line (design);
-    # tests/test_error_copy_round3d2.py pins its text.
+    # The guard follows a name bound to an exception in the same function
+    # (exc = RuntimeError(...), then raise exc), so building an exception
+    # before its raise no longer hides it from the count. That put back
+    # minimax.py's missing task id (MiniMax's answer; a refused key or no
+    # balance gets the table's line, tests/test_error_copy_round3d.py) and
+    # stream_runner.py's "ended without a final image event", raised plain
+    # and as a failed job (fal.ai's stream; a job still running gets the
+    # slow-job line, tests/test_error_copy_round3d2.py). Both are provider
+    # answers, so they keep the general line.
 }
 
 

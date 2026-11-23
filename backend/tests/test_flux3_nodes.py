@@ -247,6 +247,20 @@ async def test_an_agent_made_krea_3_node_sends_the_resolution_krea_requires(monk
 
 
 @pytest.mark.asyncio
+async def test_a_krea_3_run_with_an_empty_prompt_stops_before_krea(monkeypatch):
+    """Krea's schema leaves prompt optional (a region note can stand in for
+    it) and the node has no regions, so a connected but empty prompt stops
+    here instead of reaching Krea."""
+    from execution.person_line import person_line
+
+    hosts = hosts_for(monkeypatch, "krea", False)
+    with pytest.raises(ValueError, match=r"^Krea prompt is empty$") as exc:
+        await registry_handler("krea-3")(node("krea-3", _provider="krea"), ports(prompt=""), dict(KEYS))
+    assert person_line(exc.value) == "Prompt is empty. Type it in the connected node, then run the node again."
+    assert not [r for r in hosts.requests if r.method == "POST"]
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("model, sends", [("berry", True), ("jam", False)])
 async def test_krea_3_on_fal_sends_a_negative_prompt_only_where_it_shows(monkeypatch, model, sends):
     """Negative prompt shows only on Berry (visibleWhen {model: [berry]}; fal:

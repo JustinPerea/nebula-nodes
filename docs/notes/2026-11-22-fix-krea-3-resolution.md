@@ -19,4 +19,10 @@
 
 ## Catalog refresh
 
-- The Krea 3 catalog entry was refreshed alone (`scripts/sync-krea-catalog.py --openapi <file> --only /generate/image/krea/krea-3`). `--only` used to re-read the Krea 2 guide as well, and the live guide's `> [!NOTE]` blocks in Pricing stop `parse_k2_guide`, so a one-entry refresh failed. `--only` now keeps the Krea 2 guide pinned unless `--refresh-guide` is given. Updating `parse_k2_guide` for the NOTE blocks is left for the next Krea 2 refresh.
+- The Krea 3 catalog entry was refreshed alone (`scripts/sync-krea-catalog.py --openapi <file> --only /generate/image/krea/krea-3`). `--only` used to re-read the Krea 2 guide as well, and the live guide's `> [!NOTE]` blocks in Pricing stop `parse_k2_guide`, so a one-entry refresh failed. `--only` now keeps the Krea 2 guide pinned unless `--refresh-guide` or `--guide FILE` is given. Updating `parse_k2_guide` for the NOTE blocks is left for the next Krea 2 refresh.
+
+## Review fixes
+
+- Required ports that are connected but empty (a Text node with nothing typed) now stop the run in `handle_krea_catalog` (`_refuse_empty_required`). The refreshed Krea 3 schema leaves `prompt` optional, because a region note can stand in for it, but the node has no regions, so an empty prompt would otherwise reach Krea.
+- `tests/test_error_copy_round3c2.py` `_raises` follows a name bound to an exception in the same function (`exc = RuntimeError(...)`, then `raise exc`). The first version of `_validate` here dropped the unlined count from 27 to 26 that way, without adding a line. The guard now also counts `minimax.py`'s missing task id and `stream_runner.py`'s final-event failure (provider answers, baselines 6 to 7 and 5 to 7), and `typesafe_client.py`'s oversized-file raise got the person line its twin already had.
+- Plan runs of Krea 3 go through the Krea MCP, whose guide said closed beta on 2026-10-15 and was not re-checked, so the docs scope "every workspace" to API-token runs.

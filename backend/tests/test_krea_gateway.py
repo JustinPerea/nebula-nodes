@@ -812,7 +812,7 @@ def test_krea_3_without_a_size_names_the_fields_it_needs():
     model = gateway.catalog_models()["krea-image-krea-krea-3"]
     with pytest.raises(ValueError, match=r"^Invalid Krea request: needs resolution, or width and height$") as exc:
         gateway._validate({"prompt": "A cyan logo"}, model["requestSchema"])
-    assert person_line(exc.value) == "Krea needs Resolution, or Width and height set on this node. Set it, then run the node again."
+    assert person_line(exc.value) == "Krea needs resolution, or width and height. Set it on this node, then run the node again."
     gateway._validate({"prompt": "A cyan logo", "resolution": "4K"}, model["requestSchema"])
     gateway._validate({"prompt": "A cyan logo", "width": 1600, "height": 900}, model["requestSchema"])
 

@@ -188,7 +188,7 @@ These are one node per model with a provider switcher (`_provider`: `auto` or a 
 
 **`krea-3` "Krea 3"** (Krea is the maker). Ports `prompt`, `images` (up to 8 references; Krea's OpenAPI, MCP schema and docs all say 8).
 
-- Route `krea` first: `/generate/image/krea/krea-3`, API token or plan (`plan: optional`). Available to every workspace (checked 2026-11-22). Under Auto, `_kreaAuth: mcp` runs on the plan, and new nodes take the global Krea mode, because Krea is the maker.
+- Route `krea` first: `/generate/image/krea/krea-3`, API token or plan (`plan: optional`). API-token runs are open to every workspace (checked 2026-11-22); plan runs go through the Krea MCP, not re-checked. Under Auto, `_kreaAuth: mcp` runs on the plan, and new nodes take the global Krea mode, because Krea is the maker.
 - Route `fal` second: `krea/v3/text-to-image`, or `krea/v3/edit` when images are wired.
 - Shared: `seed` only. The two providers name everything else differently, and neither documents a mapping, so each route keeps its own settings:
   - Krea: `thinking_mode` fast / high (default fast), `resolution` 1K / 2K / 4K (default 1K; required by Krea unless `width` and `height` are sent), `aspect_ratio` (10 values; unset means automatic framing), `regional_edit` (needs a reference image).
