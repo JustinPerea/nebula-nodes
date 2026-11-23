@@ -27,7 +27,7 @@ def _fresh_keys():
     scene_keys.forget()
 
 
-def test_m1_an_mcp_read_guards_a_cli_write(api):  # noqa: F811
+def test_an_mcp_read_guards_a_cli_write(api):  # noqa: F811
     node = _cinema(api)
     assert api.client.get("/api/canvas/snapshot", headers=MCP).status_code == 200
     _person_types(api, node)
@@ -36,7 +36,7 @@ def test_m1_an_mcp_read_guards_a_cli_write(api):  # noqa: F811
     assert _prompts(api, node) == ["the person typed this", "a busy street"]
 
 
-def test_m1_a_cli_write_on_a_fresh_mcp_read_is_held_to_its_own_older_read(api):  # noqa: F811
+def test_a_cli_write_on_a_fresh_mcp_read_is_held_to_its_own_older_read(api):  # noqa: F811
     # (probe B8): the CLI's own read comes first,
     # so an MCP read never refreshes it. A refusal the agent recovers from
     # (`nebula look`, then redo), never a write over the person's typing.
@@ -54,7 +54,7 @@ def test_m1_a_cli_write_on_a_fresh_mcp_read_is_held_to_its_own_older_read(api): 
     assert redo.status_code == 200, redo.text
 
 
-def test_m1_a_session_that_never_read_is_held_to_the_names_read(api):  # noqa: F811
+def test_a_session_that_never_read_is_held_to_the_names_read(api):  # noqa: F811
     node = _cinema(api)
     assert api.client.get("/api/canvas/snapshot", headers=MCP).status_code == 200
     _person_types(api, node)
@@ -62,7 +62,7 @@ def test_m1_a_session_that_never_read_is_held_to_the_names_read(api):  # noqa: F
     assert blind.status_code == 409
 
 
-def test_m1_lanes_still_apart_and_name_only_as_before(api):  # noqa: F811
+def test_lanes_still_apart_and_name_only_as_before(api):  # noqa: F811
     node = _cinema(api)
     one = {**CODEX, "X-Nebula-Agent-Session": "agent-1"}
     two = {**CODEX, "X-Nebula-Agent-Session": "agent-2"}
@@ -74,7 +74,7 @@ def test_m1_lanes_still_apart_and_name_only_as_before(api):  # noqa: F811
     assert _put(api, node, two, _scene("the person typed this", "agent 2 on top")).status_code == 200
 
 
-def test_m1_a_verified_token_is_not_the_names_reader(api, monkeypatch):  # noqa: F811
+def test_a_verified_token_is_not_the_names_reader(api, monkeypatch):  # noqa: F811
     from commons.actors import agent_registry
     monkeypatch.setattr(agent_registry, "lookup", lambda token: {"runner": "codex", "session": "chat-a"} if token == "tok-a" else None)
     node = _cinema(api)
@@ -86,7 +86,7 @@ def test_m1_a_verified_token_is_not_the_names_reader(api, monkeypatch):  # noqa:
     assert _put(api, node, CODEX, _scene("the person typed this", "outside codex")).status_code == 200
 
 
-def test_n1_only_if_free_into_an_input_that_takes_several(api):  # noqa: F811
+def test_only_if_free_into_an_input_that_takes_several(api):  # noqa: F811
     node = _cinema(api)
     target = api.graph.add_node("gpt-image-2-5-edit", {}, position={"x": 400, "y": 0})
     api.graph.connect(node, "shot_s1", target, "images")

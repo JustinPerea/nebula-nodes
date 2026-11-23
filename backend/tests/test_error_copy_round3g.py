@@ -11,7 +11,7 @@ Design, verbatim (2026-10-23):
    “Prompt” brings something it can't take." "Connect an image to
    “Character Refs”.""
 3. "World Labs: keep the quotes." (already pinned by
-   test_error_copy_round3f.test_review_rule_5_the_lines_the_label_guard_found_quote_their_fields)
+   test_error_copy_round3f.test_the_lines_the_label_guard_found_quote_their_fields)
 - "Gemini Omni: the period inside the quote followed by a comma reads badly.
   → "Gemini Omni can edit a video but can’t make it longer. Describe the
   change as an edit, like “Change the lighting and keep everything else the
@@ -37,7 +37,7 @@ DEFINITIONS = json.loads((BACKEND / "data" / "node_definitions.json").read_text(
 # -- Design: a port's label sits in quotes ------------------------------------
 
 
-def test_the_port_check_catches_each_shape_and_lets_gms_lines_through() -> None:
+def test_the_port_check_catches_each_shape_and_lets_the_approved_lines_through() -> None:
     for line in (
         "The wire into the node's Prompt input brings something it can't take.",
         "The node's Images (1-4) input takes up to 4 wires.",
@@ -92,7 +92,7 @@ def test_every_wiring_line_names_the_port_in_quotes_exactly_as_the_node_shows_it
     assert not broken, "\n".join(broken[:40])
 
 
-def test_the_wiring_lines_in_gms_form() -> None:
+def test_the_wiring_lines_in_the_approved_form() -> None:
     from services import port_contracts
 
     prompt = {"id": "prompt", "label": "Prompt"}
@@ -168,7 +168,7 @@ def test_the_quoted_ports_other_rounds_wrote_are_the_nodes_own_labels() -> None:
     assert _port_label("krea-video-minimax-hailuo-02", "end_image") == "End image"
 
 
-def test_a_numbered_port_keeps_gms_second_example_form() -> None:
+def test_a_numbered_port_keeps_the_approved_second_example_form() -> None:
     from execution.person_line import connect_line
 
     assert connect_line("Item 1") == "Connect an output to “Item 1”, then run the node again."

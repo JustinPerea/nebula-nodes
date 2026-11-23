@@ -57,7 +57,7 @@ def _person_types(api, node, text="the person typed this"):  # noqa: F811
     return typed
 
 
-def test_h1_revisions_grow_with_each_authoring_and_stay_with_it(api):  # noqa: F811
+def test_revisions_grow_with_each_authoring_and_stay_with_it(api):  # noqa: F811
     node = _cinema(api)
     first = _export(api)["sceneRevs"][node]
     assert _export(api)["sceneRevs"][node] == first  # the same scene, the same revision
@@ -76,7 +76,7 @@ def test_h1_revisions_grow_with_each_authoring_and_stay_with_it(api):  # noqa: F
     assert _export(api)["sceneRevs"][node] == second
 
 
-def test_m1_a_switch_away_and_back_keeps_the_agents_read(api):  # noqa: F811
+def test_a_switch_away_and_back_keeps_the_agents_read(api):  # noqa: F811
     from tests.conftest import PERSON
     node = _cinema(api)
     assert api.client.get("/api/graph/export", headers=CODEX).status_code == 200
@@ -91,7 +91,7 @@ def test_m1_a_switch_away_and_back_keeps_the_agents_read(api):  # noqa: F811
     assert _prompts(api, node) == ["the person typed this", "a busy street"]
 
 
-def test_m2_two_sessions_of_one_agent_never_share_a_read(api):  # noqa: F811
+def test_two_sessions_of_one_agent_never_share_a_read(api):  # noqa: F811
     node = _cinema(api)
     one = {**CODEX, "X-Nebula-Agent-Session": "agent-1"}
     two = {**CODEX, "X-Nebula-Agent-Session": "agent-2"}
@@ -105,7 +105,7 @@ def test_m2_two_sessions_of_one_agent_never_share_a_read(api):  # noqa: F811
     assert taken.status_code == 200, taken.text
 
 
-def test_m2_a_verified_token_is_its_own_reader(api, monkeypatch):  # noqa: F811
+def test_a_verified_token_is_its_own_reader(api, monkeypatch):  # noqa: F811
     from commons.actors import agent_registry
     records = {"tok-a": {"runner": "codex", "session": "chat-a"}, "tok-b": {"runner": "codex", "session": "chat-b"}}
     monkeypatch.setattr(agent_registry, "lookup", lambda token: records.get(token))
@@ -118,7 +118,7 @@ def test_m2_a_verified_token_is_its_own_reader(api, monkeypatch):  # noqa: F811
     assert _put(api, node, a, _scene("a quiet street", "chat a's stale copy")).status_code == 409
 
 
-def test_l1_a_refusal_is_not_a_read_and_a_read_again_is(api):  # noqa: F811
+def test_a_refusal_is_not_a_read_and_a_read_again_is(api):  # noqa: F811
     node = _cinema(api)
     assert api.client.get("/api/graph/export", headers=CODEX).status_code == 200
     _person_types(api, node)
@@ -131,7 +131,7 @@ def test_l1_a_refusal_is_not_a_read_and_a_read_again_is(api):  # noqa: F811
     assert _put(api, node, CODEX, _scene("the person typed this", "codex on top")).status_code == 200
 
 
-def test_l2_a_write_whose_scene_is_nebulas_is_never_refused(api):  # noqa: F811
+def test_a_write_whose_scene_is_nebulas_is_never_refused(api):  # noqa: F811
     node = _cinema(api)
     assert api.client.get("/api/graph/export", headers=CODEX).status_code == 200
     _person_types(api, node)
@@ -140,7 +140,7 @@ def test_l2_a_write_whose_scene_is_nebulas_is_never_refused(api):  # noqa: F811
     assert same.status_code == 200, same.text
 
 
-def test_gm_r12_the_agents_refusal_detail_and_no_log_row(api):  # noqa: F811
+def test_the_agents_refusal_detail_and_no_log_row(api):  # noqa: F811
     node = _cinema(api)
     api.main.cli_graph.nodes[node]["label"] = "Opening"
     assert api.client.get("/api/graph/export", headers=CODEX).status_code == 200
@@ -153,7 +153,7 @@ def test_gm_r12_the_agents_refusal_detail_and_no_log_row(api):  # noqa: F811
     assert api.sent[before:] == []
 
 
-def test_l3_a_put_back_connect_never_takes_a_held_input(api):  # noqa: F811
+def test_a_put_back_connect_never_takes_a_held_input(api):  # noqa: F811
     node = _cinema(api)
     target = api.graph.add_node("gpt-image-2-5-edit", {}, position={"x": 400, "y": 0})
     api.graph.connect(node, "shot_s1", target, "mask")
@@ -166,7 +166,7 @@ def test_l3_a_put_back_connect_never_takes_a_held_input(api):  # noqa: F811
     assert free.status_code == 200, free.text
 
 
-def test_docs_say_the_round_9_rule():
+def test_docs_say_the_refusal_rule():
     """MCP-SETUP, SKILL.md and the MCP docstring (every feature has agent
     support): revisions, sessions, refusal is not a read, input_taken."""
     from pathlib import Path

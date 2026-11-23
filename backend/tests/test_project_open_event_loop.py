@@ -15,10 +15,9 @@ its refusals keep their order (a 404 or a stale revision still answers first).
 from __future__ import annotations
 
 import asyncio
-import gc
 import json
 import sys
-import time
+import threading
 from pathlib import Path
 from unittest.mock import AsyncMock
 from uuid import uuid4
@@ -38,11 +37,6 @@ from services.provider_start_guard import ProviderStartGuard
 AGENT = {"X-Nebula-Agent": "Claude Code"}
 SLOW = "slow-check-marker"
 DELAY = 1.2
-# A check on the event loop holds a ping at least DELAY - 0.1 s (the thread
-# assertions are the direct proof). The limit sits halfway, clear of a pause
-# the open didn't cause: CI held one ping 0.35 s before the check's thread had
-# even started, most likely a garbage-collection pass in the full suite.
-PING_LIMIT = DELAY / 2
 
 
 @pytest.fixture
@@ -60,20 +54,32 @@ def workspace(tmp_path, monkeypatch):
     return graph, store
 
 
+class _Threads(list):
+    """The thread record (a list of bools) with the hold's events alongside."""
+
+
 @pytest.fixture
 def slow_check(monkeypatch):
     """The check takes DELAY seconds of blocking work on any whole graph that
     holds SLOW (a stand-in for a large project's real check), and records the
-    thread each whole-graph check ran on."""
+    thread each whole-graph check ran on. ``.started`` is set while a slow
+    check holds, so a request can prove it answered during the check. A test
+    can raise ``.hold`` and end the hold early with ``.release``."""
     real = main_module.validate_file_references
-    threads: list[bool] = []
+    threads = _Threads()
+    threads.started = threading.Event()
+    threads.release = threading.Event()
+    threads.hold = DELAY
 
     def slow(value):
         if isinstance(value, dict) and ("nodes" in value or "snapshot" in value):
-            import threading
             threads.append(threading.current_thread() is threading.main_thread())
             if SLOW in json.dumps(value, default=str):
-                time.sleep(DELAY)
+                threads.started.set()
+                try:
+                    threads.release.wait(threads.hold)
+                finally:
+                    threads.started.clear()
         return real(value)
 
     monkeypatch.setattr(main_module, "validate_file_references", slow)
@@ -112,23 +118,27 @@ async def _client():
     return httpx.AsyncClient(transport=httpx.ASGITransport(app=main_module.app), base_url="http://127.0.0.1")
 
 
-async def _ping_during(request, *, after=0.1):
-    """Send ``request`` and, ``after`` seconds in, a ping. Returns (response,
-    ping latency measured from when it was due, whether the request was still
-    in flight when the ping answered)."""
-    gc.collect()  # now, rather than inside the window
-    started = time.monotonic()
+async def _ping_during(request, check):
+    """Send ``request`` and, once the slow ``check`` holds, a ping. The check
+    holds until the ping has answered (30 s at most, the hang guard), so a ping
+    that answers at all answered while the check held: the loop was free for
+    it. Returns (response, whether the request was still in flight when the
+    ping answered, whether the check still held then)."""
+    check.hold = 30
     task = asyncio.ensure_future(request)
 
     async def ping(client):
-        await asyncio.sleep(after)
-        response = await client.get("/api/health")
-        assert response.status_code == 200
-        return time.monotonic() - started - after, not task.done()
+        try:
+            assert await asyncio.to_thread(check.started.wait, 30), "the whole-graph check never ran"
+            response = await client.get("/api/health")
+            assert response.status_code == 200
+            return not task.done(), check.started.is_set()
+        finally:
+            check.release.set()
 
     async with await _client() as pinger:
-        latency, in_flight = await ping(pinger)
-    return await task, latency, in_flight
+        in_flight, during = await ping(pinger)
+    return await task, in_flight, during
 
 
 # -- the loop keeps serving ------------------------------------------------------
@@ -139,12 +149,13 @@ async def test_a_ping_answers_while_a_large_project_opens(workspace, slow_check)
     async with await _client() as client:
         small = (await client.post("/api/projects", json={"name": "Small"})).json()
         big = _seed(store, "Big", _snapshot(SLOW, "a dune"))
-        response, latency, in_flight = await _ping_during(
-            client.post(f"/api/projects/{big}/open", json={"workspaceRevision": small["workspaceRevision"]}))
+        response, in_flight, during = await _ping_during(
+            client.post(f"/api/projects/{big}/open", json={"workspaceRevision": small["workspaceRevision"]}),
+            slow_check)
     assert response.status_code == 200, response.text
     assert slow_check and not any(slow_check), "the whole-snapshot check ran on the event loop"
-    assert latency < PING_LIMIT, f"a ping waited {latency:.2f}s behind the open"
     assert in_flight, "the open finished before the ping, so it proves nothing"
+    assert during, "the ping answered after the check's hold ended, so it proves nothing"
     assert store.read()["activeProjectId"] == big
 
 
@@ -156,12 +167,12 @@ async def test_a_ping_answers_while_the_open_project_is_reopened(workspace, slow
     async with await _client() as client:
         made = (await client.post("/api/projects", json={"name": "Open"})).json()
         graph.add_node("text-input", {"value": SLOW})
-        response, latency, in_flight = await _ping_during(
+        response, in_flight, during = await _ping_during(
             client.post(f"/api/projects/{made['project']['id']}/open", json={"workspaceRevision": made["workspaceRevision"]},
-                        headers=AGENT))
+                        headers=AGENT), slow_check)
     assert response.status_code == 200, response.text
     assert not any(slow_check), "the whole-snapshot check ran on the event loop"
-    assert in_flight and latency < PING_LIMIT, f"a ping waited {latency:.2f}s behind the reopen"
+    assert in_flight and during, "the ping answered outside the check's hold, so it proves nothing"
     assert [node["params"]["value"] for node in graph.nodes.values()] == [SLOW]
 
 
@@ -170,12 +181,12 @@ async def test_a_ping_answers_while_a_stale_tab_is_recovered(workspace, slow_che
     _graph, store = workspace
     async with await _client() as client:
         made = (await client.post("/api/projects", json={"name": "Dunes"})).json()
-        response, latency, in_flight = await _ping_during(client.post("/api/projects/recover", json={
+        response, in_flight, during = await _ping_during(client.post("/api/projects/recover", json={
             "sourceProjectId": made["project"]["id"], "recoveryId": uuid4().hex,
-            "snapshot": _snapshot(SLOW), "paramsVersion": main_module.PARAMS_VERSION}))
+            "snapshot": _snapshot(SLOW), "paramsVersion": main_module.PARAMS_VERSION}), slow_check)
     assert response.status_code == 200, response.text
     assert not any(slow_check), "the whole-snapshot check ran on the event loop"
-    assert in_flight and latency < PING_LIMIT, f"a ping waited {latency:.2f}s behind the recovery"
+    assert in_flight and during, "the ping answered outside the check's hold, so it proves nothing"
     assert len(store.read()["projects"]) == 2
 
 
@@ -184,11 +195,12 @@ async def test_a_ping_answers_while_a_graph_file_is_imported(workspace, slow_che
     graph, _store = workspace
     async with await _client() as client:
         await client.post("/api/projects", json={"name": "Dunes"})
-        response, latency, in_flight = await _ping_during(client.post("/api/graph/import", json={
-            "nodes": [{"id": "a", "definitionId": "text-input", "params": {"value": SLOW}}], "edges": []}))
+        response, in_flight, during = await _ping_during(client.post("/api/graph/import", json={
+            "nodes": [{"id": "a", "definitionId": "text-input", "params": {"value": SLOW}}], "edges": []}),
+            slow_check)
     assert response.status_code == 200, response.text
     assert not any(slow_check), "the whole-graph check ran on the event loop"
-    assert in_flight and latency < PING_LIMIT, f"a ping waited {latency:.2f}s behind the import"
+    assert in_flight and during, "the ping answered outside the check's hold, so it proves nothing"
     assert [node["params"]["value"] for node in graph.nodes.values()] == [SLOW]
 
 
@@ -306,11 +318,10 @@ async def test_an_open_that_will_be_refused_does_not_wait_for_the_check(workspac
         revision = "stale" if refusal == "stale" else current["workspaceRevision"]
         if refusal == "run-active":
             monkeypatch.setattr(main_module.execution_runs, "has_active", lambda: True)
-        started = time.monotonic()
         response = await client.post(f"/api/projects/{big}/open", json={"workspaceRevision": revision})
-        took = time.monotonic() - started
     assert response.status_code == 409, response.text
-    assert took < DELAY / 2, f"the refusal waited {took:.2f}s for a check it didn't need"
+    # The fixture records every whole-graph check: none ran, so there was
+    # nothing for the refusal to have waited on.
     assert not slow_check, "the whole snapshot was checked for an open that was refused"
     assert store.read()["activeProjectId"] == current["project"]["id"]
 
@@ -476,25 +487,24 @@ async def test_a_reopen_checks_the_live_canvas_it_commits(workspace, slow_check)
 def test_the_unlocked_read_does_not_wait_for_the_catalog_lock(tmp_path):
     """The open's threaded check reads the catalog without its lock, which the
     loop takes: a thread holding it would stall the loop."""
-    import threading
-
     store = ProjectStore(tmp_path / "projects")
     project_id = _seed(store, "Dunes", _snapshot("a dune"))
-    held, release = threading.Event(), threading.Event()
+    held, release, released = threading.Event(), threading.Event(), threading.Event()
 
     def hold():
         with store.transaction():
             held.set()
-            release.wait(5)
+            release.wait(30)  # the hang guard, not a budget
+            released.set()  # inside the lock: a read that waited finds it set
 
     holder = threading.Thread(target=hold)
     holder.start()
     try:
         assert held.wait(5)
-        started = time.monotonic()
         catalog = store.read_unlocked()
-        assert time.monotonic() - started < 1
+        # The read answered while the lock was still held.
+        assert not released.is_set(), "read_unlocked waited for the catalog lock"
         assert project_id in catalog["projects"]
     finally:
         release.set()
-        holder.join()
+        holder.join(30)

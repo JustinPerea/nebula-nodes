@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import time
 
 import httpx
 import pytest
@@ -254,7 +253,7 @@ def test_a_set_closes_once():
         book.close(made.id, "expired")
 
 
-def test_update_words_follow_gm_copy():
+def test_update_words_follow_the_approved_copy():
     book = QuestionBook(Clock())
     one = book.create(agent=ME, project_id="p", spec=parse_questions({"questions": [{"text": "Crop?"}]}))
     two = book.create(agent=ME, project_id="p", spec=parse_questions(TWO))
@@ -456,33 +455,45 @@ def test_waiting_returns_open_when_nobody_answered(asked):
     assert response.json()["questions"]["status"] == "open"
 
 
-def test_a_wait_returns_as_soon_as_the_person_answers(asked):
+def test_a_wait_returns_as_soon_as_the_person_answers(asked, monkeypatch):
     # get_answers and `nebula answers --wait` sit on this route: the person's
     # answer (a question.answered event) must wake the wait, not its deadline.
     set_id = _ask(asked).json()["questions"]["id"]
     key = _key(asked, set_id)
+    real_wait = asked.main._journal_wait
+    waits: list[dict] = []
+
+    async def spy_wait(request, **kwargs):
+        result = await real_wait(request, **kwargs)
+        waits.append(result)
+        return result
+
+    monkeypatch.setattr(asked.main, "_journal_wait", spy_wait)
 
     async def scenario():
         transport = httpx.ASGITransport(app=asked.main.app)
         async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as http:
             async def later():
-                await asyncio.sleep(0.3)
+                for _ in range(500):
+                    if asked.journal.waiting >= 1:
+                        break
+                    await asyncio.sleep(0.01)
+                assert asked.journal.waiting >= 1, "the GET never entered the journal wait"
                 return await http.post(f"/api/canvas/questions/{set_id}/answer",
                                        headers={**PERSON, KEY: key}, json=GOOD_ANSWERS)
 
             task = asyncio.create_task(later())
-            started = time.monotonic()
-            waited = await http.get(f"/api/canvas/questions/{set_id}?wait=10", headers=CLAUDE)
-            took = time.monotonic() - started
+            waited = await http.get(f"/api/canvas/questions/{set_id}?wait=25", headers=CLAUDE)
             await task
-            return waited, task.result(), took
+            return waited, task.result()
 
-    waited, answered, took = asyncio.run(scenario())
+    waited, answered = asyncio.run(scenario())
     assert answered.status_code == 200, answered.text
     view = waited.json()["questions"]
     assert view["status"] == "answered"
     assert [a["answered"] for a in view["answers"]] == [True, True]
-    assert took < 3.0, f"the wait ran {took:.1f} s: the answer didn't wake it"
+    assert len(waits) == 1 and waits[0]["timedOut"] is False, waits
+    assert [event["kind"] for event in waits[0]["events"]] == ["question.answered"], waits
 
 
 def test_an_abandoned_answers_wait_frees_its_waiter_slot(asked):

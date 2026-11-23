@@ -734,12 +734,12 @@ def test_the_skip_line_names_the_agent_when_every_skip_is_one_agents():
     assert pending_nodes.skip_line(None) is None
 
 
-def test_a_skipped_placeholders_reason_is_gms_tooltip_line(pend):
+def test_a_skipped_placeholders_reason_is_the_approved_tooltip_line(pend):
     """Design: the Skipped badge's tooltip on a skipped placeholder reads
     "Skipped: Codex is still setting this up." (the canvas puts "Skipped: "
     before the reason, lib/gating.ts skippedLabel)."""
     ids = _chain(pend, headers=CODEX)
-    response = pend.client.post("/api/execute", headers=PERSON, json={**_execute_body(pend), "runId": "r-gm"})
+    response = pend.client.post("/api/execute", headers=PERSON, json={**_execute_body(pend), "runId": "r-1"})
     assert response.status_code == 200, response.text
     assert response.json()["skipped"][ids["+p"]] == "Codex is still setting this up."
     assert _skips(pend)[ids["+p"]] == "Codex is still setting this up."

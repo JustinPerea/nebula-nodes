@@ -9580,10 +9580,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'node_app_version_id',
-        label: 'Node app version ID',
+        label: 'Version',
         type: 'string',
         required: true,
-        placeholder: 'From Krea, or ask your agent to list node apps',
+        placeholder: 'Version ID from Krea, or ask your agent to list node apps',
       },
       {
         key: 'input',
@@ -14702,7 +14702,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
   'krea-3': {
     id: 'krea-3',
     displayName: 'Krea 3',
-    description: "Krea’s own Krea 3 image model, for text to image or to edit with up to 8 reference images. Runs on Krea, where beta workspaces have early access, or on fal.ai.",
+    description: "Krea’s own Krea 3 image model, for text to image or to edit with up to 8 reference images. Runs on Krea or fal.ai.",
     category: 'image-gen',
     apiProvider: 'krea',
     apiEndpoint: '/generate/image/krea/krea-3',
@@ -14746,7 +14746,6 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
         plan: 'optional',
         handler: 'krea',
         endpoint: '/generate/image/krea/krea-3',
-        note: "Early access: Krea 3 on Krea's API is for beta workspaces",
         params: [
           {
             key: 'thinking_mode',
@@ -14762,7 +14761,7 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
             type: 'enum',
             required: false,
             default: '1K',
-            options: [{ label: '1K', value: '1K' }, { label: '2K', value: '2K' }],
+            options: [{ label: '1K', value: '1K' }, { label: '2K', value: '2K' }, { label: '4K', value: '4K' }],
           },
           {
             key: 'aspect_ratio',

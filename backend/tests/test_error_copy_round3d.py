@@ -71,7 +71,7 @@ TROUBLE = "Meshy is having trouble right now. Try again in a few minutes."
 @pytest.mark.parametrize("status, line", [
     (401, KEY), (403, KEY), (402, CREDITS), (429, BUSY), (500, TROUBLE), (502, TROUBLE), (503, TROUBLE),
 ])
-def test_one_table_maps_a_providers_status_to_gms_line(status: int, line: str) -> None:
+def test_one_table_maps_a_providers_status_to_the_approved_line(status: int, line: str) -> None:
     # The status the provider's API answered, attached where it is raised
     # (never read from the text).
     exc = with_api_status(RuntimeError(f'Meshy submit failed ({status}): {{"message": "the provider\'s own words"}}'),
@@ -409,7 +409,7 @@ async def test_gemini_omnis_missing_media_names_its_kind() -> None:
     assert person_line(exc) == "A connected video file can’t be found. Connect it again, then run the node again."
 
 
-def test_the_frame_extractors_missing_source_uses_gms_line() -> None:
+def test_the_frame_extractors_missing_source_uses_the_approved_line() -> None:
     source = (BACKEND / "execution" / "engine.py").read_text()
     assert ('raise with_person_line(ValueError("Video source file not found; restore or upload the source video '
             'before extracting frames"), missing_file_line("video file"))') in source
@@ -478,7 +478,7 @@ async def test_krea_usage_names_the_settings_field_by_its_real_label() -> None:
                                 "Nothing was sent to Krea.")
 
 
-def test_jev_modes_key_line_is_gms() -> None:
+def test_jev_modes_key_line_is_the_approved_one() -> None:
     from services.qc_jev import setup
 
     exc = _raised(setup, {}, {})
@@ -869,7 +869,7 @@ def test_a_wait_or_a_dropped_stream_is_not_an_empty_answer(text) -> None:
     assert failure_kind(RuntimeError(text)) != "no_result"
 
 
-def test_every_route_table_nodes_missing_file_uses_gms_line(tmp_path, monkeypatch) -> None:
+def test_every_route_table_nodes_missing_file_uses_the_approved_line(tmp_path, monkeypatch) -> None:
     from execution.route_clients import local_media_path
 
     monkeypatch.setattr("services.file_access.require_allowed_path", lambda value: Path(value))
@@ -880,7 +880,7 @@ def test_every_route_table_nodes_missing_file_uses_gms_line(tmp_path, monkeypatc
     assert person_line(exc) == "A connected video file can’t be found. Connect it again, then run the node again."
 
 
-def test_save_to_krea_files_missing_file_uses_gms_line(tmp_path, monkeypatch) -> None:
+def test_save_to_krea_files_missing_file_uses_the_approved_line(tmp_path, monkeypatch) -> None:
     from handlers.krea_workspace import _local_path
 
     monkeypatch.setattr("services.file_access.require_allowed_path", lambda value: Path(value))
@@ -899,7 +899,7 @@ def test_save_to_krea_files_missing_file_uses_gms_line(tmp_path, monkeypatch) ->
     assert person_line(exc) == "Save to Krea Files takes media made or uploaded in Nebula, not links. Connect one of those."
 
 
-def test_krea_media_input_missing_file_uses_gms_line(tmp_path) -> None:
+def test_krea_media_input_missing_file_uses_the_approved_line(tmp_path) -> None:
     from handlers.krea_gateway import _asset_data
 
     exc = _raised(_asset_data, str(tmp_path / "gone.mp4"))
@@ -907,7 +907,7 @@ def test_krea_media_input_missing_file_uses_gms_line(tmp_path) -> None:
     assert person_line(exc) == "A connected video file can’t be found. Connect it again, then run the node again."
 
 
-def test_a_chat_nodes_missing_image_uses_gms_line(tmp_path, monkeypatch) -> None:
+def test_a_chat_nodes_missing_image_uses_the_approved_line(tmp_path, monkeypatch) -> None:
     from services.image_input import load_local_image
 
     monkeypatch.setattr("services.file_access.require_allowed_path", lambda value: Path(value))

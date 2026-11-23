@@ -18,6 +18,7 @@ import socket
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from types import SimpleNamespace
 
 import anyio
 import httpx
@@ -54,6 +55,8 @@ class ScriptedApi:
 
     def request(self, method, path, **kwargs):
         self.calls += 1
+        # A loop that never reaches its exit fails here instead of hanging the run.
+        assert self.calls < 2000, "get_answers kept polling past any wait budget"
         step = self.script.pop(0) if len(self.script) > 1 else self.script[0]
         if isinstance(step, BaseException):
             raise step
@@ -71,6 +74,18 @@ def _script(monkeypatch, *steps) -> ScriptedApi:
     api = ScriptedApi(*steps)
     monkeypatch.setattr(mcp_server, "_api", lambda: api)
     return api
+
+
+def _no_backoff(monkeypatch) -> list[float]:
+    """Record any backoff sleep and fail on it, so a retry can't spin for the whole wait."""
+    sleeps: list[float] = []
+
+    def refuse(seconds: float) -> None:
+        sleeps.append(seconds)
+        raise AssertionError(f"get_answers backed off {seconds} s: it retried a first refused connect")
+
+    monkeypatch.setattr(mcp_server, "_sleep_unless_cancelled", refuse)
+    return sleeps
 
 
 # -- MCP get_answers -----------------------------------------------------------------
@@ -98,11 +113,11 @@ def test_a_real_http_answer_is_never_retried(fast, monkeypatch, refusal):
 def test_nebula_down_from_the_start_fails_at_once(fast, monkeypatch):
     # Not a restart: nothing answered this call yet (a wrong URL, Nebula not started).
     api = _script(monkeypatch, _down())
-    started = time.monotonic()
+    sleeps = _no_backoff(monkeypatch)
     with pytest.raises(NebulaAPIError) as caught:
         mcp_server.get_answers("qs_0000aaaa", wait_seconds=10)
     assert caught.value.kind == "connect" and api.calls == 1
-    assert time.monotonic() - started < 1
+    assert sleeps == []
 
 
 def _from(cause: Exception, kind: str = "connect") -> NebulaAPIError:
@@ -134,11 +149,11 @@ def test_a_first_poll_dropped_mid_request_rides_through(fast, monkeypatch, dropp
 ])
 def test_a_refused_first_connect_still_fails_at_once(fast, monkeypatch, refused):
     api = _script(monkeypatch, refused, ANSWERED)
-    started = time.monotonic()
+    sleeps = _no_backoff(monkeypatch)
     with pytest.raises(NebulaAPIError):
         mcp_server.get_answers("qs_0000aaaa", wait_seconds=10)
     assert api.calls == 1
-    assert time.monotonic() - started < 1
+    assert sleeps == []
 
 
 class _DropsFirst(BaseHTTPRequestHandler):
@@ -187,11 +202,20 @@ def test_a_real_refused_first_connect_fails_at_once(fast, monkeypatch):
         probe.bind(("127.0.0.1", 0))
         port = probe.getsockname()[1]
     monkeypatch.setattr(mcp_server, "_base_url", f"http://127.0.0.1:{port}")
-    started = time.monotonic()
+    calls = 0
+    real_call = mcp_server._canvas_call
+
+    def counted_call(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        return real_call(*args, **kwargs)
+
+    monkeypatch.setattr(mcp_server, "_canvas_call", counted_call)
+    sleeps = _no_backoff(monkeypatch)
     with pytest.raises(NebulaAPIError) as caught:
         mcp_server.get_answers("qs_0000aaaa", wait_seconds=10)
     assert caught.value.kind == "connect"
-    assert time.monotonic() - started < 1
+    assert calls == 1 and sleeps == []
 
 
 def test_without_a_wait_there_is_no_retry(fast, monkeypatch):
@@ -202,13 +226,15 @@ def test_without_a_wait_there_is_no_retry(fast, monkeypatch):
 
 
 def test_the_retries_stop_at_the_wait_budget(fast, monkeypatch):
-    _script(monkeypatch, OPEN, _down())
-    started = time.monotonic()
+    api = _script(monkeypatch, OPEN, _down())
+    clock = Clock()
+    monkeypatch.setattr(mcp_server, "_time", SimpleNamespace(monotonic=clock, sleep=clock.sleep))
     with pytest.raises(NebulaAPIError) as caught:
         mcp_server.get_answers("qs_0000aaaa", wait_seconds=1.0)
-    took = time.monotonic() - started
     assert caught.value.kind == "connect"
-    assert 0.9 <= took < 2.0, took
+    assert api.calls > 2
+    assert clock.now - 1000.0 == pytest.approx(1.0)
+    assert sum(clock.slept) == pytest.approx(1.0)
 
 
 def test_get_proposal_is_unchanged(fast, monkeypatch):
@@ -288,42 +314,58 @@ def _borrowed() -> int:
 
 
 def test_a_cancel_during_the_backoff_ends_the_call_at_once(monkeypatch):
-    # A long backoff, so the cancel lands inside it.
+    # A backoff far longer than the test's hang guard, so only cancellation can end it.
     monkeypatch.setattr(mcp_server, "_POLL_SECONDS", 0.05)
-    monkeypatch.setattr(nebula_api, "RETRY_FIRST_SECONDS", 3.0)
-    monkeypatch.setattr(nebula_api, "RETRY_MAX_SECONDS", 3.0)
+    monkeypatch.setattr(nebula_api, "RETRY_FIRST_SECONDS", 60.0)
+    monkeypatch.setattr(nebula_api, "RETRY_MAX_SECONDS", 60.0)
     api = _script(monkeypatch, OPEN, _down())
+    in_backoff = threading.Event()
+    sleep_outcomes: list[str] = []
+    real_sleep = mcp_server._sleep_unless_cancelled
 
-    async def main() -> tuple[str, float, bool]:
+    async def main() -> tuple[str, bool]:
+        cancelled_exc = anyio.get_cancelled_exc_class()
+
+        def spy_sleep(seconds: float) -> None:
+            in_backoff.set()
+            try:
+                real_sleep(seconds)
+            except cancelled_exc:
+                sleep_outcomes.append("cancelled")
+                raise
+            sleep_outcomes.append("returned")
+
+        monkeypatch.setattr(mcp_server, "_sleep_unless_cancelled", spy_sleep)
         outcome: dict[str, str] = {}
         async with create_connected_server_and_client_session(mcp_server.mcp._mcp_server) as session:
             async def call() -> None:
                 try:
-                    await session.call_tool("get_answers", {"question_id": "qs_0000aaaa", "wait_seconds": 30})
+                    await session.call_tool("get_answers", {"question_id": "qs_0000aaaa", "wait_seconds": 120})
                     outcome["result"] = "returned"
                 except McpError as exc:
                     outcome["result"] = exc.error.message
 
             async with anyio.create_task_group() as group:
                 group.start_soon(call)
-                await anyio.sleep(0.4)
+                with anyio.fail_after(10):
+                    while not in_backoff.is_set():
+                        await anyio.sleep(0.01)
                 assert api.calls == 2  # one open read, one refused: now in the backoff
                 assert _borrowed() == 1
                 (request_id,) = session._response_streams
                 await session.send_notification(types.ClientNotification(types.CancelledNotification(
                     params=types.CancelledNotificationParams(requestId=request_id))))
-                cancelled = time.monotonic()
-                while _borrowed() and time.monotonic() - cancelled < 5:
-                    await anyio.sleep(0.02)
-                freed = time.monotonic() - cancelled
-            await anyio.sleep(0.1)
+                with anyio.fail_after(10):
+                    while _borrowed():
+                        await anyio.sleep(0.02)
             monkeypatch.setattr(mcp_server, "_api", lambda: ScriptedApi({"ok": True}))
             alive = not (await session.call_tool("look_at_canvas", {})).isError
-        return outcome["result"], freed, alive
+        return outcome["result"], alive
 
-    result, freed, alive = anyio.run(main)
+    result, alive = anyio.run(main)
     assert result == "Request cancelled"
-    assert freed < 1.0, f"the cancelled get_answers held its thread {freed:.1f} s in the backoff"
+    assert sleep_outcomes == ["cancelled"], sleep_outcomes
+    assert _borrowed() == 0
     assert alive
     assert api.calls == 2  # no retry after the cancel
 

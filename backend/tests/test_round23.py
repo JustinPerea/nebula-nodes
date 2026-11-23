@@ -69,14 +69,14 @@ def _tab_headers(revision: str, canvas: str | None = None) -> dict[str, str]:
 # The pin routes and the fence
 
 
-def test_M1_every_pin_write_is_a_fenced_graph_write(api):
+def test_every_pin_write_is_a_fenced_graph_write(api):
     main = api.main
     for method, path in [("POST", "/api/canvas/pins"), ("DELETE", "/api/canvas/pins/pin_1"),
                          ("POST", "/api/canvas/pins/pin_1/resolve")]:
         assert main._graph_fence_of(method, path) == main.FENCE_BEFORE_ROUTE, (method, path)
 
 
-def test_M1_a_note_written_for_A_n1_is_refused_once_an_agent_opened_B(api, monkeypatch):
+def test_a_note_written_for_A_n1_is_refused_once_an_agent_opened_B(api, monkeypatch):
     """pins.out: A's n1 and B's n1 both exist; the tab still
     sends the revision of A, where the note was written."""
     main = api.main
@@ -100,7 +100,7 @@ def test_M1_a_note_written_for_A_n1_is_refused_once_an_agent_opened_B(api, monke
     assert "pin.added" not in kinds
 
 
-def test_M1_a_tab_note_sent_with_no_project_is_refused(api, monkeypatch):
+def test_a_tab_note_sent_with_no_project_is_refused(api, monkeypatch):
     """PIN-F: sent while the tab followed the switch (it holds no
     project then): never anchored to whatever is open."""
     main = api.main
@@ -112,7 +112,7 @@ def test_M1_a_tab_note_sent_with_no_project_is_refused(api, monkeypatch):
     assert "pin.added" not in kinds
 
 
-def test_M1_a_note_for_a_canvas_cleared_since_is_refused(api, monkeypatch):
+def test_a_note_for_a_canvas_cleared_since_is_refused(api, monkeypatch):
     main = api.main
     api.graph.add_node("text-input", {"value": "a"})
     revision = _context(main)["workspaceRevision"]
@@ -128,7 +128,7 @@ def test_M1_a_note_for_a_canvas_cleared_since_is_refused(api, monkeypatch):
     assert "pin.added" not in kinds
 
 
-def test_M1_a_note_for_the_canvas_open_now_lands(api):
+def test_a_note_for_the_canvas_open_now_lands(api):
     main = api.main
     api.graph.add_node("text-input", {"value": "a"})
     headers = _tab_headers(_context(main)["workspaceRevision"], main._canvas_revision())
@@ -139,7 +139,7 @@ def test_M1_a_note_for_the_canvas_open_now_lands(api):
     assert response.status_code == 200, response.text
 
 
-def test_M1_a_delete_made_for_another_project_is_refused_not_sent_on(api, monkeypatch):
+def test_a_delete_made_for_another_project_is_refused_not_sent_on(api, monkeypatch):
     main = api.main
     api.graph.add_node("text-input", {"value": "a"})
     headers = _tab_headers(_context(main)["workspaceRevision"], main._canvas_revision())
@@ -151,7 +151,7 @@ def test_M1_a_delete_made_for_another_project_is_refused_not_sent_on(api, monkey
     assert "pin.removed" not in kinds
 
 
-def test_M1_resolve_of_a_note_not_in_the_open_project_says_so_for_agents(api):
+def test_resolve_of_a_note_not_in_the_open_project_says_so_for_agents(api):
     main = api.main
     api.graph.add_node("text-input", {"value": "a"})
     headers = _tab_headers(_context(main)["workspaceRevision"], main._canvas_revision())
@@ -202,7 +202,7 @@ def _broadcast_fails_after_admission(main, monkeypatch) -> dict:
 
 
 @pytest.mark.parametrize("route", ["cli", "execute", "execute-node"])
-def test_L4_a_failed_placeholder_broadcast_after_admission_still_answers_started(pend, monkeypatch, route, capsys):
+def test_a_failed_placeholder_broadcast_after_admission_still_answers_started(pend, monkeypatch, route, capsys):
     ids = _chain(pend)
     state = _broadcast_fails_after_admission(pend.main, monkeypatch)
     response = _run(pend, route, ids["+b"])
@@ -219,7 +219,7 @@ def test_L4_a_failed_placeholder_broadcast_after_admission_still_answers_started
     assert "couldn't tell open canvases" in capsys.readouterr().err
 
 
-def test_L4_the_cli_run_answers_started_when_a_later_step_fails(pend, monkeypatch):
+def test_the_cli_run_answers_started_when_a_later_step_fails(pend, monkeypatch):
     """Every step after admission in /api/graph/run: the skip notes, the
     Agent log line, the cursor. None of them says the run didn't start."""
     ids = _chain(pend, pending=False)
@@ -237,7 +237,7 @@ def test_L4_the_cli_run_answers_started_when_a_later_step_fails(pend, monkeypatc
     assert pend.ran
 
 
-def test_L4_a_deferred_broadcast_is_owed_and_sent_again(pend, monkeypatch):
+def test_a_deferred_broadcast_is_owed_and_sent_again(pend, monkeypatch):
     """The canvas still shows the placeholders until a sync says otherwise:
     the broadcast is owed, retried in the background (_pay_owed_graph_sync),
     and any later sync pays it (it carries the whole graph)."""
@@ -258,7 +258,7 @@ def test_L4_a_deferred_broadcast_is_owed_and_sent_again(pend, monkeypatch):
     assert len([m for m in pend.sent if m.get("type") == "graphSync"]) == sent_before + 1
 
 
-def test_L4_any_later_sync_pays_what_is_owed(pend, monkeypatch):
+def test_any_later_sync_pays_what_is_owed(pend, monkeypatch):
     import asyncio
 
     main = pend.main
@@ -267,7 +267,7 @@ def test_L4_any_later_sync_pays_what_is_owed(pend, monkeypatch):
     assert main._graph_sync_owed is False
 
 
-def test_L4_every_run_route_broadcasts_after_admission_best_effort():
+def test_every_run_route_broadcasts_after_admission_best_effort():
     """The four routes that admit a run (execute, execute-node, the shot,
     /api/graph/run) never await a bare _broadcast_graph_sync after it."""
     source = (ROOT / "backend" / "main.py").read_text()

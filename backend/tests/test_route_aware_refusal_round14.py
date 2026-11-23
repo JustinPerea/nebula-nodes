@@ -67,7 +67,7 @@ def test_the_direct_route_nodes_among_the_required_field_nodes():
     ("width", "Set"), ("height", "Set"), ("name", "Set"),
     ("aspect ratio", "Choose"), ("resolution", "Choose"), ("model", "Choose"), ("version", "Choose"),
 ])
-def test_gm_round14_set_for_typed_values_choose_for_pickers(field, verb):
+def test_set_for_typed_values_choose_for_pickers(field, verb):
     definition = {"width": TOPAZ, "height": TOPAZ, "name": "krea-style-train", "aspect ratio": KREA2,
                   "resolution": KREA2, "model": TOPAZ, "version": "krea-node-app"}[field]
     key = next(key for key, word in model_choice.required_fields()[definition] if word == field)
@@ -189,27 +189,27 @@ def _quick(pend, monkeypatch, definition_id, keys):
     return response, called
 
 
-def test_b1_quick_topaz_says_set_a_width(pend, monkeypatch):
+def test_quick_topaz_says_set_a_width(pend, monkeypatch):
     response, called = _quick(pend, monkeypatch, TOPAZ, KREA_KEY)
     assert response.status_code == 400
     assert response.json()["detail"] == "Nothing ran, so nothing was spent. Set a width for “Topaz Standard (Krea)” first."
     assert called == [] and pend.priced == []
 
 
-def test_b8_quick_krea2_with_a_token_says_choose(pend, monkeypatch):
+def test_quick_krea2_with_a_token_says_choose(pend, monkeypatch):
     response, called = _quick(pend, monkeypatch, KREA2, KREA_KEY)
     assert response.status_code == 400
     assert response.json()["detail"] == "Nothing ran, so nothing was spent. Choose an aspect ratio for “Krea 2 Medium (Krea)” first."
     assert called == []
 
 
-def test_b9_quick_gpt25_with_an_openai_key_is_not_refused(pend, monkeypatch):
+def test_quick_gpt25_with_an_openai_key_is_not_refused(pend, monkeypatch):
     response, called = _quick(pend, monkeypatch, FLARE, {"OPENAI_API_KEY": "sk-fake"})
     assert response.status_code == 200, response.text
     assert called == [1]
 
 
-def test_b4_whole_graph_without_a_token_names_only_the_key(pend, monkeypatch):
+def test_whole_graph_without_a_token_names_only_the_key(pend, monkeypatch):
     _real(pend, monkeypatch)
     _keys(pend, monkeypatch, {})
     node_id = _node(pend, TOPAZ, params={}, name="Clean plate")
@@ -219,7 +219,7 @@ def test_b4_whole_graph_without_a_token_names_only_the_key(pend, monkeypatch):
     assert pend.ran == []
 
 
-def test_b7_run_nodes_krea2_without_a_token_names_only_the_key(pend, monkeypatch):
+def test_run_nodes_krea2_without_a_token_names_only_the_key(pend, monkeypatch):
     _real(pend, monkeypatch)
     _keys(pend, monkeypatch, {})
     node_id = _node(pend, KREA2)
@@ -228,7 +228,7 @@ def test_b7_run_nodes_krea2_without_a_token_names_only_the_key(pend, monkeypatch
     assert pend.ran == []
 
 
-def test_b7b_run_nodes_krea2_with_a_token_names_the_field(pend, monkeypatch):
+def test_run_nodes_krea2_with_a_token_names_the_field(pend, monkeypatch):
     _real(pend, monkeypatch)
     _keys(pend, monkeypatch, KREA_KEY)
     node_id = _node(pend, KREA2)
@@ -237,7 +237,7 @@ def test_b7b_run_nodes_krea2_with_a_token_names_the_field(pend, monkeypatch):
     assert body["error"] == "Nothing ran, so nothing was spent. n1 (Hero): Choose an aspect ratio for “Hero” first."
 
 
-def test_b7c_run_nodes_gpt25_with_an_openai_key_runs(pend, monkeypatch):
+def test_run_nodes_gpt25_with_an_openai_key_runs(pend, monkeypatch):
     _real(pend, monkeypatch)
     _keys(pend, monkeypatch, {"OPENAI_API_KEY": "sk-fake"})
     node_id = _node(pend, FLARE)
@@ -250,7 +250,7 @@ def test_b7c_run_nodes_gpt25_with_an_openai_key_runs(pend, monkeypatch):
     (TOPAZ, "Set a width for “Hero” first."),
     (KREA2, "Choose an aspect ratio for “Hero” first."),
 ])
-def test_b5_b6_an_approval_run_is_refused_before_spend(pend, monkeypatch, definition_id, line):
+def test_an_approval_run_is_refused_before_spend(pend, monkeypatch, definition_id, line):
     seen = []
 
     async def spend(*args, **kwargs):
@@ -314,14 +314,14 @@ def picker_client(monkeypatch, person):
     ("openrouter-universal", "openai/gpt-4o-mini"),
     ("replicate-universal", "owner/name"),
 ])
-def test_l5_a_missing_key_is_marked_as_one(picker_client, definition_id, model):
+def test_a_missing_key_is_marked_as_one(picker_client, definition_id, model):
     response = _ports(picker_client, definition_id, model)
     assert response.status_code == 400
     assert response.headers.get("x-nebula-failure") == "missing-key"
     assert "x-nebula-failure" in response.headers.get("access-control-expose-headers", "").lower()
 
 
-def test_l5_a_malformed_replicate_id_carries_no_header(picker_client):
+def test_a_malformed_replicate_id_carries_no_header(picker_client):
     response = _ports(picker_client, "replicate-universal", "bad id")
     assert response.status_code == 400
     assert response.headers.get("x-nebula-failure") is None
@@ -331,14 +331,14 @@ def test_l5_a_malformed_replicate_id_carries_no_header(picker_client):
     ("openrouter-universal", "openai/gpt-4o-mini", "OPENROUTER_API_KEY"),
     ("replicate-universal", "owner/name", "REPLICATE_API_TOKEN"),
 ])
-def test_l5_a_failed_read_is_marked_model_settings(picker_client, definition_id, model, key):
+def test_a_failed_read_is_marked_model_settings(picker_client, definition_id, model, key):
     picker_client.keys.update({key: "fake"})
     response = _ports(picker_client, definition_id, model)
     assert response.status_code == 400, response.text
     assert response.headers.get("x-nebula-failure") == "model-settings"
 
 
-def test_l5_a_missing_model_carries_no_header(picker_client):
+def test_a_missing_model_carries_no_header(picker_client):
     response = picker_client.post("/api/universal/ports", headers=PERSON, json={"definitionId": "openrouter-universal"})
     assert response.status_code == 400
     assert response.headers.get("x-nebula-failure") is None

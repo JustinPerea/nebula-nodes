@@ -88,7 +88,7 @@ def _flip(project_id: str, *, hex_valid: bool) -> str:
 # -- M1: the strict read stays off the hot path -----------------------------------
 
 
-def test_m1_a_catalog_this_process_committed_is_read_the_fast_way(tmp_path, monkeypatch):
+def test_a_catalog_this_process_committed_is_read_the_fast_way(tmp_path, monkeypatch):
     """An id holding "1e123" (a digit, e, three digits) made every read of
     dcaafb82 strict: a Python callback per float and a full re-encode."""
     store = _store(tmp_path)
@@ -108,7 +108,7 @@ def test_m1_a_catalog_this_process_committed_is_read_the_fast_way(tmp_path, monk
     assert calls == []
 
 
-def test_m1_a_file_changed_elsewhere_still_gets_the_strict_read(tmp_path):
+def test_a_file_changed_elsewhere_still_gets_the_strict_read(tmp_path):
     store = _store(tmp_path)
     [project_id] = _add(store, "Dunes")
     raw = store.path.read_text()
@@ -119,7 +119,7 @@ def test_m1_a_file_changed_elsewhere_still_gets_the_strict_read(tmp_path):
     assert _record(store)["reason"] == "corrupt"
 
 
-def test_m1_nan_is_refused_on_every_read(tmp_path):
+def test_nan_is_refused_on_every_read(tmp_path):
     """parse_constant always runs: NaN is damage, whoever wrote it."""
     store = _store(tmp_path)
     [project_id] = _add(store, "Dunes")
@@ -132,7 +132,7 @@ def test_m1_nan_is_refused_on_every_read(tmp_path):
 
 
 @pytest.mark.parametrize("hex_valid", [False, True], ids=["non-hex flip", "hex flip"])
-def test_m2_a_flip_in_a_records_key_keeps_its_latest_version(tmp_path, hex_valid):
+def test_a_flip_in_a_records_key_keeps_its_latest_version(tmp_path, hex_valid):
     """test_d (non-hex) and live2 (hex): the record parses whole
     under a damaged key. It keeps its newer version under its own id, and is
     never reported as deleted and back."""
@@ -155,7 +155,7 @@ def test_m2_a_flip_in_a_records_key_keeps_its_latest_version(tmp_path, hex_valid
     assert record["damagedReadWhole"] is False
 
 
-def test_m2_a_flip_in_a_records_id_files_it_under_the_key_the_copy_agrees_with(tmp_path):
+def test_a_flip_in_a_records_id_files_it_under_the_key_the_copy_agrees_with(tmp_path):
     store = _store(tmp_path)
     [project_id] = _add(store, "Logo")
     _rename(store, project_id, "Logo v2")
@@ -173,7 +173,7 @@ def test_m2_a_flip_in_a_records_id_files_it_under_the_key_the_copy_agrees_with(t
     assert record["cameBack"] == [] and record["notAddedBack"] == []
 
 
-def test_m2_a_flipped_key_on_a_project_newer_than_the_copy_files_it_under_its_own_id(tmp_path):
+def test_a_flipped_key_on_a_project_newer_than_the_copy_files_it_under_its_own_id(tmp_path):
     store = _store(tmp_path)
     _add(store, "Logo")
     [new_id] = _add(store, "New")  # .bak (one commit behind) lacks it
@@ -187,7 +187,7 @@ def test_m2_a_flipped_key_on_a_project_newer_than_the_copy_files_it_under_its_ow
     assert record["cameBack"] == []
 
 
-def test_m2_a_flip_in_a_records_key_in_a_cut_file_keeps_its_latest_version(tmp_path):
+def test_a_flip_in_a_records_key_in_a_cut_file_keeps_its_latest_version(tmp_path):
     store = _store(tmp_path)
     [logo, dunes] = _add(store, "Logo", "Dunes")
     _rename(store, logo, "Logo v2")
@@ -209,7 +209,7 @@ def test_m2_a_flip_in_a_records_key_in_a_cut_file_keeps_its_latest_version(tmp_p
 
 
 @pytest.mark.parametrize("section, flipped", [("projects", "projectr"), ("trash", "trasi")])
-def test_m2_a_flip_in_a_section_name_keeps_what_the_section_held(tmp_path, section, flipped):
+def test_a_flip_in_a_section_name_keeps_what_the_section_held(tmp_path, section, flipped):
     store = _store(tmp_path)
     [logo, old] = _add(store, "Logo", "Old")
     with store.transaction() as catalog:
@@ -234,7 +234,7 @@ def test_m2_a_flip_in_a_section_name_keeps_what_the_section_held(tmp_path, secti
     assert record["damagedReadWhole"] is False
 
 
-def test_m2_a_damaged_open_project_id_in_a_whole_file_is_not_reported_missing(tmp_path):
+def test_a_damaged_open_project_id_in_a_whole_file_is_not_reported_missing(tmp_path):
     """activeProjectId names a project the file doesn't hold: the value is
     damaged, not a project that didn't come back."""
     store = _store(tmp_path)
@@ -250,7 +250,7 @@ def test_m2_a_damaged_open_project_id_in_a_whole_file_is_not_reported_missing(tm
     assert _record(store)["openProjectMissing"] is None
 
 
-def test_m2_salvage_never_files_a_whole_record_under_a_key_that_differs_from_its_id():
+def test_salvage_never_files_a_whole_record_under_a_key_that_differs_from_its_id():
     good = make_project("Logo")
     flipped = _flip(good["id"], hex_valid=True)
     catalog = {"version": 1, "activeProjectId": None, "workspaceRevision": "r",
@@ -307,7 +307,7 @@ def _events(since: int, kind: str) -> list[dict]:
     return [event for event in main_module.canvas_events.read(after=since)["events"] if event["kind"] == kind]
 
 
-def test_l1_a_recover_retry_after_a_delete_for_good_survives_a_restore(app):
+def test_a_recover_retry_after_a_delete_for_good_survives_a_restore(app):
     """test_c: the stale tab's retry re-creates the copy with the
     same id after the person deleted it for good. .bak (one commit behind)
     still has the tombstone; the newer record wins."""
@@ -343,7 +343,7 @@ def _base(*records: dict) -> dict:
             "projects": {record["id"]: record for record in records}, "trash": {}}
 
 
-def test_l1_a_tombstone_newer_than_a_record_drops_it_with_a_row():
+def test_a_tombstone_newer_than_a_record_drops_it_with_a_row():
     old = make_project("Old")
     at = datetime.now(timezone.utc).isoformat()
     newest = _salvage(purged={old["id"]: at})
@@ -354,7 +354,7 @@ def test_l1_a_tombstone_newer_than_a_record_drops_it_with_a_row():
     assert old["id"] in merged.catalog["purged"]
 
 
-def test_l1_a_tombstone_only_in_the_copy_never_drops_a_newer_record():
+def test_a_tombstone_only_in_the_copy_never_drops_a_newer_record():
     again = make_project("Again")
     base = _base()
     base["purged"] = {again["id"]: (datetime.now(timezone.utc) - timedelta(minutes=5)).isoformat()}
@@ -365,7 +365,7 @@ def test_l1_a_tombstone_only_in_the_copy_never_drops_a_newer_record():
     assert merged.kept_deleted == []
 
 
-def test_l1_a_tombstone_in_a_newer_file_decides_even_against_a_later_created_at():
+def test_a_tombstone_in_a_newer_file_decides_even_against_a_later_created_at():
     # Replaced this test's rule: the tombstone
     # sits in a newer file and the record, only in an older one, says it was
     # made after it. That is a clock that ran ahead, not another project:
@@ -382,7 +382,7 @@ def test_l1_a_tombstone_in_a_newer_file_decides_even_against_a_later_created_at(
 # -- L2: a reader on the event loop never restores or waits for one ------------------
 
 
-def test_l2_a_loop_reader_never_restores_on_the_loop_or_waits_for_a_restore(app, monkeypatch):
+def test_a_loop_reader_never_restores_on_the_loop_or_waits_for_a_restore(app, monkeypatch):
     client, store, _graph, _state = app
     _create(client, "Alpha")
     before = main_module._workspace_context()
@@ -398,29 +398,31 @@ def test_l2_a_loop_reader_never_restores_on_the_loop_or_waits_for_a_restore(app,
 
     async def scenario():
         loop_thread = threading.get_ident()
-        # Another holder of the lock for 1.5 s (a restore in another thread).
-        held, release = threading.Event(), threading.Event()
+        # The lock is held (a restore in another thread) until the test lets
+        # it go; released is set inside it, so a reader that waited for it
+        # always finds it set. release.wait's bound is the hang guard.
+        held, release, released = threading.Event(), threading.Event(), threading.Event()
 
         def holder():
             with store._locked():
                 held.set()
-                release.wait(5)
+                release.wait(30)
+                released.set()
 
         worker = threading.Thread(target=holder)
         worker.start()
         held.wait(5)
-        threading.Timer(1.5, release.set).start()
-        started = time.perf_counter()
         context = main_module._workspace_context()
-        waited = time.perf_counter() - started
+        waited_on_lock = released.is_set()
+        release.set()
         await asyncio.to_thread(worker.join)
         reading = getattr(main_module, "_catalog_reading", None)
         if reading is not None:
-            await asyncio.shield(reading[1])
-        return loop_thread, waited, context, main_module._workspace_context()
+            await asyncio.wait_for(asyncio.shield(reading[1]), 30)
+        return loop_thread, waited_on_lock, context, main_module._workspace_context()
 
-    loop_thread, waited, during, after = asyncio.run(scenario())
-    assert waited < 0.5, f"a loop reader waited {waited:.2f} s for the restore"
+    loop_thread, waited_on_lock, during, after = asyncio.run(scenario())
+    assert not waited_on_lock, "a loop reader waited for the lock the restore held"
     assert during["activeProjectId"] == before["activeProjectId"]
     assert threads and loop_thread not in threads
     assert after["workspaceRevision"] != before["workspaceRevision"]
@@ -429,7 +431,7 @@ def test_l2_a_loop_reader_never_restores_on_the_loop_or_waits_for_a_restore(app,
 # -- L3: no hard links, and the newest valid copy ------------------------------------
 
 
-def test_l3_without_hard_links_bak_follows_every_commit(tmp_path, monkeypatch):
+def test_without_hard_links_bak_follows_every_commit(tmp_path, monkeypatch):
     store = _store(tmp_path)
 
     def no_link(*args, **kwargs):
@@ -442,7 +444,7 @@ def test_l3_without_hard_links_bak_follows_every_commit(tmp_path, monkeypatch):
     assert json.loads(store.backup_path.read_text())["projects"][logo]["name"] == "Logo v4"
 
 
-def test_l3_a_restore_takes_the_newest_valid_copy_by_what_it_holds(tmp_path):
+def test_a_restore_takes_the_newest_valid_copy_by_what_it_holds(tmp_path):
     store = _store(tmp_path)
     [logo] = _add(store, "Logo")
     stale = store.path.read_bytes()
@@ -462,7 +464,7 @@ def test_l3_a_restore_takes_the_newest_valid_copy_by_what_it_holds(tmp_path):
 # -- L4: filing the canvas at a limit never fails the listing ------------------------
 
 
-def test_l4_filing_the_canvas_at_the_project_limit_never_fails_the_listing(app, monkeypatch):
+def test_filing_the_canvas_at_the_project_limit_never_fails_the_listing(app, monkeypatch):
     """test_f: the canvas's project isn't in the list, which is full."""
     client, store, graph, state = app
     monkeypatch.setattr(store_module, "MAX_PROJECTS", 3)
@@ -500,7 +502,7 @@ def test_l4_filing_the_canvas_at_the_project_limit_never_fails_the_listing(app, 
 # -- L5: a filing attaches to the restore it came from, and is journaled -------------
 
 
-def test_l5_a_later_filing_is_not_pinned_on_an_older_restore_notice(app):
+def test_a_later_filing_is_not_pinned_on_an_older_restore_notice(app):
     """test_h: a restore that brought everything back, then a
     crash-window filing while its notice is still open."""
     client, store, graph, state = app
@@ -522,7 +524,7 @@ def test_l5_a_later_filing_is_not_pinned_on_an_older_restore_notice(app):
 
 
 @pytest.mark.parametrize("route", ["create", "open"])
-def test_l5_a_filing_from_create_or_open_is_journaled(app, route):
+def test_a_filing_from_create_or_open_is_journaled(app, route):
     client, store, graph, state = app
     alpha = _create(client, "Alpha")
     _add_text(client, "a1")
@@ -541,7 +543,7 @@ def test_l5_a_filing_from_create_or_open_is_journaled(app, route):
     assert _values(after["projects"][filed[0]["data"]["projectId"]]) == ["a1"]
 
 
-def test_l5_a_filing_right_after_its_restore_goes_in_that_restores_record(app):
+def test_a_filing_right_after_its_restore_goes_in_that_restores_record(app):
     client, store, graph, state = app
     _create(client, "Alpha")
     beta = _create(client, "Beta")
@@ -566,7 +568,7 @@ def _tear_inside(text: str, project_id: str, length: int = 48) -> str:
     return text[:at] + "\x00" * length + text[at + length:]
 
 
-def test_m2_salvage_finds_a_record_torn_right_after_another_torn_record():
+def test_salvage_finds_a_record_torn_right_after_another_torn_record():
     # The live check's B: a record cut right after another cut record sits
     # where no structure says a record belongs (no group opener, no whole
     # record before it), but its own members say what it is.
@@ -579,7 +581,7 @@ def test_m2_salvage_finds_a_record_torn_right_after_another_torn_record():
     assert found.partial[second["id"]]["name"] == "Scratch"
 
 
-def test_m2_a_key_nested_in_a_torn_record_is_never_taken_for_a_record():
+def test_a_key_nested_in_a_torn_record_is_never_taken_for_a_record():
     # The content rule needs the record's own id and name: a project-id key
     # inside a snapshot (an output map, say) is still not counted.
     project = make_project("Logo")
@@ -596,7 +598,7 @@ def test_m2_a_key_nested_in_a_torn_record_is_never_taken_for_a_record():
     assert set(found.failed) == {project["id"]}
 
 
-def test_m2_the_open_project_torn_after_another_torn_record_is_filed_under_its_name(app):
+def test_the_open_project_torn_after_another_torn_record_is_filed_under_its_name(app):
     client, store, _graph, _state = app
     logo = _create(client, "Logo")
     _add_text(client, "l1")
@@ -684,7 +686,7 @@ def test_upgrade_day_a_head_that_doesnt_read_leaves_the_canvas_unproven(app):
 # -- L7: damaged files age by when they were kept -------------------------------------
 
 
-def test_l7_a_damaged_file_kept_today_is_young_whatever_its_mtime(tmp_path):
+def test_a_damaged_file_kept_today_is_young_whatever_its_mtime(tmp_path):
     store = _store(tmp_path)
     _add(store, "Alpha")
     long_ago = (datetime.now() - timedelta(days=60)).timestamp()
@@ -700,7 +702,7 @@ def test_l7_a_damaged_file_kept_today_is_young_whatever_its_mtime(tmp_path):
     assert all(path.exists() for path in kept_today)
 
 
-def test_l7_an_unreadable_restore_record_is_kept_with_a_time_in_its_name(tmp_path):
+def test_an_unreadable_restore_record_is_kept_with_a_time_in_its_name(tmp_path):
     store = _store(tmp_path)
     _add(store, "Alpha")
     store.record_path.write_text("{not json", encoding="utf-8")
@@ -710,7 +712,7 @@ def test_l7_an_unreadable_restore_record_is_kept_with_a_time_in_its_name(tmp_pat
     datetime.strptime(kept.name.split(".damaged-")[1][:16], "%Y%m%dT%H%M%SZ")
 
 
-def test_l4_a_commit_past_a_limit_the_room_check_missed_still_lists(app, monkeypatch):
+def test_a_commit_past_a_limit_the_room_check_missed_still_lists(app, monkeypatch):
     """The backstop: prepare refuses the filing after the estimate let it
     through. The filing is undone (state.json too) and the listing answers."""
     client, store, graph, state = app
@@ -730,7 +732,7 @@ def test_l4_a_commit_past_a_limit_the_room_check_missed_still_lists(app, monkeyp
     assert len(json.loads(store.path.read_text())["projects"]) == 2
 
 
-def test_l2_a_loop_reader_doesnt_parse_a_damaged_file_again_while_its_restore_runs(app, monkeypatch):
+def test_a_loop_reader_doesnt_parse_a_damaged_file_again_while_its_restore_runs(app, monkeypatch):
     client, store, _graph, _state = app
     _create(client, "Alpha")
     store.path.write_text("{not json", encoding="utf-8")
@@ -766,7 +768,7 @@ def test_l2_a_loop_reader_doesnt_parse_a_damaged_file_again_while_its_restore_ru
 
 
 @pytest.mark.parametrize("change", ["damaged", "changed elsewhere"])
-def test_l2_a_loop_reader_never_parses_a_file_the_worker_is_already_reading(app, monkeypatch, change):
+def test_a_loop_reader_never_parses_a_file_the_worker_is_already_reading(app, monkeypatch, change):
     # The live measure: a 102 MB file cut in half held the loop 1.6 s with
     # the hand-off, in the parse that finds the damage while the worker's
     # own read of the same file was still running.

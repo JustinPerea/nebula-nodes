@@ -289,7 +289,7 @@ def test_an_answer_that_cannot_be_saved_leaves_the_set_open(kept):
 
 # -- a record that can't be read: design's restart line ---------------------------------------------
 
-def test_a_record_that_cannot_be_read_closes_its_update_with_gm_line(kept):
+def test_a_record_that_cannot_be_read_closes_its_update_with_the_approved_line(kept):
     set_id = _ask(kept).json()["questions"]["id"]
     store = kept.main.project_store
     with store.transaction() as catalog:

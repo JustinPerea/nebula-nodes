@@ -136,7 +136,7 @@ def test_the_open_projects_run_capped_out_while_a_copy_holds_it_still_refuses(ap
 # -- 2. Only the stamp releases ---------------------------------------------------------------
 
 @pytest.mark.parametrize("who", [PERSON, CODEX], ids=["person", "agent"])
-def test_lr1_deltas_n1_deletes_against_alphas_stamped_record(app, recoveries, who):
+def test_deltas_n1_deletes_against_alphas_stamped_record(app, recoveries, who):
     client, *_ = app
     alpha, _delta = _delta_brief(client)
     _set(recoveries, "wl-run-alpha", project=alpha)

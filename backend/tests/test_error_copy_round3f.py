@@ -148,7 +148,7 @@ def rule_breaks(line: str, *, ends_in_a_sentence: bool | None = None) -> list[st
     return broken
 
 
-def test_the_rules_check_catches_each_shape_and_lets_gms_lines_through() -> None:
+def test_the_rules_check_catches_each_shape_and_lets_the_approved_lines_through() -> None:
     # "Prompt input" names a port by its label, bare, too.
     assert rule_breaks("Prompt input is required") == ["no final period", "a port label not in quotes"]
     assert "an em dash or a semicolon" in rule_breaks("No mask painted yet — open the Mask Painter node.")
@@ -314,13 +314,13 @@ def test_the_guard_reads_lines_from_every_kind_of_site() -> None:
     assert len(lines) > 300
 
 
-def test_every_card_line_follows_gms_rules() -> None:
+def test_every_card_line_follows_the_copy_rules() -> None:
     broken = []
     for path, number, text, ends in card_lines():
         found = rule_breaks(text, ends_in_a_sentence=ends)
         if found:
             broken.append(f"{path}:{number} {found}: {text}")
-    assert not broken, f"{len(broken)} card lines break GM's rules:\n" + "\n".join(broken)
+    assert not broken, f"{len(broken)} card lines break the copy rules:\n" + "\n".join(broken)
 
 
 def test_every_shared_sentence_a_line_ends_with_is_a_sentence() -> None:
@@ -333,7 +333,7 @@ def test_every_shared_sentence_a_line_ends_with_is_a_sentence() -> None:
         assert not rule_breaks(line), line
 
 
-def test_the_shared_helpers_lines_follow_gms_rules() -> None:
+def test_the_shared_helpers_lines_follow_the_copy_rules() -> None:
     from execution import person_line as lines
     from services.credential_catalog import CREDENTIAL_PROVIDERS
 
@@ -356,14 +356,14 @@ def _input_labels() -> list[str]:
                    for port in definition.get("inputPorts") or []} - {""})
 
 
-def test_every_unwired_input_line_follows_gms_rules() -> None:
+def test_every_unwired_input_line_follows_the_copy_rules() -> None:
     from execution.person_line import port_line
 
     for label in _input_labels():
         assert not rule_breaks(port_line(label)), (label, port_line(label))
 
 
-def test_every_wiring_line_follows_gms_rules() -> None:
+def test_every_wiring_line_follows_the_copy_rules() -> None:
     from services import port_contracts
 
     for line in (port_contracts.STALE_INPUT_LINE, port_contracts.STALE_OUTPUT_LINE,
@@ -376,7 +376,7 @@ def test_every_wiring_line_follows_gms_rules() -> None:
             assert not rule_breaks(line), line
 
 
-def test_every_route_line_follows_gms_rules() -> None:
+def test_every_route_line_follows_the_copy_rules() -> None:
     # The pre-run check's and the provider switcher's line for every route case
     # (the frontend twin reads the same fixture: directRoute.test.ts).
     lines = sorted({case.get("unavailableLine") or "" for case in FIXTURE["cases"]} - {""})
@@ -385,7 +385,7 @@ def test_every_route_line_follows_gms_rules() -> None:
     assert not broken, "\n".join(broken)
 
 
-def test_the_world_labs_nodes_lines_follow_gms_rules() -> None:
+def test_the_world_labs_nodes_lines_follow_the_copy_rules() -> None:
     from handlers import worldlabs
 
     produced = list(worldlabs.PERSON_LINES.values())
@@ -395,7 +395,7 @@ def test_the_world_labs_nodes_lines_follow_gms_rules() -> None:
         assert not rule_breaks(line), line
 
 
-def test_the_gemini_omni_guardrail_card_line_follows_gms_rules() -> None:
+def test_the_gemini_omni_guardrail_card_line_follows_the_copy_rules() -> None:
     from services.provider_capabilities import GEMINI_OMNI_EXTENSION_ERROR, GEMINI_OMNI_EXTENSION_LINE
 
     assert not rule_breaks(GEMINI_OMNI_EXTENSION_LINE)
@@ -403,7 +403,7 @@ def test_the_gemini_omni_guardrail_card_line_follows_gms_rules() -> None:
     assert GEMINI_OMNI_EXTENSION_ERROR.startswith("Gemini Omni capability guardrail: Gemini Omni can edit")
 
 
-def test_the_paper_cards_lines_follow_gms_rules() -> None:
+def test_the_paper_cards_lines_follow_the_copy_rules() -> None:
     from services import paper_copy
 
     strings = [node.value for node in ast.walk(ast.parse((BACKEND / "services" / "paper_copy.py").read_text()))
@@ -611,13 +611,13 @@ def test_line_163_the_krea_agent_keeps_running_there() -> None:
         "The Krea Agent is still working after {} seconds. It keeps running there, so open Krea to see the result.")
 
 
-def test_line_164_is_gms_3d_krea_line_8() -> None:
+def test_line_164_the_krea_usage_line_names_the_workspace_service_key() -> None:
     assert _line_beside("handlers/krea_workspace.py", "Krea usage needs a workspace service key") == (
         "Krea usage needs a workspace service key, and Krea doesn't accept personal API tokens for it. Add one to "
         "“{}” in Settings. {}")
 
 
-def test_xai_edits_videos_on_one_model_in_gms_words() -> None:
+def test_xai_edits_videos_on_one_model_in_the_approved_words() -> None:
     assert _line_beside("execution/maker_routes_xai.py", "xAI edits videos on {} only, not {}") == (
         "xAI edits videos only on {}. Pick it in the node’s “Model” setting, or disconnect the video.")
 
@@ -727,7 +727,7 @@ def test_node_errors_keep_the_provider_for_the_card_only(tmp_path) -> None:
     assert "provider" not in (errors.get("n1") or {})
 
 
-def test_a_validation_entry_saved_before_round_3e_reads_the_general_line(tmp_path) -> None:
+def test_a_validation_entry_saved_before_the_person_line_change_reads_the_general_line(tmp_path) -> None:
     from services.node_errors import NodeErrors
 
     path = tmp_path / "errors.json"
@@ -837,12 +837,12 @@ def test_a_field_label_written_into_a_card_line_sits_in_quotes() -> None:
     assert not bare, bare
 
 
-def test_review_rule_5_the_grok_reference_duration_line_quotes_duration() -> None:
+def test_the_grok_reference_duration_line_quotes_duration() -> None:
     assert _line_beside("execution/maker_routes_xai.py", "Reference-to-video on {} runs up to {} seconds") == (
         "Reference-to-video on {} runs up to {} seconds. Set “Duration” to {} or less. {}")
 
 
-def test_review_rule_5_reasoning_effort_and_thinking_level_are_quoted() -> None:
+def test_reasoning_effort_and_thinking_level_are_quoted() -> None:
     from handlers.openai_chat import _listed_effort
 
     exc = _raised(_listed_effort, "gpt-6-astra", "none")
@@ -856,7 +856,7 @@ def test_review_rule_5_reasoning_effort_and_thinking_level_are_quoted() -> None:
 
 
 @pytest.mark.asyncio
-async def test_review_a_gemini_thinking_level_line_reads_the_nodes_own_labels(monkeypatch) -> None:
+async def test_a_gemini_thinking_level_line_reads_the_nodes_own_labels(monkeypatch) -> None:
     # The level's label comes from the node's own field (thinkingLevel), not a
     # key it doesn't have: the card said "doesn't offer Thinking Level minimal".
     from handlers import google_gemini
@@ -880,7 +880,7 @@ async def test_review_a_gemini_thinking_level_line_reads_the_nodes_own_labels(mo
 
 
 @pytest.mark.asyncio
-async def test_review_rule_5_xai_quality_is_quoted() -> None:
+async def test_xai_quality_is_quoted() -> None:
     from handlers.xai_image import QUALITY_MODELS, handle_xai_image
     from models.graph import GraphNode, PortValueDict
 
@@ -893,7 +893,7 @@ async def test_review_rule_5_xai_quality_is_quoted() -> None:
     assert person_line(exc).endswith(". Clear “Quality”, then run the node again.")
 
 
-def test_review_rule_5_the_prores_profile_is_its_label_with_option_labels() -> None:
+def test_the_prores_profile_is_its_label_with_option_labels() -> None:
     from execution.maker_routes_ideogram_runway import runway_ruby_request
 
     exc = _raised(runway_ruby_request, {"video_url": "https://example.com/v.mp4", "output_format": "hdr_prores",
@@ -902,7 +902,7 @@ def test_review_rule_5_the_prores_profile_is_its_label_with_option_labels() -> N
     assert person_line(exc) == "Set “Prores profile” to 422, 4444 or 422 HQ, then run the node again."
 
 
-def test_review_rule_5_seedream_names_images_per_generation_in_quotes() -> None:
+def test_seedream_names_images_per_generation_in_quotes() -> None:
     from execution.maker_routes_byteplus import seedream_fal_to_byteplus
     from models.graph import GraphNode, PortValueDict
 
@@ -915,7 +915,7 @@ def test_review_rule_5_seedream_names_images_per_generation_in_quotes() -> None:
         "counting references and results. Use fewer references, or lower “Images per generation”.")
 
 
-def test_review_rule_5_an_image_count_names_the_nodes_own_field() -> None:
+def test_an_image_count_names_the_nodes_own_field() -> None:
     from execution import maker_routes, maker_routes_openai, sync_runner
     from models.graph import GraphNode
 
@@ -931,7 +931,7 @@ def test_review_rule_5_an_image_count_names_the_nodes_own_field() -> None:
     assert person_line(exc) == "Set “Images” to a whole number from 1 to 4."
 
 
-def test_review_rule_5_ideograms_field_checks_quote_the_label() -> None:
+def test_ideograms_field_checks_quote_the_label() -> None:
     from handlers.ideogram import _boolean_field, _validate_enum, _validate_int_range
     from models.graph import GraphNode
 
@@ -947,7 +947,7 @@ def test_review_rule_5_ideograms_field_checks_quote_the_label() -> None:
     assert person_line(exc) == "Pick one of the node's “Images” options, then run the node again."
 
 
-def test_review_rule_5_claudes_max_tokens_line_quotes_both_fields() -> None:
+def test_claudes_max_tokens_line_quotes_both_fields() -> None:
     from execution.person_line import field_label
 
     assert _line_beside("handlers/anthropic_chat.py", "before it wrote an answer ") == (
@@ -955,7 +955,7 @@ def test_review_rule_5_claudes_max_tokens_line_quotes_both_fields() -> None:
     assert (field_label("claude-chat", "max_tokens"), field_label("claude-chat", "effort")) == ("Max Tokens", "Effort")
 
 
-def test_review_rule_5_the_lines_the_label_guard_found_quote_their_fields() -> None:
+def test_the_lines_the_label_guard_found_quote_their_fields() -> None:
     from handlers import worldlabs
 
     assert worldlabs.PERSON_LINES["both_recovery_ids"] == (
@@ -972,7 +972,7 @@ def test_review_rule_5_the_lines_the_label_guard_found_quote_their_fields() -> N
         "Image only, which need no key.")
 
 
-def test_review_rule_9_vertex_is_vertex_ai_on_every_veo_line() -> None:
+def test_vertex_is_vertex_ai_on_every_veo_line() -> None:
     assert _line_beside("execution/maker_routes_google.py", "On Vertex only Veo 3.1 (Standard) renders 4K") == (
         "On Vertex AI, only Veo 3.1 Standard renders 4K. Pick 1080p.")
     assert _line_beside("execution/maker_routes_google.py", "Vertex takes up to {} reference images") == (
@@ -984,7 +984,7 @@ def test_review_rule_9_vertex_is_vertex_ai_on_every_veo_line() -> None:
         "On Vertex AI, only Veo 3.1 Standard renders 4K. Pick 1080p, or pick Veo 3.1.")
 
 
-def test_review_rule_9_minimax_512p_is_lowercase_and_agents_keep_512P() -> None:
+def test_minimax_512p_is_lowercase_and_agents_keep_512P() -> None:
     from execution.maker_routes_minimax_meshy import krea_hailuo_to_minimax
     from models.graph import GraphNode
 
@@ -1000,7 +1000,7 @@ def test_review_rule_9_minimax_512p_is_lowercase_and_agents_keep_512P() -> None:
 # -- the general line names a provider only when it answered -----------------------
 
 
-def test_review_a_failure_before_sending_names_no_provider() -> None:
+def test_a_failure_before_sending_names_no_provider() -> None:
     from execution.provider_status import card_line
 
     # handlers/worldlabs.py refuses a saved model it doesn't list before any
@@ -1012,7 +1012,7 @@ def test_review_a_failure_before_sending_names_no_provider() -> None:
     assert card_line(TypeError("bad"), "runway-image", {}, {"RUNWAY_API_KEY": "fixture"}).provider is None
 
 
-def test_review_a_failure_the_provider_answered_names_the_route() -> None:
+def test_a_failure_the_provider_answered_names_the_route() -> None:
     import httpx
 
     from execution.person_line import as_job_failure, with_api_status, with_provider_line

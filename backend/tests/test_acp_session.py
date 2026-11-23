@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import os
 import stat
@@ -843,9 +844,29 @@ async def test_opening_a_gemini_agent_never_blocks_the_event_loop(env, tmp_path,
     from services import agent_binaries, gemini_cli_setup
     bin_dir = tmp_path / "slow-bin"
     bin_dir.mkdir()
+    probed = tmp_path / "probed.txt"
+    gate = tmp_path / "gate.txt"
+    release = tmp_path / "release.txt"
+    trace = tmp_path / "trace.txt"
     gemini = bin_dir / "gemini"
-    gemini.write_text(f'#!/bin/sh\necho "$1" >> {tmp_path / "probed.txt"}\nsleep 1.5\ncase "$1" in --version) echo 0.25.2 ;; '
-                      '--help) echo "  --experimental-acp  ACP mode" ;; esac\n')
+    gemini.write_text(
+        f'#!/bin/sh\n'
+        f'echo "$1" >> "{probed}"\n'
+        f'if [ -f "{gate}" ]; then\n'
+        f'  i=0\n'
+        f'  while [ ! -f "{release}" ] && [ "$i" -lt 200 ]; do\n'
+        f'    sleep 0.05\n'
+        f'    i=$((i + 1))\n'
+        f'  done\n'
+        f'  if [ -f "{release}" ]; then\n'
+        f'    echo "$1:released" >> "{trace}"\n'
+        f'  else\n'
+        f'    echo "$1:timed_out" >> "{trace}"\n'
+        f'  fi\n'
+        f'fi\n'
+        f'case "$1" in --version) echo 0.25.2 ;; '
+        f'--help) echo "  --experimental-acp  ACP mode" ;; esac\n'
+    )
     gemini.chmod(0o755)
     monkeypatch.setattr(agent_binaries, "_FIXED_DIRS", ())
     monkeypatch.setattr(agent_binaries, "login_shell_path", lambda: "")
@@ -855,31 +876,40 @@ async def test_opening_a_gemini_agent_never_blocks_the_event_loop(env, tmp_path,
     personal_agents.acknowledge_warning(env.state)
     personal_agents.update_agent(env.state, "gemini", {"enabled": True}, home=tmp_path / "home")
     gemini_cli_setup.clear_probe_cache()
-    (tmp_path / "probed.txt").unlink()
-    longest = 0.0
+    probed.unlink()
+    gate.write_text("1")
 
-    async def heartbeat() -> None:
-        nonlocal longest
-        last = time.monotonic()
-        while True:
-            await asyncio.sleep(0.05)
-            now = time.monotonic()
-            longest = max(longest, now - last)
-            last = now
-
-    beat = asyncio.create_task(heartbeat())
-    await asyncio.sleep(0.1)  # the heartbeat is running before open starts
+    open_task = asyncio.create_task(env.manager.open(
+        OWNER, "gemini", state_dir=env.state, output_root=env.out,
+        backend_url="http://127.0.0.1:8142", workspace_sessions=env.workspaces,
+        home=tmp_path / "home"))
+    while_probing = 0
     try:
+        while not (probed.exists() and "--help" in probed.read_text()):
+            if open_task.done():
+                break
+            await asyncio.sleep(0.01)
+        if not open_task.done():
+            for _ in range(5):
+                await asyncio.sleep(0)
+                while_probing += 1
+            release.write_text("go")
         with pytest.raises(PersonalSessionError) as info:
-            await env.manager.open(OWNER, "gemini", state_dir=env.state, output_root=env.out,
-                                   backend_url="http://127.0.0.1:8142", workspace_sessions=env.workspaces,
-                                   home=tmp_path / "home")
+            await open_task
     finally:
-        await asyncio.sleep(0.12)  # let the heartbeat see any stall before it stops
-        beat.cancel()
+        release.write_text("go")
+        if not open_task.done():
+            open_task.cancel()
+            with contextlib.suppress(BaseException):
+                await open_task
     assert info.value.code == "personal_agent_needs_setup"
-    assert "--help" in (tmp_path / "probed.txt").read_text()  # the slow probe really ran
-    assert longest < 0.75, f"the event loop stalled for {longest:.2f}s"
+    assert "--help" in probed.read_text()  # the slow probe really ran
+    assert while_probing == 5
+    # The check that matters: the fake CLI was released by this test's coroutine while the
+    # probe was still running. A probe that blocked the event loop would have hit the script's
+    # own 10 s cap first and written timed_out.
+    recorded = trace.read_text()
+    assert "--help:released" in recorded and "timed_out" not in recorded, recorded
 
 
 @pytest.mark.asyncio

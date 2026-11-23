@@ -61,7 +61,7 @@ def test_the_first_turn_instructions_are_unchanged_and_under_the_cap():
     assert OLD not in mcp_server.INSTRUCTIONS
 
 
-def test_the_plan_records_q113():
+def test_the_plan_records_the_question():
     plan = (REPO / "docs/moodboard-canvas-plan.md").read_text(encoding="utf-8")
     assert "Q113 c" in plan and "This board" in plan
 

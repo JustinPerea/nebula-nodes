@@ -427,7 +427,7 @@
               }
             ]
           },
-          "note": "Early access: Krea 3 beta workspaces only"
+          "note": "Fixture route note"
         },
         {
           "id": "fal",
@@ -7361,7 +7361,8 @@
           "key": "resolution",
           "options": [
             "1K",
-            "2K"
+            "2K",
+            "4K"
           ]
         },
         {
@@ -10786,7 +10787,8 @@
           "key": "resolution",
           "options": [
             "1K",
-            "2K"
+            "2K",
+            "4K"
           ]
         },
         {

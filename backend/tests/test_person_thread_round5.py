@@ -134,7 +134,7 @@ def test_the_oldest_open_push_is_answered_first_across_projects(thread):
     assert answer["reply"]["replyTo"] == newer["id"] and answer["projectId"] == coast
 
 
-def test_no_message_and_no_project_open_is_refused_with_r100s_line(paced):
+def test_no_message_and_no_project_open_is_refused_with_the_no_project_line(paced):
     _open(paced, None)
     refused = _reply(paced, "Done.", headers=CLAUDE_TOKEN)
     assert refused.status_code == 409 and refused.json()["code"] == "no_project"
@@ -367,7 +367,7 @@ def _clause(monkeypatch, path) -> str:
     return match.group(1)
 
 
-def test_each_token_file_clause_is_gm_r97s(token_path, monkeypatch):
+def test_each_token_file_clause_is_the_approved_one(token_path, monkeypatch):
     folder = token_path / "a-folder"
     folder.mkdir()
     assert _clause(monkeypatch, folder) == "points to something that isn’t a regular file"

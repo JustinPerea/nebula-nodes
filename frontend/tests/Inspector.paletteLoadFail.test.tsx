@@ -30,7 +30,25 @@ import { expectEveryTryAgainLine } from './helpers/tryAgainLine';
 const initialUI = useUIStore.getState();
 const initialGraph = useGraphStore.getState();
 const LINE = 'Nebula couldn’t extract the colors because the server isn’t answering. Try again.';
-const wait = (ms: number) => act(async () => { await new Promise((r) => setTimeout(r, ms)); });
+
+/* The retry's 400 ms hold runs on fake timers (the pr198Fix25Held pattern):
+ * setTimeout, performance.now() and Date share one clock the test moves, so
+ * the hold ends at exactly PALETTE_LINE_MIN_MS. Promises and setImmediate are
+ * not faked, so `step` and `settleNoAdvance` let them run; vi.waitFor is
+ * never used while the clock is fake.
+ */
+function fakeClock() {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'performance', 'Date'] });
+}
+/** Move the fake clock by `ms` and let what that sets off settle. */
+const step = (ms: number) => act(async () => { await vi.advanceTimersByTimeAsync(ms); });
+/** Let a pending answer land with the clock standing still. */
+async function settleNoAdvance(rounds = 5) {
+  for (let round = 0; round < rounds; round += 1) {
+    await step(0);
+    await act(async () => { await new Promise<void>((resolve) => { setImmediate(resolve); }); });
+  }
+}
 
 beforeEach(() => {
   // A chunk that loaded stays loaded (the module registry keeps it), so
@@ -39,6 +57,7 @@ beforeEach(() => {
   resetPaletteFocusForTests();
 });
 afterEach(() => {
+  vi.useRealTimers();
   cleanup();
   useUIStore.setState(initialUI, true);
   useGraphStore.setState(initialGraph, true);
@@ -133,9 +152,11 @@ describe("Extract when its own code can't load (design on #208)", () => {
     await waitFor(() => expect(line(container)).not.toBeNull());
     const button = tryAgain(container)!;
     act(() => button.focus());
+    fakeClock();
     const started = Date.now();
     const loadsBefore = chunk.loads;
-    await act(async () => { fireEvent.click(button); });
+    act(() => { fireEvent.click(button); });
+    await settleNoAdvance();
     // Running: the same element, aria-disabled, the line unchanged, no pending line.
     expect(tryAgain(container)).toBe(button);
     expect(button.getAttribute('aria-disabled')).toBe('true');
@@ -143,12 +164,14 @@ describe("Extract when its own code can't load (design on #208)", () => {
     expect(container.querySelector('.inspector__palette-pending')).toBeNull();
     expect(status(container)).toBe('');
     // A press while it runs does nothing.
-    await act(async () => { fireEvent.click(button); });
+    act(() => { fireEvent.click(button); });
     expect(chunk.loads).toBe(loadsBefore + 1);
-    await wait(PALETTE_LINE_MIN_MS - 120);
+    // Held: aria-disabled until the hold's 400 ms, live at it.
+    await step(PALETTE_LINE_MIN_MS - 1);
     expect(button.getAttribute('aria-disabled')).toBe('true');
-    await waitFor(() => expect(button.getAttribute('aria-disabled')).toBeNull());
-    expect(Date.now() - started).toBeGreaterThanOrEqual(PALETTE_LINE_MIN_MS - 5);
+    await step(1);
+    expect(button.getAttribute('aria-disabled')).toBeNull();
+    expect(Date.now() - started).toBe(PALETTE_LINE_MIN_MS);
     // The press made while it ran tried nothing.
     expect(chunk.loads).toBe(loadsBefore + 1);
     // Failed again: the same element, still focused, the status says it again.
@@ -158,8 +181,10 @@ describe("Extract when its own code can't load (design on #208)", () => {
     expect(status(container)).toBe(LINE);
     // Success: the normal row, focus on Extract, the count.
     chunk.fails = false;
-    await act(async () => { fireEvent.click(button); });
-    await waitFor(() => expect(line(container)).toBeNull());
+    act(() => { fireEvent.click(button); });
+    await settleNoAdvance();
+    await step(PALETTE_LINE_MIN_MS);
+    expect(line(container)).toBeNull();
     const extract = container.querySelector('label[title="Extract a palette from an image"] input');
     expect(extract).not.toBeNull();
     expect(document.activeElement).toBe(extract);

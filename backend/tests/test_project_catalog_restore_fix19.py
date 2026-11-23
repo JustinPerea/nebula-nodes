@@ -76,7 +76,7 @@ def _disk_node(store, project_id: str, node_id: str) -> dict:
 
 # -- The agent's edit to the renumbered node stands -----------------------------
 
-def test_medium1_p1_an_agents_edit_by_the_id_it_was_told_survives_the_tabs_handoff(app):
+def test_an_agents_edit_by_the_id_it_was_told_survives_the_tabs_handoff(app):
     """reopen-renumber's P1: the tab's only unsaved change is n1
     moved; the duplicate is as the open loaded it."""
     client, store, *_ = app
@@ -95,7 +95,7 @@ def test_medium1_p1_an_agents_edit_by_the_id_it_was_told_survives_the_tabs_hando
                 if event.get("nodeId") == new and event["actor"].get("kind") == "person"]
 
 
-def test_medium1_a1_the_agents_value_name_and_place_all_stand(app):
+def test_the_agents_value_name_and_place_all_stand(app):
     """agents-docs' a1, with the place too."""
     client, store, *_ = app
     delta, tab, old_rev = _delta_with_a_duplicate(client)
@@ -117,7 +117,7 @@ def test_medium1_a1_the_agents_value_name_and_place_all_stand(app):
     assert stored["position"] == {"x": 900, "y": 40}
 
 
-def test_medium1_a1_control_an_agents_edit_to_n1_stands_as_before(app):
+def test_control_an_agents_edit_to_n1_stands_as_before(app):
     client, store, *_ = app
     delta, tab, old_rev = _delta_with_a_duplicate(client)
     _open(client, delta, headers=CODEX)
@@ -127,7 +127,7 @@ def test_medium1_a1_control_an_agents_edit_to_n1_stands_as_before(app):
     assert _live(client)["n1"]["data"]["params"]["value"] == "agent wrote"
 
 
-def test_medium1_p6_after_a_boot_an_agents_edit_survives_the_old_tabs_handoff(app):
+def test_after_a_boot_an_agents_edit_survives_the_old_tabs_handoff(app):
     """reopen-renumber's P6: the tab from before the boot typed
     into n1 while offline; the duplicate is as the boot loaded it."""
     client, store, _graph, state = app
@@ -146,7 +146,7 @@ def test_medium1_p6_after_a_boot_an_agents_edit_survives_the_old_tabs_handoff(ap
     assert _live(client)["n1"]["data"]["params"]["value"] == "delta-1 offline"
 
 
-def test_medium1_a3_boot_variant_with_the_persons_read_between(app):
+def test_boot_variant_with_the_persons_read_between(app):
     """agents-docs' a3: the person's read (it overlays the live
     graph onto the stored copy) comes between the agent's edit and the
     handoff, so the stored copy can't be the baseline."""
@@ -174,7 +174,7 @@ def _combine_delta(client) -> tuple[str, dict, str]:
     return delta, tab, _rev(client)
 
 
-def test_medium1_the_person_and_an_agent_change_different_keys_and_both_stand(app):
+def test_the_person_and_an_agent_change_different_keys_and_both_stand(app):
     client, store, *_ = app
     delta, tab, old_rev = _combine_delta(client)
     new = _open(client, delta, headers=CODEX).json()["renumbered"][DUP]
@@ -196,7 +196,7 @@ def test_medium1_the_person_and_an_agent_change_different_keys_and_both_stand(ap
     assert [event["data"]["keys"] for event in persons] == [["template"]]
 
 
-def test_medium1_the_same_key_the_persons_late_value_wins(app):
+def test_the_same_key_the_persons_late_value_wins(app):
     client, store, *_ = app
     delta, tab, old_rev = _delta_with_a_duplicate(client)
     new = _open(client, delta, headers=CODEX).json()["renumbered"][DUP]
@@ -208,7 +208,7 @@ def test_medium1_the_same_key_the_persons_late_value_wins(app):
     assert _value(_on_disk(store, delta)["snapshot"], new) == "person typed late"
 
 
-def test_medium1_a_later_handoff_counts_only_what_changed_since_the_last(app):
+def test_a_later_handoff_counts_only_what_changed_since_the_last(app):
     """An autosave in flight at the open lands first; an agent then edits the
     node; the tab's last save holds the same value the first one landed.
     The baseline moved on with the first, so the agent's edit stands."""
@@ -223,7 +223,7 @@ def test_medium1_a_later_handoff_counts_only_what_changed_since_the_last(app):
     assert _live(client)[new]["data"]["params"]["value"] == "agent wrote"
 
 
-def test_medium1_the_late_name_and_place_still_land_against_the_baseline(app):
+def test_the_late_name_and_place_still_land_against_the_baseline(app):
     """The late name and place still hold through the baseline: what the person changed
     since the autosave lands, value, name and place."""
     client, store, *_ = app
@@ -241,7 +241,7 @@ def test_medium1_the_late_name_and_place_still_land_against_the_baseline(app):
 
 # -- The tab's real handoff ------------------------------------------------------
 
-def test_low1_p8_the_tabs_real_handoff_remapped_with_no_unsent_lists(app):
+def test_the_tabs_real_handoff_remapped_with_no_unsent_lists(app):
     """What the tab sends after a reopen (remapSnapshotIds; handoffPending
     lists only nN ids): the late value, name and place land on n2 (mutant
     B2: renamed only by the old id)."""
@@ -265,7 +265,7 @@ def test_low1_p8_the_tabs_real_handoff_remapped_with_no_unsent_lists(app):
 
 # -- An unsaved delete stays a delete ---------------------------------------------
 
-def test_low2_p4_a_duplicate_the_person_deleted_before_the_handoff_stays_deleted(app):
+def test_a_duplicate_the_person_deleted_before_the_handoff_stays_deleted(app):
     """The window that saved the duplicate
     says the delete (``deletedNodeIds``, by the id it had)."""
     client, store, *_ = app
@@ -288,7 +288,7 @@ def test_low2_p4_a_duplicate_the_person_deleted_before_the_handoff_stays_deleted
     assert [(event["nodeId"], event["actor"]["kind"]) for event in removed] == [(new, "person")]
 
 
-def test_low2_only_the_persons_tab_says_a_delete_by_leaving_it_out(app):
+def test_only_the_persons_tab_says_a_delete_by_leaving_it_out(app):
     """A save at the old revision from anyone else (the agent that switched)
     leaving the node out deletes nothing."""
     client, store, *_ = app
@@ -302,7 +302,7 @@ def test_low2_only_the_persons_tab_says_a_delete_by_leaving_it_out(app):
 
 
 @pytest.mark.parametrize("read_between", [False, True])
-def test_low2_a_node_an_agent_added_after_the_open_survives_the_handoff(app, read_between):
+def test_a_node_an_agent_added_after_the_open_survives_the_handoff(app, read_between):
     """The opposite: in no map, and not in the tab's snapshot, it stays,
     on disk (after a read laid it over the stored copy, or not) and live."""
     client, store, *_ = app
@@ -323,7 +323,7 @@ def test_low2_a_node_an_agent_added_after_the_open_survives_the_handoff(app, rea
 
 # -- The boot replacement's project scoping ---------------------------------------
 
-def test_nit1_the_persons_read_of_another_project_doesnt_end_the_boot_replacement(app):
+def test_the_persons_read_of_another_project_doesnt_end_the_boot_replacement(app):
     """Mutant B19: any project's read ended it."""
     client, store, _graph, state = app
     alpha = _create(client, "Alpha")
@@ -341,7 +341,7 @@ def test_nit1_the_persons_read_of_another_project_doesnt_end_the_boot_replacemen
 
 # -- The person's own reopen in place ----------------------------------
 
-def test_medium2_the_persons_reopen_in_place_renumbers_and_nothing_doubles(app):
+def test_the_persons_reopen_in_place_renumbers_and_nothing_doubles(app):
     """The tab saves first (activate's flush: the late typing), then sends
     POST /api/projects/{id}/open for the project it shows.
     A handoff is kept for this project, for the person's other
@@ -380,7 +380,7 @@ def test_medium2_the_persons_reopen_in_place_renumbers_and_nothing_doubles(app):
     assert _open(client, delta).json()["renumbered"] == {}
 
 
-def test_medium2_a_save_at_the_revision_before_the_persons_reopen_lands_as_a_handoff(app):
+def test_a_save_at_the_revision_before_the_persons_reopen_lands_as_a_handoff(app):
     """The person's reopen in place keeps a
     handoff as an agent's does, so a save at the old revision (another
     window's) lands in the project under the handoff's rules, once."""
@@ -393,7 +393,7 @@ def test_medium2_a_save_at_the_revision_before_the_persons_reopen_lands_as_a_han
     assert _live(client)[new]["data"]["params"]["value"] == "too late"
 
 
-def test_medium2_a_reload_reads_the_project_and_renumbers_nothing(app):
+def test_a_reload_reads_the_project_and_renumbers_nothing(app):
     """What a page reload loads (GET /api/projects/{id}, the stored project
     with the live graph laid over it) keeps the tab-local id: a read never
     replaces the live graph."""
@@ -423,7 +423,7 @@ ONLY_DUP_NOTE = ("The person selected 1 node only their tab has (a duplicate or 
                  "it has no id agents can use until the project is opened again.")
 
 
-def test_dlu_medium1_nebula_selection_with_only_the_duplicate_selected(app):
+def test_dlu_nebula_selection_with_only_the_duplicate_selected(app):
     client, *_ = app
     _create(client, "Delta")
     _add_text(client, "delta-1")
@@ -442,7 +442,7 @@ def test_dlu_medium1_nebula_selection_with_only_the_duplicate_selected(app):
     assert "The person also selected" in selection_prompt_context(client.get("/api/canvas/selection").json())
 
 
-def test_dlu_medium1_and_agents_docs_low2_look_shows_the_count(app, monkeypatch):
+def test_dlu_and_agents_docs_look_shows_the_count(app, monkeypatch):
     client, *_ = app
     _create(client, "Delta")
     _add_text(client, "delta-1")
@@ -461,7 +461,7 @@ def test_dlu_medium1_and_agents_docs_low2_look_shows_the_count(app, monkeypatch)
     assert format_snapshot(look) in printed
 
 
-def test_agents_docs_low2_start_here_and_nebula_context_show_the_count(app):
+def test_agents_docs_start_here_and_nebula_context_show_the_count(app):
     client, *_ = app
     _create(client, "Delta")
     _add_text(client, "delta-1")
@@ -486,7 +486,7 @@ def _selection_events(since: int) -> list[tuple[str, dict]]:
     return [(event["summary"], event["data"]) for event in _events("selection.changed", since)]
 
 
-def test_agents_docs_low1_selecting_only_a_duplicate_is_a_selection_not_a_clear(app):
+def test_agents_docs_selecting_only_a_duplicate_is_a_selection_not_a_clear(app):
     client, *_ = app
     _create(client, "Delta")
     _add_text(client, "delta-1")
@@ -501,7 +501,7 @@ def test_agents_docs_low1_selecting_only_a_duplicate_is_a_selection_not_a_clear(
     assert DUP not in json.dumps(events)
 
 
-def test_agents_docs_low1_from_nothing_to_a_duplicate_and_back(app):
+def test_agents_docs_from_nothing_to_a_duplicate_and_back(app):
     client, *_ = app
     _create(client, "Delta")
     _add_text(client, "delta-1")
@@ -516,7 +516,7 @@ def test_agents_docs_low1_from_nothing_to_a_duplicate_and_back(app):
     assert "tabOnlyCount" not in _selection_events(since)[-1][1]
 
 
-def test_agents_docs_low1_one_duplicate_for_another_reads_the_same_so_no_event(app):
+def test_agents_docs_one_duplicate_for_another_reads_the_same_so_no_event(app):
     """[DUP] -> [DUP2]: agents are given neither id, only the count, and it
     is 1 both times, so what they can see didn't change."""
     client, *_ = app
@@ -530,7 +530,7 @@ def test_agents_docs_low1_one_duplicate_for_another_reads_the_same_so_no_event(a
     assert [summary for summary, _ in _selection_events(since)] == ["selected 2 nodes only their tab has"]
 
 
-def test_agents_docs_nit1_a_switch_forgets_the_tab_only_count(app):
+def test_agents_docs_a_switch_forgets_the_tab_only_count(app):
     """Mutant M18: clear() keeping the count."""
     client, *_ = app
     _create(client, "Delta")
@@ -549,7 +549,7 @@ def test_agents_docs_nit1_a_switch_forgets_the_tab_only_count(app):
     (errno.EACCES, False), (errno.EPERM, False), (errno.EROFS, False),
     (errno.ENOSPC, True), (errno.EDQUOT, True), (errno.EIO, True), (errno.EMFILE, True),
 ])
-def test_nit3_only_a_folder_no_run_could_write_ignores_the_marker(tmp_path, monkeypatch, code, holds):
+def test_only_a_folder_no_run_could_write_ignores_the_marker(tmp_path, monkeypatch, code, holds):
     marker = tmp_path / main_module.KEPT_MARKER_NAME
     marker.write_text(json.dumps({"keptTabs": 2, "at": 0}), encoding="utf-8")
     real = main_module.Path.open
@@ -584,13 +584,13 @@ def _made(case: dict) -> str:
 
 
 @pytest.mark.parametrize("case", CASES, ids=[f"{case['family']}:{case['source']}:{len(case['taken'])}" for case in CASES])
-def test_gm_r27_2_copy_names(case):
+def test_copy_names(case):
     got = _made(case)
     assert got == case["expect"]
     assert not got.startswith("Recovered Recovered ") and "copy copy" not in got
 
 
-def test_gm_r27_2_the_cases_cover_every_shape():
+def test_the_cases_cover_every_shape():
     shapes = {(case["family"], case["source"]) for case in CASES}
     for shape in [("copy", "X copy"), ("copy", "X copy 2"), ("recovered", "Recovered X"),
                   ("recovered", "Recovered X 2"), ("recovered", "Recovered Alpha copy 2"),
@@ -604,7 +604,7 @@ def test_gm_r27_2_the_cases_cover_every_shape():
                         "Recovered Shot 7 copy 3"]
 
 
-def test_gm_r27_2_every_backend_copy_follows_the_rule(app):
+def test_every_backend_copy_follows_the_rule(app):
     assert main_module._recovered_copy_name("Shot 7", _catalog("Shot 7", [])) == "Recovered Shot 7"
     assert main_module._recovered_copy_name("Shot 7", _catalog("Shot 7", ["Recovered Shot 7"])) == \
         "Recovered Shot 7 copy"
@@ -614,7 +614,7 @@ def test_gm_r27_2_every_backend_copy_follows_the_rule(app):
 
 # -- Docs ---------------------------------------------------------------------------------------
 
-def test_agent_docs_describe_round_19():
+def test_agent_docs_describe_the_fix():
     setup = (ROOT / "docs/MCP-SETUP.md").read_text()
     skill = (ROOT / "skills/nebula/SKILL.md").read_text()
     mcp = (ROOT / "backend/mcp_server.py").read_text()

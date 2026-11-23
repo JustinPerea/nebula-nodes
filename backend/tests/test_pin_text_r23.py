@@ -93,11 +93,11 @@ def test_the_corpus_agent_form_holds_no_selector_and_only_rgi_joins():
         if "‍" in case["agent"]:
             assert rgi, case["name"]
     named = {case["name"]: case for case in CORPUS}
-    assert named["GM r23: 葛 and a registered variant (E0100)"]["note"] == KUZU + "\U000E0100"
-    assert named["GM r23: 葛 and a registered variant (E0100)"]["agent"] == KUZU
-    assert named["GM r23: 280 葛 spelling an instruction in their selectors"]["agent"] == KUZU * 280
-    assert named["GM r23: 280 葛 spelling it in registered selectors, digit by digit"]["note"] != KUZU * 280
-    assert named["GM r23: 280 葛 spelling it in registered selectors, digit by digit"]["agent"] == KUZU * 280
+    assert named["selectors and joins: 葛 and a registered variant (E0100)"]["note"] == KUZU + "\U000E0100"
+    assert named["selectors and joins: 葛 and a registered variant (E0100)"]["agent"] == KUZU
+    assert named["selectors and joins: 280 葛 spelling an instruction in their selectors"]["agent"] == KUZU * 280
+    assert named["selectors and joins: 280 葛 spelling it in registered selectors, digit by digit"]["note"] != KUZU * 280
+    assert named["selectors and joins: 280 葛 spelling it in registered selectors, digit by digit"]["agent"] == KUZU * 280
 
 
 def test_a_seeded_fuzz_of_selector_smuggling_reaches_no_agent():
@@ -147,7 +147,7 @@ def test_every_agent_path_strips_and_the_persons_canvas_keeps_the_variant(api):
     assert resolved["data"]["reply"] == "done 葛" and _no_selectors(resolved["summary"])
 
 
-def test_gm_r23_the_two_refusals_carry_their_codes(api):
+def test_the_two_refusals_carry_their_codes(api):
     client, graph, _journal, _sent, _store, _ids = api
     node = graph.add_node("text-input", {})
     gone = client.post("/api/canvas/pins", headers=PERSON, json={"text": "hi", "nodeId": "n999"})
@@ -172,7 +172,7 @@ def _drain_to_pins(ws, limit: int = 12) -> dict:
     raise AssertionError("no canvasPins message")
 
 
-def test_low1_only_the_persons_sockets_get_the_persons_form(api, monkeypatch):
+def test_only_the_persons_sockets_get_the_persons_form(api, monkeypatch):
     import asyncio
 
     import main as main_module
@@ -234,7 +234,7 @@ def _tags(spec: str) -> str:
     return "".join(chr(0xE0000 + ord(c)) for c in spec)
 
 
-def test_gm_r26_the_channel_keeps_the_three_flags_and_drops_every_other_tag():
+def test_the_channel_keeps_the_three_flags_and_drops_every_other_tag():
     """Reverting an earlier change (design): a bare 🏴 is another symbol, so the
     England, Scotland and Wales flags reach the channel whole. Every other tag
     character goes, by the one shared rule (canvas_pins.agent_line, as agent_text
@@ -259,7 +259,7 @@ def test_gm_r26_the_channel_keeps_the_three_flags_and_drops_every_other_tag():
         assert mcp_channel.clean_text(line, 300, multiline=True) == agent_line(line).strip()
 
 
-def test_gm_r26_each_flag_arrives_whole_in_the_channel_push():
+def test_each_flag_arrives_whole_in_the_channel_push():
     from tests.test_mcp_channel import pin, resp, take
 
     state = mcp_channel.ChannelState(now=0.0)
@@ -272,7 +272,7 @@ def test_gm_r26_each_flag_arrives_whole_in_the_channel_push():
     assert len(kept) == 3 * 6
 
 
-def test_review15_nit4_a_stray_zwj_never_reaches_the_raw_channel_push():
+def test_a_stray_zwj_never_reaches_the_raw_channel_push():
     """The shared agent_line drops a
     ZWJ outside an RGI sequence in the raw channel push too (not only in
     clean_text), and keeps the ones that join a family or a flag."""

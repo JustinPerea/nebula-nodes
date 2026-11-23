@@ -90,7 +90,7 @@ def _read(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def test_r1_by_use_else_global(env):
+def test_by_use_else_global(env):
     one, both, unused, trashed_only = _board(name="One"), _board(name="Both"), _board(name="Unused"), _board(name="Gone")
     nari = _character()
     style = _style()

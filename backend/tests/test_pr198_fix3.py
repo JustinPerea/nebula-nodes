@@ -388,7 +388,7 @@ def test_a_render_is_protected_while_its_run_is_admitted(api, rendering, monkeyp
     assert main_module._rendering_runs(node) == []
 
 
-def test_the_persons_undo_that_removes_a_rendering_shot_reads_gms_line(api, rendering, person):  # noqa: F811
+def test_the_persons_undo_that_removes_a_rendering_shot_reads_the_approved_line(api, rendering, person):  # noqa: F811
     client, graph, _sent = api
     node = graph.add_node("cinema-scene", {"scene": _scene("s1", "s2")})
     graph.set_label(node, "Opening")

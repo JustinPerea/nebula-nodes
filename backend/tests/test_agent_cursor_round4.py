@@ -581,7 +581,7 @@ def test_no_cursor_event_is_broadcast_outside_broadcast_presence():
 
 
 @pytest.mark.parametrize("shape", GUARD_SHAPES.values(), ids=GUARD_SHAPES.keys())
-def test_the_guard_catches_every_shape_review_4_found(shape):
+def test_the_guard_catches_every_shape_the_review_found(shape):
     helper = "def build():\n    return _point(i, target=t)\n\n"
     source = f"{helper}async def f():\n    {shape}\n"
     lines = cursor_broadcasts_outside_the_helper(source)

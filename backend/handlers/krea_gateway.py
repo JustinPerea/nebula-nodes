@@ -199,6 +199,17 @@ def _validate(body: dict, schema: dict) -> None:
     if errors:
         error = errors[0]
         field = ".".join(str(part) for part in error.path) or "request"
+        # "Needs one of these sets of fields" (Krea 3: resolution, or width
+        # and height) says which, not the whole request it rejected.
+        branches = error.schema.get(error.validator) if error.validator in {"anyOf", "oneOf"} else None
+        sets = ([" and ".join(b["required"]) for b in branches]
+                if isinstance(branches, list) and branches and all(
+                    isinstance(b, dict) and set(b) == {"required"} and isinstance(b["required"], list) and b["required"]
+                    for b in branches) else None)
+        if sets:
+            needs = ", or ".join(sets)
+            raise with_person_line(ValueError(f"Invalid Krea {field}: needs {needs}"),
+                                   f"Krea needs {needs.replace('_', ' ')}. Set it on this node, then run the node again.")
         raise ValueError(f"Invalid Krea {field}: {error.message}")
 
 
@@ -350,8 +361,70 @@ async def handle_krea_catalog(
     api_key = _api_key(api_keys) if auth_mode == "api-token" else None
     wired = {port: value for port, value in inputs.items()
              if value.value is not None and value.value != "" and value.value != []}
+    _refuse_empty_required(node, inputs, wired, model)
     body = await _request_body(node, wired, model)
+    body.update(_required_defaults(node, catalog_key, body, model["requestSchema"]))
     return await run_gateway(node, model, body, auth_mode, api_key, emit)
+
+
+def _refuse_empty_required(node: GraphNode, inputs: dict[str, PortValueDict], wired: dict[str, PortValueDict],
+                           model: dict) -> None:
+    """Stop a run whose required port is connected but empty (a Text node
+    with nothing typed). The engine checks only that the port is connected,
+    and an empty value is dropped from the request with the other unset
+    ones, so Krea's schema can't catch it where the field is optional there:
+    Krea 3's prompt can give way to a region note, which the node doesn't
+    offer."""
+    from execution.maker_routes import definition_for
+
+    definition = definition_for(node.definition_id)
+    fields = model.get("portFields") if isinstance(model.get("portFields"), dict) else {}
+    for port in definition.get("inputPorts") or []:
+        field = str(fields.get(port["id"], port["id"]))
+        if port.get("required") and field in inputs and field not in wired:
+            label = str(port.get("label") or port["id"])
+            fix = "Connect one with text in it" if port.get("dataType") == "Text" else "Connect another one"
+            raise with_person_line(ValueError(f"Krea {field} is empty"),
+                                   f"{label} is empty. {fix}, then run the node again.")
+
+
+def _required_defaults(node: GraphNode, catalog_key: str, body: dict, schema: dict) -> dict:
+    """The route's defaults for fields Krea requires that the node didn't
+    save. The canvas saves every default on a new node, but a node an agent
+    made saves none, and Krea 3 requires ``resolution`` (or ``width`` and
+    ``height``: an ``anyOf`` of required sets, filled from the first set the
+    route has defaults for). Only required fields: a handler fills a missing
+    value only where its API needs one (services/param_defaults.py)."""
+    from execution.maker_routes import definition_for, translate_params
+    from services import node_route
+
+    try:
+        definition = definition_for(node.definition_id)
+    except ValueError:
+        return {}
+    endpoints = {catalog_key, catalog_models()[catalog_key]["endpoint"]}
+    spec = next((route for route in definition.get("routes") or []
+                 if route.get("provider") == "krea" and (
+                     route.get("endpoint") in endpoints
+                     or any(isinstance(rule, dict) and rule.get("endpoint") in endpoints
+                            for rule in route.get("endpointWhen") or []))),
+                None)
+    if spec is None:
+        return {}
+    ours = {str(param["key"]): param["default"] for param in node_route.route_param_definitions(definition, spec.get("id"))
+            if param.get("default") is not None}
+    defaults = translate_params(spec, ours)
+    unset = lambda field: body.get(field) in (None, "")  # noqa: E731
+    filled = {field: defaults[field] for field in schema.get("required", []) if unset(field) and field in defaults}
+    branches = schema.get("anyOf") or schema.get("oneOf") or []
+    if branches and all(isinstance(branch, dict) and set(branch) == {"required"} and isinstance(branch["required"], list)
+                        for branch in branches) and not any(
+            all(not unset(field) or field in filled for field in branch["required"]) for branch in branches):
+        for branch in branches:
+            if all(field in defaults for field in branch["required"]):
+                filled.update({field: defaults[field] for field in branch["required"] if unset(field)})
+                break
+    return copy.deepcopy(filled)
 
 
 async def run_gateway(node: GraphNode, model: dict, body: dict, auth_mode: str, api_key: str | None,

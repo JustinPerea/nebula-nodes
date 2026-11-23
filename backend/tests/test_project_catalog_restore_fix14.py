@@ -33,7 +33,7 @@ def _record(left_out: list[str | None], other: int = 0, count: int | None = None
             "setAside": ["/p/catalog.json.damaged-1"]}
 
 
-def test_q4_the_note_is_gms_sentence_with_the_numbers():
+def test_the_note_is_the_approved_sentence_with_the_numbers():
     limit = store_module.MAX_PROJECTS
     note = main_module._canvas_not_filed_note("projects", deletes=2, projects=limit + 1)
     assert f"The project list has {limit + 1} projects, over the limit of {limit}. Move 2 to Recently deleted to make room." in note
@@ -44,7 +44,7 @@ def test_q4_the_note_is_gms_sentence_with_the_numbers():
     assert "Moving a project to Recently deleted frees a slot" in main_module._canvas_not_filed_note("projects", deletes=1, projects=limit)
 
 
-def test_q5_agents_read_the_left_out_records_in_plain_text():
+def test_agents_read_the_left_out_records_in_plain_text():
     note = main_module._catalog_restore_note(_record(["Alpha", "Beta"]))
     assert ('"Alpha" and "Beta" weren\'t added back because the project list is at its limit of 500 projects. '
             'They\'re still in the damaged file, which was kept (notAddedBack, reason "limit").') in note
@@ -61,13 +61,13 @@ def test_q5_agents_read_the_left_out_records_in_plain_text():
     assert '"Alpha" wasn\'t added back because' in one and "It's still in the damaged file" in one
 
 
-def test_q5_a_mix_keeps_could_not_be_added_back_for_the_rest():
+def test_a_mix_keeps_could_not_be_added_back_for_the_rest():
     note = main_module._catalog_restore_note(_record(["Alpha", "Beta"], other=1))
     assert "1 project in the damaged file could not be added back and stays only there (notAddedBack)." in note
     assert '"Alpha" and "Beta" weren\'t added back because the project list is at its limit of 500 projects.' in note
 
 
-def test_q5_a_restore_at_the_limit_records_the_readable_records_it_left_out(app, monkeypatch):
+def test_a_restore_at_the_limit_records_the_readable_records_it_left_out(app, monkeypatch):
     """The copy holds 3 projects (the limit); the damaged file, cut at its
     end, still holds Delta and Epsilon readable. Neither comes back past the
     limit; the record counts them, and the note names them."""

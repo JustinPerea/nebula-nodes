@@ -242,8 +242,8 @@ def test_folded_models_are_routes_of_their_nodes_not_nodes():
         assert route["provider"] == "krea" and route["endpoint"] == model["endpoint"]
     # Krea 3 came in by itself (--only), stamped with the spec it was read from.
     krea_3 = CATALOG["models"]["krea-image-krea-krea-3"]
-    assert krea_3["fetchedAt"] == "2026-10-15" and len(krea_3["openapiSha256"]) == 64
-    assert krea_3["displayName"] == "Krea 3 Beta" and "pricing" not in krea_3
+    assert krea_3["fetchedAt"] == "2026-11-22" and len(krea_3["openapiSha256"]) == 64
+    assert krea_3["displayName"] == "Krea 3" and "pricing" not in krea_3
 
 
 def _broken(node_id, change):
@@ -327,6 +327,35 @@ def test_the_krea_2_guide_pricing_is_parsed_and_pinned():
     assert {key: CATALOG[SYNC.K2_GUIDE_KEY][key] for key in ("prices", "quote")} == \
         {key: guide[key] for key in ("prices", "quote")}
     assert guide["quote"].startswith("| **Medium** | $0.030 | $0.035 | $0.040 | ... | **Large** |")
+
+
+K2_GUIDE_ADMONITION = K2_GUIDE_PRICING.replace(
+    "<Note>\n  Combining", "> [!NOTE]\n>\n> Combining").replace("\n</Note>", "")
+
+
+def test_the_krea_2_guide_note_reads_as_a_markdown_admonition_too():
+    # Krea's guide moved the note from a <Note> block to "> [!NOTE]" lines.
+    assert "> [!NOTE]" in K2_GUIDE_ADMONITION and "<Note>" not in K2_GUIDE_ADMONITION
+    guide = SYNC.parse_k2_guide(K2_GUIDE_ADMONITION, "2026-11-22")
+    pinned = SYNC.parse_k2_guide(K2_GUIDE_PRICING, "2026-10-19")
+    assert {key: guide[key] for key in ("prices", "quote")} == {key: pinned[key] for key in ("prices", "quote")}
+
+
+@pytest.mark.parametrize("text", [
+    K2_GUIDE_ADMONITION.replace("> [!NOTE]", "> [!WARNING]"),
+    K2_GUIDE_ADMONITION.replace("Large).", "Large).\n> LoRA styles bill the style reference rate."),
+    # Only the note may be quoted: a quoted price row or separator, a second
+    # note, or a bare ">" outside the note is a change to re-read.
+    K2_GUIDE_ADMONITION.replace("| **Large** |", "> | **Large** |"),
+    K2_GUIDE_ADMONITION.replace("| - | - | - | - |", "> | - | - | - | - |"),
+    K2_GUIDE_ADMONITION.replace("## Endpoints", "> [!NOTE]\n> Combining moodboards **with** style references does "
+                                "not increase the price per generation — you pay the moodboard rate (\\$0.040 "
+                                "Medium / \\$0.070 Large).\n\n## Endpoints"),
+    K2_GUIDE_ADMONITION.replace("| - | - | - | - |", "| - | - | - | - |\n>"),
+])
+def test_an_unknown_admonition_line_still_stops_the_refresh(text):
+    with pytest.raises(ValueError, match="doesn't read"):
+        SYNC.parse_k2_guide(text, "2026-11-22")
 
 
 @pytest.mark.parametrize("change, message", [

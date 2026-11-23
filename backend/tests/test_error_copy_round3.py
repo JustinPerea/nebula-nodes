@@ -397,7 +397,7 @@ MAIN_404S = [
 
 @pytest.mark.parametrize("method,path,body,person_line,specific", MAIN_404S,
                          ids=[f"{m} {p}" for m, p, *_ in MAIN_404S])
-def test_a_404_the_person_reads_says_gms_pattern(app_client, method, path, body, person_line, specific):
+def test_a_404_the_person_reads_says_the_approved_pattern(app_client, method, path, body, person_line, specific):
     for headers in (PERSON, DESKTOP):
         response = app_client.request(method, path, json=body, headers=headers)
         assert response.status_code == 404, response.text
@@ -441,7 +441,7 @@ PERSON_ONLY_404S = [
 
 @pytest.mark.parametrize("method,path,body,person_line", PERSON_ONLY_404S,
                          ids=[f"{m} {p}" for m, p, *_ in PERSON_ONLY_404S])
-def test_a_person_only_404_says_gms_pattern(app_client, method, path, body, person_line):
+def test_a_person_only_404_says_the_approved_pattern(app_client, method, path, body, person_line):
     response = app_client.request(method, path, json=body, headers=PERSON)
     assert response.status_code == 404, response.text
     assert response.json()["detail"] == person_line
@@ -523,7 +523,7 @@ COMMONS_404S = [
 
 @pytest.mark.parametrize("method,path,body,person_line,specific", COMMONS_404S,
                          ids=[f"{m} {p}" for m, p, *_ in COMMONS_404S])
-def test_a_commons_404_says_gms_pattern_to_the_person_and_the_detail_to_agents(
+def test_a_commons_404_says_the_approved_pattern_to_the_person_and_the_detail_to_agents(
         commons, method, path, body, person_line, specific):
     person = commons.request(method, path, json=body, headers=human())
     assert person.status_code == 404, person.text
@@ -549,7 +549,7 @@ def test_commons_person_only_404s(commons):
 
 # -- folders.py:96, design verbatim ---------------------------------------------------
 
-def test_a_linked_folder_shortcut_says_gms_line(commons, tmp_path):
+def test_a_linked_folder_shortcut_says_the_approved_line(commons, tmp_path):
     h = human()
     real = tmp_path / "real"
     real.mkdir()
@@ -561,7 +561,7 @@ def test_a_linked_folder_shortcut_says_gms_line(commons, tmp_path):
 
 # -- 6. Blind labeling: what's needed, the count, then what to do -----------------
 
-def test_too_few_distinct_references_says_gms_line_with_the_count(commons, tmp_path):
+def test_too_few_distinct_references_says_the_approved_line_with_the_count(commons, tmp_path):
     h = human()
     folder = tmp_path / "set"
     folder.mkdir()
@@ -574,7 +574,7 @@ def test_too_few_distinct_references_says_gms_line_with_the_count(commons, tmp_p
         "You have 3. Add more, then try again.")
 
 
-def test_a_shortcut_as_the_blind_labeling_folder_says_gms_folder_line(commons, tmp_path):
+def test_a_shortcut_as_the_blind_labeling_folder_says_the_approved_folder_line(commons, tmp_path):
     h = human()
     real = tmp_path / "real"
     real.mkdir()
@@ -669,7 +669,7 @@ def test_restoring_a_bundle_names_a_recovery_records_node_by_its_card_title(canv
     assert response.json()["detail"] == RECOVERY("Harbor world")
 
 
-def test_a_bootstrap_error_reads_gms_restart_line(canvas, monkeypatch):
+def test_a_bootstrap_error_reads_the_approved_restart_line(canvas, monkeypatch):
     """Design, PR #114: "Couldn't <action>. Nebula couldn't
     save its World Labs safeguards. Restart Nebula, then try again." The
     screen's heading names the action; a reload doesn't re-run the boot

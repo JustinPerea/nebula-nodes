@@ -82,7 +82,8 @@ UNPRICED_FIELD_NOTES = {
 K2_TIER = "k2BillingTier"
 K2_TIERS = ("text-to-image", "srefs", "moodboards")
 # The guide's Pricing section is re-read on every refresh (--refresh,
-# --openapi, --refresh-guide) and pinned in the catalog under K2_GUIDE_KEY.
+# --openapi, --refresh-guide; with --only, only when --refresh-guide or
+# --guide FILE asks) and pinned in the catalog under K2_GUIDE_KEY.
 # Its prices must equal the OpenAPI's, and a line in that section this script
 # doesn't parse (a new note, a new column) stops the refresh, so a change to
 # the guide alone gets a human re-read.
@@ -1548,9 +1549,30 @@ def parse_k2_guide(text, checked_on):
     prices, quoted, notes = {}, [], []
     row = re.compile(r"\| \*\*(?P<name>[A-Za-z][\w ]*)\*\* \| \$(?P<a>[0-9.]+) \| \$(?P<b>[0-9.]+) "
                      r"\| \$(?P<c>[0-9.]+) \|")
+    admonition = False  # inside a "> [!NOTE]" block
     for raw, line in zip(section, plain):
+        # The note comes as a <Note> block, or as a Markdown admonition:
+        # "> [!NOTE]", a bare ">", then "> " before its text. Only the note
+        # may be quoted: a quoted table row, or a second note, is unread.
+        if raw in ("<Note>", "</Note>"):
+            continue
+        if raw == "> [!NOTE]" and not admonition and not notes:
+            admonition = True
+            continue
+        if raw.startswith(">"):
+            if not admonition:
+                raise ValueError(f"{K2_GUIDE_URL} Pricing has a line this script doesn't read: {raw!r}; re-read "
+                                 "the guide and update K2_* in scripts/sync-krea-catalog.py")
+            if raw == ">":
+                continue
+            raw, line = raw[1:].strip(), line[1:].strip()
+            if not K2_GUIDE_NOTE.fullmatch(line):
+                raise ValueError(f"{K2_GUIDE_URL} Pricing has a line this script doesn't read: {raw!r}; re-read "
+                                 "the guide and update K2_* in scripts/sync-krea-catalog.py")
+        else:
+            admonition = False
         cleaned = raw.replace("\\$", "$")
-        if raw == K2_GUIDE_HEADER or re.fullmatch(r"\|(\s*:?-+:?\s*\|)+", raw) or raw in ("<Note>", "</Note>"):
+        if raw == K2_GUIDE_HEADER or re.fullmatch(r"\|(\s*:?-+:?\s*\|)+", raw):
             continue
         if found := row.fullmatch(cleaned):
             prices[found["name"].strip().lower()] = [float(found[key]) for key in "abc"]
@@ -1862,13 +1884,14 @@ def main():
     parser.add_argument("--openapi", type=Path)
     parser.add_argument("--date", default=datetime.date.today().isoformat())
     parser.add_argument("--refresh-guide", action="store_true",
-                        help="re-read just the Krea 2 guide's Pricing section (also done by --refresh/--openapi)")
+                        help="re-read just the Krea 2 guide's Pricing section (also done by --refresh/--openapi "
+                             "without --only)")
     parser.add_argument("--guide", type=Path, metavar="FILE",
                         help=f"read the Krea 2 guide from FILE instead of {K2_GUIDE_URL}")
     parser.add_argument("--only", metavar="ENDPOINT", action="append",
                         help="with --refresh or --openapi: refresh just this Krea endpoint's entry (repeat for "
                              "several), which keeps its own fetchedAt and openapiSha256; every other entry stays "
-                             "as pinned")
+                             "as pinned, the Krea 2 guide's too unless --refresh-guide or --guide is also given")
     args = parser.parse_args()
     if args.check and (args.refresh or args.openapi or args.refresh_guide):
         parser.error("--check is offline; refresh separately")
@@ -1887,7 +1910,9 @@ def main():
                 catalog = refresh_one(catalog, fresh, endpoint)
     else:
         catalog = json.loads(CATALOG.read_text())
-    if args.refresh or args.openapi or args.refresh_guide:
+    # --only keeps every other entry as pinned, the Krea 2 guide's included,
+    # unless --refresh-guide or --guide FILE asks for it too.
+    if args.refresh_guide or ((args.refresh or args.openapi) and (not args.only or args.guide)):
         if args.guide:
             guide = args.guide.read_text()
         else:

@@ -33,7 +33,7 @@ def test_a_definition_is_bare_when_id_shaped_and_in_curly_quotes_otherwise():
 
 
 @pytest.mark.parametrize("sent", [{"definitionId": ""}, {"definitionId": None}, {}])
-def test_no_definition_the_person_reads_gms_line_and_an_agent_the_raw_value(api, sent):  # noqa: F811
+def test_no_definition_the_person_reads_the_approved_line_and_an_agent_the_raw_value(api, sent):  # noqa: F811
     person = api.client.post("/api/graph/node", json={**sent, "params": {}}, headers=_tab(api, _canvas(api)))
     assert person.status_code == 400, person.text
     assert person.json() == {"detail": "No node definition was given.", "code": "unknown_definition", "definitionId": ""}

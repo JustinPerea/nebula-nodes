@@ -31,7 +31,7 @@ describe('no toast cuts a sentence', () => {
   // where its full height would leave the proposal card short of Accept and
   // Reject (lib/noticeStackPlace.ts `clip`); its full text stays in its
   // aria-label. Nothing else is.
-  const GM_R76_CLIPPED_UNDO = [
+  const CLIPPED_UNDO_SELECTORS = [
     'styles/canvasProposals.css: .canvas-undo-notice[data-notice-more-host] .canvas-undo-notice__text,\n'
       + '.canvas-undo-notice[data-notice-clipped] .canvas-undo-notice__text',
   ];
@@ -40,7 +40,7 @@ describe('no toast cuts a sentence', () => {
     const cut = rules.filter((rule) => /(toast|notice)(?![\w-]*(dot|icon|close|action|button|dismiss|back))/i.test(rule.selector)
       && (/text-overflow:\s*ellipsis/.test(rule.body) || /white-space:\s*nowrap/.test(rule.body)))
       .map((rule) => `${rule.file}: ${rule.selector}`)
-      .filter((rule) => !GM_R76_CLIPPED_UNDO.includes(rule));
+      .filter((rule) => !CLIPPED_UNDO_SELECTORS.includes(rule));
     expect(cut).toEqual([]);
   });
 });

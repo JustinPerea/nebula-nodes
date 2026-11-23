@@ -19,10 +19,10 @@ from tests.test_pending_nodes import (  # noqa: F401 - fixture
     CLAUDE_ID, CODEX_ID, _apply, _chain, _direct, _execute_body, _owner, _paid_chain, _undo, pend,
 )
 
-GM_ONE = ("Nothing ran. This run includes 1 paid node Claude Code is still setting up, and Nebula asks "
+REVIEW_RUN_LINE = ("Nothing ran. This run includes 1 paid node Claude Code is still setting up, and Nebula asks "
           "before running those. Click “Run” again to review it.")
 # A shot's refusal ends with the shot panel's words (design).
-GM_SHOT = GM_ONE.replace("Click “Run” again to review it.", "Generate again to review it.")
+REVIEW_SHOT_LINE = REVIEW_RUN_LINE.replace("Click “Run” again to review it.", "Generate again to review it.")
 
 
 def _cinema(pend, source: str) -> str:
@@ -60,7 +60,7 @@ def test_the_persons_shot_over_a_paid_placeholder_needs_their_confirmation(pend,
     detail = response.json()["detail"]
     assert detail["code"] == "placeholder_confirm_required"
     assert detail["placeholders"] == [ids["+i"]]
-    assert detail["message"] == GM_SHOT
+    assert detail["message"] == REVIEW_SHOT_LINE
     assert pend.priced == [] and pend.ran == []
     assert all(_owner(pend, node_id)["id"] == CLAUDE_ID for node_id in ids.values())
 
@@ -177,7 +177,7 @@ def test_a_confirmed_run_costing_more_than_the_person_confirmed_is_refused(pend)
     assert response.status_code == 409, response.text
     detail = response.json()["detail"]
     assert detail["code"] == "placeholder_confirm_required"
-    assert detail["message"] == GM_ONE
+    assert detail["message"] == REVIEW_RUN_LINE
     assert pend.ran == [] and pend.priced == []
     assert _owner(pend, ids["+i"])["id"] == CLAUDE_ID
 
@@ -334,7 +334,7 @@ def test_the_undo_plan_compares_what_the_ready_entry_kept():
 
 # -- Design, items 4 and 6 -------------------------------------------------------------------
 
-def test_the_refusal_says_gms_words_plural_and_several_agents(pend):
+def test_the_refusal_says_the_approved_words_plural_and_several_agents(pend):
     ids = _paid_chain(pend)
     second = _apply(pend, {"note": "alt", "nodes": [{"ref": "+j", "definitionId": "nano-banana"}],
                            "edges": [{"source": ids["+p"], "sourceHandle": "text", "target": "+j",

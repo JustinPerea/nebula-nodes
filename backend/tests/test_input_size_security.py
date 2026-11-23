@@ -25,6 +25,7 @@ import shutil
 import struct
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 from unittest.mock import AsyncMock
@@ -708,21 +709,31 @@ def test_measuring_on_the_event_loop_is_refused():
     asyncio.run(on_loop())
 
 
-def _slow_store_clip(monkeypatch, seconds=1.5):
+def _slow_store_clip(monkeypatch):
+    """A clip whose probe holds until the test lets it go: ``running`` is set
+    while it holds, ``release`` lets it through (its own bound covers a hang)."""
     clip = _store("slow.mp4")
     clip.write_bytes(b"\x00" * 64)
+    running, release = threading.Event(), threading.Event()
 
     def slow_probe(path):
-        time.sleep(seconds)
+        running.set()
+        try:
+            release.wait(30)
+        finally:
+            running.clear()
         return {"width": 64, "height": 48, "seconds": 2.0, "frames": 20}
 
     monkeypatch.setattr(input_sizes, "_probe_video", slow_probe)
-    return clip
+    return clip, running, release
 
 
-def _while_slow(request) -> tuple[float, bool, int]:
-    """Start ``request`` (a coroutine factory taking the client), then time a
-    health check while it waits on the slow probe."""
+def _while_slow(request, probe_running, probe_release) -> tuple[bool, bool, int]:
+    """Start ``request`` (a coroutine factory taking the client), then a
+    health check once ``probe_running`` says the probe holds. The health check
+    can only answer while the probe still holds, so answering proves the loop
+    was free for it. Returns (whether the probe still held when the health
+    check answered, whether the request was still in flight, its status)."""
     import httpx
 
     import main
@@ -731,51 +742,52 @@ def _while_slow(request) -> tuple[float, bool, int]:
         transport = httpx.ASGITransport(app=main.app)
         async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as http:
             slow = asyncio.create_task(request(http))
-            await asyncio.sleep(0.3)
-            started = time.monotonic()
+            assert await asyncio.to_thread(probe_running.wait, 30), "the slow probe never ran"
             health = await http.get("/api/health")
-            waited = time.monotonic() - started
+            held = probe_running.is_set()
             still_going = not slow.done()
+            probe_release.set()
             response = await slow
             assert health.status_code == 200
-            return waited, still_going, response.status_code
+            return held, still_going, response.status_code
     return asyncio.run(go())
 
 
 def test_quick_measures_off_the_event_loop(client, monkeypatch):
-    clip = _slow_store_clip(monkeypatch)
+    clip, running, release = _slow_store_clip(monkeypatch)
     _limit_video(client, 0.0000001)
-    waited, still_going, status = _while_slow(lambda http: http.post("/api/quick", json={
-        "definitionId": SEEDVR_VIDEO, "inputs": {"video": str(clip)}, "params": {}}))
-    assert still_going and waited < 0.8
+    held, still_going, status = _while_slow(lambda http: http.post("/api/quick", json={
+        "definitionId": SEEDVR_VIDEO, "inputs": {"video": str(clip)}, "params": {}}), running, release)
+    assert held and still_going, "the health check waited for the measure"
     assert status == 403  # measured, then held to the limit
 
 
 def test_a_graph_run_measures_off_the_event_loop(client, monkeypatch):
-    clip = _slow_store_clip(monkeypatch)
+    clip, running, release = _slow_store_clip(monkeypatch)
     _limit_video(client, 0.0000001)
     source = client.post("/api/graph/node", json={"definitionId": "video-input",
                                                   "params": {"filePath": str(clip)}}).json()["id"]
     up = client.post("/api/graph/node", json={"definitionId": SEEDVR_VIDEO, "params": {}}).json()["id"]
     client.post("/api/graph/connect", json={"source": source, "sourceHandle": "video", "target": up,
                                          "targetHandle": "video"})
-    waited, still_going, status = _while_slow(lambda http: http.post("/api/graph/run", json={"targetNodeId": up}))
-    assert still_going and waited < 0.8
+    held, still_going, status = _while_slow(lambda http: http.post("/api/graph/run", json={"targetNodeId": up}),
+                                            running, release)
+    assert held and still_going, "the health check waited for the measure"
     assert status == 403
 
 
 def test_a_proposal_estimate_measures_off_the_event_loop(client, monkeypatch):
     from tests.test_canvas_proposals import CLAUDE
 
-    clip = _slow_store_clip(monkeypatch)
+    clip, running, release = _slow_store_clip(monkeypatch)
     source = client.post("/api/graph/node", json={"definitionId": "video-input",
                                                   "params": {"filePath": str(clip)}}).json()["id"]
     body = {"note": "Upscale it", "nodes": [{"ref": "+up", "definitionId": SEEDVR_VIDEO}],
             "edges": [{"source": source, "sourceHandle": "video", "target": "+up", "targetHandle": "video"}],
             "run": ["+up"]}
-    waited, still_going, status = _while_slow(
-        lambda http: http.post("/api/canvas/proposals", json=body, headers=CLAUDE))
-    assert still_going and waited < 0.8
+    held, still_going, status = _while_slow(
+        lambda http: http.post("/api/canvas/proposals", json=body, headers=CLAUDE), running, release)
+    assert held and still_going, "the health check waited for the measure"
     assert status == 201
 
 
@@ -900,10 +912,19 @@ def test_the_packet_pass_stops_at_the_deadline(tmp_path, monkeypatch):
     clip.write_bytes(b"\x00")
     monkeypatch.setattr(input_sizes, "SIZE_PROBE_TIMEOUT_SECONDS", 0.5)
     calls = _fake_probe(monkeypatch, [_video_stream()], _packets(1_000_000), delay=0.01)
-    started = time.monotonic()
-    assert input_sizes._probe_video(clip) is None
-    assert time.monotonic() - started < 3
-    assert calls.processes[-1].killed
+    # A pass that ignored the deadline would read for hours: run it on a daemon
+    # thread so that regression fails here instead of hanging the suite.
+    result: list = []
+    probe = threading.Thread(target=lambda: result.append(input_sizes._probe_video(clip)), daemon=True)
+    probe.start()
+    probe.join(30)
+    assert not probe.is_alive(), "the packet pass ran past its deadline"
+    assert result == [None]
+    process = calls.processes[-1]
+    # The pass stopped at the deadline, not at the stream's end: the probe's
+    # timer killed ffprobe mid-read, and far fewer lines came through than the
+    # ~5M a million packets make (0.01 s a line floors the read rate).
+    assert process.killed and process.read <= 75
 
 
 def test_an_overlong_or_malformed_packet_line_leaves_the_clip_unmeasured(tmp_path, monkeypatch):

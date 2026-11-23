@@ -61,21 +61,21 @@ _IDS = [f"{case['family']}:{case['source']}:{'+'.join(case['taken'])}" for case 
 
 
 @pytest.mark.parametrize("case", CASES, ids=_IDS)
-def test_gm_r29_2_the_shared_cases(case):
+def test_the_shared_cases(case):
     got = _made(case, _listed([*_source(case), *case["taken"]]))
     assert got == case["expect"]
     assert not got.startswith("Recovered Recovered ") and "copy copy" not in got
 
 
 @pytest.mark.parametrize("case", CASES, ids=_IDS)
-def test_gm_r29_2_names_in_recently_deleted_are_taken(case):
+def test_names_in_recently_deleted_are_taken(case):
     """The same cases with every other name in Recently deleted, and again
     as names promised to copies not filed yet (``taken``)."""
     assert _made(case, _listed(_source(case), trash=case["taken"])) == case["expect"]
     assert _made(case, _listed(_source(case)), taken=case["taken"]) == case["expect"]
 
 
-def test_gm_r29_2_the_cases_cover_gms_list():
+def test_the_cases_cover_the_approved_list():
     """Design's cases, each in the shared file with its answer."""
     def answer(family: str, source: str, *taken: str) -> str:
         (case,) = [case for case in CASES if (case["family"], case["source"], tuple(case["taken"])) ==
@@ -103,7 +103,7 @@ def test_gm_r29_2_the_cases_cover_gms_list():
 
 
 @pytest.mark.parametrize("number", [1, 2, 7, 8, 10, 99])
-def test_gm_r29_2_no_number_in_a_name_is_read(number):
+def test_no_number_in_a_name_is_read(number):
     """Whatever number a name carries, the recovered copy only adds Nebula's
     words: never a raised or a dropped number."""
     names = _listed([f"Shot {number}", f"Recovered Shot {number + 1}", f"Recovered Shot {number - 1}"])
@@ -114,7 +114,7 @@ def test_gm_r29_2_no_number_in_a_name_is_read(number):
     assert store_module.lost_row_name(f"Recovered Shot {number}", names) == f"Recovered Shot {number} copy"
 
 
-def test_gm_r29_2_every_backend_copy_names_by_the_rule(app):
+def test_every_backend_copy_names_by_the_rule(app):
     assert main_module._recovered_copy_name("Shot 7", _listed(["Shot 7"])) == "Recovered Shot 7"
     catalog = _listed(["Shot 7", "Recovered Shot 7"], trash=["Recovered Shot 7 copy"])
     assert main_module._recovered_copy_name("Shot 7", catalog) == "Recovered Shot 7 copy 2"
@@ -137,7 +137,7 @@ def _recover(client, source_id: str, snapshot: dict, recovery: str, **more):
     return reply.json()
 
 
-def test_gm_r29_2_two_recoveries_back_to_back_get_two_names(app):
+def test_two_recoveries_back_to_back_get_two_names(app):
     """Two kept tabs saving at once: each recover commits its copy in its own
     transaction, so the second finds the first's name taken. "Recovered
     Shot 7" is a different name, so the first is just "Recovered Shot"."""
@@ -155,7 +155,7 @@ def test_gm_r29_2_two_recoveries_back_to_back_get_two_names(app):
     assert names == ["Recovered Shot", "Recovered Shot 7", "Recovered Shot copy", "Shot"]
 
 
-def test_gm_r29_2_a_name_in_recently_deleted_is_taken_by_the_route(app):
+def test_a_name_in_recently_deleted_is_taken_by_the_route(app):
     client, store, *_ = app
     gone = _create(client, "Recovered Delta")
     delta = _create(client, "Delta")
@@ -168,7 +168,7 @@ def test_gm_r29_2_a_name_in_recently_deleted_is_taken_by_the_route(app):
 
 # -- Design: the recover answer names its true source ----------------------------------------
 
-def test_gm_r29_2_each_answer_names_its_own_source(app):
+def test_each_answer_names_its_own_source(app):
     """Two copies named "Recovered Shot 7 copy": one made from "Shot 7 copy",
     one from "Shot 7" while "Recovered Shot 7" was taken. Each answer, its
     retry and the copy's record name the project it was made from."""
@@ -194,7 +194,7 @@ def test_gm_r29_2_each_answer_names_its_own_source(app):
     assert records["5" * 32]["recoveredFrom"] == {"id": shot, "name": "Shot 7"}
 
 
-def test_gm_r29_2_the_source_name_is_nebulas_then_the_tabs_then_none(app):
+def test_the_source_name_is_nebulas_then_the_tabs_then_none(app):
     """The name Nebula held for the source wins over the tab's; a source
     row that is gone takes the name the tab showed; with neither, none."""
     client, store, *_ = app
@@ -212,7 +212,7 @@ def test_gm_r29_2_the_source_name_is_nebulas_then_the_tabs_then_none(app):
     assert main_module._recovered_source_name({"name": "Recovered Shot 7 copy"}) is None
 
 
-def test_gm_r29_2_a_source_in_recently_deleted_is_named(app):
+def test_a_source_in_recently_deleted_is_named(app):
     client, store, *_ = app
     beta = _create(client, "Beta")
     _create(client, "Other")
@@ -277,7 +277,7 @@ def _agents_see(api, proposal_id: str) -> None:
 
 
 @pytest.mark.parametrize("headers", [PERSON, CODEX], ids=["persons-open", "agents-open"])
-def test_gm_r29_3_a_reopen_in_place_keeps_open_proposals(canvas, headers):
+def test_a_reopen_in_place_keeps_open_proposals(canvas, headers):
     n1 = canvas.graph.add_node("text-input", {"value": "old"})
     proposal_id = _retitle(canvas, n1)
     canvas.sent.clear()
@@ -300,7 +300,7 @@ def test_gm_r29_3_a_reopen_in_place_keeps_open_proposals(canvas, headers):
     assert canvas.graph.nodes[n1]["params"]["value"] == "agent's"
 
 
-def test_gm_r29_3_the_boots_reopen_keeps_them(app, monkeypatch):
+def test_the_boots_reopen_keeps_them(app, monkeypatch):
     """The boot's quiet reopen of the open project (system reopen)
     closes no proposal, and each socket's first sync says so."""
     client, store, _graph, state = app
@@ -318,13 +318,13 @@ def test_gm_r29_3_the_boots_reopen_keeps_them(app, monkeypatch):
     assert first["graphReplaced"] is True and first["proposalsKept"] is True
 
 
-def test_gm_r29_3_without_a_boot_reopen_the_first_sync_says_nothing():
+def test_without_a_boot_reopen_the_first_sync_says_nothing():
     main_module._boot_replacement.clear()
     main_module._boot_renumbered.clear()
     assert "proposalsKept" not in main_module._boot_first_sync()
 
 
-def test_gm_r29_3_opening_another_project_still_closes_them(canvas):
+def test_opening_another_project_still_closes_them(canvas):
     n1 = canvas.graph.add_node("text-input", {"value": "old"})
     proposal_id = _retitle(canvas, n1)
     other = _other_project(canvas)
@@ -337,7 +337,7 @@ def test_gm_r29_3_opening_another_project_still_closes_them(canvas):
     assert "proposalsKept" not in _replaced_events(canvas)[-1]["data"]
 
 
-def test_gm_r29_3_an_import_still_closes_them(canvas):
+def test_an_import_still_closes_them(canvas):
     n1 = canvas.graph.add_node("text-input", {"value": "old"})
     proposal_id = _retitle(canvas, n1)
     canvas.sent.clear()
@@ -347,7 +347,7 @@ def test_gm_r29_3_an_import_still_closes_them(canvas):
     assert all("proposalsKept" not in sync for sync in _replaced_syncs(canvas))
 
 
-def test_gm_r29_3_a_node_the_save_before_the_open_changed_keeps_the_rule_of_any_edit(canvas):
+def test_a_node_the_save_before_the_open_changed_keeps_the_rule_of_any_edit(canvas):
     """The person edited a value the proposal sets, the tab autosaved and
     reopened in place: the proposal stays open with the same id (an edit
     never closes it), and Accept applies the edit rule (#160): "changed
@@ -371,7 +371,7 @@ def test_gm_r29_3_a_node_the_save_before_the_open_changed_keeps_the_rule_of_any_
     assert _accept(canvas, untouched).status_code == 200
 
 
-def test_gm_r29_3_the_tabs_handoff_after_an_agents_reopen_keeps_the_rule_of_any_edit(canvas):
+def test_the_tabs_handoff_after_an_agents_reopen_keeps_the_rule_of_any_edit(canvas):
     """An agent reopened the open project; the person's tab hands off its
     unsent typing on a node the proposal sets: the live node changes, the
     proposal stays open with the same id, and Accept refuses it as for any edit."""
@@ -393,7 +393,7 @@ def test_gm_r29_3_the_tabs_handoff_after_an_agents_reopen_keeps_the_rule_of_any_
     assert refused.status_code == 409 and "changed after it was proposed" in refused.text
 
 
-def test_gm_r29_3_a_kept_proposal_whose_node_is_gone_closes_as_for_a_delete(canvas):
+def test_a_kept_proposal_whose_node_is_gone_closes_as_for_a_delete(canvas):
     """_proposals_after_reopen: a node a proposal reads that the reopened
     canvas doesn't hold closes it (no removal: nothing undoes an open), and
     one of another project closes as for a switch; the rest stay."""
@@ -413,7 +413,7 @@ def test_gm_r29_3_a_kept_proposal_whose_node_is_gone_closes_as_for_a_delete(canv
     assert [p.id for p in canvas.book.open_list()] == [stays]
 
 
-def test_gm_r29_3_approved_runs_stay_across_a_reopen_in_place_only(canvas):
+def test_approved_runs_stay_across_a_reopen_in_place_only(canvas):
     """A run the person approved on Accept and hasn't started: its nodes keep
     their ids, so it stays (the run still has to match it value for value);
     another project's open ends it, as before."""
@@ -428,7 +428,7 @@ def test_gm_r29_3_approved_runs_stay_across_a_reopen_in_place_only(canvas):
     assert canvas.approvals.open_list() == []
 
 
-def test_gm_r29_3_removal_tags_stay_across_a_reopen_in_place_only(canvas, monkeypatch):
+def test_removal_tags_stay_across_a_reopen_in_place_only(canvas, monkeypatch):
     """A proposal a node delete closed keeps its tag (the delete's undo can
     still reopen it) and cover proposals keep theirs; another project's open
     drops both, as before."""
@@ -446,7 +446,7 @@ def test_gm_r29_3_removal_tags_stay_across_a_reopen_in_place_only(canvas, monkey
     assert canvas.book.get(proposal_id).closed_by == {} and dropped == ["the canvas was replaced"]
 
 
-def test_gm_r29_3_opening_the_project_the_live_canvas_is_but_the_list_didnt_have_open_closes_them(canvas):
+def test_opening_the_project_the_live_canvas_is_but_the_list_didnt_have_open_closes_them(canvas):
     """The live canvas is another project than the list has open (after a
     restore, or a crash between the two files): opening it is no reopen in
     place, even though it ends up the open one."""
@@ -460,7 +460,7 @@ def test_gm_r29_3_opening_the_project_the_live_canvas_is_but_the_list_didnt_have
     assert all("proposalsKept" not in sync for sync in _replaced_syncs(canvas))
 
 
-def test_gm_r29_3_a_canvas_that_isnt_the_open_projects_closes_them(canvas):
+def test_a_canvas_that_isnt_the_open_projects_closes_them(canvas):
     """The open project's id, but the live canvas is another (an agent's
     copy, a canvas filed after a restore): not a reopen in place."""
     n1 = canvas.graph.add_node("text-input", {"value": "a"})
@@ -474,7 +474,7 @@ def test_gm_r29_3_a_canvas_that_isnt_the_open_projects_closes_them(canvas):
     assert all("proposalsKept" not in sync for sync in _replaced_syncs(canvas))
 
 
-def test_gm_r29_3_nebula_watch_says_the_reopen_kept_them(canvas):
+def test_nebula_watch_says_the_reopen_kept_them(canvas):
     from cli.formatter import format_event
 
     n1 = canvas.graph.add_node("text-input", {"value": "a"})
@@ -488,7 +488,7 @@ def test_gm_r29_3_nebula_watch_says_the_reopen_kept_them(canvas):
 
 # -- Docs ---------------------------------------------------------------------------------------
 
-def test_agent_docs_describe_round_20():
+def test_agent_docs_describe_the_fix():
     import mcp_server
 
     def flat(text: str) -> str:

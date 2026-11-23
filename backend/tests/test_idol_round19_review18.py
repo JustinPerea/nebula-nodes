@@ -515,7 +515,7 @@ def test_a_nodes_needs_are_one_card_line_ending_once(definition, keys, line):
     assert _card(definition, keys) == {line}
 
 
-def test_gms_card_and_bubble_forms_word_for_word():
+def test_the_approved_card_and_bubble_forms_word_for_word():
     assert person_line.needs_card_line(["Prompt", "Image"]) == (
         "Connect a prompt and an image to this node, then run it again.")
     assert person_line.needs_card_line(["Prompt"], "your Anthropic API key") == (

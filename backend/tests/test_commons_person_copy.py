@@ -52,7 +52,7 @@ def collection(client, h) -> str:
     return client.post("/api/commons/collections", json={"name": "refs"}, headers=h).json()["id"]
 
 
-def test_bad_filters_person_gets_gms_line_agent_keeps_detail(client, caplog):
+def test_bad_filters_person_gets_the_approved_line_agent_keeps_detail(client, caplog):
     h = human()
     with caplog.at_level(logging.INFO, logger="routes.commons"):
         person = client.post("/api/commons/search", json={"filters": {"axes": []}}, headers=h)

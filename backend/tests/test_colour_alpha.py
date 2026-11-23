@@ -570,7 +570,7 @@ RERUN_LINE = ("The board’s saved colors counted transparent areas as dark, so 
               "Analyze it in Moodboard Studio to save the new analysis.")
 
 
-def test_the_lines_read_as_gm_wrote_them() -> None:
+def test_the_lines_read_as_written() -> None:
     from services.moodboard_analysis import ALPHA_RERUN_WARNING, TRANSPARENT_IMAGE_LINE
 
     assert ALPHA_OUTDATED == OUTDATED_LINE

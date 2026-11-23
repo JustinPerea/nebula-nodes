@@ -71,6 +71,6 @@ for (const { what, pattern } of MARKERS) {
   if (pattern.test(flows)) failures.push(`${what} is in the lazy chunk ${flowsChunks[0]}; it must load with the entry`);
 }
 if (failures.length > 0) {
-  throw new Error(`Kept guard check failed (GM r23, 3): ${failures.join('; ')}.`);
+  throw new Error(`Kept guard check failed: ${failures.join('; ')}.`);
 }
 console.log(`Kept guard check passed: the kept unload guard and the kept fallback line load with ${entryMatch[1]} (${loadedWithEntry.size} chunks statically), not in ${lazyCopy[0]} or ${flowsChunks[0]}.`);

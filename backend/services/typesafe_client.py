@@ -262,7 +262,7 @@ async def load_image_source(value: str, *, label: str = "Image") -> bytes:
             raise
         except ValueError:
             raise ValueError(f"{label} reference escapes Nebula's output directory") from None
-    too_big = ValueError(f"{label} is larger than {MAX_SOURCE_BYTES // (1024 * 1024)} MiB")
+    too_big = with_person_line(ValueError(f"{label} is larger than {MAX_SOURCE_BYTES // (1024 * 1024)} MiB"), f"{label} is larger than {MAX_SOURCE_BYTES // (1024 * 1024)} MB. Connect a smaller image.")
     if raw.startswith(("http://", "https://")):
         try:
             content, _type = await asyncio.wait_for(

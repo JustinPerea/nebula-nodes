@@ -1060,7 +1060,7 @@ def test_a_new_listener_id_is_news_to_the_listener():
     assert state.beat_answered({"listener": {"listenerId": "ch_b"}}, 3.0) is True  # Nebula restarted
 
 
-def test_gm_r108_a_a_pin_the_person_deletes_ends_its_span():
+def test_a_pin_the_person_deletes_ends_its_span():
     state = listening()
     state.observe(resp(pin(1, "warmer")), now=100.0)
     assert [p.wake for _, p in drain(state, 100.0, 101.0)] == ["pin"]

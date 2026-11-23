@@ -457,7 +457,7 @@ def run_started(seq: int, run_id: str, node: str = "n3") -> dict:
     ("edge.added", {"source": "n1", "target": "n2"}), ("edge.removed", {"source": "n1", "target": "n2"}),
     ("pin.removed", {"pinId": "pin_1"}),
 ])
-def test_each_q50_change_wakes_it_after_the_quiet_time(kind, data):
+def test_each_change_wakes_it_after_the_quiet_time(kind, data):
     state = ChannelState(now=0.0)
     state.observe(resp(ev(1, kind, node="n2", data=data, summary=f"{kind} on Hero (n2)")), now=100.0)
     assert take(state, 107.9) is None
@@ -1020,7 +1020,8 @@ def test_its_own_run_watch_gives_up_after_repeated_errors():
 
 def _listener_rig(limits: Limits):
     """A Listener on the real clock with a fake Nebula whose long-polls never answer early."""
-    record = {"polls": 0, "open": 0, "most_open": 0, "cancelled": 0, "pushes": []}
+    record = {"polls": 0, "open": 0, "most_open": 0, "cancelled": 0, "pushes": [],
+              "open_at_push": [], "sleeps": [], "idle_sleeping": anyio.Event()}
     ends: dict[str, anyio.Event] = {}
 
     async def fetch_events(params):
@@ -1029,7 +1030,7 @@ def _listener_rig(limits: Limits):
         record["open"] += 1
         record["most_open"] = max(record["most_open"], record["open"])
         try:
-            await anyio.sleep(float(params["wait"]))
+            await anyio.Event().wait()
         except anyio.get_cancelled_exc_class():
             record["cancelled"] += 1
             raise
@@ -1043,13 +1044,25 @@ def _listener_rig(limits: Limits):
 
     async def push(content, meta):
         record["pushes"].append(dict(meta))
+        record["open_at_push"].append(record["open"])
 
     async def fetch_pins():
         return {"projectId": None, "pins": []}
 
+    async def tracked_sleep(seconds):
+        if seconds > 60:
+            record["idle_sleeping"].set()
+        try:
+            await anyio.sleep(seconds)
+        except anyio.get_cancelled_exc_class():
+            record["sleeps"].append((seconds, True))
+            raise
+        record["sleeps"].append((seconds, False))
+
     state = ChannelState(limits=limits, now=time.monotonic())
     listener = mcp_channel.Listener(state, fetch_events=fetch_events, fetch_run=fetch_run, push=push,
-                                    clock=time.monotonic, log=lambda line: None, fetch_pins=fetch_pins)
+                                    clock=time.monotonic, log=lambda line: None, sleep=tracked_sleep,
+                                    fetch_pins=fetch_pins)
     return listener, record, ends
 
 
@@ -1081,18 +1094,24 @@ def test_a_run_end_never_abandons_the_events_long_poll():
                 return [json.dumps({"status": "running", "runId": "run_1"})]
 
             await listener.call("run_nodes", {}, started)
-            await anyio.sleep(0.2)
-            began = time.monotonic()
+            await _until(lambda: "run_1" in listener._watching)
+            record["idle_sleeping"] = anyio.Event()
+            listener._nudge()
+            await _until(lambda: record["idle_sleeping"].is_set())
+            before_end = len(record["sleeps"])
             ends.setdefault("run_1", anyio.Event()).set()
-            await _until(lambda: record["pushes"], timeout=3.0)
-            took = time.monotonic() - began
-            seen = dict(record)
+            await _until(lambda: record["pushes"], timeout=10.0)
+            seen = {**record, "sleeps_after_end": list(record["sleeps"][before_end:])}
             group.cancel_scope.cancel()
-        return seen, took
+        return seen
 
-    seen, took = anyio.run(main)
-    assert seen["pushes"][0]["wake"] == "run" and took < 1.0, took
-    assert seen["cancelled"] == 0 and seen["polls"] == 1  # the 25 s poll went on, untouched
+    seen = anyio.run(main)
+    assert seen["pushes"][0]["wake"] == "run"
+    assert seen["params"]["wait"] == mcp_channel.POLL_SECONDS
+    assert seen["cancelled"] == 0 and seen["polls"] == 1 and seen["open_at_push"] == [1]  # the 25 s poll went on, untouched
+    assert any(s > 60 and cancelled for s, cancelled in seen["sleeps_after_end"]), seen["sleeps_after_end"]
+    max_expected = max(limits.run_gather, limits.agent_quiet, mcp_channel.MIN_POLL) + 0.01
+    assert all(s <= max_expected for s, cancelled in seen["sleeps_after_end"] if not cancelled), seen["sleeps_after_end"]
 
 
 def test_a_burst_of_33_wakes_never_abandons_a_long_poll():
@@ -2693,6 +2712,8 @@ class _Journal:
         self.events: list[dict] = []
         self.cond = threading.Condition()
         self.polls: list[dict] = []
+        self.events_open = 0
+        self.events_timed_out = 0
         self.tool_agents: list[str] = []
         self.runs: dict[str, dict] = {}  # GET /api/graph/runs/{id}: the answer, by run id
         self.run_polls: list[str] = []
@@ -2748,16 +2769,22 @@ def _fake_nebula(journal: _Journal):
                 me = self.headers.get("X-Nebula-Agent")
                 journal.polls.append({**query, "agent": me})
                 deadline = time.monotonic() + float(query.get("wait", "0"))
-                with journal.cond:
-                    after = int(query["after"]) if "after" in query else len(journal.events)
-                    while True:
-                        fresh = [e for e in journal.events[after:]
-                                 if query.get("self") == "1" or e["actor"].get("name") != me]
-                        left = deadline - time.monotonic()
-                        if fresh or left <= 0 or journal.closing.is_set():
-                            break
-                        journal.cond.wait(left)
-                    cursor = len(journal.events)
+                journal.events_open += 1
+                try:
+                    with journal.cond:
+                        after = int(query["after"]) if "after" in query else len(journal.events)
+                        while True:
+                            fresh = [e for e in journal.events[after:]
+                                     if query.get("self") == "1" or e["actor"].get("name") != me]
+                            left = deadline - time.monotonic()
+                            if fresh or left <= 0 or journal.closing.is_set():
+                                if not fresh and left <= 0 and not journal.closing.is_set():
+                                    journal.events_timed_out += 1
+                                break
+                            journal.cond.wait(left)
+                        cursor = len(journal.events)
+                finally:
+                    journal.events_open -= 1
                 # Like Nebula's journal, the answer names the open project.
                 self._send({"journal": "abc123", "cursor": cursor, "events": fresh, "gap": False, "reset": False,
                             "projectId": "proj_1"})
@@ -3050,20 +3077,19 @@ def test_a_persons_run_reaches_the_session_once_at_its_end(nebula):
 def test_listening_never_blocks_a_tool_and_shutdown_leaves_nothing_running(nebula):
     async def main():
         async with _connected(channel=True) as (session, _, done):
-            await _until(lambda: nebula.polls)
-            await anyio.sleep(0.2)  # a 25 s long-poll is now in flight
-            started = time.monotonic()
+            await _until(lambda: nebula.events_open == 1)
             result = await session.call_tool("look_at_canvas", {})
-            looked = time.monotonic() - started
-            closed_at = time.monotonic()
-        stopped = time.monotonic() - closed_at
-        return result, looked, stopped, done.is_set()
+            open_after_look = nebula.events_open
+            timed_out_after_look = nebula.events_timed_out
+        open_after_close = nebula.events_open
+        timed_out_after_close = nebula.events_timed_out
+        return result, open_after_look, timed_out_after_look, open_after_close, timed_out_after_close, done.is_set()
 
-    result, looked, stopped, done = anyio.run(main)
+    result, open_after_look, timed_out_after_look, open_after_close, timed_out_after_close, done = anyio.run(main)
     assert not result.isError
-    assert looked < 1.0, looked
+    assert open_after_look == 1 and timed_out_after_look == 0
     # Closing the session ends the listener at once, mid long-poll, not after it.
-    assert done and stopped < 2.0, stopped
+    assert done and open_after_close == 1 and timed_out_after_close == 0
     assert mcp_server._CALL_LIMITER.borrowed_tokens == 0
     assert mcp_server._WAIT_LIMITER.borrowed_tokens == 0
     assert mcp_server._channel is None
