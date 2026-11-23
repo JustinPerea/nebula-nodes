@@ -1550,8 +1550,14 @@ def parse_k2_guide(text, checked_on):
     row = re.compile(r"\| \*\*(?P<name>[A-Za-z][\w ]*)\*\* \| \$(?P<a>[0-9.]+) \| \$(?P<b>[0-9.]+) "
                      r"\| \$(?P<c>[0-9.]+) \|")
     for raw, line in zip(section, plain):
+        # The note comes as a <Note> block, or as a Markdown admonition:
+        # "> [!NOTE]", a bare ">", then "> " before each line of its text.
+        if raw in ("<Note>", "</Note>", "> [!NOTE]", ">"):
+            continue
+        if raw.startswith("> "):
+            raw, line = raw[2:].strip(), line[2:].strip()
         cleaned = raw.replace("\\$", "$")
-        if raw == K2_GUIDE_HEADER or re.fullmatch(r"\|(\s*:?-+:?\s*\|)+", raw) or raw in ("<Note>", "</Note>"):
+        if raw == K2_GUIDE_HEADER or re.fullmatch(r"\|(\s*:?-+:?\s*\|)+", raw):
             continue
         if found := row.fullmatch(cleaned):
             prices[found["name"].strip().lower()] = [float(found[key]) for key in "abc"]
