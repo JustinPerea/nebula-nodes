@@ -19,6 +19,7 @@ from __future__ import annotations
 import ast
 import json
 import re
+import textwrap
 from pathlib import Path
 from typing import Any
 
@@ -436,6 +437,45 @@ UNLINED_BASELINE: dict[str, int] = {
     # slow-job line, tests/test_error_copy_round3d2.py). Both are provider
     # answers, so they keep the general line.
 }
+
+
+def test_the_guard_follows_a_raised_name_by_scope_and_order(tmp_path: Path) -> None:
+    """A name bound to an exception and raised later counts like the raise
+    of a call: the latest binding before the raise, in its own scope or an
+    enclosing one; never an inner function's binding for an outer raise,
+    never a binding that comes after the raise; and a rebinding that wraps
+    the old value carries its person line."""
+    source = tmp_path / "sample.py"
+    source.write_text(textwrap.dedent('''
+        def outer():
+            def inner():
+                exc = ValueError("inner only")
+                raise exc
+            raise exc
+
+        def closure():
+            exc = ValueError("from outer")
+            def inner():
+                raise exc
+            return inner
+
+        def rewrap():
+            exc = ValueError("wrapped later")
+            exc = with_person_line(exc, "A line.")
+            raise exc
+
+        def caught():
+            try:
+                pass
+            except Exception as exc:
+                raise exc
+            exc = ValueError("bound after")
+
+        exc_module = ValueError("module level")
+        raise exc_module
+    '''))
+    assert sorted((lined, text) for lined, text, *_ in _raises(source)) == [
+        (False, "from outer"), (False, "inner only"), (False, "module level"), (True, "wrapped later")]
 
 
 def test_no_run_time_raise_in_nebulas_own_words_goes_without_a_person_line() -> None:
