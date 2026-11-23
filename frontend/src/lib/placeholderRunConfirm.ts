@@ -173,8 +173,6 @@ const NOT_A_MODEL: Readonly<Record<string, ReadonlySet<string>>> = { 'krea-style
  * as the model and each setting by the label its card uses. */
 const KREA_SETTING_KEYS = ['variant', 'engine', 'model', 'enhancement_model', 'frame_interpolation_model', 'grain_model',
   'node_app_version_id'];
-/** The design's word for the node app's version (its card's field is "Node app version ID"). */
-const KREA_SETTING_LABELS: Readonly<Record<string, string>> = { node_app_version_id: 'Version' };
 /** Settings that pick a model only while a switch is on (design: "Name 'Grain
  * model' when one is chosen (it picks a model that runs)"): Topaz Bloom 2's and Wonder 3.5's grain
  * model runs only with Grain on. Magnific Precise's Flavor is a style setting on the same engine,
@@ -300,7 +298,7 @@ function kreaSetting(node: Node<NodeData>): string | null {
       if (!isKreaSetting(definition, spec)) continue;
       const when = KREA_SETTING_WHEN[spec.key];
       if (when && (params[when] ?? specs.find((candidate) => candidate.key === when)?.default) !== true) continue;
-      const words = settingWords(spec, KREA_SETTING_LABELS[spec.key] ?? spec.label, params[spec.key] ?? spec.default);
+      const words = settingWords(spec, spec.label, params[spec.key] ?? spec.default);
       if (words) named.push(words);
     }
   }
@@ -325,7 +323,7 @@ function requiredFields(definition: (typeof NODE_DEFINITIONS)[string]): string[]
     if (seen.has(spec.key)) continue;
     seen.add(spec.key);
     if (!spec.required || !unset(spec.default) || spec.hidden || ports.has(spec.key)) continue;
-    fields.push([spec.key, (KREA_SETTING_LABELS[spec.key] ?? spec.label).toLowerCase()]);
+    fields.push([spec.key, (spec.label).toLowerCase()]);
   }
   return fields;
 }
