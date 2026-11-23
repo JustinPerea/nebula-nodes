@@ -1862,13 +1862,14 @@ def main():
     parser.add_argument("--openapi", type=Path)
     parser.add_argument("--date", default=datetime.date.today().isoformat())
     parser.add_argument("--refresh-guide", action="store_true",
-                        help="re-read just the Krea 2 guide's Pricing section (also done by --refresh/--openapi)")
+                        help="re-read just the Krea 2 guide's Pricing section (also done by --refresh/--openapi "
+                             "without --only)")
     parser.add_argument("--guide", type=Path, metavar="FILE",
                         help=f"read the Krea 2 guide from FILE instead of {K2_GUIDE_URL}")
     parser.add_argument("--only", metavar="ENDPOINT", action="append",
                         help="with --refresh or --openapi: refresh just this Krea endpoint's entry (repeat for "
                              "several), which keeps its own fetchedAt and openapiSha256; every other entry stays "
-                             "as pinned, the Krea 2 guide's too unless --refresh-guide is also given")
+                             "as pinned, the Krea 2 guide's too unless --refresh-guide or --guide is also given")
     args = parser.parse_args()
     if args.check and (args.refresh or args.openapi or args.refresh_guide):
         parser.error("--check is offline; refresh separately")
@@ -1888,8 +1889,8 @@ def main():
     else:
         catalog = json.loads(CATALOG.read_text())
     # --only keeps every other entry as pinned, the Krea 2 guide's included,
-    # unless --refresh-guide asks for it too.
-    if args.refresh_guide or ((args.refresh or args.openapi) and not args.only):
+    # unless --refresh-guide or --guide FILE asks for it too.
+    if args.refresh_guide or ((args.refresh or args.openapi) and (not args.only or args.guide)):
         if args.guide:
             guide = args.guide.read_text()
         else:
