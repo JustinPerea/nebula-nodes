@@ -383,7 +383,7 @@ def _refuse_empty_required(node: GraphNode, inputs: dict[str, PortValueDict], wi
         field = str(fields.get(port["id"], port["id"]))
         if port.get("required") and field in inputs and field not in wired:
             label = str(port.get("label") or port["id"])
-            fix = "Type it in the connected node" if port.get("dataType") == "Text" else "Connect another one"
+            fix = "Connect one with text in it" if port.get("dataType") == "Text" else "Connect another one"
             raise with_person_line(ValueError(f"Krea {field} is empty"),
                                    f"{label} is empty. {fix}, then run the node again.")
 

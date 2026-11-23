@@ -256,7 +256,7 @@ async def test_a_krea_3_run_with_an_empty_prompt_stops_before_krea(monkeypatch):
     hosts = hosts_for(monkeypatch, "krea", False)
     with pytest.raises(ValueError, match=r"^Krea prompt is empty$") as exc:
         await registry_handler("krea-3")(node("krea-3", _provider="krea"), ports(prompt=""), dict(KEYS))
-    assert person_line(exc.value) == "Prompt is empty. Type it in the connected node, then run the node again."
+    assert person_line(exc.value) == "Prompt is empty. Connect one with text in it, then run the node again."
     assert not [r for r in hosts.requests if r.method == "POST"]
 
 
