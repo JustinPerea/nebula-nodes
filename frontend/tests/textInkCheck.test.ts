@@ -635,9 +635,9 @@ describe('check-text-ink: thin text takes weight 500', () => {
     expect(listed.stale).toEqual(['fixture.css::.b', 'fixture.css::.gone']);
   });
 
-  // The number may only go down. Never raise it to admit a new thin-text rule: give the text weight 500 or a mono face.
-  it('the baseline never grows past 90 entries', () => {
-    expect(THIN_TEXT_BASELINE.size).toBeLessThanOrEqual(90);
+  // Never add an entry to admit a new thin-text rule: give the text weight 500 or a mono face.
+  it('the baseline is empty', () => {
+    expect([...THIN_TEXT_BASELINE]).toEqual([]);
   });
 
   it('the status words under Choose model are not in the baseline', () => {

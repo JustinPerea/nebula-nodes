@@ -61,6 +61,7 @@
 }
 .run-history__status {
   font-size: 10px;
+  font-weight: 500;
   /* Design: a status word is a badge, not a field label, so it reads in
      sentence case ("Running", "Failed", "Complete"). */
   letter-spacing: 0.04em;
@@ -72,6 +73,7 @@
 .run-history__status-note {
   margin-top: 3px;
   font-size: 10px;
+  font-weight: 500;
   line-height: 1.35;
 }
 .run-history__target {
@@ -97,6 +99,7 @@
   border-radius: 5px;
   font: inherit;
   font-size: 10px;
+  font-weight: 500;
   line-height: 1;
   cursor: pointer;
 }
@@ -108,6 +111,7 @@
 .run-history__replay-blocked {
   color: var(--text-muted);
   font-size: 10px;
+  font-weight: 500;
   line-height: 1.3;
 }
 .run-history__empty {
@@ -116,15 +120,15 @@
   font-size: 12px;
 }
 
-.run-history__paper-stale { display: grid; gap: 3px; margin-top: 4px; font-size: 10px; line-height: 1.4; }
-.run-history__paper-details { margin-top: 5px; font-size: 10px; }
+.run-history__paper-stale { display: grid; gap: 3px; margin-top: 4px; font-size: 10px; font-weight: 500; line-height: 1.4; }
+.run-history__paper-details { margin-top: 5px; font-size: 10px; font-weight: 500; }
 .run-history__paper-details summary { cursor: pointer; line-height: 1.4; }
 .run-history__paper-recipe { display: block; margin-top: 5px; overflow-wrap: anywhere; }
 .run-history__paper-snapshot { display: grid; gap: 5px; margin-top: 10px; }
 .run-history__paper-snapshot img,
 .run-history__paper-snapshot video { width: 100%; max-height: 140px; object-fit: contain; }
 .run-history__paper-snapshot audio { width: 100%; }
-.run-history__paper-snapshot code { font-size: 9px; overflow-wrap: anywhere; user-select: text; }
+.run-history__paper-snapshot code { font-size: 9px; font-weight: 500; overflow-wrap: anywhere; user-select: text; }
 body.app-slava-restraint .run-history__paper-stale { color: var(--sr-ink, #1a1a1a); }
 /* Design: a link is light ink with an underline, and full ink on hover. */
 body.app-slava-restraint .run-history__paper-snapshot a { color: var(--sr-ink-light); text-decoration: underline; text-underline-offset: 2px; }
@@ -135,6 +139,7 @@ body.app-slava-restraint .run-history__paper-snapshot a:hover { color: var(--sr-
   padding: 10px;
   border-radius: 8px;
   font-size: 10px;
+  font-weight: 500;
   line-height: 1.35;
 }
 .run-history__safeguards-title {

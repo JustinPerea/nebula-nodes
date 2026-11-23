@@ -224,6 +224,7 @@ body.app-slava-restraint .jev-result__scale {
   gap: var(--sr-space-3);
   color: var(--sr-ink-light);
   font-size: var(--sr-type-meta);
+  font-weight: 500;
 }
 body.app-slava-restraint .jev-result__scale > span {
   min-width: 0;
@@ -264,6 +265,7 @@ body.app-slava-restraint .jev-result__bar-track {
 body.app-slava-restraint .jev-result__more {
   color: var(--sr-ink-light);
   font-size: var(--sr-type-meta);
+  font-weight: 500;
 }
 
 /* Score levels: one segment per level, brighter where the model leans, and
@@ -554,6 +556,7 @@ body.app-slava-restraint .jev-result__footer {
   border-top: 1px solid var(--sr-edge);
   color: var(--sr-ink-light);
   font-size: var(--sr-type-meta);
+  font-weight: 500;
 }
 body.app-slava-restraint .jev-result__footer .jev-result__figure { color: var(--sr-ink-light); }
 
@@ -692,6 +695,7 @@ body.app-slava-restraint .model-node__jev-field-note {
   color: var(--sr-ink-light);
   font-family: var(--sr-ui);
   font-size: var(--sr-type-meta);
+  font-weight: 500;
   line-height: var(--sr-line-meta);
 }
 

@@ -123,6 +123,7 @@ body.app-slava-restraint .model-node__file-name { color: var(--sr-ink-light); fo
   cursor: pointer;
   opacity: 0.7;
   font-size: 9px;
+  font-weight: 500;
   list-style: revert;
   width: fit-content;
 }
@@ -329,7 +330,7 @@ body.app-slava-restraint .mesh-modal__download-error {
 }
 
 /* Source freshness is separate from execution state; retained output stays visible. */
-.model-node__source-stale { display: grid; gap: 5px; padding: 10px; font-size: 10px; line-height: 1.4; }
+.model-node__source-stale { display: grid; gap: 5px; padding: 10px; font-size: 10px; font-weight: 500; line-height: 1.4; }
 .model-node__source-stale button { padding: 5px 7px; width: fit-content; border-radius: 4px; font: inherit; cursor: pointer; }
 .model-node__source-stale button:disabled { opacity: 0.45; cursor: default; }
 body.app-slava-restraint .model-node__source-stale { color: var(--sr-ink, #1a1a1a); background: color-mix(in srgb, var(--sr-warning) 10%, transparent); }

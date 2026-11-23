@@ -147,6 +147,7 @@ button.agent-roster__row:hover {
   height: 18px;
   margin-top: -1px;
   font-size: 9px;
+  font-weight: 700;
 }
 
 .agent-roster__text {
