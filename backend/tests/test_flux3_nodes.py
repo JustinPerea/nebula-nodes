@@ -234,6 +234,33 @@ async def test_each_routes_cheapest_run_sends_a_body_its_provider_takes(monkeypa
 
 
 @pytest.mark.asyncio
+async def test_an_agent_made_krea_3_node_sends_the_resolution_krea_requires(monkeypatch):
+    """The canvas saves every default on a new node; a node an agent made
+    (nebula apply) saves none. Krea requires resolution, or width and height,
+    on every Krea 3 request (its OpenAPI anyOf), so the run sends the
+    route's default resolution instead of nothing."""
+    hosts = hosts_for(monkeypatch, "krea", False)
+    await registry_handler("krea-3")(node("krea-3", _provider="krea"), ports(prompt=P), dict(KEYS))
+    sent = hosts.json("POST", re.escape("https://api.krea.ai/generate/image/krea/krea-3"))
+    assert sent.get("resolution") == "1K"
+    validate(CATALOG["krea-image-krea-krea-3"]["requestSchema"], sent)
+
+
+@pytest.mark.asyncio
+async def test_a_krea_3_run_with_an_empty_prompt_stops_before_krea(monkeypatch):
+    """Krea's schema leaves prompt optional (a region note can stand in for
+    it) and the node has no regions, so a connected but empty prompt stops
+    here instead of reaching Krea."""
+    from execution.person_line import person_line
+
+    hosts = hosts_for(monkeypatch, "krea", False)
+    with pytest.raises(ValueError, match=r"^Krea prompt is empty$") as exc:
+        await registry_handler("krea-3")(node("krea-3", _provider="krea"), ports(prompt=""), dict(KEYS))
+    assert person_line(exc.value) == "Prompt is empty. Connect one with text in it, then run the node again."
+    assert not [r for r in hosts.requests if r.method == "POST"]
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("model, sends", [("berry", True), ("jam", False)])
 async def test_krea_3_on_fal_sends_a_negative_prompt_only_where_it_shows(monkeypatch, model, sends):
     """Negative prompt shows only on Berry (visibleWhen {model: [berry]}; fal:
@@ -310,3 +337,14 @@ def test_unconfirmed_prices_are_marked_on_the_routes_whose_pages_dont_state_them
               if model_pricing.route_price_unconfirmed(PRICING["nodes"][node_id], REGISTRY[node_id], route_id)}
     assert marked == {("flux-3-image", "fal"), ("flux-3-image-klein-base", "fal"), ("flux-3-video", "fal"),
                       ("flux-video-upscale", "fal"), ("flux-video-upscale", "replicate"), ("krea-3", "fal")}
+
+
+def test_krea_3_4k_pricing_matches_2k_plus_4_cents():
+    definition = REGISTRY["krea-3"]
+    no_refs = model_pricing.estimate_routes(definition, {"resolution": "4K"}, [], PRICING)["krea"]
+    assert no_refs["low"] == pytest.approx(0.10) and no_refs["high"] == pytest.approx(0.10)
+    with_refs = model_pricing.estimate_routes(definition, {"resolution": "4K"}, ["images"], PRICING)["krea"]
+    assert with_refs["low"] == pytest.approx(0.10) and with_refs["high"] == pytest.approx(0.66)
+    high_thinking = model_pricing.estimate_routes(
+        definition, {"resolution": "4K", "thinking_mode": "high"}, ["images"], PRICING)["krea"]
+    assert high_thinking["low"] == pytest.approx(0.12) and high_thinking["high"] == pytest.approx(0.68)

@@ -3383,6 +3383,13 @@
             },
             {
               "match": {
+                "(references)": "none",
+                "resolution": "4K"
+              },
+              "price": 0.1
+            },
+            {
+              "match": {
                 "resolution": "1K"
               },
               "price": [
@@ -3398,6 +3405,15 @@
                 0.06,
                 0.62
               ]
+            },
+            {
+              "match": {
+                "resolution": "4K"
+              },
+              "price": [
+                0.1,
+                0.66
+              ]
             }
           ],
           "extras": [
@@ -3408,18 +3424,18 @@
               "price": 0.02
             }
           ],
-          "notes": "The API balance's price. A Krea account (plan) run bills workspace compute units, which Krea doesn't publish; the estimate sends plan runs to the plan before any row is read, so the rows don't match _kreaAuth. (references) is read from the wired ports: with nothing wired to images, a run costs the base price exactly ($0.03 at 1K, $0.06 at 2K). With references wired, each adds $0.02 (a 1K reference) or $0.07 (a 2K reference), priced by the reference's own size, which isn't known before the run; the range runs from the base price to the most references Krea takes (8) at $0.07. thinking_mode high adds $0.02 per generation.",
+          "notes": "The API balance's price. A Krea account (plan) run bills workspace compute units, which Krea doesn't publish; the estimate sends plan runs to the plan before any row is read, so the rows don't match _kreaAuth. (references) is read from the wired ports: with nothing wired to images, a run costs the base price exactly ($0.03 at 1K, $0.06 at 2K, $0.10 at 4K). With references wired, each adds $0.02 (a 1K reference) or $0.07 (a 2K reference), priced by the reference's own size, which isn't known before the run; the range runs from the base price to the most references Krea takes (8) at $0.07. thinking_mode high adds $0.02 per generation. A 4K image is billed as a 2K image plus $0.04 ($0.10, up to $0.66 with 8 references).",
           "sources": [
             {
               "url": "https://www.krea.ai/docs/developers/krea-3/overview.md#pricing",
-              "quote": "Base price | $0.03 | $0.06 ... Each 1K reference image | +$0.02 | +$0.02 ... Each 2K reference image | +$0.07 | +$0.07 ... `high` thinking mode | +$0.02 per generation"
+              "quote": "Base price | $0.03 | $0.06 ... Each 1K reference image | +$0.02 | +$0.02 ... Each 2K reference image | +$0.07 | +$0.07 ... `high` thinking mode | +$0.02 per generation ... A `4K` image is billed as a 2K image plus $0.04."
             },
             {
               "url": "https://api.krea.ai/openapi.json",
               "quote": "POST /generate/image/krea/krea-3 has no x-krea-pricing block; image_urls maxItems 8"
             }
           ],
-          "checked": "2026-10-15"
+          "checked": "2026-11-22"
         },
         "fal": {
           "currency": "usd",

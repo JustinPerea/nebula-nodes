@@ -804,3 +804,114 @@ async def test_3d_job_returns_local_mesh_and_keeps_preview_artifact():
     assert Path(result["mesh"]["value"]).read_bytes() == glb
     assert len(result["meshes"]["value"]) == 1
     assert [artifact["type"] for artifact in result["artifacts"]["value"]] == ["Mesh", "Image"]
+
+
+def test_krea_3_without_a_size_names_the_fields_it_needs():
+    from execution.person_line import person_line
+
+    model = gateway.catalog_models()["krea-image-krea-krea-3"]
+    with pytest.raises(ValueError, match=r"^Invalid Krea request: needs resolution, or width and height$") as exc:
+        gateway._validate({"prompt": "A cyan logo"}, model["requestSchema"])
+    assert person_line(exc.value) == "Krea needs resolution, or width and height. Set it on this node, then run the node again."
+    gateway._validate({"prompt": "A cyan logo", "resolution": "4K"}, model["requestSchema"])
+    gateway._validate({"prompt": "A cyan logo", "width": 1600, "height": 900}, model["requestSchema"])
+
+
+def test_a_krea_validation_failure_shows_its_details():
+    from execution.person_line import api_status
+    from handlers.krea import _raise_for_krea_response
+
+    response = httpx.Response(422, json={"error": "Validation failed", "details": [
+        {"field": "resolution", "message": "Invalid enum value. Expected '1K' | '2K' | '4K'", "code": "invalid_value"},
+        {"field": "prompt", "message": "Required", "code": "missing"},
+        {"field": "seed", "message": "Must be a number", "code": "invalid_type"},
+        {"field": "extra", "message": "Fourth detail is truncated", "code": "extra"},
+    ]})
+    with pytest.raises(RuntimeError, match=r"\(422\): Validation failed \(resolution: Invalid enum value") as exc:
+        _raise_for_krea_response(response, "generate submit")
+    assert api_status(exc.value) == 422
+    assert "prompt: Required" in str(exc.value)
+    assert "seed: Must be a number" in str(exc.value)
+    assert "Fourth detail is truncated" not in str(exc.value)
+
+
+def test_a_krea_3_node_without_a_saved_resolution_sends_the_routes_default():
+    # The canvas saves every default; a node an agent made saves none.
+    agent_made = GraphNode(id="n8", definitionId="krea-3", params={"aspect_ratio": "1:1", "_kreaAuth": "mcp"})
+    model = gateway.catalog_models()["krea-image-krea-krea-3"]
+    body = {"prompt": "A cyan logo", "aspect_ratio": "1:1"}
+    filled = gateway._required_defaults(agent_made, "krea-image-krea-krea-3", body, model["requestSchema"])
+    assert filled == {"resolution": "1K"}
+    gateway._validate({**body, **filled}, model["requestSchema"])
+    sized = {"prompt": "A cyan logo", "width": 1600, "height": 900}
+    assert gateway._required_defaults(agent_made, "krea-image-krea-krea-3", sized, model["requestSchema"]) == {}
+
+
+def _krea_routed_definitions():
+    definitions = json.loads((Path(__file__).resolve().parents[1] / "data" / "node_definitions.json").read_text())
+    return [
+        (node_id, definition, route)
+        for node_id, definition in sorted(definitions.items())
+        for route in definition.get("routes") or []
+        if route.get("provider") == "krea"
+    ]
+
+
+@pytest.mark.parametrize(
+    "node_id, definition, route",
+    _krea_routed_definitions(),
+    ids=[f"{node_id}:{route['id']}" for node_id, _, route in _krea_routed_definitions()],
+)
+def test_every_krea_route_fills_required_defaults_for_an_agent_made_node(node_id, definition, route):
+    """Recurrence guard: for every node with a Krea route, a node saved with
+    only _provider set to that route gets every schema-required field (or an
+    anyOf/oneOf required set) that the route has a default for."""
+    from execution.maker_routes import translate_params
+    from services import node_route
+
+    catalog_key = gateway.catalog_key_for(route["endpoint"])
+    model = gateway.catalog_models()[catalog_key]
+    schema = model["requestSchema"]
+    port_fields = model.get("portFields") or {}
+    sample_values = {
+        "Text": "a fox",
+        "Image": "https://assets.example.test/ref.png",
+        "Video": "https://assets.example.test/clip.mp4",
+        "Audio": "https://assets.example.test/clip.mp3",
+    }
+    body = {}
+    for port_def in definition.get("inputPorts") or []:
+        if port_def.get("required"):
+            field = port_fields.get(port_def["id"], port_def["id"])
+            value = sample_values[port_def["dataType"]]
+            if "array" in gateway._types(schema.get("properties", {}).get(field, {})):
+                value = [value]
+            body[field] = value
+
+    agent_node = GraphNode(id="n1", definitionId=node_id, params={"_provider": route["id"]})
+    filled = gateway._required_defaults(agent_node, catalog_key, body, schema)
+    combined = {**body, **filled}
+
+    ours = {
+        str(param["key"]): param["default"]
+        for param in node_route.route_param_definitions(definition, route["id"])
+        if param.get("default") is not None
+    }
+    defaults = translate_params(route, ours)
+    for field in schema.get("required") or []:
+        if field in defaults:
+            assert combined.get(field) not in (None, ""), (node_id, route["id"], field)
+
+    branches = schema.get("anyOf") or schema.get("oneOf") or []
+    if branches and all(isinstance(b, dict) and set(b) == {"required"} for b in branches):
+        satisfiable = any(
+            all(body.get(field) not in (None, "") or field in defaults for field in branch["required"])
+            for branch in branches
+        )
+        if satisfiable:
+            assert any(
+                all(combined.get(field) not in (None, "") for field in branch["required"])
+                for branch in branches
+            ), (node_id, route["id"], combined)
+
+    gateway._validate(combined, schema)

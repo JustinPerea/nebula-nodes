@@ -232,6 +232,13 @@ def _raise_for_krea_response(response: httpx.Response, action: str) -> None:
     try:
         payload = response.json()
         detail = str(payload.get("error") or payload.get("message") or payload)
+        # A 422 says only "Validation failed"; which field and why is in details.
+        raw_details = payload.get("details")
+        problems = [f"{item.get('field') or 'request'}: {item.get('message')}"
+                    for item in (raw_details if isinstance(raw_details, list) else ())
+                    if isinstance(item, dict) and item.get("message")]
+        if problems:
+            detail = f"{detail} ({'; '.join(problems[:3])})"
     except Exception:
         detail = response.text
     if response.status_code == 402:

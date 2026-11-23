@@ -26819,7 +26819,7 @@
   "krea-3": {
     "id": "krea-3",
     "displayName": "Krea 3",
-    "description": "Krea’s own Krea 3 image model, for text to image or to edit with up to 8 reference images. Runs on Krea, where beta workspaces have early access, or on fal.ai.",
+    "description": "Krea’s own Krea 3 image model, for text to image or to edit with up to 8 reference images. Runs on Krea or fal.ai.",
     "category": "image-gen",
     "apiProvider": "krea",
     "apiEndpoint": "/generate/image/krea/krea-3",
@@ -26916,7 +26916,6 @@
         "plan": "optional",
         "handler": "krea",
         "endpoint": "/generate/image/krea/krea-3",
-        "note": "Early access: Krea 3 on Krea's API is for beta workspaces",
         "params": [
           {
             "key": "thinking_mode",
@@ -26949,6 +26948,10 @@
               {
                 "label": "2K",
                 "value": "2K"
+              },
+              {
+                "label": "4K",
+                "value": "4K"
               }
             ]
           },

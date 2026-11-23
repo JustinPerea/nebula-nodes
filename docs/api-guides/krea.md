@@ -11,7 +11,7 @@ Choose a specific Krea model in the model picker. Canvas supports the full catal
 
 **Krea 3 and FLUX 3 video (2026-10-15).** These models are one node each with a provider switcher on the card, and Krea is one of the providers you can pick ([provider routes](../PROVIDER-ROUTES.md)):
 
-- **Krea 3** (`krea-3`): Krea first, then fal. Krea 3 on Krea's API is early access for beta workspaces; if yours isn't in the beta, pick fal in the switcher.
+- **Krea 3** (`krea-3`): Krea first, then fal. Krea 3's API is open to every workspace with an API token (checked 2026-11-22), with `1K`, `2K` and `4K` resolution.
 - **FLUX 3 Video**, **FLUX Video Edit [fast]**, **FLUX Video Upscale** (`flux-3-video`, `flux-video-edit`, `flux-video-upscale`): Black Forest Labs first, then fal, Replicate, OpenRouter and Krea. A saved graph with Krea's old FLUX nodes opens with these nodes set to Krea and the same API-token or plan choice, so nothing bills differently. The Krea plan is used on them only when you pick **Krea · plan** in the switcher.
 
 ## Set up an API token

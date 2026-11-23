@@ -19,6 +19,7 @@ from __future__ import annotations
 import ast
 import json
 import re
+import textwrap
 from pathlib import Path
 from typing import Any
 
@@ -291,17 +292,84 @@ def _template(node: ast.AST) -> str | None:
     return None
 
 
+_SCOPES = (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef, ast.Module)
+
+
+def _own_nodes(scope: ast.AST):
+    """The nodes of one scope, without descending into a nested one."""
+    stack = list(ast.iter_child_nodes(scope))
+    while stack:
+        node = stack.pop()
+        yield node
+        if not isinstance(node, _SCOPES):
+            stack.extend(ast.iter_child_nodes(node))
+
+
+def _bound_exceptions(tree: ast.AST) -> dict[ast.Raise, tuple[ast.AST, ast.Call | None]]:
+    """For each ``raise NAME``, the exception that name holds there and its
+    person-line wrapper: the latest assignment to NAME before the raise in
+    the same scope, else in an enclosing one (a closure). A rebinding that
+    wraps the old value (``exc = with_person_line(exc, line)``) carries the
+    line. Without this, ``exc = ValueError(...)`` then ``raise exc``
+    escapes the count that ``raise ValueError(...)`` is held to."""
+    resolved: dict[ast.Raise, tuple[ast.AST, ast.Call | None]] = {}
+
+    def assignments(scope: ast.AST) -> dict[str, list[tuple[int, ast.AST]]]:
+        found: dict[str, list[tuple[int, ast.AST]]] = {}
+        for node in _own_nodes(scope):
+            if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
+                found.setdefault(node.targets[0].id, []).append((node.lineno, node.value))
+        for entries in found.values():
+            entries.sort(key=lambda entry: entry[0])
+        return found
+
+    def lookup(chain: list[dict[str, list[tuple[int, ast.AST]]]], name: str, line: int,
+               depth: int = 0) -> tuple[ast.AST, ast.Call | None] | None:
+        for level, table in enumerate(chain):
+            earlier = [(at, value) for at, value in table.get(name, []) if level > 0 or at < line]
+            if not earlier:
+                continue
+            at, value = earlier[-1]
+            inner, wrapper = _peel(value)
+            if isinstance(inner, ast.Name) and wrapper is not None and depth < 8:
+                # exc = with_person_line(exc, line): the exception bound before this.
+                before = lookup(chain[level:], inner.id, at, depth + 1)
+                return (before[0], wrapper) if before else None
+            return inner, wrapper
+        return None
+
+    def visit(scope: ast.AST, outer: list[dict[str, list[tuple[int, ast.AST]]]]) -> None:
+        chain = [assignments(scope), *outer]
+        for node in _own_nodes(scope):
+            if isinstance(node, ast.Raise):
+                exc, wrapper = _peel(node.exc)
+                if isinstance(exc, ast.Name):
+                    found = lookup(chain, exc.id, node.lineno)
+                    if found is not None:
+                        resolved[node] = (found[0], wrapper or found[1])
+            if isinstance(node, _SCOPES):
+                visit(node, chain)
+
+    visit(tree, [])
+    return resolved
+
+
 def _raises(path: Path) -> list[tuple[bool, str, ast.Call, ast.Call | None]]:
     """(has a person line, text template, exception call, wrapper call) per literal raise."""
     found = []
-    for node in ast.walk(ast.parse(path.read_text())):
+    tree = ast.parse(path.read_text())
+    bound = _bound_exceptions(tree)
+    for node in ast.walk(tree):
         if isinstance(node, ast.Raise):
             exc = node.exc
         elif isinstance(node, ast.Return):
             exc = node.value  # a helper that builds the exception it raises
         else:
             continue
-        exc, wrapper = _peel(exc)
+        if isinstance(node, ast.Raise) and node in bound:
+            exc, wrapper = bound[node]
+        else:
+            exc, wrapper = _peel(exc)
         if not isinstance(exc, ast.Call) or not exc.args:
             continue
         name = exc.func.id if isinstance(exc.func, ast.Name) else getattr(exc.func, "attr", "")
@@ -328,7 +396,7 @@ UNLINED_BASELINE: dict[str, int] = {
     "handlers/google_gemini.py": 9, "handlers/grok_video.py": 7, "handlers/higgsfield.py": 8,
     "handlers/ideogram.py": 12, "handlers/jev_box.py": 1, "handlers/jev_decide.py": 2, "handlers/krea.py": 18,
     "handlers/krea_export.py": 9, "handlers/krea_gateway.py": 27, "handlers/krea_workspace.py": 19,
-    "handlers/meshy.py": 26, "handlers/minimax.py": 6, "handlers/minimax_v2.py": 5,
+    "handlers/meshy.py": 26, "handlers/minimax.py": 7, "handlers/minimax_v2.py": 5,
     "handlers/openai_audio.py": 3, "handlers/openai_image.py": 1, "handlers/openai_image_edit.py": 2,
     "handlers/openai_image_v2.py": 2, "handlers/openrouter.py": 1, "handlers/openrouter_media.py": 14,
     "handlers/qc_base.py": 1, "handlers/quiver.py": 6, "handlers/remotion_node.py": 5,
@@ -341,7 +409,7 @@ UNLINED_BASELINE: dict[str, int] = {
     "execution/maker_routes_google.py": 2, "execution/maker_routes_ideogram_runway.py": 3,
     "execution/maker_routes_minimax_meshy.py": 5, "execution/maker_routes_openai.py": 3,
     "execution/maker_routes_xai.py": 1, "execution/poll_retry.py": 1, "execution/route_clients.py": 4,
-    "execution/stream_runner.py": 5, "execution/sync_runner.py": 4, "services/media_input.py": 3,
+    "execution/stream_runner.py": 7, "execution/sync_runner.py": 4, "services/media_input.py": 3,
     "services/qc_common.py": 6, "services/qc_jev.py": 3, "services/typesafe_client.py": 23,
     "services/vision_llm.py": 8, "services/google_vertex.py": 2, "services/quiver_client.py": 9,
     # Two entries were each raised by one later: handlers/replicate_model.py's
@@ -359,15 +427,55 @@ UNLINED_BASELINE: dict[str, int] = {
     "services/krea_mcp_generation.py": 17,
     # This pass lowered fourteen, mostly paid jobs Nebula stopped waiting on
     # (the slow-job line, design) and Krea's lines 1-10.
-    # minimax.py was lowered by one later: its missing task id now reads
-    # MiniMax's own code (a refused key or no balance gets the table's line),
-    # and the exception is built before the raise, so the guard can't read
-    # its text; tests/test_error_copy_round3d.py pins it.
-    # This pass lowered stream_runner.py by one: the image stream's
-    # "ended without a final image event" is built before its raise, so the
-    # card can give a fal.ai job still running the slow-job line (design);
-    # tests/test_error_copy_round3d2.py pins its text.
+    # The guard follows a name bound to an exception in the same function
+    # (exc = RuntimeError(...), then raise exc), so building an exception
+    # before its raise no longer hides it from the count. That put back
+    # minimax.py's missing task id (MiniMax's answer; a refused key or no
+    # balance gets the table's line, tests/test_error_copy_round3d.py) and
+    # stream_runner.py's "ended without a final image event", raised plain
+    # and as a failed job (fal.ai's stream; a job still running gets the
+    # slow-job line, tests/test_error_copy_round3d2.py). Both are provider
+    # answers, so they keep the general line.
 }
+
+
+def test_the_guard_follows_a_raised_name_by_scope_and_order(tmp_path: Path) -> None:
+    """A name bound to an exception and raised later counts like the raise
+    of a call: the latest binding before the raise, in its own scope or an
+    enclosing one; never an inner function's binding for an outer raise,
+    never a binding that comes after the raise; and a rebinding that wraps
+    the old value carries its person line."""
+    source = tmp_path / "sample.py"
+    source.write_text(textwrap.dedent('''
+        def outer():
+            def inner():
+                exc = ValueError("inner only")
+                raise exc
+            raise exc
+
+        def closure():
+            exc = ValueError("from outer")
+            def inner():
+                raise exc
+            return inner
+
+        def rewrap():
+            exc = ValueError("wrapped later")
+            exc = with_person_line(exc, "A line.")
+            raise exc
+
+        def caught():
+            try:
+                pass
+            except Exception as exc:
+                raise exc
+            exc = ValueError("bound after")
+
+        exc_module = ValueError("module level")
+        raise exc_module
+    '''))
+    assert sorted((lined, text) for lined, text, *_ in _raises(source)) == [
+        (False, "from outer"), (False, "inner only"), (False, "module level"), (True, "wrapped later")]
 
 
 def test_no_run_time_raise_in_nebulas_own_words_goes_without_a_person_line() -> None:

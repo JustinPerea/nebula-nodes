@@ -14803,13 +14803,12 @@
     },
     "krea-image-krea-krea-3": {
       "endpoint": "/generate/image/krea/krea-3",
-      "displayName": "Krea 3 Beta",
+      "displayName": "Krea 3",
       "requestSchema": {
         "type": "object",
         "properties": {
           "prompt": {
-            "type": "string",
-            "minLength": 1
+            "type": "string"
           },
           "thinking_mode": {
             "type": "string",
@@ -14827,12 +14826,75 @@
               "format": "uri"
             }
           },
+          "regions": {
+            "maxItems": 24,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "label": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                "x": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "y": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "width": {
+                  "type": "number",
+                  "exclusiveMinimum": 0,
+                  "maximum": 1
+                },
+                "height": {
+                  "type": "number",
+                  "exclusiveMinimum": 0,
+                  "maximum": 1
+                },
+                "note": {
+                  "default": "",
+                  "type": "string",
+                  "maxLength": 600
+                },
+                "image_idx": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": [
+                "x",
+                "y",
+                "width",
+                "height",
+                "image_idx"
+              ],
+              "additionalProperties": false
+            }
+          },
           "resolution": {
             "type": "string",
             "enum": [
               "1K",
-              "2K"
+              "2K",
+              "4K"
             ]
+          },
+          "width": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 4096
+          },
+          "height": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 4096
           },
           "aspect_ratio": {
             "type": "string",
@@ -14856,10 +14918,20 @@
             "type": "boolean"
           }
         },
-        "required": [
-          "prompt"
-        ],
-        "additionalProperties": false
+        "additionalProperties": false,
+        "anyOf": [
+          {
+            "required": [
+              "resolution"
+            ]
+          },
+          {
+            "required": [
+              "width",
+              "height"
+            ]
+          }
+        ]
       },
       "mediaType": "Image",
       "inputPorts": [
@@ -14876,13 +14948,22 @@
           "required": false,
           "multiple": true,
           "maxConnections": 8
+        },
+        {
+          "id": "regions",
+          "label": "Regions",
+          "dataType": "Any",
+          "required": false,
+          "multiple": true,
+          "maxConnections": 24
         }
       ],
       "jsonParams": [
-        "image_urls"
+        "image_urls",
+        "regions"
       ],
-      "fetchedAt": "2026-10-15",
-      "openapiSha256": "2be9a43621928c4e4ee18d6b3830cfe98ca964367935029208da3e5970b95ee3",
+      "fetchedAt": "2026-11-22",
+      "openapiSha256": "fc355c768865f418294481a7ee55c82f4c19933a796ac7b889d4b1efc5c8615c",
       "foldedInto": "krea-3",
       "portFields": {
         "images": "image_urls"
