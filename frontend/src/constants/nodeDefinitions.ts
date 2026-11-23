@@ -9580,10 +9580,10 @@ export const NODE_DEFINITIONS: Record<string, ModelNodeDefinition> = {
       },
       {
         key: 'node_app_version_id',
-        label: 'Node app version ID',
+        label: 'Version',
         type: 'string',
         required: true,
-        placeholder: 'From Krea, or ask your agent to list node apps',
+        placeholder: 'Version ID from Krea, or ask your agent to list node apps',
       },
       {
         key: 'input',

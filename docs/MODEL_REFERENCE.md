@@ -7304,7 +7304,7 @@ No settings.
 | Parameter | Type | Default | Options/Range |
 |-----------|------|---------|---------------|
 | Krea connection | enum | api-token | API key · API balance, Krea account · workspace compute |
-| Node app version ID | string | — | — |
+| Version | string | — | — |
 | Input · JSON | textarea | — | — |
 
 ---
