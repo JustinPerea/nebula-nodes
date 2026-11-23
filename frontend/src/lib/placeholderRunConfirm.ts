@@ -312,7 +312,7 @@ function kreaSetting(node: Node<NodeData>): string | null {
  * the same id (a wire could fill those). The canvas fills none in (a new
  * node keeps nothing, the field reads "Choose…"), and the gateway refuses a
  * request without one. Each is [key, the word the line uses]: the card's
- * label, lowercased; a node app's Version as design named it.
+ * label, lowercased (a node app's reads "version").
  */
 function requiredFields(definition: (typeof NODE_DEFINITIONS)[string]): string[][] {
   if (!isKrea(definition)) return [];
@@ -323,7 +323,7 @@ function requiredFields(definition: (typeof NODE_DEFINITIONS)[string]): string[]
     if (seen.has(spec.key)) continue;
     seen.add(spec.key);
     if (!spec.required || !unset(spec.default) || spec.hidden || ports.has(spec.key)) continue;
-    fields.push([spec.key, (spec.label).toLowerCase()]);
+    fields.push([spec.key, spec.label.toLowerCase()]);
   }
   return fields;
 }
