@@ -291,26 +291,66 @@ def _template(node: ast.AST) -> str | None:
     return None
 
 
-def _bound_exceptions(tree: ast.AST) -> dict[ast.AST, dict[str, ast.Call]]:
-    """Per function, the names bound to an exception built right there
-    (``exc = ValueError(...)``). Without this, ``raise exc`` escapes the
-    count that ``raise ValueError(...)`` is held to."""
-    scopes: dict[ast.AST, dict[str, ast.Call]] = {}
-    for scope in ast.walk(tree):
-        if not isinstance(scope, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            continue
-        bound: dict[str, ast.Call] = {}
-        for node in ast.walk(scope):
-            if (isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name)
-                    and isinstance(node.value, ast.Call)):
-                inner, _wrapper = _peel(node.value)
-                func = inner.func if isinstance(inner, ast.Call) else None
-                name = func.id if isinstance(func, ast.Name) else getattr(func, "attr", "")
-                if name.endswith(("Error", "Exception")):
-                    bound[node.targets[0].id] = node.value
-        for node in ast.walk(scope):
-            scopes[node] = bound  # walk reaches an inner function after its outer one, so the inner wins
-    return scopes
+_SCOPES = (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef, ast.Module)
+
+
+def _own_nodes(scope: ast.AST):
+    """The nodes of one scope, without descending into a nested one."""
+    stack = list(ast.iter_child_nodes(scope))
+    while stack:
+        node = stack.pop()
+        yield node
+        if not isinstance(node, _SCOPES):
+            stack.extend(ast.iter_child_nodes(node))
+
+
+def _bound_exceptions(tree: ast.AST) -> dict[ast.Raise, tuple[ast.AST, ast.Call | None]]:
+    """For each ``raise NAME``, the exception that name holds there and its
+    person-line wrapper: the latest assignment to NAME before the raise in
+    the same scope, else in an enclosing one (a closure). A rebinding that
+    wraps the old value (``exc = with_person_line(exc, line)``) carries the
+    line. Without this, ``exc = ValueError(...)`` then ``raise exc``
+    escapes the count that ``raise ValueError(...)`` is held to."""
+    resolved: dict[ast.Raise, tuple[ast.AST, ast.Call | None]] = {}
+
+    def assignments(scope: ast.AST) -> dict[str, list[tuple[int, ast.AST]]]:
+        found: dict[str, list[tuple[int, ast.AST]]] = {}
+        for node in _own_nodes(scope):
+            if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
+                found.setdefault(node.targets[0].id, []).append((node.lineno, node.value))
+        for entries in found.values():
+            entries.sort(key=lambda entry: entry[0])
+        return found
+
+    def lookup(chain: list[dict[str, list[tuple[int, ast.AST]]]], name: str, line: int,
+               depth: int = 0) -> tuple[ast.AST, ast.Call | None] | None:
+        for level, table in enumerate(chain):
+            earlier = [(at, value) for at, value in table.get(name, []) if level > 0 or at < line]
+            if not earlier:
+                continue
+            at, value = earlier[-1]
+            inner, wrapper = _peel(value)
+            if isinstance(inner, ast.Name) and wrapper is not None and depth < 8:
+                # exc = with_person_line(exc, line): the exception bound before this.
+                before = lookup(chain[level:], inner.id, at, depth + 1)
+                return (before[0], wrapper) if before else None
+            return inner, wrapper
+        return None
+
+    def visit(scope: ast.AST, outer: list[dict[str, list[tuple[int, ast.AST]]]]) -> None:
+        chain = [assignments(scope), *outer]
+        for node in _own_nodes(scope):
+            if isinstance(node, ast.Raise):
+                exc, wrapper = _peel(node.exc)
+                if isinstance(exc, ast.Name):
+                    found = lookup(chain, exc.id, node.lineno)
+                    if found is not None:
+                        resolved[node] = (found[0], wrapper or found[1])
+            if isinstance(node, _SCOPES):
+                visit(node, chain)
+
+    visit(tree, [])
+    return resolved
 
 
 def _raises(path: Path) -> list[tuple[bool, str, ast.Call, ast.Call | None]]:
@@ -325,10 +365,10 @@ def _raises(path: Path) -> list[tuple[bool, str, ast.Call, ast.Call | None]]:
             exc = node.value  # a helper that builds the exception it raises
         else:
             continue
-        exc, wrapper = _peel(exc)
-        if isinstance(exc, ast.Name) and isinstance(node, ast.Raise) and exc.id in bound.get(node, {}):
-            exc, built_with = _peel(bound[node][exc.id])
-            wrapper = wrapper or built_with
+        if isinstance(node, ast.Raise) and node in bound:
+            exc, wrapper = bound[node]
+        else:
+            exc, wrapper = _peel(exc)
         if not isinstance(exc, ast.Call) or not exc.args:
             continue
         name = exc.func.id if isinstance(exc.func, ast.Name) else getattr(exc.func, "attr", "")

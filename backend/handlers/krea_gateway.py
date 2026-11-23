@@ -209,7 +209,7 @@ def _validate(body: dict, schema: dict) -> None:
         if sets:
             needs = ", or ".join(sets)
             raise with_person_line(ValueError(f"Invalid Krea {field}: needs {needs}"),
-                                   f"Krea needs {needs}. Set it on this node, then run the node again.")
+                                   f"Krea needs {needs.replace('_', ' ')}. Set it on this node, then run the node again.")
         raise ValueError(f"Invalid Krea {field}: {error.message}")
 
 
@@ -377,10 +377,7 @@ def _refuse_empty_required(node: GraphNode, inputs: dict[str, PortValueDict], wi
     offer."""
     from execution.maker_routes import definition_for
 
-    try:
-        definition = definition_for(node.definition_id)
-    except ValueError:
-        return
+    definition = definition_for(node.definition_id)
     fields = model.get("portFields") if isinstance(model.get("portFields"), dict) else {}
     for port in definition.get("inputPorts") or []:
         field = str(fields.get(port["id"], port["id"]))
