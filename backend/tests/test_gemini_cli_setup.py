@@ -207,20 +207,33 @@ esac
 
 
 def test_version_and_help_run_side_by_side(tmp_path, home, monkeypatch):
-    # Settings waits for this the first time, so the two answers don't queue.
+    # Settings waits for this the first time, so the two answers don't queue:
+    # proved by a barrier — each call writes its marker and goes on only once
+    # the other's exists (its own bound, or the probe deadline, fails a run
+    # that queued instead of overlapping).
     monkeypatch.setattr(g, "PROBE_TIMEOUT_S", 5)
+    marker = tmp_path / "started"
     script = tmp_path / "gemini"
-    script.write_text("""#!/bin/sh
-sleep 1
+    script.write_text(f"""#!/bin/sh
+me="${{1#--}}"
+: > "{marker}-$me"
+other=help; [ "$me" = help ] && other=version
+n=0
+while [ ! -f "{marker}-$other" ]; do
+    n=$((n + 1))
+    [ "$n" -gt 400 ] && exit 9
+    sleep 0.05
+done
 case "$1" in
   --version) echo 0.64.0 ;;
   --help) echo "  --acp  ACP" ;;
 esac
 """)
     script.chmod(0o755)
-    started = time.monotonic()
-    assert g.probe(script).acp_flag == "--acp"
-    assert time.monotonic() - started < 1.8
+    result = g.probe(script)
+    assert result.ran and result.acp_flag == "--acp"
+    # Neither subprocess could have answered before the other started.
+    assert (tmp_path / "started-version").exists() and (tmp_path / "started-help").exists()
 
 
 def test_a_probe_already_running_is_not_started_again(tmp_path, home, monkeypatch):
@@ -229,12 +242,19 @@ def test_a_probe_already_running_is_not_started_again(tmp_path, home, monkeypatc
     on a busy Mac) must not be started again on every poll, piling up node
     processes and worker threads; later looks say it's still checking."""
     import threading
-    monkeypatch.setattr(g, "PROBE_TIMEOUT_S", 5)
     count = tmp_path / "count"
+    marker = tmp_path / "started"
+    release = tmp_path / "release"
     script = tmp_path / "gemini"
     script.write_text(f"""#!/bin/sh
 echo "$1" >> "{count}"
-sleep 1.5
+: > "{marker}-${{1#--}}"
+n=0
+while [ ! -f "{release}" ]; do
+    n=$((n + 1))
+    [ "$n" -gt 400 ] && exit 9
+    sleep 0.05
+done
 case "$1" in
   --version) echo 0.64.0 ;;
   --help) echo "  --acp  ACP" ;;
@@ -244,14 +264,19 @@ esac
     results = []
     first = threading.Thread(target=lambda: results.append(g.probe(script)))
     first.start()
-    time.sleep(0.4)
-    started = time.monotonic()
+    # Provably running when the second look comes in: both its subprocesses
+    # are up and held on the release file (their own bound covers a hang).
+    deadline = time.monotonic() + 30  # a hang guard, not a budget
+    while not ((tmp_path / "started-version").exists() and (tmp_path / "started-help").exists()):
+        assert time.monotonic() < deadline, "the first probe's subprocesses never started"
+        time.sleep(0.02)
     second = g.probe(script)
-    waited = time.monotonic() - started
     write_settings(home, "gemini-api-key")
     note = check(script, home, tmp_path).note
-    first.join()
-    assert waited < 0.5 and not second.ran and second.checking
+    release.write_text("")
+    first.join(timeout=60)
+    assert not first.is_alive()
+    assert not second.ran and second.checking
     assert "still checking" in note
     assert results[0].acp_flag == "--acp"
     assert sorted(count.read_text().split()) == ["--help", "--version"]  # one probe, not three

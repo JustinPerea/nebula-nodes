@@ -185,15 +185,11 @@ describe('the walk measures a node once per content version', () => {
     });
     const steps: UndoWalkStep[] = Array.from({ length: 50 }, copy);
     measureShape.mockClear();
-    const started = performance.now();
     expect(undosToFitSave(nodes, edges, undefined, undefined, steps)).toBeNull();
-    const took = performance.now() - started;
-    // The root, each node and each connection once: never once per step.
+    // The root, each node and each connection once: never once per step. The
+    // call count is the exact budget — a measure-per-step regression makes it
+    // 50 calls a node (600,000) instead of 12,001.
     expect(measureShape.mock.calls.length).toBe(1 + nodes.length + edges.length);
-    // Timed at load average ~30: the saveFixStep.pr205r8 walk took 3,008 ms on this canvas,
-    // this one 237 ms, one Save walk of it 52 ms. A loose wall-clock bound
-    // for a loaded machine; the call count above is the exact budget.
-    expect(took).toBeLessThan(1_500);
   }, 60_000);
 
   it('a step that changed one node measures only that node again', () => {
