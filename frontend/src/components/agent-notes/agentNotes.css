@@ -70,8 +70,8 @@ body.app-slava-restraint .agent-notes-root {
 }
 
 /* The ring shows whenever there is anything unread and the list is closed,
- * at any count (GM review of PR #157, round 2), in the newest author's colour,
- * lightened where needed to clear 3:1 on the header (--an-ring, lib/unreadRing). */
+ * at any count (design, PR #157), in the newest author's colour, lightened
+ * where needed to clear 3:1 on the header (--an-ring, lib/unreadRing). */
 .agent-notes-chip::after {
   content: '';
   position: absolute;
@@ -90,7 +90,7 @@ body.app-slava-restraint .agent-notes-root {
 
 /* The unread ring fills 1-3px outside the chip, so while it shows the focus
  * ring moves out to 4-6px: the whole unread ring stays visible, with a 1px gap
- * (GM, review of #161: the neutral focus ring stays clear of the unread ring). */
+ * (design, PR #161: the neutral focus ring stays clear of the unread ring). */
 .agent-notes-chip--ringed:focus-visible {
   outline-offset: 4px;
 }
@@ -101,7 +101,7 @@ body.app-slava-restraint .agent-notes-root {
 }
 
 /* 1 px of the chip's own background around each dot, so overlapping dots
- * read as two (GM review of p157: "Ar" was grey on grey, half under "C"). */
+ * read as two (design, PR #157: "Ar" was grey on grey, half under "C"). */
 .agent-notes-chip__dots .agent-notes-dot {
   box-shadow: 0 0 0 1px var(--an-raised);
 }
@@ -115,12 +115,11 @@ body.app-slava-restraint .agent-notes-root {
 }
 
 /* Below about 1360 px wide the chip shows only its author dots and the count
- * (GM review of Q107 a: at 1280 the full chip wrapped the Commons toolbar to
- * two rows). Its name ("Updates, 3 unread"), height and the list it opens
- * stay; every screen's header reserves this compact width
- * (--agent-notes-chip-w, layouts.css, same breakpoint). The canvas follows
- * the same rule, so the one chip looks the same as the person moves between
- * screens. */
+ * (design: at 1280 the full chip wrapped the Commons toolbar to two rows).
+ * Its name ("Updates, 3 unread"), height and the list it opens stay; every
+ * screen's header reserves this compact width (--agent-notes-chip-w,
+ * layouts.css, same breakpoint). The canvas follows the same rule, so the
+ * one chip looks the same as the person moves between screens. */
 @media (max-width: 1359px) {
   .agent-notes-chip__label {
     display: none;
@@ -129,7 +128,7 @@ body.app-slava-restraint .agent-notes-root {
 
 /* The unread count: plain figures in the chip's own ink, after a clear gap.
  * It was a circle in the newest author's colour, the size of a dot, so the
- * chip read as three people (GM review of p157). Neutral, not the orange
+ * chip read as three people (design, PR #157). Neutral, not the orange
  * accent: the default agent colour is orange too (#E8825A). The chip's name
  * says the count ("Updates, 3 unread"). */
 .agent-notes-chip__count {
@@ -139,11 +138,11 @@ body.app-slava-restraint .agent-notes-root {
   font-variant-numeric: tabular-nums;
 }
 
-/* One face for every count (GM review of PR #157, round 2): the muted 0 dims
- * by colour only. It used to drop to weight 500 while an unread count asked
- * for 700, which the bundled JetBrains Mono doesn't ship (400, 500, 600), so
- * the two were drawn from different instances of the face and read as two
- * fonts. 600 is the heaviest weight shipped. */
+/* One face for every count (design, PR #157): the muted 0 dims by colour
+ * only. It used to drop to weight 500 while an unread count asked for 700,
+ * which the bundled JetBrains Mono doesn't ship (400, 500, 600), so the two
+ * were drawn from different instances of the face and read as two fonts.
+ * 600 is the heaviest weight shipped. */
 .agent-notes-chip__count[data-muted='true'] {
   color: var(--sr-ink-light);
 }
@@ -157,7 +156,7 @@ body.app-slava-restraint .agent-notes-root {
   to { transform: scale(1); }
 }
 
-/* How many agents need the person (GM's review of PR #193): a filled light
+/* How many agents need the person (design, PR #193): a filled light
  * pill with a dark number, the inverse of the Agents panel's outlined
  * Working badge. One badge counts several agents, so never an agent's
  * colour. After the chip's unread count, and in the panel's Needs-you group. */
@@ -194,7 +193,7 @@ body.app-slava-restraint .agent-notes-root {
 
 /* In the chip a dot brightens while its author has unread updates. */
 /* Dimmed, it stays opaque: a see-through dot showed the dot under it through
- * itself and its ring (GM review of p157). */
+ * itself and its ring (design, PR #157). */
 .agent-notes-dot[data-lit='false'] {
   filter: saturate(0.5) brightness(0.45);
 }
@@ -203,7 +202,7 @@ body.app-slava-restraint .agent-notes-root {
   transition: filter var(--spring-soft-ms) var(--spring-soft);
 }
 
-/* An agent that named itself (no token, Q125 item 2, GM): a hollow ring in
+/* An agent that named itself (no token; design): a hollow ring in
  * its colour, same size and place, with its initials in the ink. The Agents
  * panel and the question form draw it; its tooltip says why. */
 .agent-notes-dot--unverified {
@@ -325,7 +324,7 @@ body.app-slava-restraint .agent-notes-root {
   margin: 0;
 }
 
-/* =============== The list (GM's still) =============== */
+/* =============== The list (the still) =============== */
 
 .agent-notes-panel {
   position: fixed;
@@ -405,9 +404,9 @@ body.app-slava-restraint .agent-notes-root {
   list-style: none;
 }
 
-/* Two lists in one (Moodboard Studio, Q113 c): "This board", then the
- * project's. Each heading carries what the header's right side says on a
- * single list: where that list is kept. */
+/* Two lists in one (Moodboard Studio): "This board", then the project's.
+ * Each heading carries what the header's right side says on a single list:
+ * where that list is kept. */
 .agent-notes-section + .agent-notes-section {
   border-top: 1px solid var(--an-edge);
 }
@@ -646,7 +645,7 @@ body.app-slava-restraint .agent-notes-root {
   border-color: var(--an-ink-bold);
 }
 
-/* =============== Questions (Q125 item 1) =============== */
+/* =============== Questions =============== */
 
 /* The answer form: a popover over the list, at its place and width (the
  * panel's rules above), one layer up. The agent's dot and colour lead it. */
@@ -738,7 +737,7 @@ body.app-slava-restraint .agent-notes-root {
   margin-top: 10px;
 }
 
-/* An option: the list's button. Once picked, GM - Design's neutral ring for
+/* An option: the list's button. Once picked, the neutral ring for
  * every agent (2026-10-24): "the light ink ring with a faint fill, the same
  * weight as now, just not the agent's color. The pick is the person's
  * choice, not the agent's." The agent's colour stays on its dot;
@@ -762,7 +761,7 @@ body.app-slava-restraint .agent-notes-root {
 }
 
 /* Only an unpicked option dims on hover: a picked one keeps its full ring, or
-   hovering would read as un-picking it (GM). */
+   hovering would read as un-picking it (design). */
 .agent-questions-form__option:hover:not(:disabled):not([aria-pressed='true']) {
   background: var(--an-hover);
   border-color: color-mix(in srgb, var(--an-ink) 30%, transparent);
@@ -829,7 +828,7 @@ body.app-slava-restraint .agent-notes-root {
   border-top: 1px solid var(--an-edge);
 }
 
-/* GM r10 (1): the held reason on its own row under Dismiss and Send. */
+/* Design: the held reason on its own row under Dismiss and Send. */
 .agent-questions-form__held-line {
   flex: 1 0 100%;
   margin: 0;
@@ -991,7 +990,7 @@ body.app-slava-restraint .agent-notes-root {
   }
 }
 
-/* =============== Done cards (Q125 item 3) ===============
+/* =============== Done cards ===============
  * Design: a failure gets the error icon by its message, never a red edge;
  * the thumbnail sits below the message, 96 px tall, natural aspect, never
  * cropped, capped at the card's width; a video's length in mono in its

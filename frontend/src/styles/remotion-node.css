@@ -14,8 +14,8 @@ body.app-slava-restraint .remotion-node {
   cursor: default;
 }
 
-/* One selection style, the model card's, in the card's category colour (GM -
-   Design, PR #198 r7 item 2, as node-card-boundary.css): the border alone in a
+/* One selection style, the model card's, in the card's category colour
+   (design, PR #198, as node-card-boundary.css): the border alone in a
    dark category colour is too faint to read as selected. */
 body.app-slava-restraint .remotion-node--selected {
   border-color: var(--node-category-color, var(--sr-accent));

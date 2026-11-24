@@ -356,9 +356,9 @@ body.app-slava-restraint .model-node--world-surface .world-preview {
   line-height: 1.45;
 }
 
-/* A splat the viewer can't show: GM's line, centred in the stage in body
- * text and the neutral colour (PR #203 r2), with Try again when the file
- * didn't load (r3). */
+/* A splat the viewer can't show: the approved line, centred in the stage in body
+ * text and the neutral colour (PR #203), with Try again when the file
+ * didn't load. */
 .world-modal__failure {
   position: absolute;
   inset: 0;

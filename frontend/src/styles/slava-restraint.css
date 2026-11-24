@@ -12,8 +12,8 @@
  *   • Translucent dark-glass panels (backdrop-filter blur) — chrome reads
  *     as a quiet overlay on the canvas, not as opaque slabs
  *   • Single accent color — used ONLY for the primary CTA, selected
- *     state and the agent. Focus rings are a light neutral (sf, GM -
- *     Design). Everything else is monochrome.
+ *     state and the agent. Focus rings are a light neutral (design).
+ *     Everything else is monochrome.
  *   • Clean grotesk for body text + headers; NOT extreme weight
  *   • Bold-then-light same-paragraph two-tone in headlines (Slava's
  *     characteristic Nothing-OS hierarchy)
@@ -102,12 +102,12 @@ body.app-slava-restraint {
   --sr-disabled-opacity: 0.48;
   --sr-disabled-opacity-strong: 0.36;
   --sr-disabled-opacity-muted: 0.50;
-  /* GM r33 (PR #198): the one disabled look, by kind of control, never a
+  /* Design, PR #198: the one disabled look, by kind of control, never a
      whole-control opacity on a text button. Always: no hover change, no
      pointer cursor.
      - Text buttons: the label goes neutral grey at 0.55; the outline is
        never brighter than the enabled edge; a ghost button gets no fill.
-     - Filled buttons: the grey fill (the held [Try again] of round 21),
+     - Filled buttons: the grey fill (the held Try again),
        its edge the fill itself, a dark label on it.
      - Image-only buttons: 0.45 and greyscale.
      The notice buttons read these now (canvasProposals.css); the rest of
@@ -333,7 +333,7 @@ body.app-slava-restraint {
   --sr-motion-handle: 220ms cubic-bezier(0.32, 0.72, 0, 1);
   --sr-motion-panel: 500ms cubic-bezier(0.32, 0.72, 0, 1);
   --sr-motion-emphasized: 140ms cubic-bezier(0.05, 0.7, 0.1, 1);
-  /* Keyboard focus: a light neutral ring (GM - Design, sf). Orange already
+  /* Keyboard focus: a light neutral ring (design). Orange already
    * means the agent and the primary action, so focus is drawn in the primary
    * type colour, which carries no meaning of its own and clears 3:1 on every
    * dark surface (tests/focusRingCss.test.ts). */
@@ -349,43 +349,43 @@ body.app-slava-restraint {
   /* Transient menus and popovers over the canvas (the context menu, the
    * connection popup, an opened toolbar's actions, the move menu): above the
    * agent edge chips (58), so a chip never covers a menu or takes its clicks
-   * (final review of PR #233, finding 5). Still below a modal (60). The chips
-   * and the screen layer sit above the docks (55): GM's ruling. */
+   * (PR #233). Still below a modal (60). The chips
+   * and the screen layer sit above the docks (55): a design ruling. */
   --sr-layer-edge-chips: 58;
   --sr-layer-transient: 59;
   --sr-layer-modal: 60;
   --sr-layer-modal-control: 61;
-  /* The proposal bar's layer. GM r10 (PR #203 round 6), the rule: anything
+  /* The proposal bar's layer. Design, PR #203, the rule: anything
    * the person opened draws above the proposal bar, and lasting chrome they
    * didn't open draws under it. A new floating surface takes its side from
    * that, without a new question:
    * - above: every panel (10 and up: the Inspector, the library, the chat,
    *   Run History, the Agent log once expanded), the Updates list (46: it
-   *   draws over the bar and keeps its room, GM r13 item 2), Settings (30),
+   *   draws over the bar and keeps its room, design), Settings (30),
    *   context menus and popovers
    *   (40, the provider switcher's 60, Final export's 100), the chat model
    *   picker (1100), the drag layer (10000) and every modal (60 and up: the
    *   palette, the 3D viewers, the dialogs), whose scrim dims the bar with
-   *   the canvas (GM r7). Nothing stops above the bar's top edge to make
-   *   room (GM r10: Settings keeps its full height at 1280; it is where the
+   *   the canvas (design). Nothing stops above the bar's top edge to make
+   *   room (design: Settings keeps its full height at 1280; it is where the
    *   token that unlocks Accept goes).
    * - under: --sr-layer-ambient, the bars that are always there: the bottom
    *   bar and the canvas tabs, the following bar included while a proposal
    *   shows and no modal is open (below, after the tabs' own rules), and the
    *   Agent log while collapsed (its default chip) with its "hidden" notice.
-   *   A surface takes its side from its state, not its name (GM r13 item 3:
+   *   A surface takes its side from its state, not its name (design:
    *   the Agent log expanded is opened, collapsed it is chrome). The
    *   two bars also never meet: the notice stack stops below the top bars
-   *   (noticeRegion.css, GM r9 item 2).
-   * Notices stay above all of it (--sr-layer-notice, GM r25).
+   *   (noticeRegion.css, design).
+   * Notices stay above all of it (--sr-layer-notice, design).
    * tests/proposalBarStacking.test.ts pins both sides. */
   --sr-layer-proposal: calc(var(--sr-layer-panel) - 1);
   --sr-layer-ambient: calc(var(--sr-layer-proposal) - 1);
-  /* GM r25 (PR #200 fix round 16): and above every dialog's backdrop (the
+  /* Design, PR #200: and above every dialog's backdrop (the
    * World viewer's is 20000), so a notice is always usable. Before: */
   /* The app's notices (NoticeRegion): above every panel, the Agent log, the
    * chat, popovers and the Studios with their docks (Settings over a Studio is
-   * 56), below a modal that blocks the app (GM - Design, 2026-10-23: "one
+   * 56), below a modal that blocks the app (design, 2026-10-23: "one
    * app-level region above every panel ... A notice with an action never sits
    * under anything"). */
   --sr-layer-notice: 20010;
@@ -405,7 +405,7 @@ body.app-slava-restraint {
   outline-offset: var(--sr-focus-offset);
 }
 
-/* PR #204 round 18g (GM r36): a heading or a line that takes focus from code draws no ring. A
+/* PR #204 (design): a heading or a line that takes focus from code draws no ring. A
  * handover (a demote, going offline, the Commons turning off, Try again's line going, the off
  * view opening into the Commons) moves focus to a page or section heading, or to the line that
  * says why, so a screen reader announces it. Those targets have tabindex -1: a person can never
@@ -416,7 +416,7 @@ body.app-slava-restraint :is(h1, h2, h3, h4, h5, h6, [data-focus-line], [data-li
   outline: none !important;
 }
 
-/* PR #204 round 18h (GM r38 3d): when a notice that held focus leaves and nothing else can take it,
+/* PR #204 (design): when a notice that held focus leaves and nothing else can take it,
  * focus goes to the start of the page (the canvas, a screen's <main>) only so it never drops to
  * <body> (lib/noticeLeave FOCUS_START_ATTR, set until it blurs). No ring marks that, unless a
  * keyboard decision put it there (data-focus-decided, ProposalBar): that one keeps the ring below. */
@@ -424,7 +424,7 @@ body.app-slava-restraint [data-focus-start]:not([data-focus-decided]):focus-visi
   outline: none !important;
 }
 
-/* The canvas itself with keyboard focus (round 3l, GM r69 Q2): it fills the
+/* The canvas itself with keyboard focus (design): it fills the
  * window, so the baseline ring, drawn outside its box, was clipped away and
  * Tab arrival showed nothing. The token ring goes inside its edge instead.
  * A keyboard Accept or Reject that leaves focus on the canvas shows the
@@ -734,17 +734,17 @@ body.app-slava-restraint .node-inspector-popover__foot {
   padding: 0 var(--sr-space-3) var(--sr-space-3);
 }
 
-/* GM r87 (#226): while the body can scroll further down, a 1 px hairline in
+/* Design, PR #226: while the body can scroll further down, a 1 px hairline in
    the border token sits on the foot row's top edge, gone at the end. The
    12 px fade alone shows nothing when the cut falls between fields. It comes
    on the pop spring and goes on the soft one (lib/springs.ts, set on the foot
    by NodeInspectorPopover.tsx). When it shows is decided there and written as
-   the foot's data-more-below: off through the open (GM r92: every image
+   the foot's data-more-below: off through the open (design: every image
    complete and 2 stable frames, 300 ms at most), and held at its state while
-   a height spring runs (GM r98: on stays on, off stays off), then read again
+   a height spring runs (design: on stays on, off stays off), then read again
    when the spring rests. A held state, never a hide, so a line that's on
    doesn't blink when content grows under a scrolled panel. Pinned or not:
-   wherever a body scrolls, it's the same cue (r92 Q2). */
+   wherever a body scrolls, it's the same cue. */
 body.app-slava-restraint .node-inspector-popover__foot::before {
   content: '';
   position: absolute;
@@ -837,7 +837,7 @@ body.app-slava-restraint .context-menu__item:is(:disabled, [aria-disabled='true'
   opacity: var(--sr-disabled-opacity-strong);
 }
 
-/* Fix round 5 of PR #200 (review 5 N-4, GM r7 answer 2): every Delete hovers
+/* Design, PR #200: every Delete hovers
    to the danger red (#ff887d), pressed #ff9a91; orange is never destructive. */
 body.app-slava-restraint .context-menu__item--danger:hover:not(:disabled) {
   background: var(--sr-danger-tint);
@@ -1213,7 +1213,7 @@ body.app-slava-restraint .chat__tool-output {
 }
 
 /* Enabled: the normal ink with its outline, clearly apart from the
-   disabled grey (GM 2026-10-28 answer 2; review 2 M-1: at ink-light it read
+   disabled grey (design, 2026-10-28: at ink-light it used to read
    the same enabled and disabled). */
 body.app-slava-restraint .chat__codeblock-apply {
   border-top: 1px solid var(--sr-edge);
@@ -1245,7 +1245,7 @@ body.app-slava-restraint .chat__system--error {
   color: var(--sr-error);
 }
 
-/* GM, Q116 a: a person-only refusal in the chat: GM's line, the agents' text
+/* Design: a person-only refusal in the chat: the approved line, the agents' text
    behind the shared collapsed Details toggle under it. */
 body.app-slava-restraint .chat__system-details summary {
   width: fit-content;
@@ -1848,8 +1848,8 @@ body.app-slava-restraint .toolbar__button--executing .toolbar__icon {
   opacity: 0;
 }
 
-/* GM r17 (A): the dots sit in the icon's own slot, a fixed box left of the
-   label, so "Stop" never moves and is never covered. GM r18 (G4): the slot
+/* Design: the dots sit in the icon's own slot, a fixed box left of the
+   label, so "Stop" never moves and is never covered. Design: the slot
    is Run's 16px, so the label doesn't shift when Run and Stop swap. The 19px
    matrix is scaled to 14px and centred in it: (16 - 14) / 2 on each side. */
 body.app-slava-restraint .toolbar__icon-slot {
@@ -2060,7 +2060,7 @@ body.app-slava-restraint .inspector__empty-status {
   text-transform: lowercase;
 }
 
-/* GM PR #205 r11 item 3: the line under "N nodes selected", a sentence in
+/* Design, PR #205: the line under "N nodes selected", a sentence in
  * the UI face that wraps, not the lowercase status mark. */
 body.app-slava-restraint .inspector__empty-line {
   position: relative;
@@ -2148,7 +2148,7 @@ body.app-slava-restraint .inspector__favorite-button {
 
 /* An off star brightens in neutral ink on hover, as the other icon buttons
    do; only the on state is the accent, hovered or not, so hover never looks
-   like "on" (GM r17 item 1, review 10 LOW-1 of PR #200). */
+   like "on" (design, PR #200). */
 body.app-slava-restraint .inspector__favorite-button:hover:not(.inspector__favorite-button--active) {
   color: var(--sr-ink-bold);
 }
@@ -2232,7 +2232,7 @@ body.app-slava-restraint .inspector__info-meta {
 }
 
 body.app-slava-restraint .inspector__file-button,
-/* The normal ink (review 2 M-1): at ink-light (0.55) it read the same as
+/* The normal ink: at ink-light (0.55) it used to read the same as
    the shared disabled grey. */
 body.app-slava-restraint .inspector__action-button {
   min-height: var(--sr-control-h-md);
@@ -2260,7 +2260,7 @@ body.app-slava-restraint .inspector__action-button:hover:not(:disabled) {
   color: var(--sr-ink-bold);
 }
 
-/* Fix round 5 of PR #200 (review 5 N-4, GM r7 answer 2): every Delete hovers
+/* Design, PR #200: every Delete hovers
    to the danger red (#ff887d), pressed #ff9a91; orange is never destructive. */
 body.app-slava-restraint .inspector__action-button--danger:hover:not(:disabled) {
   border-color: var(--sr-danger-edge);
@@ -2307,10 +2307,10 @@ body.app-slava-restraint .inspector__palette-pending {
   font-size: var(--sr-type-body);
 }
 
-/* Fix round 5 of PR #200 (review 5 LOW-2, GM r7): the palette × is a
+/* Design, PR #200: the palette × is a
    control the lock greys, so its enabled ink is above the shared grey
    (it was --sr-ink-faint, dimmer than its own disabled look). It hovers
-   neutral, the ghost hover (GM r12, reversing round 6's red: a × that takes
+   neutral, the ghost hover (design: a × that takes
    a swatch out of the palette is an edit, never red, never the accent). */
 body.app-slava-restraint .inspector__palette-remove {
   color: var(--sr-ink);
@@ -2326,7 +2326,7 @@ body.app-slava-restraint .inspector__palette-remove:hover:not(:disabled, [aria-d
  * Toolbar — translucent node-radius surface (keeps default position)
  * ───────────────────────────────────────────────────────────────────── */
 body.app-slava-restraint .toolbar {
-  /* Lasting chrome: under the proposal bar (--sr-layer-proposal, GM r10). */
+  /* Lasting chrome: under the proposal bar (--sr-layer-proposal, design). */
   z-index: var(--sr-layer-ambient);
   bottom: var(--sr-space-6);
   background: var(--sr-glass-raised);
@@ -2437,10 +2437,10 @@ body.app-slava-restraint .toolbar__button--active .toolbar__icon {
   color: rgba(255, 255, 255, 0.96);
   filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.18));
 }
-/* GM r18 (PR #200 fix round 12): these three neutral controls had no
+/* Design, PR #200: these three neutral controls had no
    pressed state, so a held press looked like hover. They take the toolbar's
    press: scale down fast on press, ease back on release. The release lives
-   in the base rule (review 12 NIT-1: with it only in :active, the scale
+   in the base rule (with it only in :active, the scale
    snapped back), the toolbar's 220ms spring, with each control's own
    colour, background, border, shadow and opacity fades. */
 body.app-slava-restraint .editor-transport__btn.editor-transport__zoom-reset,
@@ -2611,7 +2611,7 @@ body.app-slava-restraint .panel-launcher:active {
  * small today (time/source/message), so Slava expresses status through a
  * subtle signal strip, source dots, and restrained mono metadata.
  * ───────────────────────────────────────────────────────────────────── */
-/* Its layer follows its state (GM, PR #203 r13 item 3; the rule beside
+/* Its layer follows its state (design, PR #203; the rule beside
  * --sr-layer-proposal): collapsed, the default chip, it is lasting chrome
  * and sits under the proposal bar; expanded, the person opened it, so it
  * draws over the bar, and drops back under when collapsed. */
@@ -2666,7 +2666,7 @@ body.app-slava-restraint .agent-log__hide:focus-visible {
 }
 
 /* The "hidden" notice is the log's chrome, not one of the notices above
- * dialogs: ambient, under the proposal bar (GM, PR #203 r13). */
+ * dialogs: ambient, under the proposal bar (design, PR #203). */
 body.app-slava-restraint .agent-log-hidden-notice {
   z-index: var(--sr-layer-ambient);
   background: var(--sr-glass);
@@ -2877,8 +2877,8 @@ body.app-slava-restraint .agent-log__empty-status {
 body.app-slava-restraint .agent-log__entry {
   --agent-log-source-color: var(--sr-ink-meta);
   display: grid;
-  /* The time takes its own width and never wraps ("03:46:22 PM", GM, round
-     17 of PR #195 and PR #198 r2); it is zero-padded and tabular, so every
+  /* The time takes its own width and never wraps ("03:46:22 PM", design,
+     PR #195 and PR #198); it is zero-padded and tabular, so every
      row's time column is the same width. */
   grid-template-columns: 8px max-content 70px 1fr;
   gap: 8px;
@@ -2939,7 +2939,7 @@ body.app-slava-restraint .agent-log__msg {
 }
 
 /* A neutral line, in the muted colour, never the error colour (a run that
-   waited with its agent's proposal slots full: GM - Design, 2026-10-31). */
+   waited with its agent's proposal slots full: design, 2026-10-31). */
 body.app-slava-restraint .agent-log__entry--muted .agent-log__msg {
   color: var(--sr-ink-light);
 }
@@ -4269,14 +4269,14 @@ body.app-slava-restraint .model-node__error-details summary {
 }
 
 /* An agent's run stopped at a node only the person may run: a stop by
-   design, not a failure (GM, PR #203 r39 item 1). The notice style: the
+   design, not a failure (design, PR #203). The notice style: the
    card's muted text on the neutral notice fill, never the error or warning colour. */
 body.app-slava-restraint .model-node__error--waiting {
   color: var(--sr-ink-light);
   background: var(--sr-surface-control);
 }
 /* A missing key reads the same way: something to do, not a failure (copy
-   sweep item 12; NodeError `missingKey`). */
+   sweep; NodeError `missingKey`). */
 body.app-slava-restraint .model-node__error--key {
   color: var(--sr-ink-light);
   background: var(--sr-surface-control);
@@ -4293,7 +4293,7 @@ body.app-slava-restraint .model-node__error--waiting .failure-lines__heading {
  * ───────────────────────────────────────────────────────────────────── */
 body.app-slava-restraint .canvas-tabs-wrap {
   top: var(--sr-space-6);
-  /* Lasting chrome: under the proposal bar (--sr-layer-proposal, GM r10). */
+  /* Lasting chrome: under the proposal bar (--sr-layer-proposal, design). */
   z-index: var(--sr-layer-ambient);
   gap: 6px;
 }
@@ -4307,7 +4307,7 @@ body.app-slava-restraint .canvas-tabs-wrap[data-following] {
   z-index: 1002;
 }
 
-/* GM r9 item 2 and r10 (PR #203 round 6): with a proposal showing and no
+/* Design, PR #203: with a proposal showing and no
    modal open, the following bar is lasting chrome like the rest of the
    tabs, so where it meets the proposal bar, the proposal bar (a decision
    with a clock) is on top. A modal open (the mask painter) keeps the raise
@@ -4759,7 +4759,7 @@ body.app-slava-restraint .editor-transport__range:disabled {
   opacity: var(--sr-disabled-opacity);
 }
 
-/* GM r18: offline (or with no clips) Trim, Speed, Cut and Vol and the clip
+/* Design: offline (or with no clips) Trim, Speed, Cut and Vol and the clip
    presets read as disabled, like the transport's other buttons. */
 body.app-slava-restraint .editor-transport__tool:disabled,
 body.app-slava-restraint .editor-transport__preset:disabled {
@@ -4767,7 +4767,7 @@ body.app-slava-restraint .editor-transport__preset:disabled {
   cursor: not-allowed;
 }
 
-/* GM r18: a disabled Render Preview or Export is the neutral disabled style,
+/* Design: a disabled Render Preview or Export is the neutral disabled style,
    with no accent outline. Orange only ever means "you can press this". */
 body.app-slava-restraint .editor-transport__btn--render:disabled {
   border-color: var(--sr-edge);
@@ -4919,8 +4919,8 @@ body.app-slava-restraint .editor-tl__playhead {
 /* ─────────────────────────────────────────────────────────────────────
  * Selection + scrollbars
  * ───────────────────────────────────────────────────────────────────── */
-/* Text selection keeps the platform's own colour (fix round 1 of PR #200,
-   GM bug 2): the accent means "you can press this", never "selected". */
+/* Text selection keeps the platform's own colour (design, PR #200):
+   the accent means "you can press this", never "selected". */
 
 body.app-slava-restraint ::-webkit-scrollbar {
   width: 8px;

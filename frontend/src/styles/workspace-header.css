@@ -25,7 +25,7 @@ body.app-slava-restraint .workspace-header__identity {
   min-width: 0;
 }
 /* One line, cut with an ellipsis when the header is narrow: it never breaks
-   inside a word (GM, #210 r1: "Moodbo / ard" at a narrow window). */
+   inside a word (design, PR #210: "Moodbo / ard" at a narrow window). */
 body.app-slava-restraint .workspace-header__title {
   flex: 0 1 auto;
   min-width: 0;
@@ -88,7 +88,7 @@ body.app-slava-restraint .workspace-header__back:disabled {
   cursor: not-allowed;
   opacity: var(--sr-disabled-opacity-strong);
 }
-/* The title takes focus only from code (tabindex -1): no ring (slava-restraint.css, round 18g). */
+/* The title takes focus only from code (tabindex -1): no ring (slava-restraint.css, design, PR #204). */
 body.app-slava-restraint .workspace-header__back:focus-visible {
   outline: var(--sr-focus-outline);
   outline-offset: var(--sr-focus-offset);
@@ -112,11 +112,11 @@ body.app-slava-restraint .editor-view__empty-message {
   color: var(--sr-ink-light);
 }
 /* The offline banner is a row of every studio's layout right under its top
-   header (GM, PR #198 r2; components/StudioOfflineRow.tsx): a track that is
+   header (design, PR #198; components/StudioOfflineRow.tsx): a track that is
    0 tall until the row opens, so it pushes the content down instead of
    covering it. Each studio's grid, and each variant's (Moodboard Studio's
    Board view), names its `offline` row in that studio's own stylesheet, the
-   one place its template is written (fix/moodboard-board-layout: a generic
+   one place its template is written (PR #209: a generic
    template here overrode the Board view's, and its canvas and panel fell into
    implicit tracks; tests/studioGridAreas.test.ts).
    The video editor is a flex column with a 10px gap (16px when empty): the
@@ -140,7 +140,7 @@ body.app-slava-restraint .editor-view--empty > .studio-offline-row[data-open='tr
   body.app-slava-restraint .workspace-header.workspace-header--canvas { padding: 5px 10px; gap: 8px; }
 }
 
-/* The Updates corner (Q107 a): while the chip shows, the header keeps the
+/* The Updates corner: while the chip shows, the header keeps the
  * chip's width in its right padding, so its own controls wrap inside the rest
  * and never under the chip, and the slot the chip centres on is pinned to the
  * first row's right end (components/agent-notes). A flex-item slot wrapped
@@ -156,7 +156,7 @@ body.app-slava-restraint.agent-notes-shown .workspace-header.workspace-header--u
 }
 
 /* A studio that couldn't render (components/StudioBoundary.tsx): its header
-   and offline row stay (GM, PR #198 r3 b), and the line takes the body. */
+   and offline row stay (design, PR #198), and the line takes the body. */
 body.app-slava-restraint .studio-boundary {
   position: fixed;
   inset: 0;

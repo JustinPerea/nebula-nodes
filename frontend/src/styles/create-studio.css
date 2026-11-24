@@ -1,6 +1,6 @@
-/* The whole grid, in this one place (fix/moodboard-board-layout,
+/* The whole grid, in this one place (PR #209,
    tests/studioGridAreas.test.ts), the offline row included: right under the
-   top header, 0 tall until it opens (GM, PR #198 r2; StudioOfflineRow). */
+   top header, 0 tall until it opens (design, PR #198; StudioOfflineRow). */
 body.app-slava-restraint .create-view {
   position: fixed;
   inset: 0;
@@ -192,7 +192,7 @@ body.app-slava-restraint .create-composer__generate {
 }
 body.app-slava-restraint .create-composer__generate:disabled { opacity: 0.45; cursor: not-allowed; }
 /* Disabled for any reason, the one neutral disabled look
-   (styles/disabled-buttons.css, GM r24 item 2), never orange. */
+   (styles/disabled-buttons.css, design), never orange. */
 
 @media (max-width: 640px), (max-height: 540px) {
   body.app-slava-restraint .create-view__stage { padding: 10px 12px; }

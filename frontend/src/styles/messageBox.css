@@ -1,11 +1,11 @@
 /*
- * The Message box in the Agent log (GM - Design r50, r55, r61): the
+ * The Message box in the Agent log (design): the
  * collapsed bar's preview and composer, and the expanded thread with the
  * composer at its foot. The log's height follows its content here, growing
  * to at most half the viewport, until the person drags its handle (design);
  * then their height (inline, data-sized) wins until a double-click.
  * AgentLog writes the height it has with no give to --agent-log-h for the
- * docked chat above it. #216's rules hold: folded for the proposal card it
+ * docked chat above it. PR #216's rules hold: folded for the proposal card it
  * is its header's height, and it is bounded by the shown height only while
  * a give is in force (layouts.css). Motion: the layout spring
  * (--agent-log-spring) only; reduced motion jumps.
@@ -23,9 +23,9 @@
   transition: height 420ms var(--agent-log-spring);
 }
 
-/* Collapsed by the person, it is its header, the preview and the composer
-   (r50), whatever height the person gave it open; folded for the card it
-   stays its header's height (layouts.css, #216 review 3 MEDIUM-1). */
+/* Collapsed by the person, it is its header, the preview and the composer,
+   whatever height the person gave it open; folded for the card it
+   stays its header's height (layouts.css, PR #216). */
 .agent-log.agent-log--messaging:not(.agent-log--open):not([data-card-collapsed]) {
   height: auto !important;
 }
@@ -37,7 +37,7 @@
 }
 
 /* Following its content, open: no shorter than the open log's token, unless
-   a give takes it lower (#216 r6), and no taller than half the viewport;
+   a give takes it lower (PR #216), and no taller than half the viewport;
    while a give is in force, the shown height bounds it. */
 .agent-log.agent-log--messaging.agent-log--open:not([data-sized]) {
   min-height: min(var(--agent-h-open), var(--agent-log-shown-h, var(--agent-h-open)));
@@ -49,11 +49,11 @@
   transition: --agent-log-give 420ms var(--agent-log-spring), height 420ms var(--agent-log-spring);
 }
 
-/* The person's height wins over the content's (r61 answer 1): up to the
+/* The person's height wins over the content's: up to the
    viewport less the top chrome (AgentLog clamps it), bounded by the shown
    height only while a give is in force. A drag counts from the press, so
-   the first drag already tracks the pointer past half the viewport (#225
-   review 3 live LOW-1). */
+   the first drag already tracks the pointer past half the viewport
+   (PR #225). */
 .agent-log.agent-log--messaging.agent-log--open[data-sized][data-docked],
 .agent-log.agent-log--messaging.agent-log--open[data-sized][data-floating],
 .agent-log.agent-log--messaging.agent-log--open[data-resizing][data-docked],
@@ -71,7 +71,7 @@
   transition: none;
 }
 
-/* -- the resize handle (r61 answer 1) ---------------------------------------- */
+/* -- the resize handle --------------------------------------------------- */
 
 .agent-log__resize {
   position: absolute;
@@ -191,7 +191,7 @@
   min-height: 0;
   overflow-y: auto;
   /* The thread keeps its own bottom (MessageThread's observer): the
-     browser's scroll anchoring would move it on a reflow (live-ux L2). */
+     browser's scroll anchoring would move it on a reflow. */
   overflow-anchor: none;
 }
 
@@ -209,7 +209,7 @@
   margin-bottom: 4px;
 }
 
-/* GM r108 D2: Open on a reply's Update focuses the reply's row. Its ring is
+/* Design: Open on a reply's Update focuses the reply's row. Its ring is
    drawn inside the row (a negative offset as wide as the ring), so the
    thread's scroll area never clips it and it never reaches the header; the
    scroll margin keeps it clear of the scroll fade when it is brought in. */
@@ -283,7 +283,7 @@
   margin-top: 8px;
 }
 
-/* r61 answer 4: an answered question's quiet line. */
+/* An answered question's quiet line. */
 .message-box__answered {
   margin: 8px 0 0;
   color: var(--sr-ink-light);
@@ -291,9 +291,9 @@
   line-height: var(--sr-line-body, 1.45);
 }
 
-/* GM r70: "You answered “…”." on one line; the words are cut, and the
+/* Design: "You answered “…”." on one line; the words are cut, and the
    ellipsis sits inside the curly quotes (the closing quote and the full
-   stop always show). GM r73: the cut is at a word (MessageBox's
+   stop always show). Design: the cut is at a word (MessageBox's
    useWordCut, the chip's cut too); the ellipsis below only catches one
    word too long for the line. */
 .message-box__answered--typed {
@@ -309,7 +309,7 @@
   white-space: nowrap;
 }
 
-/* GM r117: a status line swapped for another moves the row's height on the
+/* Design: a status line swapped for another moves the row's height on the
    layout spring, as the box's own height does; reduced motion jumps. The
    gap above the line is padding (inside the measured height), not margin. */
 .message-box__status-wrap {
@@ -366,7 +366,7 @@
   transition: transform 220ms var(--agent-log-spring);
 }
 
-/* r61 A, GM r70: the run's status leads its fold ("› Claude is working ·
+/* Design: the run's status leads its fold ("› Claude is working ·
    …") in the same bordered chip the settled "› 2 actions" is: only the
    words and the breathing dot (in the session's shade) change, so the row
    doesn't move when the reply lands. No rule here may tell the two apart. */
@@ -375,7 +375,7 @@
   margin: 0 2px;
 }
 
-/* GM r89.5: the chip's words are cut at a word (MessageBox's useWordCut, the
+/* Design: the chip's words are cut at a word (MessageBox's useWordCut, the
    shared cut); the ellipsis and any closers ("on “Hero…”") sit after the
    measured words, so they always show. */
 .message-box__fold-text {
@@ -508,7 +508,7 @@
 }
 
 /* "Answering “<the question>”": the question is cut to the chip's one line
-   at a word (GM r73, MessageBox's useWordCut), and its closing quote stays. */
+   at a word (design, MessageBox's useWordCut), and its closing quote stays. */
 .message-box__context--answering .message-box__context-label {
   display: inline-flex;
   min-width: 0;
@@ -552,7 +552,7 @@
 .message-box__field {
   flex: 1 1 auto;
   min-width: 0;
-  /* Five lines, then it scrolls (r50). */
+  /* Five lines, then it scrolls. */
   max-height: calc(5 * 1.45 * 13px + 8px);
   padding: 4px 0;
   border: none;
@@ -574,7 +574,7 @@
   color: var(--sr-ink-light, rgba(255, 255, 255, 0.55));
 }
 
-/* r61 B: locked, the composer looks locked: its chrome (the border and the
+/* Locked, the composer looks locked: its chrome (the border and the
    placeholder, and the "/" key) dims as the locked opener's does, at the
    disabled opacity; the lock line under it stays at full strength, and the
    field stays focusable (aria-disabled, described by the line). The border
@@ -640,7 +640,7 @@
   color: var(--sr-ink-light, rgba(255, 255, 255, 0.55));
   font-size: var(--sr-type-body, 12px);
   line-height: var(--sr-line-body, 1.45);
-  /* GM r70: the field's describedby lines never end on one word ("here."). */
+  /* Design: the field's describedby lines never end on one word ("here."). */
   text-wrap: pretty;
 }
 
@@ -751,7 +751,7 @@
   }
 }
 
-/* GM r70: the header's meta names the latest agent by its cursor label
+/* Design: the header's meta names the latest agent by its cursor label
    ("Claude", "Claude · 2") in its own case; the telemetry's state words
    ("standby", "streaming") stay lowercase (slava-restraint.css). */
 .agent-log__telemetry .agent-log__status--name {

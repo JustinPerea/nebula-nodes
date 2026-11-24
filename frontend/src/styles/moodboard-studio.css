@@ -1,12 +1,12 @@
 @import './moodboard-swatches.css';
 
 /* The List view: its frame, paint and grid, in this one place, the offline
-   row included (right under the top header, 0 tall until it opens: GM, PR
-   #198 r2; StudioOfflineRow). The Board view writes all of its own in
+   row included (right under the top header, 0 tall until it opens: design,
+   PR #198; StudioOfflineRow). The Board view writes all of its own in
    moodboard-board.css; the :not() keeps the two from ever matching the same
-   element, so neither has to outrank the other (fix/moodboard-board-layout:
+   element, so neither has to outrank the other (PR #209:
    a generic template that did outrank the Board view's dropped its canvas
-   and panel into implicit tracks, and review 1 LOW-2: a shared frame rule
+   and panel into implicit tracks, and its review found a shared frame rule
    here painted the Board root under the skin, so its --mb-board-* tokens
    did nothing; tests/studioGridAreas.test.ts). */
 body.app-slava-restraint .moodboard-studio-view:not(.moodboard-studio-view--board) {
@@ -60,7 +60,7 @@ body.app-slava-restraint .moodboard-analysis button:hover {
   color: #f59e0b;
 }
 
-/* GM r13: deleting a board deletes a standalone thing, so red, never the
+/* Design: deleting a board deletes a standalone thing, so red, never the
    amber every other toolbar button hovers. */
 body.app-slava-restraint .moodboard-studio-toolbar__button--delete:hover:not(:disabled) {
   border-color: var(--sr-danger-ink, #ff887d);
@@ -152,7 +152,7 @@ body.app-slava-restraint .moodboard-studio-view__main {
 }
 
 /* The bottom spacer that holds a panel scrolled to the bottom in place when
-   Analyze clears the "old colors" lines (GM r6 on #208, item 4;
+   Analyze clears the "old colors" lines (design, PR #208;
    useHoldBottom.ts). Hidden, so it takes no gap, until it holds. Not visual,
    so it is unscoped: the board panel and the list both have it. */
 .moodboard-hold-spacer {
@@ -173,7 +173,7 @@ body.app-slava-restraint .moodboard-analysis__empty {
 
 /* A line's fill is a tint (--mb-notice-fill, each kind sets its own), drawn
    over what is behind it. In the List that is the panel. On the board it is
-   the canvas, and a line there can sit over cards (#210 round 6s, GM r105 3),
+   the canvas, and a line there can sit over cards (design, PR #210),
    so the board's lines lay the same tint over the canvas colour: one solid
    surface, the colour the line has over the empty canvas (the rule below;
    tests/moodboardNoticeSurface.test.ts). */
@@ -198,7 +198,7 @@ body.app-slava-restraint :is(.moodboard-studio__notice--warn, .moodboard-studio_
   color: var(--sr-warning);
 }
 
-/* GM r12 1 (PR #210): a board's send that failed on reconnect lost nothing
+/* Design, PR #210: a board's send that failed on reconnect lost nothing
    (it waits in the draft), so its line is neutral, colour included: PR #204's
    because-line look (neutral ink, control fill, strong edge). The header chip
    reads "Not saved" in the same neutral ink. */
@@ -207,7 +207,7 @@ body.app-slava-restraint .moodboard-studio__notice--neutral {
   color: var(--sr-ink-light);
 }
 
-/* Round 6j (GM r18): a line with its own action (Restore for a deleted
+/* Design: a line with its own action (Restore for a deleted
    board's kept edit) keeps the button at the line's end. */
 body.app-slava-restraint .moodboard-studio__notice--action {
   display: flex;
@@ -217,14 +217,14 @@ body.app-slava-restraint .moodboard-studio__notice--action {
 }
 
 /* Its resting ink and edge said here too (they are the toolbar button's), so the
-   shared paused look's contrast check (disabled-buttons.css, round 6q) reads them. */
+   shared paused look's contrast check (disabled-buttons.css) reads them. */
 body.app-slava-restraint .moodboard-studio__notice-action {
   flex: none;
   border-color: var(--sr-edge);
   color: var(--sr-ink);
 }
 
-/* Round 6k (GM r19 1): the red line for a board deleted for good closes by
+/* Design: the red line for a board deleted for good closes by
    its × (its edit is already gone). As the trash toast's ×, in the line's ink. */
 body.app-slava-restraint .moodboard-studio__notice-close {
   display: grid;
@@ -388,7 +388,7 @@ body.app-slava-restraint .moodboard-tile__image {
   background: rgba(0, 0, 0, 0.22);
 }
 
-/* A file still uploading (GM, #210): its row is its own status, its thumb
+/* A file still uploading (design, PR #210): its row is its own status, its thumb
    the board's placeholder look (white 0.06, a 1 px dashed edge at 0.28, the
    file's name top-left at 12 px), and "Uploading" where the controls go. */
 body.app-slava-restraint .moodboard-tile__upload {
@@ -662,7 +662,7 @@ body.app-slava-restraint .moodboard-analysis .moodboard-chip button {
   line-height: 1;
 }
 
-/* GM r12: a chip's × is an edit, so neutral, the same as a Commons
+/* Design: a chip's × is an edit, so neutral, the same as a Commons
    keyword chip's (commons.css). */
 body.app-slava-restraint .moodboard-chip .moodboard-chip__remove:hover {
   border-color: transparent;

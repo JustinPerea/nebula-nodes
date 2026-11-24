@@ -14,7 +14,7 @@ body.app-slava-restraint .cinema-scene-node {
   cursor: default;
 }
 
-/* GM r7 item 2: one selection style. The scene card is selected as every
+/* Design: one selection style. The scene card is selected as every
  * model card is (slava-restraint.css, .model-node--selected .model-node__card):
  * its category colour (--node-category-color, set on the card by
  * CinemaSceneNode.tsx) and the same breathing ring. Orange (--sr-accent) is
@@ -156,10 +156,10 @@ body.app-slava-restraint .cinema-scene-node__shot-label {
   padding-right: 6px;
 }
 
-/* Edits on screen that the backend didn't take (GM, PR #198 r6 item 1).
-   GM r9: "Unsaved", small, on its own row under the header, so it never
+/* Edits on screen that the backend didn't take (design, PR #198).
+   Design: "Unsaved", small, on its own row under the header, so it never
    wraps the card's name; its tooltip says why. The name truncates first if
-   a badge crowds it (PR #198 review 6, L8). */
+   a badge crowds it (PR #198). */
 body.app-slava-restraint .cinema-scene-node__name {
   min-width: 0;
   overflow: hidden;
@@ -181,7 +181,7 @@ body.app-slava-restraint .cinema-scene-node__unsaved {
   cursor: help;
 }
 
-/* GM r12 item 1: a stopped save's mark is a button that opens its line with
+/* Design: a stopped save's mark is a button that opens its line with
    [Try again]; it looks like the mark it was. */
 body.app-slava-restraint .cinema-scene-node__unsaved--button {
   padding: 0;

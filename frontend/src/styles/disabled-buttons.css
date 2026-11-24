@@ -1,12 +1,12 @@
-/* GM - Design, r24 item 2 (2026-10-27, the follow-up to PR #195), and PR
-   #200's answer 6 with its 2026-10-27 follow-up: one disabled colour
+/* Design, 2026-10-27 (the follow-up to PR #195), and PR #200's design
+   answer with its 2026-10-27 follow-up: one disabled colour
    treatment, app-wide. A disabled button is neutral grey whatever the
    reason (following an agent's switch, offline, a run limit, a missing
    reference, nothing to send); its tooltip gives the reason. Never orange
    but disabled.
 
-   One colour treatment, not one shape. Since round 25 of PR #198 (GM r37,
-   option c) the two list rules read GM r33's token set (slava-restraint.css),
+   One colour treatment, not one shape. Since a later round of PR #198 the
+   two list rules read the shared token set (slava-restraint.css),
    so a button looks the same disabled whatever the reason (following,
    offline, a run, a hold):
    - A filled button: the grey fill (--disabled-fill, white at 0.42) with a
@@ -32,29 +32,28 @@
    their studio's chunk); the disabled look wins over each of them, its
    hover included. PR #198's [data-offline-neutral] says the same for its
    offline actions. A Studio line's own action (.moodboard-studio__notice-action:
-   Restore project, aria-disabled offline so it keeps focus, #210 round 6q,
-   GM r95) is an outline button, so it is in the first list. */
+   Restore project, aria-disabled offline so it keeps focus, design,
+   PR #210) is an outline button, so it is in the first list. */
 :root {
   /* white at 0.55 (--sr-ink-light): 6.3:1 on the canvas's black, 5.6:1 on
      the grey fill below; an enabled label (--sr-ink, 0.92) is 17.6:1. One
-     shared grey (GM 2026-10-28 answer 2): every listed control's enabled
+     shared grey (design, 2026-10-28): every listed control's enabled
      label is brighter (the dim ones were raised to --sr-ink), which
-     tests/agentPresenceFollowups.ratchet M-1 measures. */
+     tests/agentPresenceFollowups.ratchet.test.ts measures. */
   --sr-disabled-ink: rgba(255, 255, 255, 0.55);
   --sr-disabled-fill: rgba(255, 255, 255, 0.1);
   /* The outline of a disabled ghost or outline button: neutral, and never
-     brighter than that button's enabled edge (GM 2026-10-28 answer 3). The
+     brighter than that button's enabled edge (design, 2026-10-28). The
      plain edge (--sr-edge, 0.06) is the faintest any listed button has
-     enabled; 0.12 doubled Cinema's outlines when they went disabled (review
-     2 M-1). */
+     enabled; 0.12 doubled Cinema's outlines when they went disabled. */
   --sr-disabled-edge: rgba(255, 255, 255, 0.06);
   /* An enabled danger label (the selection toolbar's Delete, a dialog's
-     destructive action). GM, PR #200 round 5 answer 2: a true red (hue 5°,
+     destructive action). Design, PR #200: a true red (hue 5°,
      full saturation, as #ff7b6e), only its lightness raised until it sits
      about 8:1, clearly above the shared grey's 6.2:1. #ff887d: 8.03:1 on the
      toolbar's surface (rgba(20, 20, 22, 0.94) over the canvas), 8.75:1 on a
      dialog (--sr-canvas-elevated); the grey is 6.19:1 and 6.26:1 there.
-     Fix round 3's #ffa395 (9.7:1, hue 8°, lighter) read salmon. Hover is
+     An earlier #ffa395 (9.7:1, hue 8°, lighter) read salmon. Hover is
      brighter: #ff9a91 (L 78%, same hue), over the red tint. */
   --sr-danger: #ff887d;
   --sr-danger-hover: #ff9a91;
@@ -66,15 +65,15 @@
   --sr-danger-ink: var(--sr-danger);
   --sr-danger-ink-hover: var(--sr-danger-hover);
   /* A filled destructive confirm (home's Delete, Delete forever, "Continue
-     without them"): the same red as a fill, near-black ink on it (fix round 6
-     of PR #200, GM r8: replaces round 2's white on the accent). #1f1f1f on
+     without them"): the same red as a fill, near-black ink on it (design,
+     PR #200: replaces the earlier white on the accent). #1f1f1f on
      #ff887d is 7.1:1, on the hover #ff9a91 8.1:1. Orange never marks a
      destructive action. */
   --sr-danger-fill: var(--sr-danger-ink);
   --sr-danger-fill-hover: var(--sr-danger-ink-hover);
   --sr-on-danger: #1f1f1f;
   /* A ghost Delete's hover: the red tint under its #ff887d label, and its
-     edge where it has one (fix round 7 of PR #200, GM r11 answer 3: every
+     edge where it has one (design, PR #200: every
      destructive control reads these tokens; the ratchet's destructive-colour
      check fails on a hard-coded red or orange). */
   --sr-danger-tint: var(--sr-danger-soft);
@@ -85,7 +84,7 @@
    filled style below wins for a button that has both classes (Cinema's
    Generate shot is a .cinema-shot-panel__action too).
    Run History's Rerun, "Retry failed" and "Rerun with latest source"
-   (.run-history__replay) joined in PR #203 round 6 (GM r9 item 1): a key
+   (.run-history__replay) joined in PR #203 (design): a key
    lock gives them aria-disabled, and their own sheet's slava ink kept the
    enabled white label. */
 :is(
@@ -169,7 +168,7 @@
   opacity: 1 !important;
 }
 
-/* The command palette's rows (GM PR #205 r2 item 3): a locked row keeps
+/* The command palette's rows (design, PR #205): a locked row keeps
    its place and its keyboard highlight; its title and its lock line (the
    row's own secondary text) take the shared grey, with no extra dimming. */
 .command-palette__item:is(:disabled, [aria-disabled='true']),
@@ -177,7 +176,7 @@
   color: var(--disabled-label, rgba(255, 255, 255, 0.55)) !important;
   opacity: 1 !important;
 }
-/* In forced colours (GM PR #205 r8 item 4) the shared grey is the system
+/* In forced colours (design, PR #205) the shared grey is the system
    GrayText, so a locked row still reads as locked inside its Highlight
    outline (command-palette.css). */
 @media (forced-colors: active) {
@@ -188,8 +187,8 @@
 }
 
 /* The swatch's × keeps its dark bubble (the chip's own enabled fill) when
-   locked; only the × goes to the shared grey, with no hover change (fix
-   round 5 of PR #200, GM r7 answer 1). After the ghost rule, which clears
+   locked; only the × goes to the shared grey, with no hover change (design,
+   PR #200). After the ghost rule, which clears
    fills. */
 .cinema-shared-controls__swatch-remove:is(:disabled, [aria-disabled='true']),
 .cinema-shared-controls__swatch-remove:is(:disabled, [aria-disabled='true']):hover {
@@ -197,8 +196,8 @@
 }
 
 /* Image-only buttons (Cinema's variation thumbnails): there is no label to
-   grey, so the image is what dims (fix round 3 of PR #200, review 3 M-3; GM's
-   round 3 answer: "dim the thumbnail, and keep the selected one's outline in
+   grey, so the image is what dims (design, PR #200, verbatim: "dim the
+   thumbnail, and keep the selected one's outline in
    the shared grey. That's the disabled look for image-only buttons
    everywhere."). The thumbnail goes greyscale at 0.45, under the shared
    grey's own strength (white at 0.55), and its edge is the disabled edge; a
@@ -216,8 +215,8 @@
 }
 
 /* Colour swatches (Cinema's palette, the Inspector's palette): image-like,
-   with no label to grey (fix round 4 of PR #200, review 4 LOW-3). GM round 5
-   answer 1: they keep their hue, because the colour is the content; the rest
+   with no label to grey (PR #200). Design: they
+   keep their hue, because the colour is the content; the rest
    of the image-only look applies: dimmed to 0.45, the disabled edge, no hover
    change, the default cursor. Clicks are inert already (`disabled`). The
    colour's own swatch edge goes grey too, so the chip reads as a muted value,
@@ -235,7 +234,7 @@
   border-color: var(--sr-disabled-edge, rgba(255, 255, 255, 0.06)) !important;
 }
 
-/* GM r20 on #208: the Inspector palette's chip is the content, so it keeps
+/* Design, PR #208: the Inspector palette's chip is the content, so it keeps
    its full colour disabled (no dimming, no filter); only its chrome, the
    edge, goes to the disabled grey, with the default cursor. The hex field
    and the × dim as above. */
@@ -249,7 +248,7 @@
 }
 
 /* The Inspector palette's hex fields, read-only while "Extracting colors…"
-   shows (GM r17 on #208) or while the canvas is locked: the ghost look the
+   shows (design, PR #208) or while the canvas is locked: the ghost look the
    Add / Extract row has, the label and edge in the shared grey, unfilled. */
 .inspector__palette-hex:is(:disabled, [aria-disabled='true']),
 .inspector__palette-hex:is(:disabled, [aria-disabled='true']):hover {
@@ -261,8 +260,8 @@
   opacity: 1 !important;
 }
 
-/* The Projects cover picker's image buttons, disabled while a change saves
-   (review 4 N-7): the image-only look, as the variations. Their edge is
+/* The Projects cover picker's image buttons, disabled while a change saves:
+   the image-only look, as the variations. Their edge is
    transparent at rest, so it stays so (never brighter disabled); the pinned
    one keeps its mark in the shared grey. */
 :is(.project-home__cover-choice):is(:disabled, [aria-disabled='true']),
@@ -284,10 +283,10 @@
 }
 
 /* The selected one, disabled, keeps its mark: the shared selected outline in
-   the shared grey (review 3 M-3 and LOW-5: offline, the selected variation
+   the shared grey (offline, the selected variation
    and the selected film-look chip looked like the others). The grey (6.2:1)
    stays under the category colour it replaces, so it is never brighter than
-   the enabled outline (GM 2026-10-28 answer 3). After the ghost rule, which
+   the enabled outline (design, 2026-10-28). After the ghost rule, which
    drops box-shadows, so this one wins. */
 :is(.cinema-shot-panel__variation--active):is(:disabled, [aria-disabled='true']),
 :is(.cinema-shot-panel__variation--active):is(:disabled, [aria-disabled='true']):hover {
@@ -351,7 +350,7 @@
   opacity: 1 !important;
   cursor: default !important;
 }
-/* PR #204 round 18c (GM r30 2): a control that waits on a read that failed or hasn't answered
+/* PR #204 (design): a control that waits on a read that failed or hasn't answered
    (the Commons' Add to and Add, `data-not-loaded`) is disabled in the same look as a lock, with
    its own reason in its label. A select whose only value says there is nothing to pick
    ("No collections", `data-no-choice`) shows it in the disabled grey, and stays live. */
@@ -397,10 +396,10 @@ input[type='checkbox'][data-person-lock]:not([data-held-pending])::before {
   box-shadow: none !important;
 }
 
-/* Filled buttons: the accent (orange), the danger red (GM r8: #ff887d), white
+/* Filled buttons: the accent (orange), the danger red (#ff887d), white
    primaries ("Back to …", "New project", the canvas toast's Undo, Redo and
    Open copy) and other solid fills (the mask painter's blue Save): the fill
-   turns neutral grey, its hover included (review 2 M-3). */
+   turns neutral grey, its hover included. */
 :is(
   .cinema-shot-panel__action--primary,
   .create-composer__generate,
@@ -471,11 +470,11 @@ input[type='checkbox'][data-person-lock]:not([data-held-pending])::before {
 
 /* The notice's quiet choice (Use Codex’s, Use theirs) is a ghost button
    that also has the filled class: after the filled rule, so it stays
-   unfilled, its label the ghost grey (GM r33, round 25). */
+   unfilled, its label the ghost grey (design). */
 :is(.canvas-undo-notice__action--quiet):is(:disabled, [aria-disabled='true']:not([data-held-pending])),
 :is(.canvas-undo-notice__action--quiet):is(:disabled, [aria-disabled='true']:not([data-held-pending])):hover {
   background: transparent !important;
-  /* Its own enabled edge, never brighter (GM r33): the quiet choice is
+  /* Its own enabled edge, never brighter (design): the quiet choice is
      outlined at rest, so held it keeps that outline. */
   border-color: rgb(255 255 255 / 0.28) !important;
   color: var(--disabled-label, rgba(255, 255, 255, 0.55)) !important;
@@ -484,7 +483,7 @@ input[type='checkbox'][data-person-lock]:not([data-held-pending])::before {
 /* A ghost control whose label is several lines of its own text (the Agents
    panel's row: name, count, ask line). Disabled, every line takes the
    shared grey, whatever colour each line has enabled; an author's dot keeps
-   its colour, since it says who is asking (GM, PR #204 round 1). List a new
+   its colour, since it says who is asking (design, PR #204). List a new
    multi-line ghost control here, next to its entry in the ghost list above. */
 :is(.agent-roster__row):is(:disabled, [aria-disabled='true']:not([data-held-pending]))
   :not(.agent-notes-dot, .agent-notes-dot *) {
@@ -492,23 +491,23 @@ input[type='checkbox'][data-person-lock]:not([data-held-pending])::before {
 }
 
 /* A text field the canvas lock makes read-only (Cinema's shot prompt): its
-   text and edge in the same grey, no extra dimming (GM answer 1's offline
-   shot read it as live). */
+   text and edge in the same grey, no extra dimming (an offline screenshot
+   showed it read as live). */
 .cinema-shot-panel__prompt:is([data-offline-disabled], [data-following-disabled]) {
   border-color: var(--sr-disabled-edge, rgba(255, 255, 255, 0.12)) !important;
   color: var(--sr-disabled-ink, rgba(255, 255, 255, 0.55)) !important;
   opacity: 1 !important;
 }
 
-/* GM, PR #198 r39 item 1: a checked switch is an on state, not a disabled
+/* Design, PR #198: a checked switch is an on state, not a disabled
    one, so no rule here names it (`:checked`): on reads as on, never as off
-   limits. Its look stays settings.css's until GM's pressed-state sweep.
+   limits. Its look stays settings.css's until the pressed-state sweep.
    Only a switch that is actually locked (disabled: Settings while it saves)
    takes the disabled look, and that look covers the on state too: the grey
    track whether on or off, the thumb in the ghost grey, never the accent
-   (review 2 L-4, "never orange but disabled"), no extra dimming. The thumb
-   keeps its place, so on and off still read apart. GM, PR #205 r1 answer
-   6: a switch saving its own change is held (Settings' SettingsSwitch,
+   ("never orange but disabled"), no extra dimming. The thumb
+   keeps its place, so on and off still read apart. Design, PR #205:
+   a switch saving its own change is held (Settings' SettingsSwitch,
    useHeldLook): its first 150 ms (data-held-pending) keep the enabled look,
    so a quick save never flashes grey; after that this look, the thumb where
    the person put it. */
@@ -525,9 +524,9 @@ body.app-slava-restraint .settings-switch:is(:disabled, [aria-disabled='true']:n
 /* Remotion's anchor cells: empty 18 px buttons with no label, unfilled at
    rest, the chosen one filled. Disabled (the canvas lock's fieldset), they
    stay unfilled with the disabled edge (a grey fill would make every cell
-   brighter than it is enabled; review 3 M-3: no-label buttons get a disabled
+   brighter than it is enabled; no-label buttons get a disabled
    look of their own). After the two list rules, so they find their own
-   first. GM, PR #198 r39 item 1: enabled, the chosen cell keeps
+   first. Design, PR #198: enabled, the chosen cell keeps
    remotion-editor.css's look (no rule here names it unlocked), and locked
    this look covers it as it covers the others. */
 :is(.remotion-properties-panel__anchor-button):is(:disabled, [aria-disabled='true']),
@@ -538,7 +537,7 @@ body.app-slava-restraint .settings-switch:is(:disabled, [aria-disabled='true']:n
   opacity: 1 !important;
 }
 
-/* GM, PR #205 r1 answer 1: which anchor is chosen must stay readable while
+/* Design, PR #205: which anchor is chosen must stay readable while
    locked, so the chosen cell keeps the shared selected mark in the shared
    grey, as the selected variation, film-look chip and cover choice do (the
    switch keeps it by its thumb's place). Unfilled, like every locked cell;
@@ -549,7 +548,7 @@ body.app-slava-restraint .settings-switch:is(:disabled, [aria-disabled='true']:n
   box-shadow: inset 0 0 0 1px var(--sr-disabled-ink, rgba(255, 255, 255, 0.55)) !important;
 }
 
-/* GM r22 on #208 (folded): the palette's × read-only while "Extracting
+/* Design, PR #208: the palette's × read-only while "Extracting
    colors…" shows (aria-disabled, focus kept) has the default cursor and
    snaps to the disabled look, no 120 ms colour fade. */
 :is(.inspector__palette-remove):is(:disabled, [aria-disabled='true']),
@@ -563,7 +562,7 @@ body.app-slava-restraint .settings-switch:is(:disabled, [aria-disabled='true']:n
 }
 
 /* A Run locked by a missing key (lib/runKeyLock.ts keyLockedProps; a keyed
-   route without its key, GM PR #203 r6): aria-disabled, so it keeps
+   route without its key, design, PR #203): aria-disabled, so it keeps
    its focus and its tooltip, in each surface's disabled look above, with one
    cursor on every surface, the canvas lock's (App.css). */
 [data-key-locked] {

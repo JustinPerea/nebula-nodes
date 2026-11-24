@@ -146,7 +146,7 @@ body.app-slava-restraint .settings-hint {
 body.app-slava-restraint .settings-hint + .settings-hint { margin-top: 6px; }
 
 /* A hint that states what the section is doing right now, such as the
-   spending record's hold (GM - Design, 2026-11-14): the ink a row's figure
+   spending record's hold (design, 2026-11-14): the ink a row's figure
    uses, still neutral, the hints' own gap above and 12 px to the card below,
    so it doesn't read as one more paragraph of the fine print. */
 body.app-slava-restraint .settings-hint--state { margin-bottom: 12px; color: var(--sr-ink); }
@@ -243,10 +243,10 @@ body.app-slava-restraint .settings__button--primary:hover:not(:disabled) { filte
 
 body.app-slava-restraint .settings__remove-confirm { display: inline-flex; gap: 6px; }
 
-/* GM r11 answer 3: the Delete red, never the orange. The armed confirm of
+/* Design: the Delete red, never the orange. The armed confirm of
    removing a key or revoking an app: what it removes can't come back by
-   adding again (GM r12's rule), so it is a danger control. */
-/* GM r18 capture 1 (PR #200 fix round 12): an armed confirm is the filled
+   adding again (design: the same rule as the Remove trigger), so it is a danger control. */
+/* Design, PR #200: an armed confirm is the filled
    confirm every destructive confirm uses (the prompt dialog's, the Projects
    and asset-trash confirms): the red fill and near-black ink, the lighter
    fill on hover and pressed. Its trigger stays the ghost that turns red. */
@@ -264,7 +264,7 @@ body.app-slava-restraint .settings__confirm--danger:active:not(:disabled) {
   color: var(--sr-on-danger, #1f1f1f);
 }
 
-/* GM r13: removing a personal agent deletes a standalone thing with its own
+/* Design: removing a personal agent deletes a standalone thing with its own
    settings, so it is red whatever its label says. It has no confirm, so it
    rests neutral like every Settings button and turns red on hover. */
 body.app-slava-restraint .settings__button--danger:hover:not(:disabled) {
@@ -396,7 +396,7 @@ body.app-slava-restraint .settings-row__summary {
   overflow-wrap: break-word;
 }
 
-/* A sentence summary wraps rather than ending in "…" (GM, PR #203 r14 item 1). */
+/* A sentence summary wraps rather than ending in "…" (design, PR #203). */
 body.app-slava-restraint .settings-row__summary--wrap {
   overflow: visible;
   white-space: normal;
@@ -469,7 +469,7 @@ body.app-slava-restraint .settings-row__error {
 }
 
 /* A line that lost nothing (another Nebula is saving the settings): the
-   row's normal muted text, not the error colour (GM, PR #203 r39). */
+   row's normal muted text, not the error colour (design, PR #203). */
 body.app-slava-restraint .settings-row__error--neutral {
   color: var(--sr-ink-light);
 }
@@ -604,7 +604,7 @@ body.app-slava-restraint .settings-apps__head .settings-hint { margin: 0; }
 body.app-slava-restraint .settings-apps code:not(.code-span) { font: var(--sr-type-label) var(--sr-mono); color: var(--sr-ink); }
 /* The name gets its own line; the limit and Create share the next. */
 body.app-slava-restraint .settings-apps__new .settings-model-limit__controls { flex-wrap: wrap; }
-/* GM r14 (5), PR #204 round 9: Connect's lock line, on its own row under the controls, in the
+/* Design, PR #204: Connect's lock line, on its own row under the controls, in the
    held cards' grey (their __held-line). */
 body.app-slava-restraint .settings-apps__held-line {
   grid-column: 1 / -1;
@@ -620,7 +620,7 @@ body.app-slava-restraint .settings-apps__token-row { display: flex; align-items:
 body.app-slava-restraint .settings-apps__token-row .settings-folder__input { flex: 1; height: 28px; }
 body.app-slava-restraint .settings-agent-spent { color: var(--sr-ink); }
 
-/* The daily total (GM - Design, 2026-10-31): the usage line on its own line
+/* The daily total (design, 2026-10-31): the usage line on its own line
    under the help, in the same weight, and right under it a 2 px meter the
    width of the text column, 8 px below, only with a limit and something
    spent. Neutral at every level: a track in the row's border tone behind a
@@ -803,7 +803,7 @@ body.app-slava-restraint .settings-pref {
 body.app-slava-restraint .settings-pref:hover { background: rgba(255, 255, 255, 0.025); }
 body.app-slava-restraint .settings-pref--nested { padding-left: 28px; }
 /* A control too wide to sit beside its help goes under it, at its own width
-   ("Same as chats · No limit": GM - Design, 2026-10-31, never cut off). */
+   ("Same as chats · No limit": design, 2026-10-31, never cut off). */
 body.app-slava-restraint .settings-pref--stacked { grid-template-columns: minmax(0, 1fr); }
 body.app-slava-restraint .settings-pref--stacked > .settings__select { justify-self: start; }
 body.app-slava-restraint .settings__select--fits { max-width: 100%; }
@@ -886,7 +886,7 @@ body.app-slava-restraint .settings-notice-slot {
   pointer-events: none;
 }
 
-/* Round 11: a locked Undo's line wraps under it. */
+/* A locked Undo's line wraps under it. */
 body.app-slava-restraint .settings-notice:has(.person-lock-line) { flex-wrap: wrap; }
 
 body.app-slava-restraint .settings-notice {
@@ -923,7 +923,7 @@ body.app-slava-restraint .settings-notice__undo:focus-visible { outline: var(--s
 }
 
 /* A row that changed section (its key set or removed elsewhere while the
-   panel is open) springs in where it lands (GM, PR #203 r19 item 6). */
+   panel is open) springs in where it lands (design, PR #203). */
 body.app-slava-restraint .settings-row--moved {
   animation: settings-row-moved var(--settings-spring) backwards;
 }
@@ -956,7 +956,7 @@ body.app-slava-restraint .settings-row--moved {
   body.app-slava-restraint .settings-row__dot--busy { animation: none; border-top-color: var(--sr-ink-light); opacity: 0.6; }
 }
 
-/* Round 15 of PR #114: the tab's controls sit in one fieldset, disabled while
+/* PR #114: the tab's controls sit in one fieldset, disabled while
    Nebula is offline. No box of its own. */
 .settings__fieldset {
   min-width: 0;
@@ -965,7 +965,7 @@ body.app-slava-restraint .settings-row--moved {
   border: 0;
 }
 
-/* Offline (GM, round 16 of PR #114): one level of dimming, on the controls
+/* Offline (design, PR #114): one level of dimming, on the controls
    themselves, never the fieldset's on top of theirs. */
 .settings__fieldset[data-offline-disabled] {
   opacity: 1;
@@ -975,7 +975,7 @@ body.app-slava-restraint .settings-row--moved {
   cursor: not-allowed;
 }
 
-/* Nebula restored the settings at start (GM, PR #203 r38 item 5): one
+/* Nebula restored the settings at start (design, PR #203): one
    neutral line at the top of Settings until dismissed, its path in mono and
    selectable. */
 body.app-slava-restraint .settings-top-notice {
@@ -993,7 +993,7 @@ body.app-slava-restraint .settings-top-notice {
 
 body.app-slava-restraint .settings-top-notice__line { margin: 0; }
 
-/* The line, and under it why a Dismiss didn't land (GM, PR #203 r40 item 4). */
+/* The line, and under it why a Dismiss didn't land (design, PR #203). */
 body.app-slava-restraint .settings-top-notice__body { min-width: 0; }
 body.app-slava-restraint .settings-top-notice__error { margin: var(--sr-space-2) 0 0; }
 
@@ -1016,7 +1016,7 @@ body.app-slava-restraint .settings-top-notice__dismiss {
 
 body.app-slava-restraint .settings-top-notice__dismiss:hover { color: var(--sr-ink-bold); }
 body.app-slava-restraint .settings-top-notice__dismiss:focus-visible { outline: var(--sr-focus-outline); outline-offset: var(--sr-focus-offset); }
-/* PR #204 round 11 (GM r18 b): a lock line inside a list box belongs to the row above it: no
+/* PR #204 (design): a lock line inside a list box belongs to the row above it: no
    divider between them, and the row's own inset (the run cost's "You can change this…"). */
 body.app-slava-restraint .settings-list > .person-lock-line {
   margin: 0;

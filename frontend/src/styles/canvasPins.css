@@ -85,10 +85,10 @@
   margin: 0;
   color: #f2f2f2;
   overflow-wrap: anywhere;
-  /* The lines the person wrote (Shift+Enter), as agents get them (fix round 2 of PR #200, review 2 L-2). */
+  /* The lines the person wrote (Shift+Enter), as agents get them (PR #200). */
   white-space: pre-line;
   /* A tall note (up to 280 characters can be ~280 lines) scrolls inside the
-     card, about 12 lines; the time and Delete stay in view (review 3 LOW-5).
+     card, about 12 lines; the time and Delete stay in view.
      The card is .nowheel, so the wheel scrolls it, not the canvas. */
   max-height: 16.8em;
   overflow-y: auto;
@@ -132,14 +132,14 @@
   cursor: pointer;
 }
 
-/* The Delete red (fix round 5 of PR #200, review 5 N-4: one red for every Delete). */
+/* The Delete red (PR #200: one red for every Delete). */
 .canvas-pin__delete:hover,
 .canvas-pin__delete:focus-visible {
   background: var(--sr-danger-tint);
   color: var(--sr-danger-ink, #ff887d);
 }
 
-/* Pressed, the lighter red, as every other red (fix round 10 of PR #200). */
+/* Pressed, the lighter red, as every other red (PR #200). */
 .canvas-pin__delete:active {
   color: var(--sr-danger-ink-hover, #ff9a91);
 }
@@ -169,8 +169,8 @@
   cursor: pointer;
 }
 
-/* Motion by kind (fix round 6 of PR #200, GM r9 answer 2; noticeRegion.css):
-   a pin refusal is its own box in the region (neutral since GM r20 Q1), and so is the kept stack when
+/* Motion by kind (design, PR #200; noticeRegion.css):
+   a pin refusal is its own box in the region (neutral since PR #200), and so is the kept stack when
    its first note arrives, so both scale in on the toasts' spring. A note
    kept while the stack shows is a row inside it: it expands into place
    (PinComposer marks it data-entering until its expand ends) and never
@@ -192,10 +192,10 @@
   animation: none;
 }
 
-/* Fix round 7 (GM r11 answer 1, verbatim: "In the open list, a newly kept
+/* Design, PR #200, verbatim: "In the open list, a newly kept
    note FADES IN PLACE; the list's scroll position adjusts in the same frame
    so the top row stays whole and nothing jumps. Outside the open list, rows
-   still expand."). PinComposer re-places the list in the same layout pass
+   still expand." PinComposer re-places the list in the same layout pass
    the note arrives in. */
 .canvas-pin-kept-stack[data-open] .canvas-pin-kept-list > .canvas-pin-toast--kept[data-entering]:not([data-leaving]) {
   overflow: visible;
@@ -207,8 +207,8 @@
   --notice-row-gap: 6px;
 }
 
-/* In the open list a note leaves as it arrives there, the mirror of GM r11
-   answer 1: it fades out in place, and when the fade ends PinComposer
+/* In the open list a note leaves as it arrives there, the mirror of the
+   arrival rule above: it fades out in place, and when the fade ends PinComposer
    removes it and re-places the list in the same layout pass. A collapse
    there shrank the content under the list's fixed height, and the scroll,
    held at the bottom, slid the top row under the edge for most of the
@@ -218,9 +218,9 @@
   animation: notice-fade-out 200ms ease-out both;
 }
 
-/* Round 23 (review 22, M-1): a note that wasn't added because its canvas
-   went keeps its text here, in the neutral notice colours (it is no error of
-   the person's). The text wraps; Copy and × stay centred on the right. */
+/* A note that wasn't added because its canvas went keeps its text here, in
+   the neutral notice colours (it is no error of the person's). The text
+   wraps; Copy and × stay centred on the right. */
 .canvas-pin-toast--kept,
 .canvas-pin-toast--notice {
   border-color: var(--notice-neutral-edge, #333);
@@ -228,8 +228,7 @@
   color: var(--notice-neutral-ink, #d8d8d8);
 }
 
-/* Kept notes stack, one per project, newest at the bottom (fix round 3 of PR
-   #200, review 3 M-2). */
+/* Kept notes stack, one per project, newest at the bottom (PR #200). */
 .canvas-pin-kept-stack {
   display: flex;
   flex-direction: column;
@@ -243,14 +242,14 @@
   gap: 6px;
 }
 
-/* The whole list (fix round 4 of PR #200, review 4 LOW-1): it scrolls inside
+/* The whole list (PR #200): it scrolls inside
    a cap, so however many notes are kept it stays in the bottom part of the
    screen, clear of the project bar and the selection toolbar at the top. */
 .canvas-pin-kept-stack[data-open] .canvas-pin-kept-list {
   max-height: min(40vh, 360px);
   overflow-y: auto;
   overscroll-behavior: contain;
-  /* Fix round 5 (review 5 LOW-1, GM r7: snap): the list is sized to whole
+  /* Design, PR #200: the list is sized to whole
      notes (PinComposer writes --kept-list-h, under the cap), and it rests
      only on a note's top, so no note is ever cut at its top edge. */
   height: var(--kept-list-h, auto);
@@ -262,7 +261,7 @@
   scroll-snap-align: start;
 }
 
-/* "Show 7 more" (GM round 5 answer 2): a quiet row above the newest two. */
+/* "Show 7 more" (design): a quiet row above the newest two. */
 .canvas-pin-kept-more {
   align-self: flex-end;
   padding: 4px 10px;
@@ -292,7 +291,7 @@
   overflow-wrap: anywhere;
 }
 
-/* GM r24 item 1: the note on its own line, in quotes (the <q>'s own marks),
+/* Design: the note on its own line, in quotes (the <q>'s own marks),
    clamped to 2 lines with "…". Copy note copies the full text. */
 .canvas-pin-toast__note {
   display: -webkit-box;
@@ -301,7 +300,7 @@
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
   line-clamp: 2;
-  /* GM round 5 answer 5: the note's own line breaks (runs of spaces still
+  /* Design: the note's own line breaks (runs of spaces still
      fold, as in any text). */
   white-space: pre-line;
   color: #f2f2f2;
@@ -329,7 +328,7 @@
     transition: none;
     animation: none;
   }
-  /* Opacity only (GM r9 answer 2). */
+  /* Opacity only (design). */
   .canvas-pin-toast--notice,
   .canvas-pin-kept-stack,
   .canvas-pin-toast--kept[data-entering] {

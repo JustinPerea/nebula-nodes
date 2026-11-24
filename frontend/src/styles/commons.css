@@ -1,8 +1,8 @@
-/* Commons view (smart moodboard, phase 1). Every rule is scoped to the Slava restraint skin
+/* Commons view (smart moodboard). Every rule is scoped to the Slava restraint skin
    and uses its --sr-* tokens, following moodboard-studio.css. Motion is a short spring
    (cubic-bezier with overshoot, under 240 ms) and switches off for prefers-reduced-motion. */
 
-/* What Commons' own surfaces share wherever they render (review 10, M-1): the
+/* What Commons' own surfaces share wherever they render: the
    view, and its prompt, which renders on document.body (ModalPortal), outside
    the view. Its spring, its type and ink, and (below, under -- fields --) its
    fields and focus rings are scoped to this class, which both carry. */
@@ -13,12 +13,12 @@ body.app-slava-restraint .commons-scope {
   font-size: 12px;
 }
 
-/* Round 11: the Commons' focus and drafts wrapper (CommonsView) takes no box of its own. */
+/* The Commons' focus and drafts wrapper (CommonsView) takes no box of its own. */
 .commons-view-root { display: contents; }
 
-/* The whole grid, in this one place (fix/moodboard-board-layout,
+/* The whole grid, in this one place (PR #209,
    tests/studioGridAreas.test.ts), the offline row included: right under the
-   top header, 0 tall until it opens (GM, PR #198 r2; StudioOfflineRow). */
+   top header, 0 tall until it opens (design, PR #198; StudioOfflineRow). */
 body.app-slava-restraint .commons-view {
   --commons-detail-w: 0px;
   position: fixed;
@@ -102,11 +102,11 @@ body.app-slava-restraint .commons-tabs__more {
   align-items: center;
 }
 
-/* The Updates chip takes its room at the header's right end (Q107 a). Below
+/* The Updates chip takes its room at the header's right end. Below
  * 1440 px the toolbar no longer fits one row beside it (measured: the full
  * chip needs 1406 px, the compact one below 1360 px needs 1346), so the two
  * least-used sections fold into More (CommonsView). That frees about the
- * room the compact chip takes (GM review: no two-row wrap at 1280). */
+ * room the compact chip takes (design review: no two-row wrap at 1280). */
 @media (max-width: 1439px) {
   body.app-slava-restraint.agent-notes-shown .commons-tab--overflow:not(.commons-tab--active) {
     display: none;
@@ -155,7 +155,7 @@ body.app-slava-restraint .commons-button:hover:not(:disabled) {
   color: var(--sr-accent);
 }
 
-/* PR #204 round 18k (GM r41): a control locked by its line (aria-disabled, focusable) dims
+/* PR #204 (design): a control locked by its line (aria-disabled, focusable) dims
    as a disabled one does. */
 body.app-slava-restraint .commons-button:is(:disabled, [aria-disabled='true']) {
   opacity: var(--sr-disabled-opacity);
@@ -169,13 +169,13 @@ body.app-slava-restraint .commons-button--primary {
   color: var(--sr-accent);
 }
 
-/* Round 18k: a locked control keeps its rest look on hover, as a disabled one does. */
+/* A locked control keeps its rest look on hover, as a disabled one does. */
 body.app-slava-restraint .commons-button[aria-disabled='true']:hover {
   border-color: var(--commons-rest-edge, var(--sr-edge));
   color: var(--commons-rest-ink, var(--sr-ink));
 }
 
-/* "Delete and purge": GM r11 answer 3 (fix round 7 of PR #200): the Delete red, never the orange. An outline
+/* "Delete and purge" (design, PR #200): the Delete red, never the orange. An outline
    button, neutral at rest, its edge and label red on hover (over the
    accent hover every other Commons button has). */
 body.app-slava-restraint .commons-button--danger:hover:not(:disabled) {
@@ -205,7 +205,7 @@ body.app-slava-restraint .commons-link:hover:not(:disabled) {
   color: var(--sr-accent);
 }
 
-/* GM r14: a region's Delete is red (it deletes the region), never the
+/* Design: a region's Delete is red (it deletes the region), never the
    accent the link hovers elsewhere. */
 body.app-slava-restraint .commons-link.commons-region__delete:hover:not(:disabled) {
   color: var(--sr-danger-ink, #ff887d);
@@ -215,7 +215,7 @@ body.app-slava-restraint .commons-link.commons-region__delete:active:not(:disabl
   color: var(--sr-danger-ink-hover, #ff9a91);
 }
 
-/* Clearing a filter's range is a reset, so neutral (GM r13). */
+/* Clearing a filter's range is a reset, so neutral (design). */
 body.app-slava-restraint .commons-link.commons-filter__reset:hover:not(:disabled) {
   color: var(--sr-ink-bold);
 }
@@ -227,7 +227,7 @@ body.app-slava-restraint .commons-link:disabled {
   text-decoration: none;
 }
 
-/* The worker status gives way before the toolbar wraps (p157c): it takes the
+/* The worker status gives way before the toolbar wraps (PR #157): it takes the
  * row's free room and right-aligns its text against its control; when the
  * room runs short the text truncates on one line down to
  * --commons-status-min (or its own length, if shorter). Only that minimum
@@ -262,7 +262,7 @@ body.app-slava-restraint .commons-status > .commons-button {
   flex: none;
 }
 
-/* PR #204 round 18 (GM r28 3): a tab that isn't connected holds the status's place (the default
+/* PR #204 (design): a tab that isn't connected holds the status's place (the default
  * "Stopped" and Start), drawn as nothing, so the tabs and Add never move. */
 body.app-slava-restraint .commons-status--held {
   visibility: hidden;
@@ -279,12 +279,12 @@ body.app-slava-restraint .commons-add {
   position: relative;
 }
 
-/* PR #204 round 12 (GM r20 1): Add's lock line sits in the banner row below the header
+/* PR #204 (design): Add's lock line sits in the banner row below the header
    (components/commons/CommonsPageLines), under the because line, or alone in the row.
-   Round 13 (GM r21 1): it starts where the because line's words start, not at its rail, and at
+   It starts where the because line's words start, not at its rail, and at
    the same x when it stands alone, so it never moves between the two. The x is the line's own
    measure (--commons-line-text-x below), not a second offset.
-   Round 14 (GM r23 2): the line is the focus target (a demote's handover), and its ring hugs the
+   The line is the focus target (a demote's handover), and its ring hugs the
    sentence: the line fits its words, set in by a margin of that measure (not padding), so the
    ring's usual offset sits around the words. The row's padding stays on .commons-messages. */
 body.app-slava-restraint .commons-messages__lock-line {
@@ -401,7 +401,7 @@ body.app-slava-restraint .commons-heading {
   font-weight: 700;
 }
 
-/* Settings opens with its name as its h2 (GM review of PR #157). It has no
+/* Settings opens with its name as its h2 (design, PR #157). It has no
  * display line, so the h2 sits one step above its 13 px section titles (design:
  * "about 20px against their 14"), at the Commons' existing step size and weight
  * (commons-evaluation.css `.evaluation-step`, 22px / 450), not a new size.
@@ -414,7 +414,7 @@ body.app-slava-restraint .commons-settings > .commons-panel-title {
 
 /* -- messages + page candidates ---------------------------------------------- */
 
-/* The inset of a Commons line's words (PR #204 round 13, GM r21 1): one measure, read by the
+/* The inset of a Commons line's words (design, PR #204): one measure, read by the
    line (.commons-notice) and by Add's lock line, which lines up with its words. A line is a fill,
    never a bar down its edge (design). */
 body.app-slava-restraint {
@@ -451,7 +451,7 @@ body.app-slava-restraint .commons-notice--error {
   color: var(--sr-warning);
 }
 
-/* Round 18f (GM r35 4): a load line's "Try again", inline at the end of its sentence, in the
+/* PR #204 (design): a load line's "Try again", inline at the end of its sentence, in the
    line's own neutral ink (CommonsErrorLine). The words stay one sentence, so they wrap as text. */
 body.app-slava-restraint .commons-notice__text {
   min-width: 0;
@@ -473,7 +473,7 @@ body.app-slava-restraint .commons-retry:hover {
   color: var(--sr-ink-bold);
 }
 
-/* PR #204 round 18h (GM r38 3f): the ring covers "Try again" only. The full stop sits outside the
+/* PR #204 (design): the ring covers "Try again" only. The full stop sits outside the
  * button; the ring hugs the words (no offset) and a gap as wide as the ring keeps it off the stop. */
 body.app-slava-restraint .commons-retry {
   margin-inline-end: 2px;
@@ -486,7 +486,7 @@ body.app-slava-restraint .commons-view .commons-evaluation .commons-retry:focus-
   outline-offset: 0;
 }
 
-/* A reason that isn't an error (a too-transparent reference, GM r5 on #208). */
+/* A reason that isn't an error (a too-transparent reference; design, PR #208). */
 body.app-slava-restraint .commons-notice--muted {
   color: var(--sr-ink-light);
 }
@@ -496,7 +496,7 @@ body.app-slava-restraint .commons-notice--proposal {
   color: var(--sr-ink);
 }
 
-/* GM, PR #202 r1: each asking agent's dot, in its colour, before its name. */
+/* Design, PR #202: each asking agent's dot, in its colour, before its name. */
 body.app-slava-restraint .commons-notice__dot {
   display: inline-block;
   width: 8px;
@@ -655,7 +655,7 @@ body.app-slava-restraint .commons-chip__remove {
   cursor: pointer;
 }
 
-/* GM r12: a keyword chip's × is an edit, so neutral, the same as a
+/* Design: a keyword chip's × is an edit, so neutral, the same as a
    moodboard chip's (moodboard-studio.css). */
 body.app-slava-restraint .commons-chip__remove:hover {
   color: var(--sr-ink-bold);
@@ -754,7 +754,7 @@ body.app-slava-restraint .commons-tile__caption {
   text-overflow: ellipsis;
 }
 
-/* PR #204 round 18d (GM r32 5): the one loading look in the panes, a plain muted line where the
+/* PR #204 (design): the one loading look in the panes, a plain muted line where the
    content will appear: no box, no rail (CommonsLoadingLine). */
 body.app-slava-restraint .commons-loading {
   margin: 0;
@@ -833,7 +833,7 @@ body.app-slava-restraint .commons-badge--fidelity-unverifiable {
 
 /* Too transparent to analyze: not an error, so the plain neutral badge colour,
    never red, never QUEUED's tint, and never the faint archived tone (1.9:1).
-   On the grid it is the only signal, so it must read (GM r10 on #208, ~5.7:1).
+   On the grid it is the only signal, so it must read (design, PR #208, ~5.7:1).
    This rule is the one place its colour is set. */
 body.app-slava-restraint .commons-badge--not-analyzed {
   color: var(--sr-ink-light);
@@ -1193,7 +1193,7 @@ body.app-slava-restraint .commons-prompt__actions {
   gap: 8px;
 }
 
-/* Round 14 (GM r23 4): OK's lock line, right under the buttons, ending where OK ends. */
+/* Design: OK's lock line, right under the buttons, ending where OK ends. */
 body.app-slava-restraint .commons-prompt__card > .person-lock-line {
   margin: -4px 0 0;
   text-align: end;
@@ -1211,7 +1211,7 @@ body.app-slava-restraint .commons-prompt__card > .person-lock-line {
   to { opacity: 1; transform: none; }
 }
 
-/* Round 18f (GM r35 5): the Commons opening from its off view (after a reconnect, or when it
+/* PR #204 (design): the Commons opening from its off view (after a reconnect, or when it
    comes back mid-visit): the sections and the page below the header spring in on the Commons'
    spring; the header's way back and title stay put. */
 body.app-slava-restraint .commons-view[data-commons-opening] > :not(.commons-toolbar),
@@ -1344,7 +1344,7 @@ body.app-slava-restraint .commons-leave__actions {
   }
 }
 
-/* A failed analysis (error-copy round 3): GM's heading over its reason, Retry
+/* A failed analysis (error copy): the approved heading over its reason, Retry
    at the end, and the raw last_error behind a native, collapsed Details
    disclosure (the node error's pattern: keyboard and screen reader for free,
    no motion). */
@@ -1375,7 +1375,7 @@ body.app-slava-restraint .commons-analysis-failure__details .error-details__raw 
   overflow-wrap: anywhere;
 }
 
-/* Round 16 (L4): offline a reference's writes sit in one disabled fieldset
+/* Offline, a reference's writes sit in one disabled fieldset
    (CommonsDetail). It lays out as if it weren't there, and its own offline
    mark doesn't dim: each disabled control dims once, with the not-allowed
    cursor. */

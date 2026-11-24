@@ -41,26 +41,26 @@
 
   /* The chat launcher anchors the right column's foot. The agent log docks
    * above it and the docked chat above the log, so nothing overlaps
-   * (Q38: the log shows with the chat closed too). Slava overrides the
+   * (the log shows with the chat closed too). Slava overrides the
    * launcher's size and offset (slava-restraint.css). */
   --chat-launcher-bottom: var(--space-4);
   /* The Updates chip in the canvas's top right, level with the header pill. */
   --agent-notes-chip-top: 24px;
   --agent-notes-chip-h: 40px;
-  /* Off the canvas each screen's header keeps a slot this size for the chip
-   * (Q107 a); the corner writes the chip's measured width here. Below about
+  /* Off the canvas each screen's header keeps a slot this size for the chip;
+   * the corner writes the chip's measured width here. Below about
    * 1360 px the chip drops the word "Updates" (agentNotes.css) and the slot
-   * and the header padding reserve its compact width (GM review: a header
-   * must not wrap at 1280). Measured 2026-10-21 (p157, the count as plain
-   * figures after a 4 px gap, GM review): dots 38 + gap 8 + count 4 + 7,
+   * and the header padding reserve its compact width (design review: a header
+   * must not wrap at 1280). Measured 2026-10-21 (PR #157, the count as plain
+   * figures after a 4 px gap, design review): dots 38 + gap 8 + count 4 + 7,
    * padding 15, border 2 = 74; the word 52 + its gap 8 = 134. A two-digit
    * count widens the chip, and the corner writes its measured width here. */
   --agent-notes-chip-w-full: 134px;
   --agent-notes-chip-w-compact: 74px;
   --agent-notes-chip-w: var(--agent-notes-chip-w-full);
   --agent-notes-slot-h: 32px;
-  /* The top chrome a resized Agent log stays clear of (GM r61 answer 1):
-     the Updates chip's row and 12 px under it (GM r70: "the top bar + 12
+  /* The top chrome a resized Agent log stays clear of (design):
+     the Updates chip's row and 12 px under it (design: "the top bar + 12
      px", lib/bottomBar.ts CHROME_CLEARANCE). Over the selection toolbar's
      slot the line is the slot's (AgentLog's resizeBounds). */
   --agent-log-top-chrome: calc(var(--agent-notes-chip-top) + var(--agent-notes-chip-h) + 12px);
@@ -189,7 +189,7 @@ body.app-slava-restraint.agent-log-open.agent-log-empty {
   );
 }
 
-/* The Updates chip (PR9a) holds the canvas's top-right corner, level with
+/* The Updates chip (PR #124) holds the canvas's top-right corner, level with
  * the header pill, so the docked chat starts just below it. A chat dragged
  * up there (.chat-panel--free) keeps its own top; the chip then moves left
  * of it (components/agent-notes). */
@@ -197,7 +197,7 @@ body.agent-notes-reserved .chat-panel {
   --chat-dock-top: calc(var(--agent-notes-chip-top) + var(--agent-notes-chip-h) + var(--stack-gap-sm));
 }
 
-/* The Updates chip on every other screen (Q107 a): the header of Projects,
+/* The Updates chip on every other screen: the header of Projects,
  * the studios and the Commons keeps a slot for it (beside Settings on
  * Projects; pinned in the header's right padding elsewhere, see
  * workspace-header.css), so it never sits over that screen's own controls.
@@ -254,12 +254,12 @@ body.agent-log-reserved .chat-panel {
   );
 }
 
-/* The rest of the canvas keeps clear of the log's column too (Q38: it shows
+/* The rest of the canvas keeps clear of the log's column too (it shows
  * with the chat closed now). The minimap (canvas.css: right 16, bottom 84)
  * sits above the log; the project-switch toast, centred at the foot, stays
  * left of it. The proposal card keeps clear through the notice region alone
  * (its --agent-log-clearance), or sits above the log when that leaves it
- * under 400 px (canvasProposals.css; GM - Design, PR #216 r1: only one
+ * under 400 px (canvasProposals.css; design, PR #216: only one
  * clearance ever applies, the double count pushed it off screen). */
 body.agent-log-reserved .canvas-navigation.react-flow__panel {
   bottom: calc(
@@ -344,8 +344,8 @@ body.agent-log-reserved .project-switch-toast {
 
 /* Collapsed it is one row, centred: no resize grip, no 80 px floor. It is
    its header's height whatever height the person's native resize left
-   inline, folded for the proposal card or collapsed by the person (#216
-   review 3 MEDIUM-1): the card counts the collapse as freeing all but the
+   inline, folded for the proposal card or collapsed by the person (PR #216):
+   the card counts the collapse as freeing all but the
    header, so a box that kept its height would sit under the card. */
 .agent-log:not(.agent-log--open) {
   display: flex;
@@ -356,9 +356,9 @@ body.agent-log-reserved .project-switch-toast {
   resize: none;
 }
 
-/* GM r57 Q1: while the person holds it in a drag, the log rises above the
+/* Design: while the person holds it in a drag, the log rises above the
    notice region (the proposal card), which holds still until the drop
-   (NoticeRegion); at rest the card never crosses it. GM r69 Q5: it stays
+   (NoticeRegion); at rest the card never crosses it. Design: it stays
    above from the drop until the card's glide away from it rests. */
 :root[data-agent-log-held] .agent-log,
 :root[data-agent-log-settling] .agent-log {
@@ -474,14 +474,14 @@ body.agent-log-reserved .project-switch-toast {
 }
 
 /* At short heights the open log's body gives way to a proposal card
-   (GM - Design, PR #216 r6-r8), docked or floating: the notice region
+   (design, PR #216), docked or floating: the notice region
    writes --agent-log-squeeze (lib/noticeStackPlace.ts), and the log's
    height comes down by it on the layout spring, never under its floor of
    header and 2 rows (--agent-log-floor, AgentLog), never over its own
    height. It is held at its bottom edge, so the header and its collapse
    control come down whole with the body's top; the body shrinks and
    scrolls. It springs back when the card leaves.
-   GM r8: the held edge stays exactly fixed, and the spring's overshoot
+   Design: the held edge stays exactly fixed, and the spring's overshoot
    shows only at the free top edge. So one registered length,
    --agent-log-give, carries the spring, and the height (and a top-pinned
    log's shift) are both read from it, clamped, in the same frame: the
@@ -499,16 +499,16 @@ body.agent-log-reserved .project-switch-toast {
   display: flex;
   flex-direction: column;
   /* Bounded only while a give is in force, the spring back to 0 included
-     (#216 review 3 MEDIUM-2): with none, the person's native resize can
+     (PR #216): with none, the person's native resize can
      make it taller, up to main's 80vh, though --agent-log-natural-h is the
      height last measured. While a give is in force the second term is
      under the first: give x 10^7 passes 80vh for any give of 0.001 px or
-     more on a window up to 12,500 px tall (#216 review 4 NIT-3: x 10^5 let
+     more on a window up to 12,500 px tall (PR #216: x 10^5 used to let
      the last 0.0x px of the spring through over about 1,625 px), so the
      bound is the shown height. */
   max-height: max(var(--agent-log-shown-h), calc(80vh - var(--agent-log-give) * 10000000));
   /* The resize floor of 80 px gives way only while it springs back up from
-     its header (GM r11), so the reopen starts at the header, not at 80. */
+     its header (design), so the reopen starts at the header, not at 80. */
   min-height: min(80px, var(--agent-log-shown-h));
   transition: --agent-log-give 420ms var(--agent-log-spring);
 }
@@ -526,14 +526,14 @@ body.agent-log-reserved .project-switch-toast {
 
 /* Collapsed for the card (step 4), it has given all but its header: when
    the card leaves and it reopens, the give springs back from there, from
-   the held edge, on the same spring (GM r11). The squeeze never passes the
+   the held edge, on the same spring (design). The squeeze never passes the
    floor (lib/noticeStackPlace.ts caps it), so the height's lower clamp is
    the header. */
 .agent-log[data-card-collapsed] {
   --agent-log-give: calc(var(--agent-log-natural-h, 0px) - var(--agent-h-closed));
 }
 
-/* The held edge (GM r7, r8, r11) is the one away from the card: the bottom
+/* The held edge (design) is the one away from the card: the bottom
    with the card above the log (the root's data-agent-log-hold is "bottom",
    or not yet written), the top with the card under a floating log. A log
    the person pinned by the other edge is moved by exactly what its height
@@ -598,8 +598,8 @@ body .agent-log .agent-log__entry--agent .agent-log__source {
    of its own, so each modal keeps its own fixed overlay and stacking. */
 .modal-portal { display: contents; }
 
-/* A failure on a two-line surface (components/failure/FailureLines.tsx, GM
- * error-copy round 2): the heading on line 1, the reason on line 2, and no
+/* A failure on a two-line surface (components/failure/FailureLines.tsx,
+ * error copy): the heading on line 1, the reason on line 2, and no
  * short last word left alone on a line. Colour comes from the notice. */
 .failure-lines {
   display: block;

@@ -261,7 +261,7 @@
   outline-offset: var(--sr-focus-offset, 2px);
 }
 
-/* A pin whose image left the project (Q90 a): why the cover is automatic. */
+/* A pin whose image left the project: why the cover is automatic. */
 .asset-proposal__lost {
   margin: 0;
   color: var(--sr-ink-light);
@@ -269,7 +269,7 @@
   line-height: 1.35;
 }
 
-/* Review on its Update (Q92 a): a ring in the agent's colour springs in on
+/* Review on its Update: a ring in the agent's colour springs in on
  * the agent log's spring and settles, then the strip looks as before. */
 .asset-proposal:focus {
   outline: none;

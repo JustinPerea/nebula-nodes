@@ -53,18 +53,18 @@ body.app-slava-restraint .react-flow__minimap {
    The Panel keeps the toolbar's height while it is empty (nothing selected),
    0 px wide, so it covers nothing: floating panels stop below the toolbar's
    line whether or not the toolbar shows (lib/bottomBar.ts floatingTopLimit;
-   GM - Design, round 3: "The Inspector jumping on deselect: hold it. A panel
+   design: "The Inspector jumping on deselect: hold it. A panel
    shouldn't move unless someone moves it."). Both read one token, the
    toolbar's own height: 38 px buttons, 5 px padding, a 1 px border. */
 .selection-toolbar-panel.react-flow__panel {
   --selection-toolbar-h: 50px;
   /* The width the slot reserves, shown or not (lib/bottomBar.ts
-     toolbarSlotSpan; GM - Design r70): the widest the toolbar draws, 896 px
+     toolbarSlotSpan; design): the widest the toolbar draws, 896 px
      at 1440 with a model node's actions, and some room. Read, not drawn:
      the empty Panel stays 0 px wide. */
   --selection-toolbar-slot-w: 960px;
   min-height: var(--selection-toolbar-h);
-  /* Below the World Labs notice while it shows (GM r34 A5 on PR #199;
+  /* Below the World Labs notice while it shows (design, PR #199;
      lib/bottomBar.ts publishTopNotice): the lower of its own line and the
      notice's foot plus 8px. Without a notice the value is unset: 92px. */
   margin-top: max(92px, var(--top-notice-clearance, 0px));
@@ -93,7 +93,7 @@ body.app-slava-restraint .react-flow__minimap {
   -webkit-backdrop-filter: blur(22px);
   pointer-events: auto;
   animation: selection-toolbar-in 140ms ease-out both;
-  /* Off its own place only to keep clear of the selection (GM r35 on PR
+  /* Off its own place only to keep clear of the selection (design, PR
      #199; lib/bottomBar.ts placeSelectionToolbar): flipped below it. The
      Panel, the floating panels' marker, stays where it is. */
   position: relative;
@@ -158,8 +158,8 @@ body.app-slava-restraint .react-flow__minimap {
   background: var(--sr-accent-hover);
 }
 
-/* GM, round 16 of PR #114: a disabled Run is neutral; orange only ever
-   means "you can press this". GM round 22 (A): the neutral disabled look is
+/* Design, PR #114: a disabled Run is neutral; orange only ever
+   means "you can press this". Design: the neutral disabled look is
    the toolbar's own, as Ask, Duplicate and Delete have it: no fill (a grey
    fill read as hovered), and hover never lights it. */
 .selection-toolbar__button--primary:disabled,
@@ -169,7 +169,7 @@ body.app-slava-restraint .react-flow__minimap {
   opacity: 0.34;
 }
 
-/* Review 3 LOW-2: a red bright enough that the shared grey reads dimmer
+/* A red bright enough that the shared grey reads dimmer
    (styles/disabled-buttons.css --sr-danger-ink). */
 .selection-toolbar__button--danger {
   color: var(--sr-danger-ink, #ff887d);

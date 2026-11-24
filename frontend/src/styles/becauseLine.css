@@ -1,10 +1,10 @@
 /*
- * PR #204 round 18 (GM r28 1): a Commons load's line that got no answer ("Nebula couldn’t load
+ * PR #204 (design): a Commons load's line that got no answer ("Nebula couldn’t load
  * the references because the server didn’t respond. Try again.") destroys nothing too, so it takes this
  * same style, the token swap below that a because line's own element takes: CommonsErrorLine
  * marks its line `data-line-neutral`.
  *
- * GM r14 (4), PR #204 round 9: a "because" line ("Nebula couldn’t … because this tab isn’t
+ * Design, PR #204: a "because" line ("Nebula couldn’t … because this tab isn’t
  * connected as you. …") destroys nothing, so it never takes the warning colour, on any surface.
  * One shared style, not a per-screen fix: <LineText> (components/LineText.tsx) marks the element
  * a because line registers on with `data-line-because`, and this sheet turns every warning token
@@ -54,7 +54,7 @@
 }
 
 /*
- * PR #204 round 11 (GM r18 c): a because line, and the box it sits in, are in the sans face on
+ * PR #204 (design): a because line, and the box it sits in, are in the sans face on
  * every surface (a canvas card's error box set mono): mono is for ids and code, so raw provider
  * text under Details and code inside keep it.
  */
@@ -68,7 +68,7 @@
 }
 
 /*
- * Review 8 MEDIUM-1, GM r16 Q1 (PR #204 round 10): the box a because line sits in (a card's
+ * Design (PR #204): the box a because line sits in (a card's
  * error panel, the Projects error, a toast) goes neutral too: its rail, border and fill, and the
  * colour it hands down. The box carries `data-line-box`; while a because line is inside it reads
  * the neutral tokens above, and these win over its own literals and its sheet's specificity.

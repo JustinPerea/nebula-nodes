@@ -25,11 +25,11 @@
 }
 
 /* The Studio laid out for the Board view: the top header, the offline row
-   right under it (GM, PR #198 r2; StudioOfflineRow, 0 tall until it opens),
+   right under it (design, PR #198; StudioOfflineRow, 0 tall until it opens),
    then rail | canvas | panel. Complete on its own, so it holds in either
    skin, and the only rule that frames, paints and lays out the Board root:
    the List view's (moodboard-studio.css) is :not(.moodboard-studio-view--board),
-   so nothing has to outrank anything (fix/moodboard-board-layout; a generic template in
+   so nothing has to outrank anything (PR #209; a generic template in
    workspace-header.css once outranked this one and dropped the canvas and
    the panel into implicit tracks; tests/studioGridAreas.test.ts).
 
@@ -40,8 +40,8 @@
 .moodboard-studio-view.moodboard-studio-view--board {
   --mb-board-rail-w: 250px;
   --mb-board-panel-w: 320px;
-  /* The board keeps at least this much height in a short window (GM, #213
-     round 3): the panel under it gives up room first (see the fold below). */
+  /* The board keeps at least this much height in a short window (design,
+     PR #213): the panel under it gives up room first (see the fold below). */
   --mb-board-min-h: 300px;
   container: moodboard-board / inline-size;
   position: fixed;
@@ -95,8 +95,8 @@
   pointer-events: none;
 }
 
-/* A line can sit over cards, so its surface is solid (#210 round 6s, GM
-   r105 3): the panel tint laid over the canvas colour, the colour it has over
+/* A line can sit over cards, so its surface is solid (design,
+   PR #210): the panel tint laid over the canvas colour, the colour it has over
    the empty canvas. The Slava skin's lines lay their own tint the same way
    (moodboard-studio.css; tests/moodboardNoticeSurface.test.ts). */
 .moodboard-studio-view__board-notices > * {
@@ -124,7 +124,7 @@
 }
 
 /* Focus can rest on the board itself (the edge chip hands it there when no
-   tile can take it, GM #210 r4 answer 6): the token ring, inside its edge. */
+   tile can take it, design, PR #210): the token ring, inside its edge. */
 .moodboard-board:focus {
   outline: none;
 }
@@ -162,7 +162,7 @@
   outline: none;
 }
 
-/* A spot held for a file still uploading (GM, #210 r4 answer 1; r5): the
+/* A spot held for a file still uploading (design, PR #210): the
    tile's own size, a faint fill, a dashed edge that stays one screen pixel at
    any zoom, and the file's name in the corner at 12 screen px. BoardCanvas
    sets --mb-board-zoom. It takes focus like a card. */
@@ -191,7 +191,7 @@
    the tile's box. Not a CSS border: Chrome snaps a border's width to whole
    pixels before the zoom scales it. Not vector-effect: non-scaling-stroke:
    Chrome undoes only the transforms inside the SVG, not the board's CSS
-   scale() above it (measured live, r4). */
+   scale() above it (measured live). */
 .moodboard-board__placeholder-edge {
   position: absolute;
   inset: 0;
@@ -245,9 +245,9 @@
 }
 
 /* A card filling its placeholder starts unseen; BoardCanvas drives its
-   opacity on the board's spring each frame (GM r5), so no transition here.
+   opacity on the board's spring each frame (design), so no transition here.
    Keyed by the new image's id, so an older tile showing the same file is
-   never hidden (review 4, MEDIUM-1). */
+   never hidden. */
 .moodboard-card[data-fill-id] {
   opacity: 0;
 }
@@ -343,7 +343,7 @@
   cursor: default;
 }
 
-/* Add images while Nebula is offline (GM r12 2): paused, as the List view's Add Images is. */
+/* Add images while Nebula is offline (design): paused, as the List view's Add Images is. */
 .moodboard-board__control--disabled {
   opacity: 0.45;
   cursor: default;
@@ -400,7 +400,7 @@
   outline-offset: calc(-1 * var(--sr-focus-offset, 2px));
 }
 
-/* A narrow window (GM, #209 NIT-1 (b), round 2): the board keeps a usable column.
+/* A narrow window (design, PR #209): the board keeps a usable column.
    - The side panel moves under the board whenever side by side would leave
      the board's column under 400 px. Side by side the column is the studio's
      width less the rail and the panel:
@@ -416,13 +416,13 @@
      column (no drawer: a drawer hides the settings and adds an open/closed
      state). It scrolls inside itself past 40% of the window height, so the
      board keeps the rest. In a short window it gives up that 40% too: the
-     board's row keeps --mb-board-min-h (300 px, GM #213 round 3), and the
+     board's row keeps --mb-board-min-h (300 px, design, PR #213), and the
      panel's row, minmax(0, auto), takes only what is left, down to 0.
    - At 760 px and under (the List view's breakpoint, moodboard-studio.css)
      the rail folds above the board the same way the List view's does, and
      the board takes the full width. The panel stays under the board at every
-     width up to 760, though the board alone is 400 wide from 720 (GM, #213
-     round 3: one fold at a time); so the rail's fold can stay on the window
+     width up to 760, though the board alone is 400 wide from 720 (design,
+     PR #213: one fold at a time); so the rail's fold can stay on the window
      (@media): the studio is the window (position: fixed, inset 0).
    The board, then the panel, at every width: the screen order is the DOM's,
    so focus follows it. A fitted board refits into its new column, as on any
@@ -538,7 +538,7 @@ html body .moodboard-board-panel .moodboard-def__row {
 }
 
 .moodboard-board-panel__remove:hover {
-  border-color: var(--mb-board-ink); /* GM r12: Undo puts it back, so neutral */
+  border-color: var(--mb-board-ink); /* Design: Undo puts it back, so neutral */
 }
 
 /* The Board / List switch in the header. The thumb slides on a spring. */
@@ -626,7 +626,7 @@ html body .moodboard-board-panel .moodboard-def__row {
   min-width: 0;
 }
 
-/* GM, #198 r8: a toast wraps (up to 3 lines) and never cuts a sentence. */
+/* Design, PR #198: a toast wraps (up to 3 lines) and never cuts a sentence. */
 .moodboard-board-toast__line {
   min-width: 0;
   overflow-wrap: anywhere;
@@ -656,7 +656,7 @@ html body .moodboard-board-panel .moodboard-def__row {
   font-weight: 600;
 }
 
-/* Enabled only: a disabled one stays the shared grey (review 2 M-3). */
+/* Enabled only: a disabled one stays the shared grey. */
 .moodboard-board-toast__action:hover:not(:disabled) {
   background: #fff;
 }
@@ -681,7 +681,7 @@ html body .moodboard-board-panel .moodboard-def__row {
   outline-offset: 1px;
 }
 
-/* Fix round 5 of PR #200 (GM r7): every toast in the notice region springs
+/* Design, PR #200: every toast in the notice region springs
    in within its own slot, a scale and a fade, never sliding across a
    neighbour (the open kept-notes list sits right below some). */
 @keyframes moodboard-board-toast-in {
@@ -695,13 +695,13 @@ html body .moodboard-board-panel .moodboard-def__row {
     transition: none;
   }
 
-  /* Opacity only (GM r9 answer 2). */
+  /* Opacity only (design). */
   .moodboard-board-toast {
     animation: notice-fade-in 180ms ease-out both;
   }
 }
 
-/* Tiles added outside the view (GM - Design, #210 answer 1): a chip on the
+/* Tiles added outside the view (design, PR #210): a chip on the
    view's edge nearest the first tile, its arrow pointing at it. It enters by
    sliding 8 px in from that edge on the board's spring (no fade); with
    reduced motion it simply appears. OutsideChip sets its place along the edge. */
@@ -734,7 +734,7 @@ html body .moodboard-board-panel .moodboard-def__row {
 }
 
 /* OutsideChip sets the chip's centre (left, top): centred on the view's edge
-   nearest the tile, clear of the tile (GM r13), its foot above the toolbar and
+   nearest the tile, clear of the tile (design), its foot above the toolbar and
    the notice band (lib/bottomBar.ts floatingBottomLimit). */
 .moodboard-board__outside-chip--right,
 .moodboard-board__outside-chip--left,
