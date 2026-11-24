@@ -207,15 +207,6 @@ body.app-slava-restraint .asset-trash__toast-close {
 body.app-slava-restraint .asset-trash__toast-close:hover { background: var(--sr-pending-soft); color: var(--sr-ink); }
 body.app-slava-restraint .asset-trash__toast-close svg { width: 14px; height: 14px; }
 
-body.app-slava-restraint .moodboard-node__open-error,
-body.app-slava-restraint .character-node__open-error {
-  margin-top: 4px;
-  color: var(--sr-error);
-  font-size: 10px;
-  font-weight: 500;
-  line-height: 1.35;
-}
-
 /* Fix round 5 of PR #200 (GM r7): every toast in the notice region springs
    in within its own slot, a scale and a fade, never sliding across a
    neighbour (the open kept-notes list sits right below some). */
