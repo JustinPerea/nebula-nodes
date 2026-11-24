@@ -8,7 +8,7 @@
 ## Measured
 In the running app with real tool blocks (tool_use and tool_result events on the chat socket), chat panel at its default width (tool box 304px):
 - Before, the error sentence split inside four ordinary words ("No such f|ile", "moved b|efore"). After, it wraps at spaces. Its long path still breaks once inside, because the path alone is wider than the box.
-- Paths break after `/` and `-` where they can. No box overflows, before or after.
+- Paths break after `-` where they can. A slash gives the browser no break chance, so a long path segment still splits inside it ("ren|ders"). No box overflows, before or after.
 - Three of the four boxes are one line taller after (17.8px), since wrapping at spaces leaves shorter lines. The boxes keep `max-height: 200px` with their own scroll.
 
 ## Dead selectors
