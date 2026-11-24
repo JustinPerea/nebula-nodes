@@ -51,8 +51,8 @@ body.app-slava-restraint .model-node--skipped .model-node__card {
   border-style: dashed;
 }
 
-/* A skipped agent's placeholder (Q125 item 3): the placeholder rule wins
-   (GM - Design, 2026-10-25: "dim only the preview area. The header, the
+/* A skipped agent's placeholder: the placeholder rule wins
+   (design, 2026-10-25: "dim only the preview area. The header, the
    text and the Skipped badge stay at full contrast"). Its own dashed
    outline in the agent's colour says pending, so the card keeps its edge. */
 .model-node--skipped[data-pending='true'] .model-node__card > :not(.node-skip) {

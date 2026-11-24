@@ -1,4 +1,4 @@
-/* The Agents panel (Q125 item 2), at the top of the opened Updates list.
+/* The Agents panel, at the top of the opened Updates list.
  * Uses the corner's tokens (--an-*, agentNotes.css) and the repo's tuned
  * springs (springCssVars on .agent-notes-root). */
 
@@ -32,7 +32,7 @@
   background: var(--an-hover);
 }
 
-/* The neutral focus ring (#161's sweep), inside the list's edge. */
+/* The neutral focus ring (PR #161's sweep), inside the list's edge. */
 .agent-roster__toggle:focus-visible,
 .agent-roster__row:focus-visible {
   outline: var(--sr-focus-outline, 2px solid var(--an-ink));
@@ -69,7 +69,7 @@
 /* Needs you: the filled light pill (.agent-notes-needs-badge, agentNotes.css),
  * the inverse of this outlined one, shared with the Updates chip. */
 
-/* Closed it points down, open it points up (GM's review of PR #193). It
+/* Closed it points down, open it points up (design, PR #193). It
  * turns by a vertical mirror, never a rotation: the old rotate(45deg) to
  * rotate(-135deg) passed through -45deg, pointing right, halfway (caught
  * mid-spring in the review's screenshot). The mirror only flattens on its

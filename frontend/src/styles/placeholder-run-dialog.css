@@ -1,7 +1,7 @@
 /* The dialog before the person's direct run of agents' paid placeholders
-   (components/PlaceholderRunDialog.tsx; Q133). Built on prompt-dialog.css. */
+   (components/PlaceholderRunDialog.tsx). Built on prompt-dialog.css. */
 
-/* Review 6, M1 (GM - Design: "rows scroll with everything else pinned"):
+/* Design: "rows scroll with everything else pinned":
    the card never grows past the window. The heading and the buttons keep
    their height, the body shrinks, and inside it only the rows do, so the
    heading, the changed line, the total, the footnotes and Run / Cancel stay
@@ -70,7 +70,7 @@
   overflow-wrap: anywhere;
 }
 
-/* GM - Design, round 12: a row wraps only between its segments, at the
+/* Design: a row wraps only between its segments, at the
    " · ", never inside one ("Grain model: gaussian", "on your Krea plan",
    “Name”), and its next line keeps the row's indent. Each segment is one
    unit on the line; one longer than the row still wraps inside itself. */
@@ -120,8 +120,8 @@
   font-weight: 600;
 }
 
-/* A paid node of the run that is no placeholder (GM - Design, round 6, item
-   3): muted, no dot, its name lined up with the agents' rows. */
+/* A paid node of the run that is no placeholder (design): muted, no dot,
+   its name lined up with the agents' rows. */
 .placeholder-run__row--muted {
   text-indent: 0;
   color: var(--sr-ink-light);
@@ -131,7 +131,7 @@
   font-weight: 500;
 }
 
-/* Read to a screen reader when the dialog's words change in place (review 5, L7). */
+/* Read to a screen reader when the dialog's words change in place. */
 .placeholder-run__live {
   position: absolute;
   width: 1px;

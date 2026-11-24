@@ -1,5 +1,5 @@
 /* A canvas card that couldn't draw (components/nodes/NodeCardBoundary.tsx,
- * PR #198 review 3, L4): GM's boundary line at card size, in the card's own
+ * PR #198): the approved boundary line at card size, in the card's own
  * frame, so the rest of the canvas keeps working. Its handles stay so the
  * wires into it stay drawn. */
 body.app-slava-restraint .node-card-boundary {
@@ -12,7 +12,7 @@ body.app-slava-restraint .node-card-boundary {
   cursor: default;
 }
 
-/* GM, PR #198 r7 item 2: one selection style, the model card's, in the
+/* Design, PR #198: one selection style, the model card's, in the
    card's category colour (orange stays for primary actions and the pin). */
 body.app-slava-restraint .node-card-boundary--selected {
   border-color: var(--node-category-color, var(--sr-accent));
@@ -41,7 +41,7 @@ body.app-slava-restraint .node-card-boundary__handle {
   background: var(--sr-ink-light);
 }
 
-/* GM, PR #198 r4: the card keeps its header (icon and label); only the body
+/* Design, PR #198: the card keeps its header (icon and label); only the body
  * is the boundary's line. */
 body.app-slava-restraint .node-card-boundary__header {
   display: flex;

@@ -31,7 +31,7 @@
   padding: 4px;
 }
 
-/* A board image that links to another site (Q98): the card, tile, side
+/* A board image that links to another site: the card, tile, side
    panel, cover and Moodboard node keep their size and show the line in the
    middle, in the colour of the box it sits in. */
 .moodboard-card__placeholder,

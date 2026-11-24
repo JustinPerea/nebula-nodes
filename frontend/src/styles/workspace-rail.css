@@ -20,7 +20,7 @@
 }
 
 /* While the rail is on screen, the notice region starts right of it, one
-   notice gap clear (noticeRegion.css; GM - Design, PR #216 r2 bug 3). */
+   notice gap clear (noticeRegion.css; design, PR #216). */
 :root:has(.workspace-rail) {
   --notice-left-clearance: calc(var(--workspace-rail-left) + var(--workspace-rail-width) + 8px);
 }
@@ -67,7 +67,7 @@
   transform: scale(1);
 }
 
-/* Run History with the held-reopen line beside it (GM r32, 2 on PR #199). */
+/* Run History with the held-reopen line beside it (design, PR #199). */
 .workspace-rail__anchor {
   position: relative;
   display: flex;

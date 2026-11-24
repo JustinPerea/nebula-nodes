@@ -46,7 +46,7 @@
 
 .model-node__id-chip:active { cursor: grabbing; }
 
-/* GM r23 (b) on PR #199: a node with a tab-local id (added while the canvas
+/* Design, PR #199: a node with a tab-local id (added while the canvas
    is kept) shows no id, but its slot keeps the room of a short saved id, so
    the header doesn't shift when the id arrives. The placeholder is never
    seen or read (hidden; the slot is aria-hidden) and isn't in the text. */
@@ -127,7 +127,7 @@ body.app-slava-restraint .model-node__file-name { color: var(--sr-ink-light); fo
   list-style: revert;
   width: fit-content;
 }
-/* The raw provider text (error copy round 3c): it can be a long body, so it
+/* The raw provider text (error copy 3c): it can be a long body, so it
    wraps anywhere and scrolls inside the card's error area rather than
    stretching the card (nowheel on the toggle lets the wheel scroll it). */
 .model-node__error-details .error-details__raw {
@@ -206,7 +206,7 @@ body.app-slava-restraint .before-after__handle {
 
 /* ---------- Reroute node (minimal dot) ---------- */
 
-/* The reroute dot's run error (error copy round 3e): the dot has no body,
+/* The reroute dot's run error (error copy 3e): the dot has no body,
    so the shared error block hangs centred below it at a card's width. */
 .reroute-node__run-error {
   position: absolute;
@@ -336,7 +336,7 @@ body.app-slava-restraint .mesh-modal__download-error {
 body.app-slava-restraint .model-node__source-stale { color: var(--sr-ink, #1a1a1a); background: color-mix(in srgb, var(--sr-warning) 10%, transparent); }
 body.app-slava-restraint .model-node__source-stale button { color: var(--sr-ink, rgba(255, 255, 255, 0.92)); border: 1px solid var(--sr-edge-strong, rgba(255, 255, 255, 0.12)); background: var(--sr-glass-raised, rgba(28, 28, 31, 0.78)); }
 
-/* An agent's placeholder (Q125 item 3, GM - Design 2026-10-25): only the
+/* An agent's placeholder (design, 2026-10-25): only the
    preview area dims; the header and the line stay at full contrast. Every
    card kind with a preview dims that and nothing else (a card with none,
    such as Remotion's or Batch's list of items, dims nothing). The dashed

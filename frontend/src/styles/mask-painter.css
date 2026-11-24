@@ -117,7 +117,7 @@
   color: var(--sr-ink);
 }
 
-/* GM r12: Clear wipes every stroke, so it is red on hover. */
+/* Design: Clear wipes every stroke, so it is red on hover. */
 .mask-painter__tool--clear:hover:not(:disabled) {
   background: var(--sr-danger-tint);
   border-color: var(--sr-danger-edge);

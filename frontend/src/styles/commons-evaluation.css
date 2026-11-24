@@ -71,7 +71,7 @@
   font-weight: 500;
 }
 /* A section's eyebrow line: its name (the h2) and its descriptor, in the
- * eyebrow style above (GM review of PR #157, round 2). The words are written
+ * eyebrow style above (design, PR #157). The words are written
  * in sentence case and shown in capitals, as the old eyebrow was. */
 .commons-eyebrow {
   margin:0;
@@ -152,7 +152,7 @@
   border-color:var(--evaluation-current-edge);
 }
 .evaluation-workspace button:disabled,
-/* PR #204 round 18o (GM r51 Q3): a reference button locked by unsaved edits stays focusable
+/* PR #204 (design): a reference button locked by unsaved edits stays focusable
  * (aria-disabled, the status line its reason) and dims as the natively disabled ones do. */
 .evaluation-workspace nav button[aria-disabled='true'] {
   opacity:.45;
@@ -275,7 +275,7 @@
 .evaluation-review {
   max-width:780px;
 }
-/* A reference's row. Not the close dialog, which sits among the rows and stacks (GM r40 1). */
+/* A reference's row. Not the close dialog, which sits among the rows and stacks (design). */
 .evaluation-review>div:not(.evaluation-close) {
   display:flex;
   justify-content:space-between;
@@ -349,7 +349,7 @@ body.app-slava-restraint .evaluation-form .commons-button--primary {
 .evaluation-heading>div {
   min-width:0;
 }
-/* PR #204 round 18n (GM r45 Q1): the Review batch toggle and, while labels are unsaved, its lock
+/* PR #204 (design): the Review batch toggle and, while labels are unsaved, its lock
    line right under it, both at the heading's end. */
 .evaluation-heading__toggle {
   display:flex;
@@ -381,7 +381,7 @@ body.app-slava-restraint .commons-evaluation input::placeholder {
   margin:0 0 12px;
   padding-left:18px;
 }
-/* PR #204 round 18j (GM r40 1): the dialog stacks in either pane: the heading, the list at the
+/* PR #204 (design): the dialog stacks in either pane: the heading, the list at the
  * dialog's full width, the failure line, then one row of buttons, Cancel and the close. */
 .evaluation-close {
   display:block;

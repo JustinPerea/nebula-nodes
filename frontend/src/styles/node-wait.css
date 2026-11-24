@@ -1,17 +1,17 @@
-/* A run the daily total holds (GM - Design, PR #212 round 2): the waiting state
+/* A run the daily total holds (design, PR #212): the waiting state
    lives in the node card's header, so a node never changes size and never
    covers a neighbour (components/nodes/NodeWaitSwap.tsx).
 
    - The header row takes the proposal's accent (--agent-color) as a tint, on
      an opaque base (--sr-wait-base), so what the label sits on is known
      whatever the card draws behind its header (an image preview, a text
-     surface) and the label's ink is one colour in every state (GM r3
-     defect: 4.5:1 or better; tests/nodeWaitContrast.test.ts resolves these
+     surface) and the label's ink is one colour in every state (design:
+     4.5:1 or better; tests/nodeWaitContrast.test.ts resolves these
      tokens and asserts it for the brightest accent there can be).
    - On the right, "Waiting for your OK" (one label for one proposal or
      several; the count is in the description) replaces the model chip: both sit in one grid cell and crossfade on the opacity spring
      (SOFT, lib/springs.ts; never stock easing; at once under reduced motion).
-   - Over media (GM r5 ruling 2): when a preview sits under the header (the
+   - Over media (design): when a preview sits under the header (the
      card pulls it up beneath the title, --sr-node-preview-overlap) the row
      keeps its legibility gradient, no tint, and the tint becomes a pill
      behind the label alone, where the model chip sits (the ::before, out of
@@ -20,7 +20,7 @@
      Header rows on the card surface keep the full-row tint.
    - The title truncates first; the label never does, except that it shortens
      to "Waiting" when the full one would leave the title fewer than 8
-     characters, ellipsis included (GM r6 item 2; lib/nodeWaitLabel.ts decides,
+     characters, ellipsis included (design; lib/nodeWaitLabel.ts decides,
      NodeWaitSwap sets data-short). The two spans crossfade on the same springs;
      the one not shown leaves the layout at once (absolute, at the right end)
      so the cell is as wide as the one shown. The short one carries the

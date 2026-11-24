@@ -39,7 +39,7 @@
   font: inherit;
 }
 
-/* The note for agents (fix round 1 of PR #200, GM bug 2): one line to
+/* The note for agents (design, PR #200): one line to
    start, growing with the text to about 4 lines, then it scrolls
    (AutoGrowTextarea measures up to this max-height). */
 .prompt-dialog__field textarea {
@@ -73,7 +73,7 @@
 
 .prompt-dialog__actions .prompt-dialog__danger {
   font-weight: 600;
-  /* GM r8 (fix round 6 of PR #200): the red fill, near-black ink. */
+  /* Design, PR #200: the red fill, near-black ink. */
   color: var(--sr-on-danger, #1f1f1f);
   border-color: var(--sr-danger-fill, #ff887d);
   background: var(--sr-danger-fill, #ff887d);
@@ -91,7 +91,7 @@
   outline-offset: var(--sr-focus-offset, 2px);
 }
 
-/* A confirm's own heading (Run History's "Forget ID", round 13 of PR #114). */
+/* A confirm's own heading (Run History's "Forget ID", PR #114). */
 .prompt-dialog__heading {
   margin: 0;
   font-size: 15px;
@@ -99,12 +99,12 @@
   line-height: 1.4;
 }
 
-/* A destructive action that isn't the app's run/go (GM, round 14 of PR
+/* A destructive action that isn't the app's run/go (design, PR
    #114): the secondary button with the selection toolbar trash's red text
    (canvas.css .selection-toolbar__button--danger), never orange primary. */
 .prompt-dialog__actions .prompt-dialog__destructive {
   font-weight: 600;
-  /* The toolbar's Delete red (review 3 LOW-2, disabled-buttons.css). */
+  /* The toolbar's Delete red (disabled-buttons.css). */
   color: var(--sr-danger-ink, #ff887d);
 }
 
@@ -118,7 +118,7 @@
   opacity: 0.5;
 }
 
-/* GM r20 note 1 (PR #200 fix round 13): the note's "N left", under the
+/* Design, PR #200: the note's "N left", under the
    field at the start of the buttons' row (showing it moves nothing). A label
    in the dialog's quiet ink, never red, whatever is left. */
 .prompt-dialog__counter {
@@ -127,7 +127,7 @@
   font-size: 12px;
   font-variant-numeric: tabular-nums;
   color: var(--sr-ink-light, rgba(255, 255, 255, 0.55));
-  /* GM r23 item 3: it fades in and out with the row (always laid out, so
+  /* Design: it fades in and out with the row (always laid out, so
      showing or hiding it moves nothing), on the notice region's curves. */
   opacity: 0;
   visibility: hidden;
@@ -149,7 +149,7 @@
   }
 }
 
-/* GM r23 item 4: what screen readers hear at 30, 10 and 0 left; never seen. */
+/* Design: what screen readers hear at 30, 10 and 0 left; never seen. */
 .prompt-dialog__announce {
   position: absolute;
   width: 1px;
@@ -159,7 +159,7 @@
   white-space: nowrap;
 }
 
-/* GM r29 item 1 (PR #200 fix round 19): the note dialog names its node.
+/* Design, PR #200: the note dialog names its node.
    One line: a long title truncates, its full name in the tooltip; a shared
    title adds the node's bare id, styled like the card's id chip. */
 .prompt-dialog__heading {
@@ -173,7 +173,7 @@
   position: relative;
 }
 
-/* GM r30 item 1 (fix round 20): the name is cut in JS (NoteHeading), by
+/* Design, PR #200: the name is cut in JS (NoteHeading), by
    grapheme, with its closing quote kept; no CSS text-overflow. The clip only
    guards a sub-pixel overrun. */
 .prompt-dialog__heading-text {

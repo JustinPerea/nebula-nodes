@@ -1,4 +1,4 @@
-/* The screen layer (Phase 3, "Anywhere"): agent cursors on the surfaces beside
+/* The screen layer ("Anywhere"): agent cursors on the surfaces beside
    the canvas. Separate from agentCursor.css, whose ratchet
    (tests/agentCursorCss.test.ts) forbids pointer-events: auto and
    position: fixed there; nothing here takes a pointer event either. The
@@ -8,7 +8,7 @@
   position: fixed;
   inset: 0;
   pointer-events: none;
-  /* GM - Design 5: above the docks (--sr-layer-workspace-overlay, 55: Chat,
+  /* Design: above the docks (--sr-layer-workspace-overlay, 55: Chat,
      Settings, the Updates corner), below modals (--sr-layer-modal, 60) and
      the notice region (--sr-layer-notice). */
   z-index: calc(var(--sr-layer-modal, 60) - 1);
@@ -55,7 +55,7 @@
   align-items: center;
   border-radius: 8px;
   /* A count belongs to no agent: the column's neutral count pill, the host's
-     surface fill, a 1px hairline and secondary ink (GM r136, ruling 3). */
+     surface fill, a 1px hairline and secondary ink (design). */
   background: var(--agent-badge-ring);
   border: 1px solid var(--agent-count-border);
   color: var(--agent-count-ink);
@@ -63,7 +63,7 @@
   white-space: nowrap;
 }
 
-/* The edge park's chevron (slice 7): 6 px, in the agent colour, 4 px clear of the
+/* The edge park's chevron (PR #233): 6 px, in the agent colour, 4 px clear of the
    arrow, turned toward the item that is scrolled or panned out of view. Its
    place and angle are set from the cursor's loop (--park-x, --park-y,
    --park-angle); it is a mark, never a control. It comes in on the soft spring. */
@@ -85,7 +85,7 @@
   animation: agent-item-outline-in var(--agent-cursor-soft) both;
 }
 
-/* The launcher's activity badge (slice 8, 10c): 6 px dots, agent colour, placed
+/* The launcher's activity badge (PR #233): 6 px dots, agent colour, placed
    from JS (middle at left/top) at the launcher's top right corner, outside the
    glyph's box. A 1.5 px ring in the launcher's own surface colour lets them
    read on the icon's edge: each launcher's host sets --agent-launcher-surface
